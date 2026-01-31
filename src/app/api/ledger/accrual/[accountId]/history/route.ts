@@ -62,6 +62,10 @@ export async function GET(
           }
         }),
         totalEvents: response.totalCount || response.events.length,
+        // Gap detection fields (new in API update)
+        missingDates: (response as any).missingDates ?? (response as any).missing_dates ?? [],
+        hasGaps: (response as any).hasGaps ?? (response as any).has_gaps ?? false,
+        filteredCount: (response as any).filteredCount ?? (response as any).filtered_count ?? 0,
       }
 
       return NextResponse.json(transformedResponse)

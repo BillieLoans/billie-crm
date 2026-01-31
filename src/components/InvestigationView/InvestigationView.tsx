@@ -11,6 +11,12 @@ import styles from './styles.module.css'
 
 export interface InvestigationViewProps {
   userId?: string
+  /** Initial account ID to search (from URL query param) */
+  initialAccountId?: string
+  /** Initial tab to show (from URL query param) */
+  initialTab?: Tab
+  /** Initial stream filter for events tab (from URL query param) */
+  initialStreamFilter?: string
 }
 
 type Tab = 'events' | 'ecl-trace' | 'accrual-trace'
@@ -18,11 +24,16 @@ type Tab = 'events' | 'ecl-trace' | 'accrual-trace'
 /**
  * Investigation View - Event history and traceability tools.
  */
-export const InvestigationView: React.FC<InvestigationViewProps> = ({ userId: _userId }) => {
+export const InvestigationView: React.FC<InvestigationViewProps> = ({ 
+  userId: _userId,
+  initialAccountId,
+  initialTab,
+  initialStreamFilter,
+}) => {
   // Account lookup state
-  const [accountId, setAccountId] = useState('')
-  const [searchedAccountId, setSearchedAccountId] = useState('')
-  const [activeTab, setActiveTab] = useState<Tab>('events')
+  const [accountId, setAccountId] = useState(initialAccountId || '')
+  const [searchedAccountId, setSearchedAccountId] = useState(initialAccountId || '')
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab || 'events')
 
   // Batch query modal state
   const [batchModalOpen, setBatchModalOpen] = useState(false)
@@ -42,7 +53,7 @@ export const InvestigationView: React.FC<InvestigationViewProps> = ({ userId: _u
   const [sampleResults, setSampleResults] = useState<string[] | null>(null)
 
   // Event filter state
-  const [eventStreamFilter, setEventStreamFilter] = useState('')
+  const [eventStreamFilter, setEventStreamFilter] = useState(initialStreamFilter || '')
   const [eventTypeFilter, setEventTypeFilter] = useState('')
   const [selectedEvent, setSelectedEvent] = useState<string | null>(null)
 
@@ -262,73 +273,77 @@ export const InvestigationView: React.FC<InvestigationViewProps> = ({ userId: _u
             <div className={styles.traceCards}>
               <div className={styles.traceCard}>
                 <span className={styles.traceLabel}>ECL Amount</span>
-                <span className={styles.traceValue}>${eclTrace.currentECL.toFixed(2)}</span>
+                <span className={styles.traceValue}>${eclTrace.currentECL?.toFixed(2) ?? '—'}</span>
               </div>
               <div className={styles.traceCard}>
                 <span className={styles.traceLabel}>Carrying Amount</span>
-                <span className={styles.traceValue}>${eclTrace.carryingAmount.toFixed(2)}</span>
+                <span className={styles.traceValue}>${eclTrace.carryingAmount?.toFixed(2) ?? '—'}</span>
               </div>
               <div className={styles.traceCard}>
                 <span className={styles.traceLabel}>Calculation Date</span>
                 <span className={styles.traceValue}>
-                  {new Date(eclTrace.calculationDate).toLocaleDateString()}
+                  {eclTrace.calculationDate ? new Date(eclTrace.calculationDate).toLocaleDateString() : '—'}
                 </span>
               </div>
             </div>
           </div>
 
           {/* Trigger Info */}
-          <div className={styles.traceSection}>
-            <h3 className={styles.traceSectionTitle}>Triggered By</h3>
-            <div className={styles.triggerInfo}>
-              <span className={styles.triggerEvent}>{eclTrace.triggerEvent.eventType}</span>
-              <span className={styles.triggerTime}>
-                {new Date(eclTrace.triggerEvent.timestamp).toLocaleString()}
-              </span>
+          {eclTrace.triggerEvent && (
+            <div className={styles.traceSection}>
+              <h3 className={styles.traceSectionTitle}>Triggered By</h3>
+              <div className={styles.triggerInfo}>
+                <span className={styles.triggerEvent}>{eclTrace.triggerEvent.eventType ?? '—'}</span>
+                <span className={styles.triggerTime}>
+                  {eclTrace.triggerEvent.timestamp ? new Date(eclTrace.triggerEvent.timestamp).toLocaleString() : '—'}
+                </span>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Calculation Inputs */}
-          <div className={styles.traceSection}>
-            <h3 className={styles.traceSectionTitle}>Calculation Inputs</h3>
-            <table className={styles.inputsTable}>
-              <thead>
-                <tr>
-                  <th>Input</th>
-                  <th>Value</th>
-                  <th>Source</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>PD Rate</td>
-                  <td>{(eclTrace.inputs.pdRate * 100).toFixed(2)}%</td>
-                  <td>{eclTrace.inputs.pdRateSource.description}</td>
-                </tr>
-                <tr>
-                  <td>LGD</td>
-                  <td>{(eclTrace.inputs.lgd * 100).toFixed(0)}%</td>
-                  <td>{eclTrace.inputs.lgdSource.description}</td>
-                </tr>
-                <tr>
-                  <td>EAD</td>
-                  <td>${eclTrace.inputs.ead.toFixed(2)}</td>
-                  <td>{eclTrace.inputs.eadSource.description}</td>
-                </tr>
-                <tr>
-                  <td>Overlay</td>
-                  <td>{eclTrace.inputs.overlayMultiplier.toFixed(2)}x</td>
-                  <td>{eclTrace.inputs.overlaySource.description}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          {eclTrace.inputs && (
+            <div className={styles.traceSection}>
+              <h3 className={styles.traceSectionTitle}>Calculation Inputs</h3>
+              <table className={styles.inputsTable}>
+                <thead>
+                  <tr>
+                    <th>Input</th>
+                    <th>Value</th>
+                    <th>Source</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>PD Rate</td>
+                    <td>{eclTrace.inputs.pdRate != null ? (eclTrace.inputs.pdRate * 100).toFixed(2) : '—'}%</td>
+                    <td>{eclTrace.inputs.pdRateSource?.description ?? '—'}</td>
+                  </tr>
+                  <tr>
+                    <td>LGD</td>
+                    <td>{eclTrace.inputs.lgd != null ? (eclTrace.inputs.lgd * 100).toFixed(0) : '—'}%</td>
+                    <td>{eclTrace.inputs.lgdSource?.description ?? '—'}</td>
+                  </tr>
+                  <tr>
+                    <td>EAD</td>
+                    <td>${eclTrace.inputs.ead?.toFixed(2) ?? '—'}</td>
+                    <td>{eclTrace.inputs.eadSource?.description ?? '—'}</td>
+                  </tr>
+                  <tr>
+                    <td>Overlay</td>
+                    <td>{eclTrace.inputs.overlayMultiplier?.toFixed(2) ?? '—'}x</td>
+                    <td>{eclTrace.inputs.overlaySource?.description ?? '—'}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {/* Formula */}
           <div className={styles.traceSection}>
             <h3 className={styles.traceSectionTitle}>Calculation Formula</h3>
             <div className={styles.formula}>
-              <code>{eclTrace.formula}</code>
+              <code>{eclTrace.formula ?? 'N/A'}</code>
             </div>
           </div>
         </div>
@@ -351,16 +366,16 @@ export const InvestigationView: React.FC<InvestigationViewProps> = ({ userId: _u
               <div className={styles.traceCard}>
                 <span className={styles.traceLabel}>Accrued Amount</span>
                 <span className={styles.traceValue}>
-                  ${accrualTrace.currentAccruedAmount.toFixed(2)}
+                  ${accrualTrace.currentAccruedAmount?.toFixed(2) ?? '—'}
                 </span>
               </div>
               <div className={styles.traceCard}>
                 <span className={styles.traceLabel}>Days Accrued</span>
-                <span className={styles.traceValue}>{accrualTrace.daysAccrued}</span>
+                <span className={styles.traceValue}>{accrualTrace.daysAccrued ?? '—'}</span>
               </div>
               <div className={styles.traceCard}>
                 <span className={styles.traceLabel}>Remaining Days</span>
-                <span className={styles.traceValue}>{accrualTrace.remainingDays}</span>
+                <span className={styles.traceValue}>{accrualTrace.remainingDays ?? '—'}</span>
               </div>
             </div>
           </div>
@@ -372,23 +387,23 @@ export const InvestigationView: React.FC<InvestigationViewProps> = ({ userId: _u
               <div className={styles.infoRow}>
                 <span className={styles.infoLabel}>Amount:</span>
                 <span className={styles.infoValue}>
-                  ${accrualTrace.disbursement.amount.toFixed(2)}
+                  ${accrualTrace.disbursement?.amount?.toFixed(2) ?? '—'}
                 </span>
               </div>
               <div className={styles.infoRow}>
                 <span className={styles.infoLabel}>Fee Amount:</span>
                 <span className={styles.infoValue}>
-                  ${accrualTrace.disbursement.feeAmount.toFixed(2)}
+                  ${accrualTrace.disbursement?.feeAmount?.toFixed(2) ?? '—'}
                 </span>
               </div>
               <div className={styles.infoRow}>
                 <span className={styles.infoLabel}>Term:</span>
-                <span className={styles.infoValue}>{accrualTrace.disbursement.termDays} days</span>
+                <span className={styles.infoValue}>{accrualTrace.disbursement?.termDays ?? '—'} days</span>
               </div>
               <div className={styles.infoRow}>
                 <span className={styles.infoLabel}>Daily Rate:</span>
                 <span className={styles.infoValue}>
-                  ${accrualTrace.dailyRate.value.toFixed(4)}/day
+                  ${accrualTrace.dailyRate?.value?.toFixed(4) ?? '—'}/day
                 </span>
               </div>
             </div>
@@ -398,7 +413,7 @@ export const InvestigationView: React.FC<InvestigationViewProps> = ({ userId: _u
           <div className={styles.traceSection}>
             <h3 className={styles.traceSectionTitle}>Daily Rate Calculation</h3>
             <div className={styles.formula}>
-              <code>{accrualTrace.dailyRate.formula}</code>
+              <code>{accrualTrace.dailyRate?.formula ?? 'N/A'}</code>
             </div>
           </div>
 
@@ -420,10 +435,10 @@ export const InvestigationView: React.FC<InvestigationViewProps> = ({ userId: _u
                 <tbody>
                   {accrualTrace.accrualEvents.slice(0, 10).map((event) => (
                     <tr key={event.eventId}>
-                      <td>{event.dayNumber}</td>
-                      <td>{new Date(event.timestamp).toLocaleDateString()}</td>
-                      <td className={styles.numericCol}>${event.dailyAmount.toFixed(4)}</td>
-                      <td className={styles.numericCol}>${event.cumulativeAmount.toFixed(2)}</td>
+                      <td>{event.dayNumber ?? '—'}</td>
+                      <td>{event.timestamp ? new Date(event.timestamp).toLocaleDateString() : '—'}</td>
+                      <td className={styles.numericCol}>${event.dailyAmount?.toFixed(4) ?? '—'}</td>
+                      <td className={styles.numericCol}>${event.cumulativeAmount?.toFixed(2) ?? '—'}</td>
                     </tr>
                   ))}
                 </tbody>

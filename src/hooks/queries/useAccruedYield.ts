@@ -61,6 +61,12 @@ export interface AccrualHistoryResponse {
   accountId: string
   events: AccrualEvent[]
   totalEvents: number
+  /** Dates where accruals are missing (gaps in sequence) */
+  missingDates?: string[]
+  /** Whether gaps exist in the accrual sequence */
+  hasGaps?: boolean
+  /** Number of events excluded by date filters (e.g., future events) */
+  filteredCount?: number
   _fallback?: boolean
 }
 
@@ -257,6 +263,12 @@ export function useAccrualHistory(options: UseAccrualHistoryOptions) {
     events: query.data?.events ?? [],
     /** Total number of events */
     totalEvents: query.data?.totalEvents ?? 0,
+    /** Dates where accruals are missing (gaps in sequence) */
+    missingDates: query.data?.missingDates ?? [],
+    /** Whether gaps exist in the accrual sequence */
+    hasGaps: query.data?.hasGaps ?? false,
+    /** Number of events excluded by date filters */
+    filteredCount: query.data?.filteredCount ?? 0,
     /** Whether data is from fallback */
     isFallback: query.data?._fallback ?? false,
     /** Whether the initial load is in progress */

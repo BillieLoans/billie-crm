@@ -22,6 +22,18 @@ export async function InvestigationViewWithTemplate({
   }
 
   const userId = initPageResult.req.user?.id?.toString()
+  
+  // Extract query params for initial state
+  const resolvedSearchParams = await searchParams
+  const initialAccountId = typeof resolvedSearchParams?.accountId === 'string' 
+    ? resolvedSearchParams.accountId 
+    : undefined
+  const initialTab = typeof resolvedSearchParams?.tab === 'string'
+    ? (resolvedSearchParams.tab as 'events' | 'ecl-trace' | 'accrual-trace')
+    : undefined
+  const initialStreamFilter = typeof resolvedSearchParams?.stream === 'string'
+    ? resolvedSearchParams.stream
+    : undefined
 
   return (
     <DefaultTemplate
@@ -34,7 +46,12 @@ export async function InvestigationViewWithTemplate({
       user={initPageResult.req.user}
       visibleEntities={initPageResult.visibleEntities}
     >
-      <InvestigationView userId={userId} />
+      <InvestigationView 
+        userId={userId} 
+        initialAccountId={initialAccountId}
+        initialTab={initialTab}
+        initialStreamFilter={initialStreamFilter}
+      />
     </DefaultTemplate>
   )
 }

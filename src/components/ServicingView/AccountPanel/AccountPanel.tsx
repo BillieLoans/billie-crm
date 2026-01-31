@@ -135,7 +135,7 @@ export const AccountPanel: React.FC<AccountPanelProps> = ({
       case 'fees':
         return <FeesTab loanAccountId={account.loanAccountId} onBulkWaive={onBulkWaive} />
       case 'accruals':
-        return <AccrualsTab loanAccountId={account.loanAccountId} />
+        return <AccrualsTab loanAccountId={account.loanAccountId} accountNumber={account.accountNumber} />
       case 'ecl':
         return <ECLTab loanAccountId={account.loanAccountId} />
       case 'actions':

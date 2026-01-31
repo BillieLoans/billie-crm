@@ -1,13 +1,16 @@
 'use client'
 
-import React from 'react'
+import React, { useState } from 'react'
 import { useAccruedYield, useAccrualHistory } from '@/hooks/queries/useAccruedYield'
 import { useCarryingAmountBreakdown } from '@/hooks/queries/useCarryingAmountBreakdown'
+import { AccrualHistoryModal } from './AccrualHistoryModal'
 import styles from './accruals-tab.module.css'
 
 export interface AccrualsTabProps {
   /** Loan account ID to fetch accruals for */
   loanAccountId: string
+  /** Account number for display */
+  accountNumber?: string
 }
 
 /**
@@ -51,10 +54,11 @@ function formatDate(dateString: string | undefined): string {
  *
  * Story E2-S5: Implement Accruals Tab Component
  */
-export const AccrualsTab: React.FC<AccrualsTabProps> = ({ loanAccountId }) => {
+export const AccrualsTab: React.FC<AccrualsTabProps> = ({ loanAccountId, accountNumber }) => {
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false)
+
   const {
     accruedAmount,
-    remainingAmount,
     totalFeeAmount,
     termDays,
     daysAccrued,
@@ -90,6 +94,14 @@ export const AccrualsTab: React.FC<AccrualsTabProps> = ({ loanAccountId }) => {
   const effectiveProgress = termDays > 0 
     ? Math.min((effectiveDaysAccrued / termDays) * 100, 100)
     : 0
+
+  // Calculate effective remaining amount based on effectiveAccruedAmount
+  const effectiveRemainingAmount = (() => {
+    const totalFee = parseFloat(totalFeeAmount) || 0
+    const accrued = parseFloat(effectiveAccruedAmount) || 0
+    const remaining = totalFee - accrued
+    return remaining >= 0 ? remaining.toFixed(2) : '0'
+  })()
 
   if (isLoading) {
     return (
@@ -188,7 +200,7 @@ export const AccrualsTab: React.FC<AccrualsTabProps> = ({ loanAccountId }) => {
       {/* Remaining Amount */}
       <div className={styles.remainingCard}>
         <span className={styles.remainingLabel}>Remaining to Recognize</span>
-        <span className={styles.remainingValue}>{formatCurrency(remainingAmount)}</span>
+        <span className={styles.remainingValue}>{formatCurrency(effectiveRemainingAmount)}</span>
       </div>
 
       {/* Recent Accrual Events */}
@@ -219,11 +231,23 @@ export const AccrualsTab: React.FC<AccrualsTabProps> = ({ loanAccountId }) => {
           </table>
         )}
         {events.length > 0 && (
-          <button type="button" className={styles.viewHistoryLink}>
+          <button 
+            type="button" 
+            className={styles.viewHistoryLink}
+            onClick={() => setIsHistoryModalOpen(true)}
+          >
             View Full History →
           </button>
         )}
       </div>
+
+      {/* Accrual History Modal */}
+      <AccrualHistoryModal
+        accountId={loanAccountId}
+        accountNumber={accountNumber}
+        isOpen={isHistoryModalOpen}
+        onClose={() => setIsHistoryModalOpen(false)}
+      />
     </div>
   )
 }
