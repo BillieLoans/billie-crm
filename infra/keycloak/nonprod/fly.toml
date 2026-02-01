@@ -1,0 +1,44 @@
+# Keycloak Non-Production Instance
+# Deploy with: fly deploy --config infra/keycloak/nonprod/fly.toml
+
+app = "billie-keycloak-nonprod"
+primary_region = "syd"
+
+[build]
+  dockerfile = "../Dockerfile"
+  [build.args]
+    KC_FEATURES = "preview"
+
+[env]
+  # Proxy configuration for Fly.io (TLS terminated at edge)
+  KC_PROXY_HEADERS = "xforwarded"
+  KC_HTTP_ENABLED = "true"
+  # Hostname configuration
+  KC_HOSTNAME = "billie-keycloak-nonprod.fly.dev"
+  KC_HOSTNAME_STRICT = "true"
+  KC_LOG_LEVEL = "INFO"
+  # DATABASE_URL is set automatically via: fly postgres attach
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = true   # Allow stopping to save costs in non-prod
+  auto_start_machines = true
+  min_machines_running = 0    # Can scale to zero in non-prod
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 250
+
+[[http_service.checks]]
+  grace_period = "180s"   # Initial DB migration can take 2-3 minutes
+  interval = "30s"
+  method = "GET"
+  timeout = "10s"
+  path = "/health/ready"
+
+[[vm]]
+  memory = "1gb"      # Keycloak needs more memory during startup/migrations
+  cpu_kind = "shared"
+  cpus = 1

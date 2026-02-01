@@ -1,0 +1,41 @@
+# Keycloak Production Instance
+# Deploy with: fly deploy --config infra/keycloak/prod/fly.toml
+
+app = "billie-keycloak-prod"
+primary_region = "syd"
+
+[build]
+  dockerfile = "../Dockerfile"
+
+[env]
+  # Proxy configuration for Fly.io (TLS terminated at edge)
+  KC_PROXY_HEADERS = "xforwarded"
+  KC_HTTP_ENABLED = "true"
+  # Hostname configuration - UPDATE THIS for production domain
+  KC_HOSTNAME = "billie-keycloak-prod.fly.dev"
+  KC_HOSTNAME_STRICT = "true"
+  KC_LOG_LEVEL = "WARN"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false  # Keep running in production
+  auto_start_machines = true
+  min_machines_running = 1    # Always have at least one running
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 250
+
+[[http_service.checks]]
+  grace_period = "60s"
+  interval = "15s"
+  method = "GET"
+  timeout = "5s"
+  path = "/health/ready"
+
+[[vm]]
+  memory = "1gb"      # More memory for production
+  cpu_kind = "shared"
+  cpus = 2            # More CPU for production
