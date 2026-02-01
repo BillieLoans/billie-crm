@@ -1,6 +1,7 @@
 'use client'
 
 import type { LoanAccountData } from '@/hooks/queries/useCustomer'
+import { useCarryingAmountBreakdown } from '@/hooks/queries/useCarryingAmountBreakdown'
 import { CopyButton } from '@/components/ui'
 import { RepaymentScheduleList } from './RepaymentScheduleList'
 import styles from './styles.module.css'
@@ -38,6 +39,7 @@ function formatDate(dateString: string | null): string {
  */
 export const OverviewTab: React.FC<OverviewTabProps> = ({ account, onNavigateToTransaction }) => {
   const hasLiveBalance = account.liveBalance !== null
+  const { breakdown: carryingAmountBreakdown } = useCarryingAmountBreakdown(account.loanAccountId)
 
   const principal = hasLiveBalance
     ? account.liveBalance!.principalBalance
@@ -46,6 +48,28 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ account, onNavigateToT
   const totalOutstanding = hasLiveBalance
     ? account.liveBalance!.totalOutstanding
     : account.balances?.totalOutstanding ?? 0
+
+  // Prefer Ledger carrying-amount breakdown for Total Paid when available (matches modal).
+  // Fallback: Payload balances.totalPaid, then sum of schedule amountPaid. See docs/bugs/LEDGER-GetCarryingAmountBreakdown-total-paid-zero.md
+  const totalPaidFromBreakdown =
+    carryingAmountBreakdown?.totalPaid != null && carryingAmountBreakdown.totalPaid !== ''
+      ? parseFloat(carryingAmountBreakdown.totalPaid)
+      : null
+  const totalPaidFromPayload = account.balances?.totalPaid ?? 0
+  const totalPaidFromSchedule =
+    account.repaymentSchedule?.payments?.reduce(
+      (sum, p) => sum + (p.amountPaid ?? 0),
+      0
+    ) ?? 0
+  const totalPaid =
+    (totalPaidFromBreakdown != null && totalPaidFromBreakdown > 0
+      ? totalPaidFromBreakdown
+      : totalPaidFromPayload) || totalPaidFromSchedule
+  const showTotalPaid =
+    hasLiveBalance ||
+    carryingAmountBreakdown != null ||
+    account.balances?.totalPaid != null ||
+    totalPaidFromSchedule > 0
 
   return (
     <div
@@ -82,11 +106,11 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ account, onNavigateToT
               {currencyFormatter.format(totalOutstanding)}
             </span>
           </div>
-          {account.balances?.totalPaid !== null && account.balances?.totalPaid !== undefined && (
+          {showTotalPaid && (
             <div className={styles.overviewItem}>
               <span className={styles.overviewLabel}>Total Paid</span>
               <span className={styles.overviewValue}>
-                {currencyFormatter.format(account.balances.totalPaid)}
+                {currencyFormatter.format(totalPaid)}
               </span>
             </div>
           )}
