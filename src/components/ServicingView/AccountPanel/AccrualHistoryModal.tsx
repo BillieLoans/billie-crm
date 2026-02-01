@@ -92,10 +92,11 @@ export const AccrualHistoryModal: React.FC<AccrualHistoryModalProps> = ({
   const [copySuccess, setCopySuccess] = useState(false)
 
   // Fetch all events (no limit)
-  const { events, totalEvents, missingDates, hasGaps, isLoading, isError, isFallback, refetch } = useAccrualHistory({
+  const { events, totalEvents, missingDates, hasGaps, isLoading, error, isFallback, refetch } = useAccrualHistory({
     accountId,
     enabled: isOpen,
   })
+  const isError = !!error
 
   const handleCopy = useCallback(async () => {
     if (!events.length) return

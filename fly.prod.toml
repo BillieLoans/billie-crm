@@ -1,0 +1,70 @@
+# =============================================================================
+# Fly.io Configuration - PROD Environment
+# =============================================================================
+# This file contains NON-SENSITIVE configuration only.
+# Sensitive values must be managed via 'fly secrets import'.
+#
+# To deploy: make deploy ENV=prod CONFIRM=1
+# =============================================================================
+
+app = "billie-crm-prod"
+primary_region = "syd"
+
+# =============================================================================
+# Build configuration
+# =============================================================================
+
+[build]
+  # Uncomment and adjust based on your build system
+  # dockerfile = "Dockerfile"
+  # build-target = "production"
+
+# =============================================================================
+# Environment variables (NON-SENSITIVE ONLY)
+# =============================================================================
+# ⚠️  NEVER put secrets here! Use 'fly secrets import' instead.
+# =============================================================================
+
+[env]
+  NODE_ENV = "production"
+  LOG_LEVEL = "warn"
+  PORT = "3000"
+  
+  # Feature flags
+  FEATURE_FLAG_NEW_UI = "true"
+  FEATURE_FLAG_BETA_FEATURES = "false"
+
+# =============================================================================
+# HTTP service configuration
+# =============================================================================
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  
+  # ⚠️  IMPORTANT: Service type configuration
+  # For HTTP services (APIs, web apps): auto_stop_machines = true, min_machines_running = 0
+  # For background services (workers, event consumers, schedulers): auto_stop_machines = false, min_machines_running = 1
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 2
+
+  [http_service.concurrency]
+    type = "connections"
+    hard_limit = 25
+    soft_limit = 20
+
+  [[http_service.checks]]
+    interval = "15s"
+    timeout = "3s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/api/health"
+
+# =============================================================================
+# Machine configuration
+# =============================================================================
+
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "1gb"

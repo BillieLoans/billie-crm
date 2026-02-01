@@ -79,3 +79,9 @@ _bmad/core/resources/*
 _bmad/core/*
 _bmad/_config/*
 event-processor/src/billie_servicing/__pycache__/*
+# Fly.io secrets - NEVER commit these
+.env.dev
+.env.demo
+.env.staging
+.env.prod
+.env.local
