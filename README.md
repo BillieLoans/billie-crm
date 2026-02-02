@@ -45,7 +45,16 @@ Internal staff application for managing customer loan accounts at Billie, a smal
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-## Quick Start
+## Deployment to Fly.io
+
+For cloud deployment to Fly.io, see **[DEPLOYMENT.md](./DEPLOYMENT.md)**.
+
+Quick deploy:
+```bash
+make deploy ENV=demo GITHUB_TOKEN="ghp_your_token_here"
+```
+
+## Quick Start (Local Development)
 
 ### Option 1: Docker Compose (Recommended)
 

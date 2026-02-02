@@ -251,7 +251,13 @@ deploy: check-config
 	@echo "App Name:    $(APP_NAME)"
 	@echo "Config:      $(CONFIG_FILE)"
 	@echo ""
-	fly deploy -c $(CONFIG_FILE) -a $(APP_NAME)
+	@if [ -n "$(GITHUB_TOKEN)" ]; then \
+		echo "Building with GITHUB_TOKEN (for private SDKs)"; \
+		fly deploy -c $(CONFIG_FILE) -a $(APP_NAME) --build-secret GITHUB_TOKEN="$(GITHUB_TOKEN)"; \
+	else \
+		echo "⚠️  GITHUB_TOKEN not set - private SDKs will not be installed"; \
+		fly deploy -c $(CONFIG_FILE) -a $(APP_NAME); \
+	fi
 	@echo ""
 	@echo "═══════════════════════════════════════════════════════════════"
 	@echo "  ✅ Deployment complete"

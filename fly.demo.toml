@@ -15,9 +15,9 @@ primary_region = "syd"
 # =============================================================================
 
 [build]
-  # Uncomment and adjust based on your build system
-  # dockerfile = "Dockerfile"
-  # build-target = "production"
+  dockerfile = "Dockerfile.demo"
+  # Note: GITHUB_TOKEN must be passed as build secret:
+  # fly deploy --build-secret GITHUB_TOKEN=<token>
 
 # =============================================================================
 # Environment variables (NON-SENSITIVE ONLY)
@@ -26,12 +26,15 @@ primary_region = "syd"
 # =============================================================================
 
 [env]
+  # Log level - set to "warn" or "error" to reduce verbosity
+  LOG_LEVEL="info"
+  
   # Event Processing - Set to true to enable the worker
   ENABLE_EVENT_PROCESSING="true"
   WORKER_ID="1"
 
   # Next.js Configuration
-  NEXT_PUBLIC_APP_URL="http://localhost:3000"
+  NEXT_PUBLIC_APP_URL="https://billie-crm-demo.fly.dev"
 
   #Github setup
   GITHUB_ORG="BillieLoans"
@@ -49,12 +52,11 @@ primary_region = "syd"
   internal_port = 3000
   force_https = true
   
-  # ⚠️  IMPORTANT: Service type configuration
-  # For HTTP services (APIs, web apps): auto_stop_machines = true, min_machines_running = 0
-  # For background services (workers, event consumers, schedulers): auto_stop_machines = false, min_machines_running = 1
-  auto_stop_machines = true
+  # ⚠️  IMPORTANT: With event processor enabled, keep machine running
+  # The event processor needs to stay alive to consume Redis events
+  auto_stop_machines = false
   auto_start_machines = true
-  min_machines_running = 0
+  min_machines_running = 1
 
   [http_service.concurrency]
     type = "connections"
@@ -63,8 +65,8 @@ primary_region = "syd"
 
   [[http_service.checks]]
     interval = "30s"
-    timeout = "5s"
-    grace_period = "15s"
+    timeout = "10s"
+    grace_period = "30s"  # Allow time for both Next.js and event processor to start
     method = "GET"
     path = "/api/health"
 
@@ -74,4 +76,5 @@ primary_region = "syd"
 
 [[vm]]
   size = "shared-cpu-1x"
-  memory = "256mb"
+  memory = "512mb"  # Increased for running both Next.js and Python event processor
+  count = 1

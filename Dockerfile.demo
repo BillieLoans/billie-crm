@@ -1,0 +1,111 @@
+# =============================================================================
+# Demo/Fly.io Dockerfile - runs both Next.js (standalone) and Python event processor
+# =============================================================================
+# This Dockerfile creates a combined image that runs:
+#   1. Next.js standalone server (production optimized)
+#   2. Python event processor (background worker)
+# =============================================================================
+
+FROM node:22-alpine AS base
+
+# Install Python and dependencies in base image
+RUN apk add --no-cache \
+    python3 \
+    py3-pip \
+    git \
+    bash \
+    libc6-compat
+
+# =============================================================================
+# Dependencies stage - install Node.js packages
+# =============================================================================
+FROM base AS deps
+WORKDIR /app
+
+# Update corepack to fix signature verification issue
+RUN npm install -g corepack@latest && corepack enable
+
+# Install Node.js dependencies
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+
+# =============================================================================
+# Python dependencies stage
+# =============================================================================
+FROM base AS pydeps
+WORKDIR /app
+
+# Install to a specific target directory for easy copying
+ENV PIP_TARGET=/pip-packages
+
+# Copy and install Python base dependencies (without SDK lines)
+COPY event-processor/requirements.txt ./event-processor/
+RUN grep -v "git+https" event-processor/requirements.txt > /tmp/base-requirements.txt && \
+    pip3 install --no-cache-dir -r /tmp/base-requirements.txt
+
+# Install Billie SDKs (requires GITHUB_TOKEN at build time)
+# Use: fly deploy --build-secret GITHUB_TOKEN=<token>
+RUN --mount=type=secret,id=GITHUB_TOKEN \
+    if [ -f /run/secrets/GITHUB_TOKEN ]; then \
+    export GITHUB_TOKEN=$(cat /run/secrets/GITHUB_TOKEN) && \
+    echo "Installing Billie SDKs with GITHUB_TOKEN..." && \
+    git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/" && \
+    pip3 install --no-cache-dir \
+        "git+https://${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@accounts-v2.5.0#subdirectory=packages/accounts" \
+        "git+https://${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@customers-v2.0.0#subdirectory=packages/customers" \
+        "git+https://${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@ledger-v1.0.0#subdirectory=packages/ledger" && \
+    echo "✓ Billie SDKs installed successfully"; \
+    else echo "⚠️ GITHUB_TOKEN not set, skipping SDK install"; fi
+
+# Verify packages are installed
+RUN ls -la /pip-packages/ || echo "No packages in /pip-packages"
+
+# =============================================================================
+# Builder stage - build Next.js
+# =============================================================================
+FROM base AS builder
+WORKDIR /app
+
+# Update corepack
+RUN npm install -g corepack@latest && corepack enable
+
+# Copy dependencies from deps stage
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+# Build Next.js (standalone output)
+RUN pnpm run build
+
+# =============================================================================
+# Runner stage - production image
+# =============================================================================
+FROM base AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV PYTHONPATH=/pip-packages:/app/event-processor/src
+ENV PYTHONUNBUFFERED=1
+
+# Create non-root user
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+# Copy Python packages from pydeps stage
+COPY --from=pydeps /pip-packages /pip-packages
+
+# Copy Next.js standalone build
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+# Copy event processor source
+COPY --chown=nextjs:nodejs event-processor/src ./event-processor/src
+
+# Copy start script
+COPY --chown=nextjs:nodejs start-fly.sh /start-fly.sh
+RUN chmod +x /start-fly.sh
+
+USER nextjs
+
+EXPOSE 3000
+
+CMD ["/start-fly.sh"]
