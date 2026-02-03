@@ -158,6 +158,28 @@
   color: var(--theme-text, #1a1a1a);
 }
 
+.detailValueWithIcon {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.detailIconLink {
+  display: inline-flex;
+  align-items: center;
+  color: var(--theme-elevation-500, #888);
+  transition: color 0.15s;
+}
+
+.detailIconLink:hover {
+  color: var(--theme-elevation-700, #2563eb);
+}
+
+.detailIconLinkSvg {
+  width: 14px;
+  height: 14px;
+}
+
 .badgesExpanded {
   display: flex;
   flex-wrap: wrap;

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import type { CustomerData } from '@/hooks/queries/useCustomer'
+import { getAddressForMapLink, getGoogleMapsUrl } from '@/lib/utils'
 import { CopyButton } from '@/components/ui'
 import styles from './CustomerHeader.module.css'
 
@@ -140,7 +141,29 @@ export const CustomerHeader: React.FC<CustomerHeaderProps> = ({ customer }) => {
             </div>
             <div className={styles.detailItem}>
               <span className={styles.detailLabel}>Address</span>
-              <span className={styles.detailValue}>{formatAddress(customer.residentialAddress)}</span>
+              <span className={styles.detailValueWithIcon}>
+                <span>{formatAddress(customer.residentialAddress)}</span>
+                {(() => {
+                  const mapAddress = getAddressForMapLink(customer.residentialAddress)
+                  const mapUrl = mapAddress ? getGoogleMapsUrl(mapAddress) : ''
+                  return mapUrl ? (
+                    <a
+                      href={mapUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={styles.detailIconLink}
+                      title="View on Google Maps"
+                      aria-label="View address on Google Maps"
+                    >
+                      <svg className={styles.detailIconLinkSvg} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                        <polyline points="15 3 21 3 21 9" />
+                        <line x1="10" y1="14" x2="21" y2="3" />
+                      </svg>
+                    </a>
+                  ) : null
+                })()}
+              </span>
             </div>
           </div>
 

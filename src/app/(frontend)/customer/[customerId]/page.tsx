@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { getAddressForMapLink, getGoogleMapsUrl } from '@/lib/utils'
 
 // Types
 interface CustomerData {
@@ -168,15 +169,38 @@ function CustomerHeader({ customer }: { customer: CustomerData['customer'] }) {
               </a>
             </div>
           )}
-          {customer.residentialAddress?.fullAddress && (
-            <div className="flex items-start gap-2">
-              <svg className="w-4 h-4 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              <span>{customer.residentialAddress.fullAddress}</span>
-            </div>
-          )}
+          {(() => {
+            const addr = customer.residentialAddress
+            const displayAddress = addr?.fullAddress ?? (addr ? getAddressForMapLink(addr) : '')
+            const mapAddress = addr ? getAddressForMapLink(addr) : ''
+            const mapUrl = mapAddress ? getGoogleMapsUrl(mapAddress) : ''
+            if (!displayAddress) return null
+            return (
+              <div className="flex items-start gap-2">
+                <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>{displayAddress}</span>
+                {mapUrl && (
+                  <a
+                    href={mapUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-slate-400 hover:text-blue-600 inline-flex mt-0.5"
+                    title="View on Google Maps"
+                    aria-label="View address on Google Maps"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                      <polyline points="15 3 21 3 21 9" />
+                      <line x1="10" y1="14" x2="21" y2="3" />
+                    </svg>
+                  </a>
+                )}
+              </div>
+            )
+          })()}
         </div>
       </div>
     </div>

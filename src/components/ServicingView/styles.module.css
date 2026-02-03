@@ -145,6 +145,23 @@
   text-align: right;
 }
 
+.profileIconLink {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 4px;
+  color: var(--theme-elevation-500, #888);
+  transition: color 0.15s;
+}
+
+.profileIconLink:hover {
+  color: var(--theme-elevation-700, #2563eb);
+}
+
+.profileIconLinkSvg {
+  width: 14px;
+  height: 14px;
+}
+
 .profileBadges {
   display: flex;
   flex-wrap: wrap;
