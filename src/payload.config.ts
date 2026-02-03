@@ -19,6 +19,8 @@ const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
 
 export default buildConfig({
+  // Server URL is critical for cookie handling and authentication
+  serverURL: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
   admin: {
     user: Users.slug,
     importMap: {
@@ -40,13 +42,9 @@ export default buildConfig({
       // Notification bell in header actions (next to user profile button)
       actions: ['@/components/Notifications/NotificationAction#NotificationAction'],
       // Custom views with Payload admin template (includes sidebar)
+      // Note: /admin root redirect is handled by Next.js middleware (src/middleware.ts)
+      // to work around Payload's built-in route redirect loop issue.
       views: {
-        // Root admin redirect - prevents redirect loop between /admin and /admin/login
-        rootRedirect: {
-          Component: '@/components/AdminRootRedirect/AdminRootRedirect#AdminRootRedirect',
-          path: '/',
-          exact: true,
-        },
         // Dashboard view (Story 6.2)
         dashboard: {
           Component: '@/components/DashboardView/DashboardViewWithTemplate#DashboardViewWithTemplate',
