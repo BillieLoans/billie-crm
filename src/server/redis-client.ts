@@ -41,6 +41,8 @@ export function getRedisClient(): Redis {
       maxRetriesPerRequest: 3,
       // Connection settings
       connectTimeout: 10000,
+      // TCP keepalive — detect dead connections proactively (every 10s)
+      keepAlive: 10000,
       // Don't buffer commands when disconnected
       enableOfflineQueue: false,
       // Lazy connect - don't connect until first command

@@ -9,6 +9,16 @@ from typing import Any, Callable, Coroutine
 import redis.asyncio as redis
 import structlog
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
+from pymongo.errors import (
+    ConfigurationError as MongoConfigurationError,
+    ConnectionFailure as MongoConnectionFailure,
+    ServerSelectionTimeoutError as MongoServerSelectionTimeoutError,
+)
+from redis.exceptions import (
+    ConnectionError as RedisConnectionError,
+    TimeoutError as RedisTimeoutError,
+    ResponseError as RedisResponseError,
+)
 
 from billie_accounts_events.parser import parse_account_message
 from billie_customers_events.parser import parse_customer_message
@@ -104,14 +114,126 @@ class EventProcessor:
         self.handlers[event_type] = handler
         logger.info("Registered handler", event_type=event_type)
 
+    def _create_redis_client(self) -> redis.Redis:
+        """Create a Redis client with resilient connection settings."""
+        return redis.from_url(
+            self.redis_url,
+            decode_responses=False,
+            health_check_interval=30,
+            socket_connect_timeout=10,
+            socket_timeout=30,
+            retry_on_timeout=True,
+        )
+
+    async def _connect(self) -> None:
+        """Initialize Redis and MongoDB connections with startup retry."""
+        startup_backoff = 1
+        max_startup_backoff = 30
+
+        # Connect to Redis with retry
+        while True:
+            try:
+                print("Connecting to Redis...")
+                self.redis = self._create_redis_client()
+                await self.redis.ping()
+                print("Connected to Redis ✓")
+                logger.info("Redis connection established")
+                break
+            except (RedisConnectionError, RedisTimeoutError, OSError) as e:
+                # Close the failed client to avoid leaking sockets
+                if self.redis:
+                    try:
+                        await self.redis.close()
+                    except Exception:
+                        pass
+                    self.redis = None
+                print(
+                    f"Redis not available ({type(e).__name__}), "
+                    f"retrying in {startup_backoff}s..."
+                )
+                logger.warning(
+                    "Redis not available at startup, retrying",
+                    error_type=type(e).__name__,
+                    error=str(e),
+                    retry_in=startup_backoff,
+                )
+                await asyncio.sleep(startup_backoff)
+                startup_backoff = min(startup_backoff * 2, max_startup_backoff)
+
+        # Connect to MongoDB with retry
+        startup_backoff = 1  # reset for MongoDB phase
+        while True:
+            try:
+                print("Connecting to MongoDB...")
+                self.mongo = AsyncIOMotorClient(
+                    self.database_uri,
+                    serverSelectionTimeoutMS=10000,
+                )
+                self.db = self.mongo[self.db_name]
+                await self.db.command("ping")
+                print("Connected to MongoDB ✓")
+                logger.info("MongoDB connection established")
+                break
+            except MongoConfigurationError as e:
+                # Bad URI or invalid options — will never self-heal, fail fast
+                logger.error(
+                    "MongoDB configuration error (fatal — check DATABASE_URI)",
+                    error=str(e),
+                )
+                raise
+            except (
+                MongoConnectionFailure,
+                MongoServerSelectionTimeoutError,
+                OSError,
+            ) as e:
+                # Transient connectivity errors — retry with backoff.
+                # ConnectionFailure covers network errors, broken pipes,
+                # DNS failures. ServerSelectionTimeoutError covers
+                # unreachable hosts. OSError covers low-level socket errors.
+                if self.mongo:
+                    self.mongo.close()
+                    self.mongo = None
+                    self.db = None
+                print(
+                    f"MongoDB not available ({type(e).__name__}), "
+                    f"retrying in {startup_backoff}s..."
+                )
+                logger.warning(
+                    "MongoDB not available at startup, retrying",
+                    error_type=type(e).__name__,
+                    error=str(e),
+                    retry_in=startup_backoff,
+                )
+                await asyncio.sleep(startup_backoff)
+                startup_backoff = min(startup_backoff * 2, max_startup_backoff)
+
+    async def _reconnect_redis(self) -> None:
+        """Close existing Redis connection and create a fresh one."""
+        if self.redis:
+            try:
+                await self.redis.close()
+            except Exception:
+                pass
+        self.redis = self._create_redis_client()
+        await self.redis.ping()
+
+    async def _recover_after_reconnect(self) -> None:
+        """Full recovery sequence after a successful Redis reconnection.
+
+        Reconnects, ensures consumer groups exist (may have been lost if
+        Redis restarted without persistence), and replays any pending
+        messages that were interrupted by the connection failure.
+        """
+        await self._reconnect_redis()
+        logger.info("Redis reconnection successful")
+        await self._ensure_consumer_group(settings.inbox_stream)
+        await self._ensure_consumer_group(settings.internal_stream)
+        await self._process_pending_messages(settings.inbox_stream)
+        await self._process_pending_messages(settings.internal_stream)
+
     async def start(self) -> None:
         """Initialize connections and start processing."""
-        print("Connecting to Redis...")
-        self.redis = redis.from_url(self.redis_url, decode_responses=False)
-
-        print("Connecting to MongoDB...")
-        self.mongo = AsyncIOMotorClient(self.database_uri)
-        self.db = self.mongo[self.db_name]
+        await self._connect()
 
         print("Setting up consumer groups...")
         await self._ensure_consumer_group(settings.inbox_stream)
@@ -122,6 +244,9 @@ class EventProcessor:
         await self._process_pending_messages(settings.internal_stream)
 
         self._running = True
+        reconnect_backoff = 1
+        max_reconnect_backoff = 30
+
         print(f"✅ Event processor started (consumer: {self.consumer_id})")
         print(f"👂 Listening for events on:")
         print(f"   - {settings.inbox_stream} (external)")
@@ -134,7 +259,97 @@ class EventProcessor:
         )
 
         while self._running:
-            await self._process_new_messages()
+            try:
+                await self._process_new_messages()
+                reconnect_backoff = 1  # Reset on successful iteration
+
+            except RedisResponseError as e:
+                # ── Layer 1: NOGROUP recovery ──
+                # Redis restarted without persistence or stream/group was deleted.
+                if "NOGROUP" in str(e):
+                    logger.warning(
+                        "Consumer group missing (NOGROUP), re-creating groups",
+                        consumer_group=settings.consumer_group,
+                    )
+                    try:
+                        await self._ensure_consumer_group(settings.inbox_stream)
+                        await self._ensure_consumer_group(settings.internal_stream)
+                        logger.info(
+                            "Consumer groups re-created successfully "
+                            "(from id=0, backlog will be replayed)"
+                        )
+                        reconnect_backoff = 1
+                    except (
+                        RedisConnectionError,
+                        RedisTimeoutError,
+                        OSError,
+                    ) as conn_err:
+                        # Redis dropped during group re-creation — use the
+                        # same full recovery sequence as Layer 2.
+                        logger.warning(
+                            "Redis connection lost during NOGROUP recovery",
+                            error_type=type(conn_err).__name__,
+                            error=str(conn_err),
+                            reconnect_in=reconnect_backoff,
+                        )
+                        await asyncio.sleep(reconnect_backoff)
+                        reconnect_backoff = min(
+                            reconnect_backoff * 2, max_reconnect_backoff
+                        )
+                        try:
+                            await self._recover_after_reconnect()
+                            reconnect_backoff = 1
+                        except Exception as reconnect_err:
+                            logger.error(
+                                "Redis reconnection failed",
+                                error=str(reconnect_err),
+                            )
+                    except RedisResponseError:
+                        # Non-transient Redis command error (e.g. ACL/permission) —
+                        # re-raise; retrying won't help.
+                        raise
+                else:
+                    raise
+
+            except (RedisConnectionError, RedisTimeoutError, OSError) as e:
+                # ── Layer 2: Connection error reconnection ──
+                # Network failures, Redis restarts, broken pipes, etc.
+                logger.warning(
+                    "Redis connection error, attempting reconnection",
+                    error_type=type(e).__name__,
+                    error=str(e),
+                    reconnect_in=reconnect_backoff,
+                )
+                await asyncio.sleep(reconnect_backoff)
+                reconnect_backoff = min(
+                    reconnect_backoff * 2, max_reconnect_backoff
+                )
+                try:
+                    await self._recover_after_reconnect()
+                    reconnect_backoff = 1
+                except Exception as reconnect_err:
+                    logger.error(
+                        "Redis reconnection failed",
+                        error=str(reconnect_err),
+                    )
+
+            except asyncio.CancelledError:
+                # ── Layer 3: Graceful cancellation ──
+                logger.info("Event processing cancelled")
+                self._running = False
+                raise
+
+            except Exception as e:
+                # ── Layer 4: Generic catch-all ──
+                # Non-connection errors (e.g., message processing bugs).
+                logger.error(
+                    "Unexpected error in processing loop",
+                    error=str(e),
+                    exc_info=True,
+                )
+                await asyncio.sleep(1)  # Brief pause to avoid tight error loops
+
+        logger.info("Event processor main loop ended")
 
     async def stop(self) -> None:
         """Stop processing and close connections."""
@@ -294,6 +509,11 @@ class EventProcessor:
             print(f"   ✅ Processed successfully")
             log.info("Event processed successfully")
 
+        except (RedisConnectionError, RedisTimeoutError, OSError):
+            # Re-raise connection errors so the main loop can handle reconnection.
+            # The message was not ACK'd and will be retried after reconnection.
+            raise
+
         except Exception as e:
             print(f"   ❌ Error: {e}")
             logger.error(
@@ -306,10 +526,18 @@ class EventProcessor:
             )
 
             if delivery_count >= settings.max_retries:
-                print(f"   🗑️  Moving to DLQ after {delivery_count} attempts")
-                await self._move_to_dlq(message_id, fields, str(e))
-                await self.redis.xack(stream, settings.consumer_group, message_id)
-                logger.error("Message moved to DLQ", message_id=message_id_str)
+                try:
+                    print(f"   🗑️  Moving to DLQ after {delivery_count} attempts")
+                    await self._move_to_dlq(message_id, fields, str(e))
+                    await self.redis.xack(stream, settings.consumer_group, message_id)
+                    logger.error("Message moved to DLQ", message_id=message_id_str)
+                except (RedisConnectionError, RedisTimeoutError, OSError) as dlq_err:
+                    logger.error(
+                        "Failed to move message to DLQ (Redis unavailable), "
+                        "message will be retried on reconnection",
+                        message_id=message_id_str,
+                        error=str(dlq_err),
+                    )
 
     def _parse_event(self, event_type: str, sanitized: dict[str, Any]) -> Any:
         """Parse event using appropriate SDK."""
