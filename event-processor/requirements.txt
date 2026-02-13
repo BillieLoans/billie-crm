@@ -8,7 +8,7 @@ email-validator>=2.0
 
 # Billie Event SDKs
 # Install event sdks directly from git repo
-git+https://${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@accounts-v2.5.0#subdirectory=packages/accounts
+git+https://${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@accounts-v2.6.0#subdirectory=packages/accounts
 git+https://${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@customers-v2.0.0#subdirectory=packages/customers
 git+https://${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@ledger-v1.0.0#subdirectory=packages/ledger
 

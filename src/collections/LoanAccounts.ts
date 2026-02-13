@@ -212,6 +212,7 @@ export const LoanAccounts: CollectionConfig = {
       required: true,
       index: true,
       options: [
+        { label: 'Pending Disbursement', value: 'pending_disbursement' },
         { label: 'Active', value: 'active' },
         { label: 'Paid Off', value: 'paid_off' },
         { label: 'In Arrears', value: 'in_arrears' },

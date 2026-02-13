@@ -70,6 +70,11 @@ export default buildConfig({
           Component: '@/components/CollectionsView/CollectionsViewWithTemplate#CollectionsViewWithTemplate',
           path: '/collections',
         },
+        pendingDisbursements: {
+          Component:
+            '@/components/PendingDisbursementsView/PendingDisbursementsViewWithTemplate#PendingDisbursementsViewWithTemplate',
+          path: '/pending-disbursements',
+        },
         // System Status view (Story E1-S10)
         systemStatus: {
           Component: '@/components/SystemStatusView/SystemStatusViewWithTemplate#SystemStatusViewWithTemplate',

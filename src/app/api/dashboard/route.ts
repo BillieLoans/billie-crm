@@ -18,6 +18,7 @@ import {
   type DashboardResponse,
   type RecentAccount,
   type UpcomingPayment,
+  type PendingDisbursement,
 } from '@/lib/schemas/dashboard'
 
 /** Valid user roles */
@@ -95,7 +96,7 @@ export async function GET(request: NextRequest) {
     const baseUrl = `${protocol}://${host}`
 
     // 5. Parallel fetch all data
-    const [approvalsResult, ledgerHealth, customersResult, recentAccountsResult, allAccountsWithSchedule] = await Promise.all([
+    const [approvalsResult, ledgerHealth, customersResult, recentAccountsResult, allAccountsWithSchedule, pendingDisbursementResult] = await Promise.all([
       // Only query approvals if user has permission
       canSeeApprovals
         ? payload.find({
@@ -131,6 +132,16 @@ export async function GET(request: NextRequest) {
           accountStatus: { equals: 'active' },
         },
         limit: 100, // Reasonable limit for payment processing
+      }),
+
+      // Loans pending disbursement
+      payload.find({
+        collection: 'loan-accounts',
+        where: {
+          accountStatus: { equals: 'pending_disbursement' },
+        },
+        sort: '-createdAt',
+        limit: 10,
       }),
     ])
 
@@ -240,6 +251,17 @@ export async function GET(request: NextRequest) {
     // Limit to 10 most urgent
     const topUpcomingPayments = upcomingPayments.slice(0, 10)
 
+    // Process pending disbursement accounts
+    const pendingDisbursements: PendingDisbursement[] = pendingDisbursementResult.docs.map((acc) => ({
+      loanAccountId: acc.loanAccountId ?? '',
+      accountNumber: acc.accountNumber ?? '',
+      customerName: acc.customerName ?? 'Unknown',
+      customerId: acc.customerIdString ?? '',
+      loanAmount: acc.loanTerms?.loanAmount ?? 0,
+      loanAmountFormatted: formatCurrency(acc.loanTerms?.loanAmount ?? 0),
+      createdAt: acc.createdAt,
+    }))
+
     // 7. Build response
     const userRole = isValidRole(user.role) ? user.role : 'operations'
     const response: DashboardResponse = {
@@ -254,6 +276,8 @@ export async function GET(request: NextRequest) {
       recentCustomersSummary: customersWithAccounts,
       recentAccounts,
       upcomingPayments: topUpcomingPayments,
+      pendingDisbursements,
+      pendingDisbursementsCount: pendingDisbursementResult.totalDocs,
       systemStatus: {
         ledger: ledgerHealth.status,
         latencyMs: ledgerHealth.latencyMs,

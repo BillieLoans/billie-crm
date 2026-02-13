@@ -187,6 +187,25 @@ export interface MakeAdjustmentRequest {
   idempotencyKey?: string
 }
 
+export interface DisburseLoanRequest {
+  loanAccountId: string
+  disbursementAmount: string
+  bankReference: string
+  paymentMethod: string
+  attachmentLocation: string
+  notes: string
+  idempotencyKey?: string
+}
+
+export interface DisburseLoanResponse {
+  success: boolean
+  message: string
+  disbursementTransactionId: string
+  feeTransactionId: string
+  eventId: string
+  idempotentReplay: boolean
+}
+
 export interface InstalmentAllocation {
   paymentNumber: number
   amountApplied: string
@@ -1027,6 +1046,12 @@ export class LedgerClient {
 
   async makeAdjustment(request: MakeAdjustmentRequest): Promise<TransactionResponse> {
     return this.promisify<MakeAdjustmentRequest, TransactionResponse>(this.client.makeAdjustment)(
+      request,
+    )
+  }
+
+  async disburseLoan(request: DisburseLoanRequest): Promise<DisburseLoanResponse> {
+    return this.promisify<DisburseLoanRequest, DisburseLoanResponse>(this.client.disburseLoan)(
       request,
     )
   }

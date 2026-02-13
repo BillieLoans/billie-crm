@@ -349,6 +349,11 @@
 }
 
 /* Shared status color classes - used with size-specific base classes */
+.statusPendingDisbursement {
+  background: #fef3c7;
+  color: #92400e;
+}
+
 .statusActive {
   background: #dcfce7;
   color: #166534;
@@ -1562,6 +1567,15 @@
   color: #b91c1c;
   border-radius: 6px;
   font-size: 13px;
+}
+
+.disbursementSuccess {
+  padding: 12px;
+  background: #dcfce7;
+  color: #166534;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .repaymentField {

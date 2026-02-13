@@ -10,6 +10,7 @@ export interface ActionsTabProps {
   onRecordRepayment: () => void
   onWaiveFee: () => void
   onRequestWriteOff?: () => void
+  onDisburseLoan?: () => void
   hasPendingWriteOff?: boolean
 }
 
@@ -28,6 +29,7 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
   onRecordRepayment,
   onWaiveFee,
   onRequestWriteOff,
+  onDisburseLoan,
   hasPendingWriteOff = false,
 }) => {
   const readOnlyMode = useUIStore((state) => state.readOnlyMode)
@@ -55,6 +57,34 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
         <div className={styles.actionsReadOnlyWarning} role="alert">
           <span className={styles.actionsWarningIcon}>🔒</span>
           <span>System is in read-only mode. Actions are temporarily disabled.</span>
+        </div>
+      )}
+
+      {/* Disburse Loan Action - only visible for pending disbursement accounts */}
+      {onDisburseLoan && account.accountStatus === 'pending_disbursement' && (
+        <div className={styles.actionCard}>
+          <div className={styles.actionCardHeader}>
+            <span className={styles.actionCardIcon}>🏦</span>
+            <span className={styles.actionCardTitle}>Disburse Loan</span>
+          </div>
+          <p className={styles.actionCardDescription}>
+            Record disbursement of funds to the customer. This will transition the account to active
+            status and begin the repayment schedule.
+          </p>
+          <div className={styles.actionCardFooter}>
+            <span className={styles.actionCardMeta}>
+              Loan Amount: {currencyFormatter.format(account.loanTerms?.loanAmount ?? 0)}
+            </span>
+            <button
+              type="button"
+              className={`${styles.actionCardBtn} ${styles.actionCardBtnPrimary}`}
+              onClick={onDisburseLoan}
+              disabled={readOnlyMode}
+              data-testid="action-disburse-loan"
+            >
+              Disburse Loan
+            </button>
+          </div>
         </div>
       )}
 

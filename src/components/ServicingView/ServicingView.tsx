@@ -18,6 +18,7 @@ import { WaiveFeeDrawer } from './WaiveFeeDrawer'
 import { RecordRepaymentDrawer } from './RecordRepaymentDrawer'
 import { BulkWaiveFeeDrawer } from './BulkWaiveFeeDrawer'
 import { WriteOffRequestDrawer } from './WriteOffRequestDrawer'
+import { DisburseLoanDrawer } from './DisburseLoanDrawer'
 import { AccountPanel, type TabId } from './AccountPanel'
 import type { SelectedFee } from './FeeList'
 import { usePendingWriteOff } from '@/hooks/queries/usePendingWriteOff'
@@ -163,6 +164,7 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
   const [bulkWaiveOpen, setBulkWaiveOpen] = useState(false)
   const [selectedFees, setSelectedFees] = useState<SelectedFee[]>([])
   const [writeOffOpen, setWriteOffOpen] = useState(false)
+  const [disburseLoanOpen, setDisburseLoanOpen] = useState(false)
 
   // Derive accounts and selected account
   const accounts = customer?.loanAccounts ?? []
@@ -264,6 +266,14 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
 
   const handleCloseWriteOff = useCallback(() => {
     setWriteOffOpen(false)
+  }, [])
+
+  const handleOpenDisburseLoan = useCallback(() => {
+    setDisburseLoanOpen(true)
+  }, [])
+
+  const handleCloseDisburseLoan = useCallback(() => {
+    setDisburseLoanOpen(false)
   }, [])
 
   // Refresh handler - invalidates appropriate queries based on active tab
@@ -392,6 +402,7 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
             isRefreshing={isFetchingData}
             onRequestWriteOff={handleOpenWriteOff}
             hasPendingWriteOff={hasPendingWriteOff}
+            onDisburseLoan={handleOpenDisburseLoan}
           />
         ) : (
           <AccountSelectionPrompt />
@@ -447,6 +458,17 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
             selectedAccount.balances?.totalOutstanding ??
             0
           }
+        />
+      )}
+
+      {/* Disburse Loan Drawer - overlay */}
+      {selectedAccount && (
+        <DisburseLoanDrawer
+          isOpen={disburseLoanOpen}
+          onClose={handleCloseDisburseLoan}
+          loanAccountId={selectedAccount.loanAccountId}
+          accountNumber={selectedAccount.accountNumber}
+          loanAmount={selectedAccount.loanTerms?.loanAmount ?? 0}
         />
       )}
     </div>

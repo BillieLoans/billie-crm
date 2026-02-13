@@ -19,6 +19,7 @@ logger = structlog.get_logger()
 # SDK AccountStatus to Payload accountStatus mapping
 SDK_STATUS_MAP = {
     "PENDING": "active",
+    "PENDING_DISBURSEMENT": "pending_disbursement",
     "ACTIVE": "active",
     "SUSPENDED": "in_arrears",
     "CLOSED": "paid_off",
@@ -107,9 +108,11 @@ async def handle_account_updated(db: AsyncIOMotorDatabase, parsed_event: Any) ->
 
     update_doc: dict[str, Any] = {"updatedAt": datetime.utcnow()}
 
+    current_balance_value = None
     if payload.current_balance is not None:
-        update_doc["balances.currentBalance"] = float(payload.current_balance)
-        update_doc["balances.totalOutstanding"] = float(payload.current_balance)
+        current_balance_value = float(payload.current_balance)
+        update_doc["balances.currentBalance"] = current_balance_value
+        update_doc["balances.totalOutstanding"] = current_balance_value
 
     if payload.status:
         sdk_status = str(payload.status)
@@ -117,6 +120,22 @@ async def handle_account_updated(db: AsyncIOMotorDatabase, parsed_event: Any) ->
             sdk_status = sdk_status.split(".")[-1]
         update_doc["sdkStatus"] = sdk_status
         update_doc["accountStatus"] = SDK_STATUS_MAP.get(sdk_status, "active")
+    elif current_balance_value is not None:
+        # Some disbursement-driven account.updated events omit status.
+        # If the account is currently pending disbursement and now has a positive balance,
+        # infer that it has transitioned to ACTIVE.
+        existing_account = await db["loan-accounts"].find_one(
+            {"loanAccountId": account_id},
+            {"accountStatus": 1},
+        )
+        if existing_account and existing_account.get("accountStatus") == "pending_disbursement":
+            if current_balance_value > 0:
+                update_doc["sdkStatus"] = "ACTIVE"
+                update_doc["accountStatus"] = "active"
+                log.info(
+                    "Inferred status transition from pending_disbursement to active",
+                    current_balance=current_balance_value,
+                )
 
     if hasattr(payload, "last_payment_date") and payload.last_payment_date:
         update_doc["lastPayment.date"] = payload.last_payment_date

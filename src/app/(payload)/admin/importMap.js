@@ -14,6 +14,7 @@ import { ServicingViewWithTemplate as ServicingViewWithTemplate_04dbd51012de8c56
 import { ApprovalsViewWithTemplate as ApprovalsViewWithTemplate_03ad776ce26465d586697fa5d953dd80 } from '@/components/ApprovalsView/ApprovalsViewWithTemplate'
 import { MyActivityViewWithTemplate as MyActivityViewWithTemplate_59e3ffb5a5d6849cbc82cab26e75164b } from '@/components/MyActivityView/MyActivityViewWithTemplate'
 import { CollectionsViewWithTemplate as CollectionsViewWithTemplate_6ff107173ce80a76a0f8a31dcf506def } from '@/components/CollectionsView/CollectionsViewWithTemplate'
+import { PendingDisbursementsViewWithTemplate as PendingDisbursementsViewWithTemplate_693db25300e0ccd059d0f882c0694009 } from '@/components/PendingDisbursementsView/PendingDisbursementsViewWithTemplate'
 import { SystemStatusViewWithTemplate as SystemStatusViewWithTemplate_ec75aba93ca5497fc28565b2d315a0bb } from '@/components/SystemStatusView/SystemStatusViewWithTemplate'
 import { PeriodCloseViewWithTemplate as PeriodCloseViewWithTemplate_5066c3164c49a10261fae829cb52078b } from '@/components/PeriodCloseView/PeriodCloseViewWithTemplate'
 import { ECLConfigViewWithTemplate as ECLConfigViewWithTemplate_da54698be16fc6d457187852eba8f854 } from '@/components/ECLConfigView/ECLConfigViewWithTemplate'
@@ -37,6 +38,7 @@ export const importMap = {
   "@/components/ApprovalsView/ApprovalsViewWithTemplate#ApprovalsViewWithTemplate": ApprovalsViewWithTemplate_03ad776ce26465d586697fa5d953dd80,
   "@/components/MyActivityView/MyActivityViewWithTemplate#MyActivityViewWithTemplate": MyActivityViewWithTemplate_59e3ffb5a5d6849cbc82cab26e75164b,
   "@/components/CollectionsView/CollectionsViewWithTemplate#CollectionsViewWithTemplate": CollectionsViewWithTemplate_6ff107173ce80a76a0f8a31dcf506def,
+  "@/components/PendingDisbursementsView/PendingDisbursementsViewWithTemplate#PendingDisbursementsViewWithTemplate": PendingDisbursementsViewWithTemplate_693db25300e0ccd059d0f882c0694009,
   "@/components/SystemStatusView/SystemStatusViewWithTemplate#SystemStatusViewWithTemplate": SystemStatusViewWithTemplate_ec75aba93ca5497fc28565b2d315a0bb,
   "@/components/PeriodCloseView/PeriodCloseViewWithTemplate#PeriodCloseViewWithTemplate": PeriodCloseViewWithTemplate_5066c3164c49a10261fae829cb52078b,
   "@/components/ECLConfigView/ECLConfigViewWithTemplate#ECLConfigViewWithTemplate": ECLConfigViewWithTemplate_da54698be16fc6d457187852eba8f854,

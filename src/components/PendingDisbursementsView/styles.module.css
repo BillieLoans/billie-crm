@@ -1,0 +1,128 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.subtitle {
+  margin: 4px 0 0;
+  color: var(--theme-elevation-600, #a3a3a3);
+  font-size: 14px;
+}
+
+.refreshButton {
+  border: 1px solid var(--theme-elevation-300, #404040);
+  background: var(--theme-elevation-100, #1f1f1f);
+  color: var(--theme-text, #fff);
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.refreshButton:hover {
+  background: var(--theme-elevation-150, #2a2a2a);
+}
+
+.errorBanner {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fee2e2;
+  color: #b91c1c;
+  font-size: 13px;
+}
+
+.tableWrapper {
+  border: 1px solid var(--theme-elevation-200, #333);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--theme-elevation-50, #171717);
+}
+
+.loading {
+  padding: 24px;
+  color: var(--theme-elevation-600, #a3a3a3);
+}
+
+.emptyState {
+  padding: 28px;
+  text-align: center;
+  color: var(--theme-elevation-600, #a3a3a3);
+}
+
+.emptyIcon {
+  display: inline-block;
+  font-size: 20px;
+  margin-bottom: 8px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--theme-elevation-200, #333);
+  text-align: left;
+  font-size: 13px;
+}
+
+.table th {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--theme-elevation-600, #a3a3a3);
+  background: var(--theme-elevation-100, #1f1f1f);
+}
+
+.table tr:last-child td {
+  border-bottom: none;
+}
+
+.rowActions {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.disburseButton {
+  border: none;
+  background: #2563eb;
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.disburseButton:hover {
+  background: #1d4ed8;
+}
+
+.viewButton {
+  border: 1px solid var(--theme-elevation-300, #404040);
+  background: transparent;
+  color: var(--theme-text, #fff);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.viewButton:hover {
+  background: var(--theme-elevation-100, #1f1f1f);
+}

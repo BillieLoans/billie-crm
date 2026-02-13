@@ -16,6 +16,21 @@ export const RecentAccountSchema = z.object({
 export type RecentAccount = z.infer<typeof RecentAccountSchema>
 
 /**
+ * Schema for a loan account pending disbursement.
+ */
+export const PendingDisbursementSchema = z.object({
+  loanAccountId: z.string(),
+  accountNumber: z.string(),
+  customerName: z.string(),
+  customerId: z.string(),
+  loanAmount: z.number(),
+  loanAmountFormatted: z.string(),
+  createdAt: z.string().datetime(),
+})
+
+export type PendingDisbursement = z.infer<typeof PendingDisbursementSchema>
+
+/**
  * Schema for an upcoming payment.
  */
 export const UpcomingPaymentSchema = z.object({
@@ -58,10 +73,13 @@ export const DashboardResponseSchema = z.object({
       totalOutstanding: z.string(),
     }),
   ),
-  // New: Recently created accounts for onboarding visibility
+  // Recently created accounts for onboarding visibility
   recentAccounts: z.array(RecentAccountSchema),
-  // New: Upcoming payments for manual payment processing
+  // Upcoming payments for manual payment processing
   upcomingPayments: z.array(UpcomingPaymentSchema),
+  // Loans pending disbursement
+  pendingDisbursements: z.array(PendingDisbursementSchema),
+  pendingDisbursementsCount: z.number().int().min(0),
   systemStatus: z.object({
     ledger: z.enum(['online', 'degraded', 'offline']),
     latencyMs: z.number().int().min(0),

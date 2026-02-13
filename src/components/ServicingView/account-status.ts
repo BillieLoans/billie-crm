@@ -3,7 +3,7 @@
  * Used by LoanAccountCard and LoanAccountDetails.
  */
 
-export type AccountStatus = 'active' | 'paid_off' | 'in_arrears' | 'written_off'
+export type AccountStatus = 'pending_disbursement' | 'active' | 'paid_off' | 'in_arrears' | 'written_off'
 
 export interface StatusConfig {
   label: string
@@ -16,6 +16,7 @@ export interface StatusConfig {
  * (e.g., `accountStatus` or `detailsStatus`).
  */
 export const ACCOUNT_STATUS_CONFIG: Record<AccountStatus, StatusConfig> = {
+  pending_disbursement: { label: 'Pending Disbursement', colorClass: 'statusPendingDisbursement' },
   active: { label: 'Active', colorClass: 'statusActive' },
   paid_off: { label: 'Paid Off', colorClass: 'statusPaidOff' },
   in_arrears: { label: 'In Arrears', colorClass: 'statusArrears' },

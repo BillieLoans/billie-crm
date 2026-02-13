@@ -710,7 +710,7 @@ export interface LoanAccount {
   /**
    * Mapped from SDK AccountStatus enum
    */
-  accountStatus: 'active' | 'paid_off' | 'in_arrears' | 'written_off';
+  accountStatus: 'pending_disbursement' | 'active' | 'paid_off' | 'in_arrears' | 'written_off';
   /**
    * Original status from SDK (PENDING, ACTIVE, SUSPENDED, CLOSED)
    */

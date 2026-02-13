@@ -50,6 +50,9 @@ service AccountingLedgerService {
   // Make a manual adjustment
   rpc MakeAdjustment(MakeAdjustmentRequest) returns (TransactionResponse);
 
+  // Disburse funds for a loan account (transitions from PENDING_DISBURSEMENT to ACTIVE)
+  rpc DisburseLoan(DisburseLoanRequest) returns (DisburseLoanResponse);
+
   // ==========================================================================
   // Schedule Queries (with Instalment Status)
   // ==========================================================================
@@ -422,7 +425,7 @@ message GLReconciliationResponse {
 message TransactionResponse {
   Transaction transaction = 1;
   string event_id = 2;  // ID of the published event (for correlation)
-  
+
   // Payment allocation details (only for RepaymentResponse)
   optional string allocated_to_fees = 3;
   optional string allocated_to_principal = 4;
@@ -498,6 +501,27 @@ message MakeAdjustmentRequest {
   optional string idempotency_key = 6;  // Client-provided key for idempotent requests (TTL: 24h)
 }
 
+// Disburse a loan -- records DISBURSEMENT + ESTABLISHMENT_FEE transactions
+// and publishes account.disbursed.v1 to trigger accrual/ECL initialization
+message DisburseLoanRequest {
+  string loan_account_id = 1;
+  string disbursement_amount = 2;  // Decimal string; defaults to loan_amount + fee if empty
+  string bank_reference = 3;       // Bank payment reference
+  string payment_method = 4;       // Defaults to "bank_transfer" if empty
+  string attachment_location = 5;  // S3 URI for proof of payment / documentation
+  string notes = 6;                // Free-text notes
+  optional string idempotency_key = 7;  // Client-provided key for idempotent requests (TTL: 24h)
+}
+
+message DisburseLoanResponse {
+  bool success = 1;
+  string message = 2;
+  string disbursement_transaction_id = 3;  // Transaction ID for the DISBURSEMENT
+  string fee_transaction_id = 4;           // Transaction ID for ESTABLISHMENT_FEE (empty if no fee)
+  string event_id = 5;                     // Published account.disbursed.v1 event ID
+  bool idempotent_replay = 6;             // True if response was served from idempotency cache
+}
+
 // =============================================================================
 // Schedule with Status Messages
 // =============================================================================
@@ -562,7 +586,7 @@ message GetAccountAgingRequest {
 message AccountAgingResponse {
   string account_id = 1;
   int32 dpd = 2;                                    // Days Past Due
-  string bucket = 3;                                 // e.g., "current", "bucket_1", etc.
+  string bucket = 3;                                 // e.g., "current", "early_arrears", "late_arrears", "default"
   int32 days_until_overdue = 4;                      // 0 if already overdue
   string last_updated = 5;                           // ISO 8601 UTC timestamp
   optional string previous_bucket = 6;               // Previous bucket before transition
@@ -573,7 +597,7 @@ message AccountAgingResponse {
 
 // Request to get list of overdue accounts
 message GetOverdueAccountsRequest {
-  optional string bucket_filter = 1;     // Filter by specific bucket (e.g., "bucket_1")
+  optional string bucket_filter = 1;     // Filter by specific bucket (e.g., "early_arrears")
   optional int32 min_dpd = 2;            // Minimum DPD (default 1)
   optional int32 max_dpd = 3;            // Maximum DPD (no default = unlimited)
   int32 page_size = 4;                   // Max results per page (default 100, max 1000)
@@ -624,6 +648,9 @@ message AccruedYieldResponse {
 message GetAccrualEventHistoryRequest {
   string account_id = 1;
   optional int32 limit = 2;  // Optional limit on number of events returned
+  optional string from_date = 3;  // Optional start date filter (YYYY-MM-DD), inclusive
+  optional string to_date = 4;    // Optional end date filter (YYYY-MM-DD), inclusive. Defaults to today (excludes future events)
+  optional bool include_future = 5;  // If true, include events with accrual_date > today (default: false)
 }
 
 // Single accrual event detail
@@ -645,6 +672,9 @@ message AccrualEventHistoryResponse {
   string account_id = 1;
   repeated AccrualEventDetail events = 2;
   int32 total_count = 3;  // Number of events returned
+  repeated string missing_dates = 4;  // Dates with missing accrual events (gaps detected)
+  bool has_gaps = 5;  // True if there are missing dates in the accrual sequence
+  int32 filtered_count = 6;  // Number of events excluded by date filters (e.g., future events)
 }
 
 // Request to query full event history for an account
@@ -842,7 +872,7 @@ message GetPortfolioECLRequest {
 
 // ECL summary for a single aging bucket
 message ECLBucketSummary {
-  string bucket = 1;                    // Bucket name (current, bucket_1, etc.)
+  string bucket = 1;                    // Bucket name (current, early_arrears, late_arrears, default)
   int32 account_count = 2;              // Number of accounts in bucket
   string total_ecl = 3;                 // Sum of ECL allowances (Decimal as string)
   string total_carrying_amount = 4;     // Sum of carrying amounts (Decimal as string)
@@ -973,7 +1003,7 @@ message UpdateOverlayMultiplierRequest {
 
 // Request to update PD rate for a bucket
 message UpdatePDRateRequest {
-  string bucket = 1;                  // Bucket name: "current", "bucket_1", etc.
+  string bucket = 1;                  // Bucket name: "current", "early_arrears", "late_arrears", "default"
   string pd_rate = 2;                 // New PD rate (Decimal as string)
   string updated_by = 3;              // User making the change (required)
 }
@@ -1004,7 +1034,7 @@ message ECLConfigHistoryResponse {
 
 // Request to schedule a future config change
 message ScheduleConfigChangeRequest {
-  string field_name = 1;      // Field to change (e.g., "overlay_multiplier", "pd_rate_bucket_1")
+  string field_name = 1;      // Field to change (e.g., "overlay_multiplier", "pd_rate_early_arrears")
   string new_value = 2;       // New value (Decimal as string)
   string effective_date = 3;  // When change takes effect (YYYY-MM-DD UTC)
   string created_by = 4;      // User scheduling the change
@@ -1081,7 +1111,7 @@ message PreviewPeriodCloseRequest {
 
 // ECL summary by bucket
 message BucketSummary {
-  string bucket = 1;                  // Bucket name (current, bucket_1, etc.)
+  string bucket = 1;                  // Bucket name (current, early_arrears, late_arrears, default)
   int32 account_count = 2;            // Number of accounts
   string total_ecl = 3;               // Total ECL (Decimal as string)
   string total_carrying_amount = 4;   // Total carrying amount

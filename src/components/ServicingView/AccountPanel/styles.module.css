@@ -56,6 +56,11 @@
 }
 
 /* Status colors - reuse from parent styles */
+.statusPendingDisbursement {
+  background: #fef3c7;
+  color: #92400e;
+}
+
 .statusActive {
   background: #dcfce7;
   color: #166534;

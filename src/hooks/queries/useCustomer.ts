@@ -42,7 +42,7 @@ export interface LoanAccountData {
   id: string
   loanAccountId: string
   accountNumber: string
-  accountStatus: 'active' | 'paid_off' | 'in_arrears' | 'written_off'
+  accountStatus: 'pending_disbursement' | 'active' | 'paid_off' | 'in_arrears' | 'written_off'
   loanTerms: {
     loanAmount: number | null
     loanFee: number | null

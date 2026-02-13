@@ -9,6 +9,7 @@ import { SortableTable, type ColumnDef } from '@/components/SortableTable'
 import { PortfolioHealthWidget } from './PortfolioHealthWidget'
 import { ECLSummaryWidget } from './ECLSummaryWidget'
 import { SystemStatusWidget } from './SystemStatusWidget'
+import { PendingDisbursementsWidget } from './PendingDisbursementsWidget'
 import type { RecentAccount, UpcomingPayment } from '@/lib/schemas/dashboard'
 import styles from './styles.module.css'
 
@@ -257,6 +258,7 @@ export function DashboardView() {
       <div className={styles.widgetRow} data-testid="portfolio-widgets">
         <PortfolioHealthWidget />
         <ECLSummaryWidget />
+        <PendingDisbursementsWidget />
         <SystemStatusWidget />
       </div>
 
