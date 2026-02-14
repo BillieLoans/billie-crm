@@ -80,7 +80,7 @@ export function ECLSummaryWidget() {
             </div>
             {/* Mini bucket distribution */}
             <div className={styles.bucketBar}>
-              {buckets.map((bucket) => {
+              {buckets.map((bucket, index) => {
                 const width = totalAccounts > 0
                   ? (bucket.accountCount / totalAccounts) * 100
                   : 0
@@ -101,7 +101,7 @@ export function ECLSummaryWidget() {
                 }
                 return (
                   <div
-                    key={bucket.bucket}
+                    key={`${bucket.bucket}-${index}`}
                     className={`${styles.bucketSegment} ${getBucketClass(bucket.bucket)}`}
                     style={{ width: `${Math.max(width, 2)}%` }}
                     title={`${bucket.bucket}: ${bucket.accountCount} accounts`}
