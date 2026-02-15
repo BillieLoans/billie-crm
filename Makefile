@@ -11,6 +11,8 @@
 # Optional environment variables:
 #   CONFIRM - Required for production operations (set to 1)
 #   FLY_API_TOKEN - Fly.io API token (for CI/CD)
+#   GITHUB_TOKEN - GitHub token for installing private SDKs (demo/staging; use with NO_CACHE=1 if SDKs were previously missing)
+#   NO_CACHE - Set to 1 to force full rebuild (use when GITHUB_TOKEN is set but SDKs still missing due to cache)
 # =============================================================================
 
 # Service configuration
@@ -251,12 +253,14 @@ deploy: check-config
 	@echo "App Name:    $(APP_NAME)"
 	@echo "Config:      $(CONFIG_FILE)"
 	@echo ""
-	@if [ -n "$(GITHUB_TOKEN)" ]; then \
+	@FLY_OPTS=""; [ "$(NO_CACHE)" = "1" ] && FLY_OPTS="$$FLY_OPTS --no-cache"; \
+	if [ -n "$(GITHUB_TOKEN)" ]; then \
 		echo "Building with GITHUB_TOKEN (for private SDKs)"; \
-		fly deploy -c $(CONFIG_FILE) -a $(APP_NAME) --build-secret GITHUB_TOKEN="$(GITHUB_TOKEN)"; \
+		[ -n "$(NO_CACHE)" ] && echo "NO_CACHE=1: full rebuild to ensure SDKs are installed"; \
+		fly deploy -c $(CONFIG_FILE) -a $(APP_NAME) --build-secret GITHUB_TOKEN="$(GITHUB_TOKEN)" $$FLY_OPTS; \
 	else \
 		echo "⚠️  GITHUB_TOKEN not set - private SDKs will not be installed"; \
-		fly deploy -c $(CONFIG_FILE) -a $(APP_NAME); \
+		fly deploy -c $(CONFIG_FILE) -a $(APP_NAME) $$FLY_OPTS; \
 	fi
 	@echo ""
 	@echo "═══════════════════════════════════════════════════════════════"

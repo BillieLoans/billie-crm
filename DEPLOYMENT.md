@@ -220,12 +220,14 @@ Non-sensitive configuration is in `fly.<env>.toml`:
 
 ### Build Fails: "No module named 'billie_accounts_events'"
 
-The GITHUB_TOKEN wasn't passed during build:
+The Billie SDKs are installed at **build time** using a GitHub token. If the image was ever built without `GITHUB_TOKEN`, Docker may reuse a cached layer that skipped the SDK install. Fix it by forcing a full rebuild:
 
 ```bash
-# Make sure to include GITHUB_TOKEN
-make deploy ENV=demo GITHUB_TOKEN="ghp_your_actual_token"
+# Pass GITHUB_TOKEN and force rebuild so the SDK install step runs
+make deploy ENV=demo GITHUB_TOKEN="ghp_your_actual_token" NO_CACHE=1
 ```
+
+Without `NO_CACHE=1`, a previously cached layer (from a build without the token) can be reused and the SDKs will still be missing.
 
 ### App Crashes on Startup
 

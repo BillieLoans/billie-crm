@@ -51,8 +51,20 @@ For cloud deployment to Fly.io, see **[DEPLOYMENT.md](./DEPLOYMENT.md)**.
 
 Quick deploy:
 ```bash
+# To Deploy with new event SDKs (loaded from billlie github)
+make deploy ENV=demo GITHUB_TOKEN="ghp_your_token_here" NO_CACHE=1
+
+# To deploy with existing SDKs
 make deploy ENV=demo GITHUB_TOKEN="ghp_your_token_here"
 ```
+NO_CHACHE=1 forces the sdks to be re-downloaded from git. You only need it once to clear the bad cache, then you can stop using it.
+First deploy after you started passing GITHUB_TOKEN: use
+make deploy ENV=demo GITHUB_TOKEN="..." NO_CACHE=1
+so the “install SDKs” layer actually runs and gets cached with the SDKs installed.
+Later deploys: use
+make deploy ENV=demo GITHUB_TOKEN="..."
+with no NO_CACHE=1. The cache will be the “SDKs installed” layer, so it will keep using that.
+If you’ve already done a successful deploy with NO_CACHE=1 and the event processor is running, you don’t need NO_CACHE=1 anymore.
 
 ## Quick Start (Local Development)
 

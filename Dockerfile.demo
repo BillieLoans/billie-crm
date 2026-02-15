@@ -40,20 +40,19 @@ ENV PIP_TARGET=/pip-packages
 
 # Copy and install Python base dependencies (without SDK lines)
 COPY event-processor/requirements.txt ./event-processor/
+COPY event-processor/scripts/subst-sdk-requirements.py ./event-processor/scripts/
 RUN grep -v "git+https" event-processor/requirements.txt > /tmp/base-requirements.txt && \
     pip3 install --no-cache-dir -r /tmp/base-requirements.txt
 
-# Install Billie SDKs (requires GITHUB_TOKEN at build time)
+# Install Billie SDKs from event-processor/requirements.txt (requires GITHUB_TOKEN at build time)
+# Versions are defined in requirements.txt. A Python script substitutes the token to avoid shell escaping.
 # Use: fly deploy --build-secret GITHUB_TOKEN=<token>
 RUN --mount=type=secret,id=GITHUB_TOKEN \
     if [ -f /run/secrets/GITHUB_TOKEN ]; then \
-    export GITHUB_TOKEN=$(cat /run/secrets/GITHUB_TOKEN) && \
-    echo "Installing Billie SDKs with GITHUB_TOKEN..." && \
-    git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/" && \
-    pip3 install --no-cache-dir \
-        "git+https://${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@accounts-v2.5.0#subdirectory=packages/accounts" \
-        "git+https://${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@customers-v2.0.0#subdirectory=packages/customers" \
-        "git+https://${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@ledger-v1.0.0#subdirectory=packages/ledger" && \
+    echo "Installing Billie SDKs from requirements.txt (with GITHUB_TOKEN)..." && \
+    python3 event-processor/scripts/subst-sdk-requirements.py /run/secrets/GITHUB_TOKEN event-processor/requirements.txt /tmp/sdk-requirements.txt && \
+    pip3 install --no-cache-dir -r /tmp/sdk-requirements.txt && \
+    rm -f /tmp/sdk-requirements.txt && \
     echo "✓ Billie SDKs installed successfully"; \
     else echo "⚠️ GITHUB_TOKEN not set, skipping SDK install"; fi
 
