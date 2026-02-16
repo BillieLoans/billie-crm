@@ -130,6 +130,18 @@ export const AccountHeader: React.FC<AccountHeaderProps> = ({
         )}
       </div>
       <div className={styles.accountHeaderRight}>
+        {account.signedLoanAgreementUrl && (
+          <a
+            href={`/api/loan-agreement?accountId=${encodeURIComponent(account.loanAccountId)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={styles.accountHeaderContractLink}
+            title="View signed loan agreement"
+            data-testid="header-view-loan-agreement"
+          >
+            📄 Contract
+          </a>
+        )}
         <span className={styles.accountHeaderBalance}>
           {currencyFormatter.format(totalOutstanding)}
         </span>

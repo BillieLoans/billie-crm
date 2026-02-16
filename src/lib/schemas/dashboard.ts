@@ -26,6 +26,7 @@ export const PendingDisbursementSchema = z.object({
   loanAmount: z.number(),
   loanAmountFormatted: z.string(),
   createdAt: z.string().datetime(),
+  signedLoanAgreementUrl: z.string().nullable().optional(),
 })
 
 export type PendingDisbursement = z.infer<typeof PendingDisbursementSchema>

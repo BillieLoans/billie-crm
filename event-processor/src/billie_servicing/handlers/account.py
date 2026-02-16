@@ -77,6 +77,11 @@ async def handle_account_created(db: AsyncIOMotorDatabase, parsed_event: Any) ->
         "updatedAt": datetime.utcnow(),
     }
 
+    # Optional: signed loan agreement URL (accounts-v2.7.0+)
+    signed_url = getattr(payload, "signed_loan_agreement_url", None)
+    if signed_url is not None:
+        document["signedLoanAgreementUrl"] = str(signed_url) if signed_url else None
+
     result = await db["loan-accounts"].update_one(
         {"loanAccountId": account_id},
         {
@@ -142,6 +147,12 @@ async def handle_account_updated(db: AsyncIOMotorDatabase, parsed_event: Any) ->
 
     if hasattr(payload, "last_payment_amount") and payload.last_payment_amount is not None:
         update_doc["lastPayment.amount"] = float(payload.last_payment_amount)
+
+    # Optional: signed loan agreement URL (accounts-v2.7.0+)
+    if hasattr(payload, "signed_loan_agreement_url"):
+        update_doc["signedLoanAgreementUrl"] = (
+            str(payload.signed_loan_agreement_url) if payload.signed_loan_agreement_url else None
+        )
 
     result = await db["loan-accounts"].update_one(
         {"loanAccountId": account_id}, {"$set": update_doc}

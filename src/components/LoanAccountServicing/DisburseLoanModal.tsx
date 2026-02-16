@@ -7,6 +7,8 @@ interface DisburseLoanModalProps {
   loanAccountId: string
   accountNumber: string
   defaultAmount: number | null
+  /** When set, show a link to view the signed loan agreement (opens in new window) */
+  signedLoanAgreementUrl?: string | null
   onClose: () => void
   onSuccess: () => void
 }
@@ -21,6 +23,7 @@ export const DisburseLoanModal: React.FC<DisburseLoanModalProps> = ({
   loanAccountId,
   accountNumber,
   defaultAmount,
+  signedLoanAgreementUrl,
   onClose,
   onSuccess,
 }) => {
@@ -208,6 +211,19 @@ export const DisburseLoanModal: React.FC<DisburseLoanModalProps> = ({
 
             {!success && (
               <>
+                {signedLoanAgreementUrl && (
+                  <div className={styles.formGroup}>
+                    <a
+                      href={`/api/loan-agreement?accountId=${encodeURIComponent(loanAccountId)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={styles.contractLink}
+                      data-testid="disburse-modal-view-loan-agreement"
+                    >
+                      📄 View signed loan agreement
+                    </a>
+                  </div>
+                )}
                 <div className={styles.formGroup}>
                   <label className={styles.formLabel}>Disbursement Amount</label>
                   <input

@@ -122,6 +122,23 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ account, onNavigateToT
         )}
       </div>
 
+      {/* Loan agreement link - when available */}
+      {account.signedLoanAgreementUrl && (
+        <div className={styles.overviewSection}>
+          <h4 className={styles.overviewSectionTitle}>Loan agreement</h4>
+          <a
+            href={`/api/loan-agreement?accountId=${encodeURIComponent(account.loanAccountId)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={styles.overviewLink}
+            data-testid="view-loan-agreement"
+          >
+            <span aria-hidden>📄</span>
+            View signed loan agreement
+          </a>
+        </div>
+      )}
+
       {/* Loan Terms */}
       {account.loanTerms && (
         <div className={styles.overviewSection}>

@@ -127,6 +127,7 @@ export function PendingDisbursementsWidget() {
           loanAccountId={selectedAccount.loanAccountId}
           accountNumber={selectedAccount.accountNumber}
           loanAmount={selectedAccount.loanAmount}
+          signedLoanAgreementUrl={selectedAccount.signedLoanAgreementUrl}
         />
       )}
     </div>

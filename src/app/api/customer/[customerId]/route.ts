@@ -115,6 +115,7 @@ export async function GET(
         repaymentSchedule: account.repaymentSchedule,
         createdAt: account.createdAt,
         updatedAt: account.updatedAt, // For version conflict detection
+        signedLoanAgreementUrl: account.signedLoanAgreementUrl ?? undefined,
       })),
       conversations: conversationsResult.docs.map((conv) => ({
         id: conv.id,

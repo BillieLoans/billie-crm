@@ -1590,6 +1590,17 @@
   color: var(--theme-text, #1a1a1a);
 }
 
+.repaymentLink {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--theme-elevation-700, #1d4ed8);
+  text-decoration: none;
+}
+
+.repaymentLink:hover {
+  text-decoration: underline;
+}
+
 .repaymentInputWrapper {
   display: flex;
   align-items: center;

@@ -716,6 +716,10 @@ export interface LoanAccount {
    */
   sdkStatus?: string | null;
   /**
+   * S3 URI for signed loan agreement document (from SDK: signed_loan_agreement_url, accounts-v2.7.0+)
+   */
+  signedLoanAgreementUrl?: string | null;
+  /**
    * Repayment schedule from account.schedule.created.v1
    */
   repaymentSchedule?: {
@@ -1286,6 +1290,7 @@ export interface LoanAccountsSelect<T extends boolean = true> {
       };
   accountStatus?: T;
   sdkStatus?: T;
+  signedLoanAgreementUrl?: T;
   repaymentSchedule?:
     | T
     | {

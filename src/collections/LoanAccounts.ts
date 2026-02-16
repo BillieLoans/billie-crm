@@ -232,6 +232,14 @@ export const LoanAccounts: CollectionConfig = {
         description: 'Original status from SDK (PENDING, ACTIVE, SUSPENDED, CLOSED)',
       },
     },
+    {
+      name: 'signedLoanAgreementUrl',
+      type: 'text',
+      admin: {
+        readOnly: true,
+        description: 'S3 URI for signed loan agreement document (from SDK: signed_loan_agreement_url, accounts-v2.7.0+)',
+      },
+    },
 
     // === Repayment Schedule (from account.schedule.created.v1) ===
     {

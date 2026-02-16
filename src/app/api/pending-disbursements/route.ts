@@ -13,6 +13,7 @@ interface PendingDisbursementItem {
   totalOutstanding: number
   totalOutstandingFormatted: string
   createdAt: string
+  signedLoanAgreementUrl?: string | null
 }
 
 function formatCurrency(amount: number): string {
@@ -65,6 +66,7 @@ export async function GET(request: NextRequest) {
         totalOutstanding,
         totalOutstandingFormatted: formatCurrency(totalOutstanding),
         createdAt: acc.createdAt,
+        signedLoanAgreementUrl: acc.signedLoanAgreementUrl ?? undefined,
       }
     })
 

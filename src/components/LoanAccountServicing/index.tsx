@@ -34,6 +34,7 @@ export const LoanAccountServicing: React.FC = () => {
   const [refreshKey, setRefreshKey] = useState(0)
   const [accountStatus, setAccountStatus] = useState<string>('active')
   const [loanAmount, setLoanAmount] = useState<number | null>(null)
+  const [signedLoanAgreementUrl, setSignedLoanAgreementUrl] = useState<string | null>(null)
   const readOnlyMode = useUIStore((state) => state.readOnlyMode)
 
   // Fetch the loanAccountId from the document
@@ -46,6 +47,7 @@ export const LoanAccountServicing: React.FC = () => {
           setAccountNumber(data.accountNumber || null)
           setAccountStatus(data.accountStatus || 'active')
           setLoanAmount(data.loanTerms?.loanAmount ?? null)
+          setSignedLoanAgreementUrl(data.signedLoanAgreementUrl ?? null)
         })
         .catch(err => console.error('Failed to fetch loan account:', err))
     }
@@ -203,6 +205,7 @@ export const LoanAccountServicing: React.FC = () => {
           loanAccountId={loanAccountId}
           accountNumber={accountNumber || ''}
           defaultAmount={loanAmount}
+          signedLoanAgreementUrl={signedLoanAgreementUrl}
           onClose={() => setActiveModal(null)}
           onSuccess={handleActionComplete}
         />

@@ -260,6 +260,7 @@ export async function GET(request: NextRequest) {
       loanAmount: acc.loanTerms?.loanAmount ?? 0,
       loanAmountFormatted: formatCurrency(acc.loanTerms?.loanAmount ?? 0),
       createdAt: acc.createdAt,
+      signedLoanAgreementUrl: acc.signedLoanAgreementUrl ?? undefined,
     }))
 
     // 7. Build response

@@ -47,6 +47,17 @@
   font-family: monospace;
 }
 
+.accountHeaderContractLink {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--theme-elevation-700, #1d4ed8);
+  text-decoration: none;
+}
+
+.accountHeaderContractLink:hover {
+  text-decoration: underline;
+}
+
 .accountHeaderStatus {
   display: inline-flex;
   padding: 3px 10px;
@@ -398,6 +409,25 @@
   font-size: 11px;
   color: var(--theme-elevation-500, #888);
   margin: 0;
+}
+
+.overviewLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--theme-elevation-700, #1d4ed8);
+  text-decoration: none;
+}
+
+.overviewLink:hover {
+  text-decoration: underline;
+}
+
+.overviewLink:focus-visible {
+  outline: 2px solid var(--theme-elevation-700, #1d4ed8);
+  outline-offset: 2px;
 }
 
 /* Actions Tab */

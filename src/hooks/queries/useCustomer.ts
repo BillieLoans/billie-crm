@@ -69,6 +69,8 @@ export interface LoanAccountData {
   createdAt: string
   /** Last update timestamp for version conflict detection */
   updatedAt: string
+  /** S3 URI for signed loan agreement document (accounts-v2.7.0+) */
+  signedLoanAgreementUrl?: string | null
 }
 
 /**

@@ -469,6 +469,7 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
           loanAccountId={selectedAccount.loanAccountId}
           accountNumber={selectedAccount.accountNumber}
           loanAmount={selectedAccount.loanTerms?.loanAmount ?? 0}
+          signedLoanAgreementUrl={selectedAccount.signedLoanAgreementUrl}
         />
       )}
     </div>

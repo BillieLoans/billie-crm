@@ -10,6 +10,8 @@ export interface DisburseLoanDrawerProps {
   loanAccountId: string
   accountNumber: string
   loanAmount: number
+  /** When set, show a link to view the signed loan agreement (opens in new window) */
+  signedLoanAgreementUrl?: string | null
   onSuccess?: () => void
 }
 
@@ -42,6 +44,7 @@ export const DisburseLoanDrawer: React.FC<DisburseLoanDrawerProps> = ({
   loanAccountId,
   accountNumber,
   loanAmount,
+  signedLoanAgreementUrl,
   onSuccess,
 }) => {
   const [disbursementAmount, setDisbursementAmount] = useState('')
@@ -222,6 +225,21 @@ export const DisburseLoanDrawer: React.FC<DisburseLoanDrawerProps> = ({
             {currencyFormatter.format(loanAmount)}
           </span>
         </div>
+
+        {/* View signed loan agreement - when available */}
+        {signedLoanAgreementUrl && (
+          <div className={styles.repaymentField}>
+            <a
+              href={`/api/loan-agreement?accountId=${encodeURIComponent(loanAccountId)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={styles.repaymentLink}
+              data-testid="disburse-view-loan-agreement"
+            >
+              📄 View signed loan agreement
+            </a>
+          </div>
+        )}
 
         {/* Validation error */}
         {validationError && (

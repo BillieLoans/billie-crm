@@ -15,6 +15,7 @@ interface PendingDisbursementItem {
   totalOutstanding: number
   totalOutstandingFormatted: string
   createdAt: string
+  signedLoanAgreementUrl?: string | null
 }
 
 interface PendingDisbursementResponse {
@@ -164,6 +165,7 @@ export function PendingDisbursementsView() {
           loanAccountId={selectedItem.loanAccountId}
           accountNumber={selectedItem.accountNumber}
           loanAmount={selectedItem.loanAmount}
+          signedLoanAgreementUrl={selectedItem.signedLoanAgreementUrl}
         />
       )}
     </div>
