@@ -1,0 +1,535 @@
+/* Billie Keycloak Login Theme - Clean, Centered Design */
+/* Version: 3.0.0 - Fixed Structure */
+
+@import url('https://fonts.googleapis.com/css2?family=Alata&display=swap');
+
+:root {
+  --billie-blue: #5171ff;
+  --billie-coral: #f8857b;
+  --billie-cream: #fffbf1;
+  --billie-blue-dark: #3a5aef;
+  --billie-coral-dark: #f66b5f;
+}
+
+/* === GLOBAL RESET === */
+* {
+  box-sizing: border-box !important;
+}
+
+html {
+  margin: 0 !important;
+  padding: 0 !important;
+  min-height: 100vh !important;
+  background-color: var(--billie-cream) !important;
+  background-image: none !important;
+  background: var(--billie-cream) !important;
+}
+
+body {
+  font-family: 'Alata', sans-serif !important;
+  background-color: var(--billie-cream) !important;
+  background-image: none !important;
+  background: var(--billie-cream) !important;
+  color: #111827 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  min-height: 100vh !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Kill ALL background images everywhere */
+html *, html *::before, html *::after,
+body *, body *::before, body *::after {
+  background-image: none !important;
+}
+
+/* === MAIN PAGE CONTAINER === */
+.login-pf-page {
+  background-color: var(--billie-cream) !important;
+  background-image: none !important;
+  width: 100% !important;
+  max-width: 480px !important;
+  margin: 0 auto !important;
+  padding: 48px 16px !important;
+  min-height: 0 !important;
+}
+
+/* Remove all Keycloak chrome */
+.pf-c-page,
+.pf-c-login,
+.pf-c-page__main,
+.pf-c-login__main,
+.pf-c-masthead,
+#kc-header-masthead,
+.kc-header-masthead,
+#kc-page-header,
+.pf-c-page__header {
+  display: none !important;
+}
+
+/* === LOGO/HEADER SECTION === */
+#kc-header {
+  background: none !important;
+  background-color: transparent !important;
+  padding: 0 !important;
+  margin: 0 0 32px 0 !important;
+  text-align: center !important;
+  display: block !important;
+  height: auto !important;
+  border: none !important;
+  min-height: 0 !important;
+}
+
+.login-pf-page-header {
+  background: none !important;
+  background-color: transparent !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  border: none !important;
+}
+
+#kc-header-wrapper {
+  font-family: 'Alata', sans-serif !important;
+  text-align: center !important;
+  display: block !important;
+  background: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  position: relative !important;
+  /* Hide default text */
+  font-size: 0 !important;
+  color: transparent !important;
+}
+
+/* Hide any child text nodes */
+#kc-header-wrapper > * {
+  display: none !important;
+}
+
+/* Asterisk Icon - Coral Square */
+#kc-header-wrapper::before {
+  content: '' !important;
+  display: block !important;
+  width: 80px !important;
+  height: 80px !important;
+  margin: 0 auto 24px !important;
+  border-radius: 16px !important;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1) !important;
+  
+  /* Logo PNG from S3 */
+  background-image: url("https://billie-public-assets.s3.ap-southeast-2.amazonaws.com/billie-logo-icon.png") !important;
+  background-size: 80px 80px !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+}
+
+/* BILLIE Text */
+#kc-header-wrapper::after {
+  content: 'BILLIE' !important;
+  display: block !important;
+  font-size: 36px !important;
+  font-weight: bold !important;
+  font-style: italic !important;
+  color: var(--billie-blue) !important;
+  margin: 0 0 8px 0 !important;
+  letter-spacing: -0.5px !important;
+  text-align: center !important;
+  line-height: 1 !important;
+}
+
+/* Tagline */
+#kc-header::after {
+  content: 'your money, sooner' !important;
+  display: block !important;
+  font-size: 18px !important;
+  font-weight: normal !important;
+  font-style: italic !important;
+  color: var(--billie-coral) !important;
+  text-align: center !important;
+  margin: 0 !important;
+  line-height: 1 !important;
+}
+
+/* Hide page title */
+#kc-page-title {
+  display: none !important;
+}
+
+.login-pf-header {
+  display: none !important;
+}
+
+/* === WHITE FORM CARD === */
+.card-pf {
+  background: white !important;
+  padding: 32px !important;
+  border-radius: 12px !important;
+  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1) !important;
+  border: none !important;
+  margin: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+/* Remove styling from inner elements */
+#kc-content,
+#kc-content-wrapper,
+#kc-form,
+#kc-form-wrapper {
+  background: none !important;
+  background-color: transparent !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  border: none !important;
+  margin: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+/* === FORM ELEMENTS === */
+.form-group,
+.pf-c-form__group {
+  margin-bottom: 20px !important;
+}
+
+/* Labels */
+label,
+.pf-c-form__label-text {
+  font-family: 'Alata', sans-serif !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  color: #374151 !important;
+  display: block !important;
+  margin-bottom: 8px !important;
+}
+
+/* Input Fields */
+input[type="text"],
+input[type="password"],
+input[type="email"],
+.pf-c-form-control {
+  font-family: 'Alata', sans-serif !important;
+  width: 100% !important;
+  padding: 12px 16px !important;
+  font-size: 16px !important;
+  border: 1px solid #d1d5db !important;
+  border-radius: 8px !important;
+  background-color: white !important;
+  color: #111827 !important;
+  transition: all 0.2s !important;
+  box-sizing: border-box !important;
+}
+
+input[type="text"]:focus,
+input[type="password"]:focus,
+input[type="email"]:focus,
+.pf-c-form-control:focus {
+  outline: none !important;
+  border-color: var(--billie-blue) !important;
+  box-shadow: 0 0 0 3px rgba(81, 113, 255, 0.1) !important;
+}
+
+input::placeholder {
+  color: #9ca3af !important;
+}
+
+/* Checkbox */
+input[type="checkbox"] {
+  width: 16px !important;
+  height: 16px !important;
+  border: 2px solid #d1d5db !important;
+  border-radius: 4px !important;
+  margin-right: 8px !important;
+  cursor: pointer !important;
+}
+
+.checkbox label,
+.pf-c-check__label {
+  display: inline !important;
+  font-size: 14px !important;
+  color: #374151 !important;
+  cursor: pointer !important;
+  font-weight: normal !important;
+}
+
+/* === BUTTONS === */
+#kc-login,
+input[type="submit"],
+button[type="submit"],
+.btn-primary,
+.pf-c-button.pf-m-primary {
+  font-family: 'Alata', sans-serif !important;
+  width: 100% !important;
+  padding: 12px 16px !important;
+  font-size: 16px !important;
+  font-weight: 500 !important;
+  color: white !important;
+  background-color: var(--billie-blue) !important;
+  border: none !important;
+  border-radius: 8px !important;
+  cursor: pointer !important;
+  transition: all 0.2s !important;
+  margin-top: 8px !important;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05) !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+}
+
+#kc-login:hover,
+input[type="submit"]:hover,
+button[type="submit"]:hover,
+.btn-primary:hover,
+.pf-c-button.pf-m-primary:hover {
+  background-color: var(--billie-blue-dark) !important;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1) !important;
+}
+
+#kc-login:active,
+input[type="submit"]:active,
+button[type="submit"]:active {
+  background-color: var(--billie-blue-dark) !important;
+  transform: translateY(0) !important;
+}
+
+/* === LINKS === */
+a {
+  color: var(--billie-blue) !important;
+  text-decoration: none !important;
+  font-size: 14px !important;
+  transition: color 0.2s !important;
+}
+
+a:hover {
+  color: var(--billie-blue-dark) !important;
+  text-decoration: underline !important;
+}
+
+/* Form Options (Remember Me + Forgot Password) */
+#kc-form-options {
+  margin-top: 16px !important;
+  margin-bottom: 24px !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+}
+
+#kc-form-options .checkbox {
+  margin: 0 !important;
+}
+
+#kc-form-options a {
+  margin-left: auto !important;
+}
+
+/* Form Buttons */
+#kc-form-buttons {
+  margin-top: 24px !important;
+}
+
+/* === ALERT MESSAGES === */
+.alert-info,
+.pf-c-alert.pf-m-info {
+  background-color: rgba(81, 113, 255, 0.1) !important;
+  border-left: 4px solid var(--billie-blue) !important;
+  border-radius: 8px !important;
+  color: #374151 !important;
+  padding: 16px !important;
+  margin-bottom: 24px !important;
+  border-top: none !important;
+  border-right: none !important;
+  border-bottom: none !important;
+}
+
+.alert-error,
+.alert-danger,
+.pf-c-alert.pf-m-danger {
+  background-color: rgba(248, 133, 123, 0.1) !important;
+  border-left: 4px solid var(--billie-coral) !important;
+  border-radius: 8px !important;
+  color: #374151 !important;
+  padding: 16px !important;
+  margin-bottom: 24px !important;
+  border-top: none !important;
+  border-right: none !important;
+  border-bottom: none !important;
+}
+
+.alert-success,
+.pf-c-alert.pf-m-success {
+  background-color: rgba(16, 185, 129, 0.1) !important;
+  border-left: 4px solid #10b981 !important;
+  border-radius: 8px !important;
+  color: #374151 !important;
+  padding: 16px !important;
+  margin-bottom: 24px !important;
+  border-top: none !important;
+  border-right: none !important;
+  border-bottom: none !important;
+}
+
+.alert-warning,
+.pf-c-alert.pf-m-warning {
+  background-color: rgba(245, 158, 11, 0.1) !important;
+  border-left: 4px solid #f59e0b !important;
+  border-radius: 8px !important;
+  color: #374151 !important;
+  padding: 16px !important;
+  margin-bottom: 24px !important;
+  border-top: none !important;
+  border-right: none !important;
+  border-bottom: none !important;
+}
+
+/* === FOOTER / INFO === */
+#kc-info {
+  margin-top: 32px !important;
+  padding: 0 !important;
+  border: none !important;
+  background: none !important;
+}
+
+#kc-info-wrapper {
+  text-align: center !important;
+  font-size: 14px !important;
+  color: #6b7280 !important;
+  background: none !important;
+  padding: 0 !important;
+}
+
+/* Registration Link */
+#kc-registration {
+  margin-top: 24px !important;
+  text-align: center !important;
+}
+
+/* === SOCIAL PROVIDERS === */
+#kc-social-providers {
+  margin-top: 32px !important;
+  padding-top: 24px !important;
+  border-top: 1px solid #e5e7eb !important;
+}
+
+#kc-social-providers ul {
+  list-style: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+#kc-social-providers li {
+  margin-bottom: 12px !important;
+}
+
+#kc-social-providers button,
+#kc-social-providers a {
+  width: 100% !important;
+  padding: 12px 24px !important;
+  font-family: 'Alata', sans-serif !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  border: 2px solid var(--billie-blue) !important;
+  background-color: white !important;
+  color: var(--billie-blue) !important;
+  border-radius: 8px !important;
+  cursor: pointer !important;
+  transition: all 0.2s !important;
+  display: block !important;
+  text-align: center !important;
+}
+
+#kc-social-providers button:hover,
+#kc-social-providers a:hover {
+  background-color: rgba(81, 113, 255, 0.05) !important;
+  text-decoration: none !important;
+}
+
+/* === PASSWORD VISIBILITY TOGGLE === */
+button[type="button"],
+.pf-c-button.pf-m-control {
+  background-color: transparent !important;
+  border: none !important;
+  color: #6b7280 !important;
+  cursor: pointer !important;
+  padding: 8px !important;
+}
+
+button[type="button"]:hover,
+.pf-c-button.pf-m-control:hover {
+  color: #374151 !important;
+  background-color: transparent !important;
+}
+
+/* === RESPONSIVE === */
+@media (max-width: 640px) {
+  .login-pf-page {
+    padding: 32px 16px !important;
+  }
+
+  .card-pf {
+    padding: 24px 20px !important;
+  }
+
+  #kc-header-wrapper::before {
+    width: 64px !important;
+    height: 64px !important;
+    background-size: 40px 40px !important;
+    margin-bottom: 20px !important;
+  }
+
+  #kc-header-wrapper::after {
+    font-size: 32px !important;
+  }
+
+  #kc-header::after {
+    font-size: 16px !important;
+  }
+
+  input[type="text"],
+  input[type="password"],
+  input[type="email"],
+  .pf-c-form-control {
+    font-size: 16px !important; /* Prevent zoom on iOS */
+  }
+}
+
+/* === ACCESSIBILITY === */
+*:focus {
+  outline: 2px solid var(--billie-blue) !important;
+  outline-offset: 2px !important;
+}
+
+button:focus,
+input:focus,
+a:focus {
+  outline: 2px solid var(--billie-blue) !important;
+  outline-offset: 2px !important;
+}
+
+/* === LOADING SPINNER === */
+.kc-loading {
+  border: 3px solid rgba(81, 113, 255, 0.1) !important;
+  border-top: 3px solid var(--billie-blue) !important;
+  border-radius: 50% !important;
+  width: 40px !important;
+  height: 40px !important;
+  animation: spin 1s linear infinite !important;
+  margin: 20px auto !important;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* === HIDE KEYCLOAK LOGO === */
+#kc-logo,
+#kc-logo-wrapper {
+  display: none !important;
+}

@@ -2,15 +2,18 @@
 set -e
 
 # Keycloak Deployment Script for Fly.io
-# Usage: ./deploy.sh <environment>
+# Usage: ./deploy.sh <environment> [--skip-secrets]
 # Environment: nonprod | prod
+# --skip-secrets: skip secrets check (use when deploying to existing instance with secrets already set)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV="${1:-}"
+SKIP_SECRETS="${2:-}"
 
 if [[ -z "$ENV" ]]; then
-    echo "Usage: $0 <environment>"
+    echo "Usage: $0 <environment> [--skip-secrets]"
     echo "  environment: nonprod | prod"
+    echo "  --skip-secrets: skip secrets verification (for existing instances)"
     exit 1
 fi
 
@@ -63,23 +66,30 @@ if ! fly apps list | grep -q "$APP_NAME"; then
     exit 0
 fi
 
-# Check if secrets are set
-echo ""
-echo "Checking secrets..."
-SECRETS=$(fly secrets list -a "$APP_NAME" 2>/dev/null || echo "")
-
-if ! echo "$SECRETS" | grep -q "KC_BOOTSTRAP_ADMIN_USERNAME"; then
+# Check if secrets are set (unless --skip-secrets)
+if [[ "$SKIP_SECRETS" != "--skip-secrets" ]]; then
     echo ""
-    echo "WARNING: KC_BOOTSTRAP_ADMIN_USERNAME secret not set!"
-    echo "Run: fly secrets set KC_BOOTSTRAP_ADMIN_USERNAME=admin -a $APP_NAME"
-    exit 1
-fi
+    echo "Checking secrets..."
+    SECRETS=$(fly secrets list -a "$APP_NAME" 2>/dev/null || echo "")
 
-if ! echo "$SECRETS" | grep -q "KC_BOOTSTRAP_ADMIN_PASSWORD"; then
+    if ! echo "$SECRETS" | grep -q "KC_BOOTSTRAP_ADMIN_USERNAME"; then
+        echo ""
+        echo "WARNING: KC_BOOTSTRAP_ADMIN_USERNAME secret not set!"
+        echo "Run: fly secrets set KC_BOOTSTRAP_ADMIN_USERNAME=admin -a $APP_NAME"
+        echo "Or use: $0 $ENV --skip-secrets to deploy without checking (existing instance)."
+        exit 1
+    fi
+
+    if ! echo "$SECRETS" | grep -q "KC_BOOTSTRAP_ADMIN_PASSWORD"; then
+        echo ""
+        echo "WARNING: KC_BOOTSTRAP_ADMIN_PASSWORD secret not set!"
+        echo "Run: fly secrets set KC_BOOTSTRAP_ADMIN_PASSWORD=<secure-password> -a $APP_NAME"
+        echo "Or use: $0 $ENV --skip-secrets to deploy without checking (existing instance)."
+        exit 1
+    fi
+else
     echo ""
-    echo "WARNING: KC_BOOTSTRAP_ADMIN_PASSWORD secret not set!"
-    echo "Run: fly secrets set KC_BOOTSTRAP_ADMIN_PASSWORD=<secure-password> -a $APP_NAME"
-    exit 1
+    echo "Skipping secrets check (--skip-secrets)."
 fi
 
 # Deploy

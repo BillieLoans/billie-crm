@@ -18,6 +18,9 @@ FROM quay.io/keycloak/keycloak:26.0
 
 COPY --from=builder /opt/keycloak/ /opt/keycloak/
 
+# Custom themes (Login + Email)
+COPY themes/ /opt/keycloak/themes/
+
 # Copy entrypoint script that converts DATABASE_URL to Keycloak format
 COPY docker-entrypoint.sh /opt/keycloak/docker-entrypoint.sh
 

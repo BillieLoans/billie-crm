@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Billie Email Preview</title>
+    <style>
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            background-color: #f9fafb;
+            margin: 0;
+            padding: 20px;
+        }
+        .preview-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .email-header {
+            background-color: #fffbf1;
+            padding: 40px 20px;
+            text-align: center;
+        }
+        .logo-icon {
+            width: 60px;
+            height: 60px;
+            background-color: #f8857b;
+            border-radius: 12px;
+            display: inline-block;
+            margin: 0 auto 16px;
+            position: relative;
+        }
+        .brand-name {
+            font-size: 28px;
+            font-weight: bold;
+            font-style: italic;
+            color: #5171ff;
+            margin: 0 0 8px 0;
+            letter-spacing: -0.5px;
+        }
+        .brand-tagline {
+            font-size: 14px;
+            font-style: italic;
+            color: #f8857b;
+            margin: 0;
+        }
+        .email-content {
+            padding: 40px 30px;
+            font-size: 16px;
+            line-height: 1.6;
+            color: #111827;
+        }
+        .button {
+            display: inline-block;
+            padding: 12px 32px;
+            background-color: #5171ff;
+            color: #ffffff;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 500;
+            font-size: 16px;
+            margin: 20px 0;
+        }
+        .button:hover {
+            background-color: #3a5aef;
+        }
+        .email-footer {
+            background-color: #f9fafb;
+            padding: 30px 20px;
+            text-align: center;
+            font-size: 14px;
+            color: #6b7280;
+        }
+        .preview-header {
+            max-width: 600px;
+            margin: 0 auto 20px;
+            padding: 20px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="preview-header">
+        <h1 style="margin: 0 0 10px 0; color: #111827;">📧 Billie Email Theme Preview</h1>
+        <p style="margin: 0; color: #6b7280;">This is how your Keycloak emails will look to customers</p>
+    </div>
+
+    <div class="preview-container">
+        <!-- Header -->
+        <div class="email-header">
+            <!-- Logo Icon (Asterisk) -->
+            <div class="logo-icon">
+                <svg width="60" height="60" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
+                    <path d="M12 2v20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14M2 12h20" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </div>
+            <!-- Brand Name -->
+            <h1 class="brand-name">BILLIE</h1>
+            <!-- Tagline -->
+            <p class="brand-tagline">your money, sooner</p>
+        </div>
+        
+        <!-- Content -->
+        <div class="email-content">
+            <h2 style="font-size: 24px; font-weight: bold; color: #111827; margin: 0 0 20px 0;">
+                Verify Your Billie Account
+            </h2>
+            
+            <p style="margin: 0 0 16px 0; color: #374151;">
+                Hi <strong>John</strong>,
+            </p>
+            
+            <p style="margin: 0 0 16px 0; color: #374151;">
+                Welcome to Billie! We're excited to help you get your money, sooner.
+            </p>
+            
+            <p style="margin: 0 0 24px 0; color: #374151;">
+                To complete your account setup and verify your email address, please click the button below:
+            </p>
+            
+            <!-- Verification Button -->
+            <div style="text-align: center;">
+                <a href="#" class="button">
+                    Verify Email Address
+                </a>
+            </div>
+            
+            <p style="margin: 24px 0 16px 0; color: #6b7280; font-size: 14px;">
+                Or copy and paste this link into your browser:
+            </p>
+            
+            <p style="margin: 0 0 24px 0; word-break: break-all;">
+                <a href="#" style="color: #5171ff; text-decoration: none; font-size: 14px;">
+                    https://auth.billie.com/verify?token=abc123...
+                </a>
+            </p>
+            
+            <p style="margin: 0 0 16px 0; color: #374151;">
+                This link will expire in 5 minutes.
+            </p>
+            
+            <p style="margin: 0 0 16px 0; color: #6b7280; font-size: 14px;">
+                If you didn't create a Billie account, you can safely ignore this email.
+            </p>
+            
+            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+            
+            <p style="margin: 0; color: #374151;">
+                Best regards,<br>
+                <strong style="color: #5171ff;">The Billie Team</strong>
+            </p>
+        </div>
+        
+        <!-- Footer -->
+        <div class="email-footer">
+            <p style="margin: 0 0 10px 0;">
+                <strong style="color: #5171ff;">Billie</strong> - Your money, sooner
+            </p>
+            <p style="margin: 0; font-size: 12px;">
+                This email was sent by Billie. Please do not reply to this email.
+            </p>
+        </div>
+    </div>
+
+    <div class="preview-header" style="margin-top: 20px;">
+        <h3 style="margin: 0 0 10px 0; color: #111827;">✨ Features</h3>
+        <ul style="margin: 0; padding-left: 20px; color: #374151;">
+            <li>Billie Cream (#fffbf1) header background</li>
+            <li>Coral asterisk icon in rounded square</li>
+            <li>"BILLIE" in italic bold blue</li>
+            <li>"your money, sooner" tagline in coral</li>
+            <li>Blue action button with hover effect</li>
+            <li>Professional white card layout</li>
+            <li>Mobile responsive design</li>
+        </ul>
+    </div>
+</body>
+</html>
+
+
+
+
+
+
