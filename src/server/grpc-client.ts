@@ -1031,6 +1031,30 @@ export class LedgerClient {
     )
   }
 
+  async recordDisbursement(request: {
+    loanAccountId: string
+    disbursementAmount: string
+    actualDisbursementAt: string
+    plannedDisbursementDate?: string
+    bankReference: string
+    paymentMethod?: string
+    notes?: string
+    evidenceUrl?: string
+    idempotencyKey?: string
+  }): Promise<TransactionResponse> {
+    return this.promisify<typeof request, TransactionResponse>(this.client.recordDisbursement)({
+      loan_account_id: request.loanAccountId,
+      disbursement_amount: request.disbursementAmount,
+      actual_disbursement_at: request.actualDisbursementAt,
+      planned_disbursement_date: request.plannedDisbursementDate || '',
+      bank_reference: request.bankReference,
+      payment_method: request.paymentMethod || 'bank_transfer',
+      notes: request.notes || '',
+      evidence_url: request.evidenceUrl || '',
+      idempotency_key: request.idempotencyKey || '',
+    } as any)
+  }
+
   // ===========================================================================
   // Streaming
   // ===========================================================================

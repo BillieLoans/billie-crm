@@ -18,6 +18,7 @@ import { WaiveFeeDrawer } from './WaiveFeeDrawer'
 import { RecordRepaymentDrawer } from './RecordRepaymentDrawer'
 import { BulkWaiveFeeDrawer } from './BulkWaiveFeeDrawer'
 import { WriteOffRequestDrawer } from './WriteOffRequestDrawer'
+import { RecordDisbursementDrawer } from './RecordDisbursementDrawer'
 import { AccountPanel, type TabId } from './AccountPanel'
 import type { SelectedFee } from './FeeList'
 import { usePendingWriteOff } from '@/hooks/queries/usePendingWriteOff'
@@ -163,6 +164,7 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
   const [bulkWaiveOpen, setBulkWaiveOpen] = useState(false)
   const [selectedFees, setSelectedFees] = useState<SelectedFee[]>([])
   const [writeOffOpen, setWriteOffOpen] = useState(false)
+  const [disbursementOpen, setDisbursementOpen] = useState(false)
 
   // Derive accounts and selected account
   const accounts = customer?.loanAccounts ?? []
@@ -264,6 +266,14 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
 
   const handleCloseWriteOff = useCallback(() => {
     setWriteOffOpen(false)
+  }, [])
+
+  const handleOpenDisbursement = useCallback(() => {
+    setDisbursementOpen(true)
+  }, [])
+
+  const handleCloseDisbursement = useCallback(() => {
+    setDisbursementOpen(false)
   }, [])
 
   // Refresh handler - invalidates appropriate queries based on active tab
@@ -392,6 +402,8 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
             isRefreshing={isFetchingData}
             onRequestWriteOff={handleOpenWriteOff}
             hasPendingWriteOff={hasPendingWriteOff}
+            onTriggerDisbursement={handleOpenDisbursement}
+            hasPendingDisbursement={false}
           />
         ) : (
           <AccountSelectionPrompt />
@@ -443,6 +455,20 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
           customerName={customer?.fullName ?? undefined}
           accountNumber={selectedAccount.accountNumber}
           totalOutstanding={
+            selectedAccount.liveBalance?.totalOutstanding ??
+            selectedAccount.balances?.totalOutstanding ??
+            0
+          }
+        />
+      )}
+
+      {/* Record Disbursement Drawer - overlay (GAP-07) */}
+      {selectedAccount && (
+        <RecordDisbursementDrawer
+          isOpen={disbursementOpen}
+          onClose={handleCloseDisbursement}
+          loanAccountId={selectedAccount.loanAccountId}
+          disbursementAmount={
             selectedAccount.liveBalance?.totalOutstanding ??
             selectedAccount.balances?.totalOutstanding ??
             0

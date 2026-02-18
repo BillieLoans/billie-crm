@@ -36,6 +36,10 @@ export interface AccountPanelProps {
   onRequestWriteOff?: () => void
   /** Whether there's a pending write-off for this account */
   hasPendingWriteOff?: boolean
+  /** Callback to trigger disbursement (GAP-07) */
+  onTriggerDisbursement?: () => void
+  /** Whether a disbursement is currently being processed */
+  hasPendingDisbursement?: boolean
 }
 
 /**
@@ -62,6 +66,8 @@ export const AccountPanel: React.FC<AccountPanelProps> = ({
   isRefreshing,
   onRequestWriteOff,
   hasPendingWriteOff,
+  onTriggerDisbursement,
+  hasPendingDisbursement,
 }) => {
   // Other accounts for switcher (exclude current)
   const otherAccounts = useMemo(
@@ -146,6 +152,8 @@ export const AccountPanel: React.FC<AccountPanelProps> = ({
             onWaiveFee={onWaiveFee}
             onRequestWriteOff={onRequestWriteOff}
             hasPendingWriteOff={hasPendingWriteOff}
+            onTriggerDisbursement={onTriggerDisbursement}
+            hasPendingDisbursement={hasPendingDisbursement}
           />
         )
       default:

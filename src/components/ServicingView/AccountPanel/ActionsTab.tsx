@@ -9,8 +9,10 @@ export interface ActionsTabProps {
   account: LoanAccountData
   onRecordRepayment: () => void
   onWaiveFee: () => void
+  onTriggerDisbursement?: () => void
   onRequestWriteOff?: () => void
   hasPendingWriteOff?: boolean
+  hasPendingDisbursement?: boolean
 }
 
 // Hoisted for performance
@@ -27,13 +29,20 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
   account,
   onRecordRepayment,
   onWaiveFee,
+  onTriggerDisbursement,
   onRequestWriteOff,
   hasPendingWriteOff = false,
+  hasPendingDisbursement = false,
 }) => {
   const readOnlyMode = useUIStore((state) => state.readOnlyMode)
   const hasPendingAction = useOptimisticStore((state) => state.hasPendingAction)
   const hasPendingWaive = hasPendingAction(account.loanAccountId, 'waive-fee')
   const hasPendingRepayment = hasPendingAction(account.loanAccountId, 'record-repayment')
+  const isDisbursementPending = hasPendingDisbursement || hasPendingAction(account.loanAccountId, 'trigger-disbursement')
+
+  // GAP-06: Determine if account is awaiting disbursement
+  const isAwaitingDisbursement = account.status === 'AWAITING_DISBURSEMENT'
+  const isAlreadyDisbursed = !isAwaitingDisbursement
 
   const hasLiveBalance = account.liveBalance !== null
   const fees = hasLiveBalance ? account.liveBalance!.feeBalance : 0
@@ -55,6 +64,37 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
         <div className={styles.actionsReadOnlyWarning} role="alert">
           <span className={styles.actionsWarningIcon}>🔒</span>
           <span>System is in read-only mode. Actions are temporarily disabled.</span>
+        </div>
+      )}
+
+      {/* GAP-07: Trigger Disbursement Action (only shown when awaiting disbursement) */}
+      {isAwaitingDisbursement && onTriggerDisbursement && (
+        <div className={styles.actionCard}>
+          <div className={styles.actionCardHeader}>
+            <span className={styles.actionCardIcon}>&#x1F4B8;</span>
+            <span className={styles.actionCardTitle}>Trigger Disbursement</span>
+          </div>
+          <p className={styles.actionCardDescription}>
+            Record the actual disbursement of funds to the customer. This will start
+            revenue accrual and ECL calculation. Ensure funds have been sent before
+            confirming.
+          </p>
+          <div className={styles.actionCardFooter}>
+            <span className={styles.actionCardMeta}>
+              Amount: {currencyFormatter.format(
+                (account.loanAmount ?? 0) + (account.loanFee ?? 0)
+              )}
+            </span>
+            <button
+              type="button"
+              className={`${styles.actionCardBtn} ${styles.actionCardBtnPrimary}`}
+              onClick={onTriggerDisbursement}
+              disabled={readOnlyMode || isDisbursementPending}
+              data-testid="action-trigger-disbursement"
+            >
+              {isDisbursementPending ? 'Processing...' : 'Trigger Disbursement'}
+            </button>
+          </div>
         </div>
       )}
 
