@@ -1,368 +1,456 @@
 # Keycloak Infrastructure
 
-This directory contains the Fly.io deployment configuration for Keycloak instances.
+Keycloak identity provider for Billie, deployed on Fly.io with PostgreSQL.
 
 ## Environments
 
-| Environment | App Name | Purpose |
-|-------------|----------|---------|
-| Non-Production | `billie-keycloak-nonprod` | Development, staging, testing |
-| Production | `billie-keycloak-prod` | Production workloads |
+| Environment | App Name | Fly.io Config | Purpose |
+|---|---|---|---|
+| Non-Production | `billie-keycloak-nonprod` | `nonprod/fly.toml` | dev, demo, staging realms |
+| Production | `billie-keycloak-prod` | `prod/fly.toml` | Production workloads |
+
+Non-production hosts multiple realms (e.g. `billie-customer-dev`, `billie-customer-demo`) on one instance. Production gets its own dedicated instance.
+
+| Setting | Non-Production | Production |
+|---|---|---|
+| Memory | 1GB | 1GB |
+| CPUs | 1 shared | 2 shared |
+| Auto-stop | Yes (saves costs) | No (always running) |
+| Min machines | 0 | 1 |
+| Log level | INFO | WARN |
+| Health check interval | 30s | 15s |
+| Hostname strict | Yes | Yes |
 
 ## Directory Structure
 
 ```
 infra/keycloak/
-├── Dockerfile          # Shared Keycloak Docker image
-├── deploy.sh           # Deployment script
-├── README.md           # This file
-├── scripts/           # Optional automation
-│   ├── setup-realm-from-export.sh       # One-shot realm setup from exported JSON
-│   ├── apply-customer-id-attribute.sh   # Add Customer ID to realm user profile
-│   └── apply-client-scope-mappers.sh    # Add customer_id + optional Audience mappers to client scope
-├── .env.dev           # Setup variables for dev realm import
-├── .env.demo          # Setup variables for demo realm import
-├── .env.staging       # Setup variables for staging realm import
-├── .env.prod          # Setup variables for prod realm import
-├── themes/             # Custom Keycloak themes
-│   └── billie/         # Billie theme (Login + Email)
-│       ├── login/      # Login page theme
-│       └── email/      # Email templates (password reset, verification, etc.)
-├── nonprod/
-│   └── fly.toml        # Non-production Fly.io config
-└── prod/
-    └── fly.toml        # Production Fly.io config
+├── Dockerfile                # Multi-stage Keycloak 26.0 image (postgres, health, metrics)
+├── docker-entrypoint.sh      # Converts Fly DATABASE_URL to KC_DB_* format
+├── deploy.sh                 # Deployment script (creates app + DB on first run)
+├── README.md
+├── config_files/
+│   └── billie-customer-realm.json   # Realm export (clients, scopes, mappers, auth flows)
+├── scripts/
+│   ├── setup-realm-from-export.sh       # Import realm from JSON export
+│   ├── harden-admin.sh                  # Delete default admin user (security hardening)
+│   ├── apply-customer-id-attribute.sh   # Add customer_id to user profile
+│   └── apply-client-scope-mappers.sh    # Add customer_id + audience mappers
+├── .env.dev                  # Variables for dev realm import
+├── .env.demo                 # Variables for demo realm import
+├── .env.staging              # Variables for staging realm import
+├── .env.prod                 # Variables for prod realm import
+├── themes/billie/            # Custom Keycloak theme (login + email)
+├── nonprod/fly.toml          # Non-production Fly.io config
+└── prod/fly.toml             # Production Fly.io config
 ```
-
-## Custom theme (billie)
-
-The **billie** theme provides a custom Login theme and Email theme. After deployment, in the Keycloak Admin Console:
-
-1. Go to **Realm settings** → **Themes**.
-2. Set **Login theme** and **Email theme** to **billie**.
-3. Save.
-
-## One-shot setup from realm export (recommended)
-
-Use `scripts/setup-realm-from-export.sh` to bootstrap a full realm in one command from a JSON export (clients, scopes, mappers, user profile, themes refs, etc), with environment naming aligned to the project Makefile (`dev|demo|staging|prod`).
-
-The script:
-
-- infers a realm base from export (or uses `REALM_BASE`) and sets target realm to `<base>-<ENV>`
-- rewrites `billie-app` URLs to target app URL (defaults to `https://billie-crm-<ENV>.fly.dev`)
-- imports the realm via Keycloak Admin API
-- optionally replaces an existing realm when `--replace-existing` is passed
-- strips a few export fields that are known to be incompatible across nearby Keycloak versions (e.g. export 26.2.x -> server 26.0.x)
-
-Example using your export file:
-
-```bash
-cd infra/keycloak
-KEYCLOAK_URL=https://billie-keycloak-nonprod.fly.dev \
-ADMIN_USER=admin \
-ADMIN_PASSWORD='your-admin-password' \
-ENV=demo \
-EXPORT_FILE="/Users/rohansharp/Downloads/realm-export-billie-customer.json" \
-./scripts/setup-realm-from-export.sh --replace-existing
-```
-
-Using per-environment files (recommended):
-
-1. Update `infra/keycloak/.env.<env>` with the correct values (especially `ADMIN_PASSWORD` and `EXPORT_FILE`).
-2. Run:
-
-```bash
-cd infra/keycloak
-ENV=demo ./scripts/setup-realm-from-export.sh --replace-existing
-```
-
-Optional variables:
-
-- `APP_URL` (default: `https://billie-crm-${ENV}.fly.dev`)
-- `REALM_BASE` (default: inferred by stripping `-dev|-demo|-staging|-prod` from exported realm name)
-
-Safety:
-
-- Use `--dry-run` to generate transformed JSON only (no API calls)
-- Existing realms are not overwritten unless `--replace-existing` is set
-
-## Custom user attributes (Customer ID)
-
-The **Customer ID** field on users is a **realm user profile** attribute. This is realm configuration (stored in the Keycloak database), so it is **not** part of the Docker image. You configure it per realm on the server.
-
-### Option 1: Manual setup in Admin Console
-
-1. Log in to the Keycloak Admin Console (e.g. `https://billie-keycloak-nonprod.fly.dev/admin`).
-2. Select the realm where you want the attribute (e.g. your application realm, not `master`).
-3. Go to **Realm settings** → **User profile** tab.
-4. Open the **Attributes** sub-tab (or **JSON Editor** to paste config).
-5. Add a new attribute:
-   - **Attribute name:** `customerId` (internal key; use this when setting user attributes via API).
-   - **Display name:** `Customer ID`.
-   - Ensure it is in an attribute group so it appears in the user details (e.g. **General** or **Attributes**).
-   - Set **Permissions** so admins can view and edit (e.g. view: `admin`, edit: `admin`).
-6. Save.
-
-The Customer ID field will then appear under the **Details** tab when editing a user, and you can set values per user.
-
-### Option 2: Apply via script (repeatable / automation)
-
-A script is provided to add the Customer ID attribute to a realm’s user profile via the Keycloak Admin API. Use this to keep the same config across environments or to automate after deploy.
-
-From the repo root:
-
-```bash
-cd infra/keycloak
-KEYCLOAK_URL=https://billie-keycloak-nonprod.fly.dev \
-REALM=your-realm-name \
-ADMIN_USER=admin \
-ADMIN_PASSWORD='your-admin-password' \
-./scripts/apply-customer-id-attribute.sh
-```
-
-- `KEYCLOAK_URL`: Keycloak base URL (no trailing slash).
-- `REALM`: Realm to configure (e.g. your app realm, not `master`).
-- `ADMIN_USER` / `ADMIN_PASSWORD`: Admin console credentials (same as `KC_BOOTSTRAP_ADMIN_*`).
-
-The script fetches the current user profile, adds the `customerId` attribute if missing, and updates the realm. Requires `curl` and `jq`.
-
-### Exporting from your local Keycloak (optional)
-
-If your local Keycloak already has the Customer ID attribute configured, you can export the realm and use it on the server:
-
-1. **Export realm** (local): Admin Console → Realm settings → **Action** → **Partial export** (or **Export**). Enable **Export groups and roles** and **Export clients** if needed. Download the JSON.
-2. **Import on server**: Admin Console on Fly → **Create realm** → **Browse** and upload the JSON, or use the Admin API/CLI to create/update the realm from the file.
-
-The user profile (including Customer ID) is part of the realm export, so the attribute will be present in the imported realm.
-
-## Client scope mappers (e.g. Customer ID in tokens)
-
-To have **Customer ID** (and other custom claims) available in ID tokens, access tokens, and the UserInfo endpoint, configure **client scope mappers** on the client’s dedicated scope.
-
-### 1. Ensure the dedicated client scope is assigned
-
-1. **Clients** → select your app client (e.g. **billie-app**) → **Client scopes** tab.
-2. Under **Assigned client scopes**, ensure the client’s **dedicated** scope (e.g. **billie-app-dedicated**) is listed.
-3. Set its **Assigned type** to **Default** so it is always included in tokens for this client.
-
-### 2. Add a User Attribute mapper for Customer ID
-
-1. **Client scopes** (left sidebar) → open the **dedicated** scope (e.g. **billie-app-dedicated**) → **Mappers** tab.
-2. **Add mapper** → **By configuration** → **User Attribute**.
-3. Configure:
-   - **Name:** `customer_id`
-   - **User Attribute:** `customerId` (must match the realm user profile attribute name)
-   - **Token Claim Name:** `customer_id` (claim name in tokens)
-   - **Claim JSON Type:** String
-   - **Add to ID token:** On
-   - **Add to access token:** On
-   - **Add to userinfo:** On
-   - **Add to token introspection:** On (if you use introspection)
-   - **Multivalued:** Off
-4. Save.
-
-After this, tokens issued for that client will include a `customer_id` claim when the user has the attribute set.
-
-### 3. Optional: Audience mapper
-
-If your app expects an `aud` claim (e.g. for API validation), add an **Audience** mapper to the same dedicated scope:
-
-1. **Add mapper** → **By configuration** → **Audience**.
-2. **Name:** e.g. `billie-app-audience`
-3. **Included Client Audience:** your client ID (e.g. `billie-app`)
-4. Turn **Add to ID token** and **Add to access token** (and optionally token introspection) **On**.
-5. Save.
-
-### Note on attribute name
-
-The **User Attribute** field in the mapper must match the **attribute name** in the realm user profile (e.g. `customerId` or `customer_id`—use whatever you set when adding the attribute). The **Token Claim Name** can differ (e.g. `customer_id` in tokens) depending on your app’s expectations.
-
-### Option 2: Apply via script (repeatable / automation)
-
-A script adds the User Attribute mapper (and optionally the Audience mapper) to the client’s **dedicated** scope (`{CLIENT_ID}-dedicated`). The client must already exist (Keycloak creates the dedicated scope when you create the client).
-
-```bash
-cd infra/keycloak
-KEYCLOAK_URL=https://billie-keycloak-nonprod.fly.dev \
-REALM=billie-customer-demo \
-CLIENT_ID=billie-app \
-ADMIN_USER=admin \
-ADMIN_PASSWORD='your-admin-password' \
-./scripts/apply-client-scope-mappers.sh
-```
-
-Optional env vars:
-
-- `USER_ATTRIBUTE_NAME` — realm user profile attribute (default: `customerId`)
-- `TOKEN_CLAIM_NAME` — claim name in tokens (default: `customer_id`)
-- `ADD_AUDIENCE_MAPPER` — set to `false` to skip the Audience mapper (default: `true`)
-
-Requires `curl` and `jq`. Run after creating the client in Keycloak; the script is idempotent (skips mappers that already exist).
-
-## Post-deploy checklist (new realm or client)
-
-When setting up a new realm or client on the server, use this as a quick checklist:
-
-| Item | Where |
-|------|--------|
-| **Themes** | Realm settings → Themes → Login & Email → **billie** |
-| **Customer ID user profile attribute** | Realm settings → User profile → add `customerId` (or run `scripts/apply-customer-id-attribute.sh`) |
-| **Valid redirect URIs** | Clients → [your client] → Settings → add app callback URL(s) to avoid “Invalid parameter: redirect_uri” |
-| **Client scope mappers** | Clients → [your client] → Client scopes → dedicated scope → Mappers (or run `scripts/apply-client-scope-mappers.sh` with `CLIENT_ID=your-client`) |
-| **Web origins** (if SPA) | Clients → [your client] → Settings → **Web origins**: add app origin(s), e.g. `https://billie-crm-demo.fly.dev` or `+` to allow all redirect URIs’ origins |
 
 ## Prerequisites
 
-1. Install the Fly CLI: https://fly.io/docs/hands-on/install-flyctl/
-2. Authenticate: `fly auth login`
+- [Fly CLI](https://fly.io/docs/hands-on/install-flyctl/) installed and authenticated (`fly auth login`)
+- `curl` and `jq` installed (for realm setup and hardening scripts)
+- A strong, unique admin password generated and ready (e.g. `openssl rand -base64 32`)
 
-## Deployment
+---
 
-### First-Time Setup
+## Production Setup (Step by Step)
 
-1. **Deploy non-production:**
-   ```bash
-   cd infra/keycloak
-   ./deploy.sh nonprod
-   ```
+This is the complete procedure to stand up a new production Keycloak instance, from zero to hardened.
 
-2. **Set secrets (prompted by the script):**
-   ```bash
-   fly secrets set KC_BOOTSTRAP_ADMIN_USERNAME=admin -a billie-keycloak-nonprod
-   fly secrets set KC_BOOTSTRAP_ADMIN_PASSWORD=<secure-password> -a billie-keycloak-nonprod
-   ```
-
-3. **Attach the database:**
-   ```bash
-   fly postgres attach billie-keycloak-nonprod-db -a billie-keycloak-nonprod
-   ```
-
-4. **Run deploy again:**
-   ```bash
-   ./deploy.sh nonprod
-   ```
-
-5. **Repeat for production** when ready.
-
-### Subsequent Deployments
+### Step 1: Create the Fly app and database
 
 ```bash
-./deploy.sh nonprod  # Deploy to non-production
-./deploy.sh prod     # Deploy to production
+cd infra/keycloak
+./deploy.sh prod
 ```
 
-For an existing instance where secrets are already set, you can skip the secrets check:
+On first run, this will:
+1. Create the `billie-keycloak-prod` Fly app
+2. Create a `billie-keycloak-prod-db` PostgreSQL instance (10GB, `syd` region)
+3. Print instructions for secrets and database attachment, then exit
+
+### Step 2: Set bootstrap admin secrets
+
+Generate a strong password and set secrets. **Do not use `admin` as the password.**
 
 ```bash
-./deploy.sh nonprod --skip-secrets
+# Generate a secure password
+ADMIN_PASS="$(openssl rand -base64 32)"
+echo "Save this password securely: $ADMIN_PASS"
+
+# Set secrets on the Fly app
+fly secrets set KC_BOOTSTRAP_ADMIN_USERNAME=admin -a billie-keycloak-prod
+fly secrets set KC_BOOTSTRAP_ADMIN_PASSWORD="$ADMIN_PASS" -a billie-keycloak-prod
+```
+
+The bootstrap admin is the initial Keycloak user created in the `master` realm on first boot. You will use it to set up realms and then delete it in the hardening step.
+
+### Step 3: Attach the database
+
+```bash
+fly postgres attach billie-keycloak-prod-db -a billie-keycloak-prod
+```
+
+This creates a `DATABASE_URL` secret on the app. The `docker-entrypoint.sh` converts it to Keycloak's `KC_DB_*` format at startup.
+
+### Step 4: Deploy
+
+```bash
 ./deploy.sh prod --skip-secrets
 ```
 
-## Configuration Differences
+Wait for the deployment to complete. Keycloak takes 60-90 seconds to start (longer on first boot due to database migrations). Monitor with:
 
-| Setting | Non-Production | Production |
-|---------|---------------|------------|
-| Memory | 512MB | 1GB |
-| CPUs | 1 | 2 |
-| Auto-stop | Yes (saves costs) | No (always running) |
-| Min machines | 0 | 1 |
-| Log level | INFO | WARN |
-| Health check interval | 30s | 15s |
+```bash
+fly logs -a billie-keycloak-prod
+```
 
-## URLs
+Verify it's healthy:
 
-After deployment:
+```bash
+curl -s https://billie-keycloak-prod.fly.dev/health/ready
+# Expected: {"status":"UP"}
+```
 
-- **Non-Production:**
-  - App: https://billie-keycloak-nonprod.fly.dev
-  - Admin: https://billie-keycloak-nonprod.fly.dev/admin
+### Step 5: Create a dedicated admin user
 
-- **Production:**
-  - App: https://billie-keycloak-prod.fly.dev
-  - Admin: https://billie-keycloak-prod.fly.dev/admin
+Before deleting the bootstrap admin, create a proper admin user with a unique username.
+
+1. Open `https://billie-keycloak-prod.fly.dev/admin`
+2. Log in with the bootstrap credentials (`admin` / the password from step 2)
+3. In the **master** realm, go to **Users** > **Add user**
+4. Create a user with:
+   - A **non-obvious username** (not `admin`, not `keycloak`, not your email)
+   - A strong, unique password (set via **Credentials** tab, toggle off "Temporary")
+   - **Realm roles**: assign `admin` role
+5. Log out, then log back in with the new user to verify it works
+
+### Step 6: Security hardening
+
+Run the hardening script to delete the default `admin` user from the master realm:
+
+```bash
+cd infra/keycloak
+KEYCLOAK_URL=https://billie-keycloak-prod.fly.dev \
+ADMIN_USER=<your-new-admin-username> \
+ADMIN_PASSWORD='<your-new-admin-password>' \
+./scripts/harden-admin.sh
+```
+
+This finds and deletes the `admin` user. If it's already been removed, the script exits cleanly.
+
+### Step 7: Import the production realm
+
+Update `.env.prod` with your admin credentials:
+
+```bash
+# .env.prod
+ENV=prod
+KEYCLOAK_URL=https://billie-keycloak-prod.fly.dev
+ADMIN_USER=<your-new-admin-username>
+ADMIN_PASSWORD=<your-new-admin-password>
+EXPORT_FILE=config_files/billie-customer-realm.json
+REALM_BASE=billie-customer
+APP_URL=https://billie-crm.fly.dev
+```
+
+> **Never commit real passwords to `.env.*` files.** Use `CHANGE_ME` as the placeholder and set the actual values locally or via a secrets manager.
+
+Then import the realm:
+
+```bash
+cd infra/keycloak
+ENV=prod ./scripts/setup-realm-from-export.sh
+```
+
+The script transforms the realm JSON for production:
+- Renames the realm to `billie-customer-prod`
+- Rewrites `billie-app` client URLs to the production app URL
+- Imports via the Keycloak Admin API
+
+Use `--dry-run` first to inspect the transformed JSON without touching the server:
+
+```bash
+ENV=prod ./scripts/setup-realm-from-export.sh --dry-run
+```
+
+Use `--replace-existing` to overwrite an existing realm:
+
+```bash
+ENV=prod ./scripts/setup-realm-from-export.sh --replace-existing
+```
+
+### Step 8: Verify realm configuration
+
+After import, verify these settings in the admin console (`https://billie-keycloak-prod.fly.dev/admin`):
+
+1. **Clients > billie-app > Settings:**
+   - "Direct Access Grants Enabled" is **OFF** (password grant disabled)
+   - "Standard Flow Enabled" is **ON** (authorization code flow)
+   - "Client authentication" is **OFF** (public client for SPA)
+   - `pkce.code.challenge.method` is **S256**
+
+2. **Clients > billie-app > Settings > Access settings:**
+   - "Valid redirect URIs" includes your production app URL(s)
+   - "Web origins" includes your production app origin
+   - "Valid post logout redirect URIs" includes your production app URL(s)
+
+3. **Realm settings > Security defenses > Brute force detection:**
+   - Enabled: **ON**
+   - Max login failures: **5**
+   - Wait increment: **60 seconds**
+   - Max wait: **900 seconds** (15 minutes)
+
+4. **Realm settings > Themes:**
+   - Login theme: **billie**
+   - Email theme: **billie**
+
+5. **Realm settings > Events:**
+   - User events: **ON**
+   - Admin events: **ON** (with "Include representation" ON)
+
+6. **Realm settings > General:**
+   - User registration: **OFF**
+
+### Step 9: Configure SMTP (email)
+
+If you need password reset and email verification, configure SMTP:
+
+1. **Realm settings > Email**
+2. Set your SMTP server details (e.g. AWS SES)
+3. Send a test email to verify
+
+The realm export includes SMTP configuration, but passwords are masked (`**********`) and need to be re-entered manually.
+
+### Step 10: Smoke test
+
+1. Open your production app URL
+2. Verify the login redirect goes to Keycloak with the Billie theme
+3. Test login with a valid user
+4. Verify the JWT token contains the expected claims (`customer_id`, audience)
+5. Test password reset flow (if SMTP is configured)
+
+---
+
+## Security Hardening Checklist
+
+Run through this checklist after every new instance setup or major configuration change.
+
+| # | Item | How to verify | Script/Manual |
+|---|---|---|---|
+| 1 | **Bootstrap admin user deleted** from master realm | Admin console > master realm > Users: no user named `admin` | `scripts/harden-admin.sh` |
+| 2 | **Password grant disabled** on `billie-app` client | Clients > billie-app > Settings: "Direct Access Grants" is OFF | Realm JSON (`directAccessGrantsEnabled: false`) |
+| 3 | **Brute force detection enabled** | Realm settings > Security defenses > Brute force: ON, 5 failures, 60s wait | Realm JSON (`bruteForceProtected: true`) |
+| 4 | **PKCE enforced** on `billie-app` client | Clients > billie-app > Advanced > Proof Key for Code Exchange: S256 | Realm JSON (`pkce.code.challenge.method: S256`) |
+| 5 | **Self-registration disabled** | Realm settings > Login: "User registration" is OFF | Realm JSON (`registrationAllowed: false`) |
+| 6 | **Admin events auditing enabled** | Realm settings > Events: Admin events ON, Include representation ON | Realm JSON (`adminEventsEnabled: true`) |
+| 7 | **No credentials in git** | `.env.*` files contain `CHANGE_ME`, not real passwords | Manual review |
+| 8 | **Admin console access restricted** (recommended) | Cannot reach `/admin` from outside allowed networks | Fly.io private networking or reverse proxy |
+| 9 | **Strong admin password** | Bootstrap password is 32+ random characters, not `admin` | Fly secrets |
+| 10 | **SMTP password re-entered** | Realm settings > Email > Test connection works | Manual (masked in exports) |
+
+### Restricting admin console access (recommended)
+
+The admin console at `/admin` is publicly accessible by default on Fly.io. For production, consider:
+
+- **Fly.io private services**: Use `fly services update` or `[[services]]` in `fly.toml` to restrict the admin paths to internal Fly network only
+- **VPN / WireGuard**: Access admin via `fly wireguard` private networking (`billie-keycloak-prod.internal:8080`)
+- **IP allowlisting**: Use a reverse proxy (e.g. Fly middleware or Cloudflare Access) to restrict `/admin/*` and `/realms/master/*` to trusted IPs
+
+---
+
+## Realm Setup from Export
+
+The primary way to configure realms is via `scripts/setup-realm-from-export.sh`, which imports a realm JSON export and transforms it for the target environment.
+
+### What the script does
+
+- Renames the realm to `<REALM_BASE>-<ENV>` (e.g. `billie-customer-prod`)
+- Rewrites `billie-app` client URLs (rootUrl, adminUrl, baseUrl, redirectUris, webOrigins, post-logout URIs) to `APP_URL`
+- Strips masked secrets (`**********`) so Keycloak generates new ones
+- Removes version-specific fields that cause import errors across Keycloak versions
+
+### Usage
+
+Using environment files (recommended):
+
+```bash
+cd infra/keycloak
+# Edit .env.prod with correct ADMIN_USER, ADMIN_PASSWORD, and APP_URL
+ENV=prod ./scripts/setup-realm-from-export.sh
+```
+
+Using explicit variables:
+
+```bash
+cd infra/keycloak
+KEYCLOAK_URL=https://billie-keycloak-prod.fly.dev \
+ADMIN_USER=<admin-username> \
+ADMIN_PASSWORD='<admin-password>' \
+ENV=prod \
+EXPORT_FILE=config_files/billie-customer-realm.json \
+REALM_BASE=billie-customer \
+APP_URL=https://billie-crm.fly.dev \
+./scripts/setup-realm-from-export.sh
+```
+
+### Environment files
+
+Each `.env.<env>` file provides defaults for the setup script:
+
+| Variable | Description |
+|---|---|
+| `ENV` | Environment name (`dev`, `demo`, `staging`, `prod`) |
+| `KEYCLOAK_URL` | Keycloak base URL |
+| `ADMIN_USER` | Admin username (set to `CHANGE_ME` in git, override locally) |
+| `ADMIN_PASSWORD` | Admin password (set to `CHANGE_ME` in git, override locally) |
+| `EXPORT_FILE` | Path to realm export JSON (relative to `infra/keycloak/` or absolute) |
+| `REALM_BASE` | Realm name prefix (target realm becomes `<REALM_BASE>-<ENV>`) |
+| `APP_URL` | Application URL for client redirect URIs |
+
+---
+
+## Custom Theme (billie)
+
+The `themes/billie/` directory provides a branded Login theme and Email theme, baked into the Docker image at build time.
+
+After importing a realm, verify the theme is set:
+1. **Realm settings > Themes**
+2. Login theme: **billie**
+3. Email theme: **billie**
+
+The theme includes:
+- Custom login page with Billie branding (logo, colors, typography)
+- HTML email templates for password reset, email verification, and execute actions
+- Plain text email fallbacks
+
+---
+
+## Custom User Attributes (Customer ID)
+
+The `customer_id` attribute is configured in the realm JSON and imported automatically. It allows a Billie customer ID to be stored on each user and included in JWT tokens.
+
+### Verify after import
+
+1. **Realm settings > User profile**: `customer_id` attribute exists with admin-only edit permissions
+2. **Clients > billie-app > Client scopes > Mappers**: `customer_id` mapper is present
+3. **Test a token**: decode a JWT from the app and verify the `customer_id` claim is present
+
+### Apply manually (if needed)
+
+```bash
+cd infra/keycloak
+KEYCLOAK_URL=https://billie-keycloak-prod.fly.dev \
+REALM=billie-customer-prod \
+ADMIN_USER=<admin-username> \
+ADMIN_PASSWORD='<admin-password>' \
+./scripts/apply-customer-id-attribute.sh
+```
+
+Client scope mappers:
+
+```bash
+cd infra/keycloak
+KEYCLOAK_URL=https://billie-keycloak-prod.fly.dev \
+REALM=billie-customer-prod \
+CLIENT_ID=billie-app \
+ADMIN_USER=<admin-username> \
+ADMIN_PASSWORD='<admin-password>' \
+./scripts/apply-client-scope-mappers.sh
+```
+
+---
+
+## Subsequent Deployments
+
+For image updates (theme changes, Keycloak version bumps):
+
+```bash
+cd infra/keycloak
+./deploy.sh prod --skip-secrets
+```
+
+Realm configuration changes should be made via the admin console or by re-importing the realm JSON. The Docker image does not contain realm configuration -- it is stored in the database.
+
+---
 
 ## Managing Secrets
 
 ```bash
-# List secrets
-fly secrets list -a billie-keycloak-nonprod
-
-# Set a secret
-fly secrets set SECRET_NAME=value -a billie-keycloak-nonprod
-
-# Unset a secret
-fly secrets unset SECRET_NAME -a billie-keycloak-nonprod
+fly secrets list -a billie-keycloak-prod
+fly secrets set SECRET_NAME=value -a billie-keycloak-prod
+fly secrets unset SECRET_NAME -a billie-keycloak-prod
 ```
+
+Expected secrets on a running instance:
+
+| Secret | Source |
+|---|---|
+| `DATABASE_URL` | Created by `fly postgres attach` |
+| `KC_BOOTSTRAP_ADMIN_USERNAME` | Set manually in step 2 |
+| `KC_BOOTSTRAP_ADMIN_PASSWORD` | Set manually in step 2 |
+
+---
 
 ## Database Access
 
 ```bash
-# Connect to database
-fly postgres connect -a billie-keycloak-nonprod-db
+# Connect to database via psql
+fly postgres connect -a billie-keycloak-prod-db
 
-# Proxy database locally (for tools like pgAdmin)
-fly proxy 5432 -a billie-keycloak-nonprod-db
+# Proxy database locally (for pgAdmin or other tools)
+fly proxy 5432 -a billie-keycloak-prod-db
 ```
+
+---
 
 ## Monitoring
 
 ```bash
-# View logs
-fly logs -a billie-keycloak-nonprod
-
-# Check app status
-fly status -a billie-keycloak-nonprod
-
-# SSH into the machine
-fly ssh console -a billie-keycloak-nonprod
+fly logs -a billie-keycloak-prod        # View logs
+fly status -a billie-keycloak-prod      # Check app status
+fly ssh console -a billie-keycloak-prod # SSH into the machine
 ```
+
+---
 
 ## Scaling
 
 ```bash
-# Scale non-prod (manual)
-fly scale count 1 -a billie-keycloak-nonprod
-
-# Scale prod (increase machines)
-fly scale count 2 -a billie-keycloak-prod
-
-# Adjust VM size
-fly scale vm shared-cpu-2x -a billie-keycloak-prod
+fly scale count 2 -a billie-keycloak-prod          # Add a second machine
+fly scale vm shared-cpu-2x -a billie-keycloak-prod  # Increase VM size
 ```
+
+---
 
 ## Troubleshooting
 
-### Invalid parameter: redirect_uri (on login redirect from application)
-
-This error appears when the application redirects users to Keycloak for login and the **callback URL** the application sends is not allowed for the Keycloak client.
-
-**Fix:** Register the application’s callback URL in Keycloak:
-
-1. Log in to the Keycloak Admin Console (e.g. `https://billie-keycloak-nonprod.fly.dev/admin`).
-2. Select the **realm** your application uses (e.g. `billie-customer-demo`).
-3. Go to **Clients** → open the **client** your app uses (the one that sends the login request).
-4. Open the **Settings** (or **Credentials** / **Client details**) tab.
-5. In **Valid redirect URIs**, add the **exact** URL(s) your application uses as the OAuth/OIDC callback, for example:
-   - Production: `https://billie-crm-demo.fly.dev/*` or a specific path like `https://billie-crm-demo.fly.dev/api/auth/callback/keycloak`
-   - Local: `http://localhost:3000/*` or `http://localhost:3000/api/auth/callback/keycloak`
-   - Use a wildcard like `https://your-app.fly.dev/*` to allow any path on that origin.
-6. If your app uses post-logout redirects, add the same URLs to **Valid post logout redirect URIs**.
-7. Save.
-
-The value must match exactly what the application sends (including scheme, host, port, and path). If you’re unsure, check the app’s auth config for the callback URL or look at the browser address bar when the error appears—the `redirect_uri` may be in the query string.
-
 ### Keycloak won't start
 
-1. Check logs: `fly logs -a billie-keycloak-nonprod`
-2. Verify database is attached: `fly postgres list`
-3. Verify secrets are set: `fly secrets list -a billie-keycloak-nonprod`
-
-### Database connection issues
-
-1. Check database status: `fly status -a billie-keycloak-nonprod-db`
-2. Verify the `DATABASE_URL` secret exists (created by `fly postgres attach`)
+1. Check logs: `fly logs -a billie-keycloak-prod`
+2. Verify database is attached: `fly secrets list -a billie-keycloak-prod` (look for `DATABASE_URL`)
+3. Verify bootstrap secrets are set: look for `KC_BOOTSTRAP_ADMIN_USERNAME` and `KC_BOOTSTRAP_ADMIN_PASSWORD`
+4. Check database status: `fly status -a billie-keycloak-prod-db`
 
 ### Health check failures
 
-Keycloak can take 60-90 seconds to start. The health check grace period is set to 60s.
-If issues persist, check memory usage - Keycloak needs at least 512MB.
+Keycloak takes 60-90 seconds to start (longer on first boot with database migrations). The production grace period is 60 seconds. If health checks keep failing:
+
+- Check memory: Keycloak needs at least 512MB, 1GB recommended
+- Check database connectivity: `fly postgres connect -a billie-keycloak-prod-db`
+
+### "Invalid parameter: redirect_uri" on login
+
+The application's callback URL is not registered in the Keycloak client.
+
+1. Admin console > select your realm > **Clients** > **billie-app** > **Settings**
+2. Add the exact callback URL to **Valid redirect URIs** (e.g. `https://billie-crm.fly.dev/*`)
+3. Add the origin to **Web origins** (e.g. `https://billie-crm.fly.dev`)
+4. Save
+
+### Realm import fails
+
+- Use `--dry-run` to inspect the transformed JSON first
+- Check that your admin credentials are valid (the script authenticates to the master realm)
+- If the realm already exists, use `--replace-existing` (this deletes and recreates it)
+- Large realm imports can time out -- check Keycloak logs for errors
