@@ -21,6 +21,7 @@ import { WriteOffRequestDrawer } from './WriteOffRequestDrawer'
 import { DisburseLoanDrawer } from './DisburseLoanDrawer'
 import { AccountPanel, type TabId } from './AccountPanel'
 import type { SelectedFee } from './FeeList'
+import { ContactNotesPanel } from './ContactNotes/ContactNotesPanel'
 import { usePendingWriteOff } from '@/hooks/queries/usePendingWriteOff'
 import { useTrackCustomerView } from '@/hooks/useTrackCustomerView'
 import { Breadcrumb } from '@/components/Breadcrumb'
@@ -407,6 +408,16 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
         ) : (
           <AccountSelectionPrompt />
         )}
+
+        {/* Contact Notes Panel (Story 7.3)
+            customer.id is the Payload document ID used for relationship queries/mutations.
+            The route-level customerId prop is the business key — NOT the Payload document ID. */}
+        <ContactNotesPanel
+          customerId={customer?.id ?? ''}
+          customerName={customer?.fullName ?? undefined}
+          selectedAccountId={selectedAccountId}
+          accounts={accounts}
+        />
       </div>
 
       {/* Waive Fee Drawer - overlay */}

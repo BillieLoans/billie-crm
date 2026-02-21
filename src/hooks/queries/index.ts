@@ -96,6 +96,10 @@ export type { ECLTraceResult, ECLSourceEvent } from './useTraceECL'
 export { useTraceAccrual, traceAccrualQueryKey } from './useTraceAccrual'
 export type { AccrualTraceResult, AccrualSourceEvent } from './useTraceAccrual'
 
+// Contact Notes hooks (E7)
+export { useContactNotes, contactNotesQueryKey } from './useContactNotes'
+export type { ContactNoteData, ContactNotesFilters, ContactNotesResult } from './useContactNotes'
+
 // Re-export types from canonical location
 export type {
   CustomerSearchResult,

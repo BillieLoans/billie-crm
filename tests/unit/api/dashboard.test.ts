@@ -48,6 +48,19 @@ describe('Dashboard Schema', () => {
           status: 'upcoming',
         },
       ],
+      pendingDisbursements: [
+        {
+          loanAccountId: 'LA-002',
+          accountNumber: 'ACC-002',
+          customerName: 'John Smith',
+          customerId: 'CUST-002',
+          loanAmount: 7000,
+          loanAmountFormatted: '$7,000.00',
+          createdAt: '2025-12-11T09:00:00.000Z',
+          signedLoanAgreementUrl: null,
+        },
+      ],
+      pendingDisbursementsCount: 1,
       systemStatus: {
         ledger: 'online',
         latencyMs: 45,

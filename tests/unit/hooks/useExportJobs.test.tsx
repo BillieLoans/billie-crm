@@ -86,7 +86,7 @@ describe('useExportJobs', () => {
       expect(mockFetch).toHaveBeenCalled()
     })
 
-    expect(mockFetch).toHaveBeenCalledWith('/api/export/jobs')
+    expect(mockFetch).toHaveBeenCalledWith('/api/export/jobs?userId=unknown')
   })
 
   it('should be disabled when enabled is false', async () => {

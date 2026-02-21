@@ -4,6 +4,7 @@ import { Customers } from '../../src/collections/Customers'
 import { Conversations } from '../../src/collections/Conversations'
 import { Users } from '../../src/collections/Users'
 import { Media } from '../../src/collections/Media'
+import { ContactNotes } from '../../src/collections/ContactNotes'
 import { createMockPayloadRequest } from '../utils/test-helpers'
 
 describe('Payload Collections Configuration', () => {
@@ -237,6 +238,350 @@ describe('Payload Collections Configuration', () => {
       
       expect(altField?.type).toBe('text')
       expect(altField?.required).toBe(true)
+    })
+  })
+
+  describe('ContactNotes Collection', () => {
+    test('should have correct slug and admin configuration', () => {
+      expect(ContactNotes.slug).toBe('contact-notes')
+      expect(ContactNotes.admin?.group).toBe('Servicing')
+      expect(ContactNotes.admin?.useAsTitle).toBe('subject')
+    })
+
+    test('should have all required entity relationship fields', () => {
+      const fields = ContactNotes.fields || []
+
+      const customerField = fields.find(f => f.name === 'customer')
+      expect(customerField?.type).toBe('relationship')
+      expect(customerField?.relationTo).toBe('customers')
+      expect(customerField?.required).toBe(true)
+      expect(customerField?.index).toBe(true)
+
+      const loanAccountField = fields.find(f => f.name === 'loanAccount')
+      expect(loanAccountField?.type).toBe('relationship')
+      expect(loanAccountField?.relationTo).toBe('loan-accounts')
+      expect(loanAccountField?.index).toBe(true)
+      expect(loanAccountField?.required).toBeUndefined()
+
+      const applicationField = fields.find(f => f.name === 'application')
+      expect(applicationField?.type).toBe('relationship')
+      expect(applicationField?.relationTo).toBe('applications')
+
+      const conversationField = fields.find(f => f.name === 'conversation')
+      expect(conversationField?.type).toBe('relationship')
+      expect(conversationField?.relationTo).toBe('conversations')
+    })
+
+    test('should have noteType select with all 11 options', () => {
+      const fields = ContactNotes.fields || []
+      const noteTypeField = fields.find(f => f.name === 'noteType')
+
+      expect(noteTypeField?.type).toBe('select')
+      expect(noteTypeField?.required).toBe(true)
+
+      const options = noteTypeField?.options as Array<{ label: string; value: string }>
+      const values = options?.map(o => o.value) || []
+
+      expect(values).toContain('phone_inbound')
+      expect(values).toContain('phone_outbound')
+      expect(values).toContain('email_inbound')
+      expect(values).toContain('email_outbound')
+      expect(values).toContain('sms')
+      expect(values).toContain('general_enquiry')
+      expect(values).toContain('complaint')
+      expect(values).toContain('escalation')
+      expect(values).toContain('internal_note')
+      expect(values).toContain('account_update')
+      expect(values).toContain('collections')
+      expect(values).toHaveLength(11)
+    })
+
+    test('should have subject field with maxLength 200', () => {
+      const fields = ContactNotes.fields || []
+      const subjectField = fields.find(f => f.name === 'subject')
+
+      expect(subjectField?.type).toBe('text')
+      expect(subjectField?.required).toBe(true)
+      expect(subjectField?.maxLength).toBe(200)
+    })
+
+    test('should have json content field', () => {
+      const fields = ContactNotes.fields || []
+      const contentField = fields.find(f => f.name === 'content')
+
+      expect(contentField?.type).toBe('json')
+      expect(contentField?.required).toBe(true)
+    })
+
+    test('should have priority select with default normal', () => {
+      const fields = ContactNotes.fields || []
+      const priorityField = fields.find(f => f.name === 'priority')
+
+      expect(priorityField?.type).toBe('select')
+      expect(priorityField?.defaultValue).toBe('normal')
+
+      const options = priorityField?.options as Array<{ label: string; value: string }>
+      const values = options?.map(o => o.value) || []
+      expect(values).toEqual(['low', 'normal', 'high', 'urgent'])
+    })
+
+    test('should have sentiment select with default neutral', () => {
+      const fields = ContactNotes.fields || []
+      const sentimentField = fields.find(f => f.name === 'sentiment')
+
+      expect(sentimentField?.type).toBe('select')
+      expect(sentimentField?.defaultValue).toBe('neutral')
+
+      const options = sentimentField?.options as Array<{ label: string; value: string }>
+      const values = options?.map(o => o.value) || []
+      expect(values).toEqual(['positive', 'neutral', 'negative', 'escalation'])
+    })
+
+    test('should have createdBy relationship field (read-only in admin)', () => {
+      const fields = ContactNotes.fields || []
+      const createdByField = fields.find(f => f.name === 'createdBy')
+
+      expect(createdByField?.type).toBe('relationship')
+      expect(createdByField?.relationTo).toBe('users')
+      expect(createdByField?.required).toBe(true)
+      expect(createdByField?.admin?.readOnly).toBe(true)
+    })
+
+    test('should have amendsNote self-referential relationship with index', () => {
+      const fields = ContactNotes.fields || []
+      const amendsNoteField = fields.find(f => f.name === 'amendsNote')
+
+      expect(amendsNoteField?.type).toBe('relationship')
+      expect(amendsNoteField?.relationTo).toBe('contact-notes')
+      expect(amendsNoteField?.index).toBe(true)
+    })
+
+    test('should have status field with active default and index', () => {
+      const fields = ContactNotes.fields || []
+      const statusField = fields.find(f => f.name === 'status')
+
+      expect(statusField?.type).toBe('select')
+      expect(statusField?.defaultValue).toBe('active')
+      expect(statusField?.required).toBe(true)
+      expect(statusField?.index).toBe(true)
+
+      const options = statusField?.options as Array<{ label: string; value: string }>
+      const values = options?.map(o => o.value) || []
+      expect(values).toEqual(['active', 'amended'])
+    })
+
+    test('should have timestamps enabled', () => {
+      expect(ContactNotes.timestamps).toBe(true)
+    })
+  })
+
+  describe('ContactNotes Access Control', () => {
+    test('read: allows all authenticated users', () => {
+      expect(ContactNotes.access?.read?.(createMockPayloadRequest({ role: 'admin' }))).toBe(true)
+      expect(ContactNotes.access?.read?.(createMockPayloadRequest({ role: 'supervisor' }))).toBe(true)
+      expect(ContactNotes.access?.read?.(createMockPayloadRequest({ role: 'operations' }))).toBe(true)
+      expect(ContactNotes.access?.read?.(createMockPayloadRequest({ role: 'readonly' }))).toBe(true)
+    })
+
+    test('read: denies unauthenticated requests', () => {
+      expect(ContactNotes.access?.read?.({ req: { user: null } } as any)).toBe(false)
+    })
+
+    test('create: allows admin, supervisor, operations', () => {
+      expect(ContactNotes.access?.create?.(createMockPayloadRequest({ role: 'admin' }))).toBe(true)
+      expect(ContactNotes.access?.create?.(createMockPayloadRequest({ role: 'supervisor' }))).toBe(true)
+      expect(ContactNotes.access?.create?.(createMockPayloadRequest({ role: 'operations' }))).toBe(true)
+    })
+
+    test('create: denies readonly and unauthenticated', () => {
+      expect(ContactNotes.access?.create?.(createMockPayloadRequest({ role: 'readonly' }))).toBe(false)
+      expect(ContactNotes.access?.create?.({ req: { user: null } } as any)).toBe(false)
+    })
+
+    test('update: allows admin, supervisor, operations', () => {
+      expect(ContactNotes.access?.update?.(createMockPayloadRequest({ role: 'admin' }))).toBe(true)
+      expect(ContactNotes.access?.update?.(createMockPayloadRequest({ role: 'supervisor' }))).toBe(true)
+      expect(ContactNotes.access?.update?.(createMockPayloadRequest({ role: 'operations' }))).toBe(true)
+    })
+
+    test('update: denies readonly and unauthenticated', () => {
+      expect(ContactNotes.access?.update?.(createMockPayloadRequest({ role: 'readonly' }))).toBe(false)
+      expect(ContactNotes.access?.update?.({ req: { user: null } } as any)).toBe(false)
+    })
+
+    test('delete: allows admin only', () => {
+      expect(ContactNotes.access?.delete?.(createMockPayloadRequest({ role: 'admin' }))).toBe(true)
+      expect(ContactNotes.access?.delete?.(createMockPayloadRequest({ role: 'supervisor' }))).toBe(false)
+      expect(ContactNotes.access?.delete?.(createMockPayloadRequest({ role: 'operations' }))).toBe(false)
+      expect(ContactNotes.access?.delete?.(createMockPayloadRequest({ role: 'readonly' }))).toBe(false)
+    })
+  })
+
+  describe('ContactNotes beforeChange Hook', () => {
+    test('should auto-populate createdBy on create', async () => {
+      const hook = ContactNotes.hooks?.beforeChange?.[0]
+      expect(hook).toBeDefined()
+
+      const data = { subject: 'Test note', noteType: 'general_enquiry' }
+      const req = { user: { id: 'user-abc-123' } }
+
+      const result = await hook?.({ data, operation: 'create', req } as any)
+
+      expect(result?.createdBy).toBe('user-abc-123')
+    })
+
+    test('should not overwrite createdBy if user is not present on create', async () => {
+      const hook = ContactNotes.hooks?.beforeChange?.[0]
+
+      const data = { subject: 'Test note' }
+      const req = { user: null }
+
+      const result = await hook?.({ data, operation: 'create', req } as any)
+
+      expect(result?.createdBy).toBeUndefined()
+    })
+
+    test('should strip non-status fields on update (immutability)', async () => {
+      const hook = ContactNotes.hooks?.beforeChange?.[0]
+
+      const data = {
+        status: 'amended',
+        subject: 'Attempted edit',
+        noteType: 'complaint',
+        content: 'Tampered content',
+      }
+      const req = { user: { id: 'user-abc-123' } }
+
+      const result = await hook?.({ data, operation: 'update', req } as any)
+
+      expect(result?.status).toBe('amended')
+      expect(result?.subject).toBeUndefined()
+      expect(result?.noteType).toBeUndefined()
+      expect(result?.content).toBeUndefined()
+    })
+
+    test('should preserve status field on update', async () => {
+      const hook = ContactNotes.hooks?.beforeChange?.[0]
+
+      const data = { status: 'amended' }
+      const req = { user: { id: 'user-abc-123' } }
+
+      const result = await hook?.({ data, operation: 'update', req } as any)
+
+      expect(result?.status).toBe('amended')
+    })
+
+    test('should throw when status is set to anything other than amended on update', async () => {
+      const hook = ContactNotes.hooks?.beforeChange?.[0]
+      const req = { user: { id: 'user-abc-123' } }
+
+      await expect(
+        hook?.({ data: { status: 'active' }, operation: 'update', req } as any),
+      ).rejects.toThrow('may only be set to `amended`')
+    })
+
+    test('should not throw when status is absent from update payload', async () => {
+      const hook = ContactNotes.hooks?.beforeChange?.[0]
+      const req = { user: { id: 'user-abc-123' } }
+
+      // An update with no status key (e.g., Payload internal operations) should pass silently
+      await expect(
+        hook?.({ data: {}, operation: 'update', req } as any),
+      ).resolves.not.toThrow()
+    })
+  })
+
+  describe('ContactNotes beforeValidate Hook', () => {
+    test('accepts valid Tiptap content', async () => {
+      const hook = ContactNotes.hooks?.beforeValidate?.[0]
+      expect(hook).toBeDefined()
+
+      await expect(
+        hook?.({
+          data: {
+            content: {
+              type: 'doc',
+              content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Hello' }] }],
+            },
+          },
+          operation: 'create',
+        } as any),
+      ).resolves.not.toThrow()
+    })
+
+    test('rejects invalid content payload shape', async () => {
+      const hook = ContactNotes.hooks?.beforeValidate?.[0]
+
+      await expect(
+        hook?.({
+          data: {
+            content: { root: { children: [] } },
+          },
+          operation: 'create',
+        } as any),
+      ).rejects.toThrow('Invalid note content format')
+    })
+  })
+
+  describe('ContactNotes Field: contactDirection', () => {
+    test('should have contactDirection select field with inbound/outbound options', () => {
+      const fields = ContactNotes.fields || []
+      const contactDirectionField = fields.find(f => f.name === 'contactDirection')
+
+      expect(contactDirectionField?.type).toBe('select')
+      expect(contactDirectionField?.required).toBeUndefined()
+
+      const options = contactDirectionField?.options as Array<{ label: string; value: string }>
+      const values = options?.map(o => o.value) || []
+      expect(values).toEqual(['inbound', 'outbound'])
+    })
+
+    test('should be conditionally shown for phone, email and SMS note types', () => {
+      const fields = ContactNotes.fields || []
+      const contactDirectionField = fields.find(f => f.name === 'contactDirection')
+      const condition = contactDirectionField?.admin?.condition
+
+      expect(condition).toBeDefined()
+      expect(condition?.({ noteType: 'phone_inbound' }, {})).toBe(true)
+      expect(condition?.({ noteType: 'phone_outbound' }, {})).toBe(true)
+      expect(condition?.({ noteType: 'email_inbound' }, {})).toBe(true)
+      expect(condition?.({ noteType: 'email_outbound' }, {})).toBe(true)
+      // SMS has a direction (inbound/outbound) so it also shows the field
+      expect(condition?.({ noteType: 'sms' }, {})).toBe(true)
+    })
+
+    test('should be hidden for non-communication note types', () => {
+      const fields = ContactNotes.fields || []
+      const contactDirectionField = fields.find(f => f.name === 'contactDirection')
+      const condition = contactDirectionField?.admin?.condition
+
+      expect(condition?.({ noteType: 'complaint' }, {})).toBe(false)
+      expect(condition?.({ noteType: 'escalation' }, {})).toBe(false)
+      expect(condition?.({ noteType: 'internal_note' }, {})).toBe(false)
+      expect(condition?.({ noteType: 'general_enquiry' }, {})).toBe(false)
+      expect(condition?.({ noteType: 'collections' }, {})).toBe(false)
+    })
+
+    test('should handle undefined noteType without throwing', () => {
+      const fields = ContactNotes.fields || []
+      const contactDirectionField = fields.find(f => f.name === 'contactDirection')
+      const condition = contactDirectionField?.admin?.condition
+
+      expect(() => condition?.({}, {})).not.toThrow()
+      expect(condition?.({}, {})).toBeFalsy()
+      expect(condition?.({ noteType: undefined }, {})).toBeFalsy()
+    })
+  })
+
+  describe('ContactNotes Field: createdAt index', () => {
+    test('should define createdAt field with index: true for timeline sort performance', () => {
+      const fields = ContactNotes.fields || []
+      const createdAtField = fields.find(f => f.name === 'createdAt')
+
+      expect(createdAtField).toBeDefined()
+      expect(createdAtField?.type).toBe('date')
+      expect(createdAtField?.index).toBe(true)
+      expect(createdAtField?.admin?.readOnly).toBe(true)
     })
   })
 }) 

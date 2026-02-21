@@ -74,6 +74,7 @@ export interface Config {
     applications: Application;
     'loan-accounts': LoanAccount;
     'write-off-requests': WriteOffRequest;
+    'contact-notes': ContactNote;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
@@ -87,6 +88,7 @@ export interface Config {
     applications: ApplicationsSelect<false> | ApplicationsSelect<true>;
     'loan-accounts': LoanAccountsSelect<false> | LoanAccountsSelect<true>;
     'write-off-requests': WriteOffRequestsSelect<false> | WriteOffRequestsSelect<true>;
+    'contact-notes': ContactNotesSelect<false> | ContactNotesSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
@@ -920,6 +922,91 @@ export interface WriteOffRequest {
   createdAt: string;
 }
 /**
+ * Customer interaction notes — immutable audit trail
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "contact-notes".
+ */
+export interface ContactNote {
+  id: string;
+  /**
+   * The customer this note relates to
+   */
+  customer: string | Customer;
+  /**
+   * Linked loan account (optional — leave blank for general enquiries)
+   */
+  loanAccount?: (string | null) | LoanAccount;
+  /**
+   * Linked application (optional)
+   */
+  application?: (string | null) | Application;
+  /**
+   * Linked conversation (optional)
+   */
+  conversation?: (string | null) | Conversation;
+  /**
+   * Type of customer interaction
+   */
+  noteType:
+    | 'phone_inbound'
+    | 'phone_outbound'
+    | 'email_inbound'
+    | 'email_outbound'
+    | 'sms'
+    | 'general_enquiry'
+    | 'complaint'
+    | 'escalation'
+    | 'internal_note'
+    | 'account_update'
+    | 'collections';
+  /**
+   * Direction of contact (for phone, email, and SMS note types)
+   */
+  contactDirection?: ('inbound' | 'outbound') | null;
+  /**
+   * Brief subject line for the note (max 200 characters)
+   */
+  subject: string;
+  /**
+   * Full note content (Tiptap JSON)
+   */
+  content:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Note priority (hidden in timeline when Normal)
+   */
+  priority?: ('low' | 'normal' | 'high' | 'urgent') | null;
+  /**
+   * Sentiment of the interaction (hidden in timeline when Neutral)
+   */
+  sentiment?: ('positive' | 'neutral' | 'negative' | 'escalation') | null;
+  /**
+   * User who created this note (auto-populated from session)
+   */
+  createdBy: string | User;
+  /**
+   * The original note this amendment corrects (set automatically by the amendment workflow)
+   */
+  amendsNote?: (string | null) | ContactNote;
+  /**
+   * Active = current version. Amended = superseded by a newer amendment.
+   */
+  status: 'active' | 'amended';
+  /**
+   * Note creation timestamp (auto-set)
+   */
+  createdAt: string;
+  updatedAt: string;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-locked-documents".
  */
@@ -953,6 +1040,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'write-off-requests';
         value: string | WriteOffRequest;
+      } | null)
+    | ({
+        relationTo: 'contact-notes';
+        value: string | ContactNote;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -1369,6 +1460,27 @@ export interface WriteOffRequestsSelect<T extends boolean = true> {
   requestedAt?: T;
   updatedAt?: T;
   createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "contact-notes_select".
+ */
+export interface ContactNotesSelect<T extends boolean = true> {
+  customer?: T;
+  loanAccount?: T;
+  application?: T;
+  conversation?: T;
+  noteType?: T;
+  contactDirection?: T;
+  subject?: T;
+  content?: T;
+  priority?: T;
+  sentiment?: T;
+  createdBy?: T;
+  amendsNote?: T;
+  status?: T;
+  createdAt?: T;
+  updatedAt?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema

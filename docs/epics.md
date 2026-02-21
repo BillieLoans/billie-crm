@@ -1159,6 +1159,87 @@ So that operational staff see a clean, task-focused interface while admins retai
 
 ---
 
+## Epic 7: Customer Contact Notes
+
+**Goal:** Enable support staff to record, view, and amend customer interaction notes directly within the ServicingView, providing continuity across agents and an immutable audit trail for compliance.
+
+**Dependencies:** Epic 2 (ServicingView must exist)
+
+**References:**
+- [Product Brief](_bmad-output/planning-artifacts/product-brief-billie-crm-2026-02-20.md)
+- [UX Design](docs/ux-design/contact-notes-ux.md)
+
+### Story 7.1: ContactNotes Payload Collection
+
+As a **developer**, I want a ContactNotes Payload CMS collection with all required fields, indexes, and access control, so that the data model is ready for the notes timeline and add-note UI components.
+
+| AC | Description |
+|----|-------------|
+| AC1 | Collection registered in Payload with slug `contact-notes` |
+| AC2 | All fields present: customer, loanAccount, application, conversation, noteType (11 options), contactDirection, subject, content (Lexical), priority, sentiment, createdBy, amendsNote, status |
+| AC3 | Indexes on customer, loanAccount, createdAt, amendsNote |
+| AC4 | RBAC: Read (all authenticated), Create (admin/supervisor/operations), Update (status field only, admin/supervisor/operations), Delete (admin only) |
+| AC5 | createdBy auto-populated from authenticated user via beforeChange hook |
+
+[Full Story →](sprint-artifacts/7-1-contact-notes-collection.md)
+
+### Story 7.2: Notes Timeline Panel
+
+As a **support staff member**, I want to see a chronological timeline of all contact notes for a customer on their ServicingView, so that I can quickly understand prior interactions before handling their call.
+
+| AC | Description |
+|----|-------------|
+| AC1 | "Contact Notes" section renders below AccountPanel in the right column |
+| AC2 | 5 most recent notes visible by default, newest-first |
+| AC3 | Note cards show: type icon, timestamp, subject, truncated body, linked account, author, "Amend" action |
+| AC4 | Priority/sentiment indicators hidden when at default values |
+| AC5 | Filter by note type dropdown |
+| AC6 | Filter by account dropdown (includes "General (no account)") |
+| AC7 | Notes linked to selected account highlighted with blue left border |
+| AC8 | "Load more" pagination |
+| AC9 | Empty state message when no notes exist |
+| AC10 | TanStack Query with skeleton loaders and standard staleTime |
+
+[Full Story →](sprint-artifacts/7-2-notes-timeline-panel.md)
+
+### Story 7.3: Add Note Drawer
+
+As a **support staff member**, I want to create a contact note via a slide-over drawer with smart pre-population, so that I can quickly document customer interactions without leaving the ServicingView.
+
+| AC | Description |
+|----|-------------|
+| AC1 | "+ Add Note" button opens slide-over drawer from right |
+| AC2 | Customer field read-only, pre-filled |
+| AC3 | Linked Account pre-filled from AccountPanel selection |
+| AC4 | Required field validation: noteType, subject, content |
+| AC5 | Direction field conditionally shown for phone/email types |
+| AC6 | "More" expander reveals Priority and Sentiment fields |
+| AC7 | Lexical rich text editor for content |
+| AC8 | Subject limited to 200 characters |
+| AC9 | Submit closes drawer, shows toast, scrolls timeline, highlights new note |
+| AC10 | Keyboard shortcuts: `N` opens, `Escape` closes, `Cmd+Enter` submits |
+| AC11 | Focus managed: auto-focus first field on open, return focus on close |
+
+[Full Story →](sprint-artifacts/7-3-add-note-drawer.md)
+
+### Story 7.4: Amendment Chain
+
+As a **support staff member**, I want to amend a contact note by creating a new version linked to the original, so that corrections are traceable without destroying the audit trail.
+
+| AC | Description |
+|----|-------------|
+| AC1 | "Amend" action on active notes only (not on already-amended notes) |
+| AC2 | Amend drawer pre-fills all fields from original note with info banner |
+| AC3 | Submit creates new note with `amendsNote` reference, sets original to `amended` status |
+| AC4 | Amended notes show amber "AMENDED" badge, de-emphasised content, "View current version" link |
+| AC5 | Amendment notes show blue "AMENDMENT" badge, "Amends note from [date]", "View original" link |
+| AC6 | Cross-links scroll to and highlight the target note |
+| AC7 | Amendments appear at their own creation timestamp in the timeline |
+
+[Full Story →](sprint-artifacts/7-4-amendment-chain.md)
+
+---
+
 ## Summary
 
 ### Epic Overview
@@ -1171,8 +1252,9 @@ So that operational staff see a clean, task-focused interface while admins retai
 | Epic 4: Write-Off & Approval | 5 | FR10, FR13-FR19 | 2-3 sprints |
 | Epic 5: System Health | 5 | FR20-FR24 | 1-2 sprints |
 | Epic 6: Navigation UX | 6 (1 cancelled) | UX Enhancement | 0.5-1 sprint |
+| Epic 7: Customer Contact Notes | 4 | Contact Notes MVP | 1-2 sprints |
 
-**Total: 28 active stories across 6 epics (~9-12 sprints)**
+**Total: 32 active stories across 7 epics (~10-14 sprints)**
 
 *Note: Epic 6 had Story 6.5 cancelled (Payload handles mobile natively). Story 6.7 added for role-based visibility.*
 
@@ -1184,14 +1266,18 @@ So that operational staff see a clean, task-focused interface while admins retai
 4. **Epic 4** adds governance layer (can partially parallel with Epic 3)
 5. **Epic 5** adds resilience (can be threaded throughout or at end)
 6. **Epic 6** adds navigation UX polish (can parallel with Epic 5)
+7. **Epic 7** adds contact notes (requires Epic 2, can parallel with Epics 3-6)
 
 ### Dependencies
 
 ```
 Epic 1 (Foundation) ──► Epic 2 (Customer View) ──► Epic 3 (Actions)
-                                                        │
-                                                        ▼
-                                               Epic 4 (Approvals)
+                              │                         │
+                              │                         ▼
+                              │                Epic 4 (Approvals)
+                              │                         │
+                              ▼                         │
+                     Epic 7 (Contact Notes)             │
                                                         │
 Epic 5 (Resilience) ◄──────────────────────────────────┘
         │
