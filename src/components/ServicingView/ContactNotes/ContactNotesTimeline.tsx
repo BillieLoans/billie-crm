@@ -12,6 +12,7 @@ export interface ContactNotesTimelineProps {
   onLoadMore: () => void
   hasMore: boolean
   onAmend?: (noteId: string) => void
+  onNavigateToAccount?: (loanAccountId: string) => void
   newlyAddedNoteId?: string | null
 }
 
@@ -54,6 +55,7 @@ export const ContactNotesTimeline: React.FC<ContactNotesTimelineProps> = ({
   onLoadMore,
   hasMore,
   onAmend,
+  onNavigateToAccount,
   newlyAddedNoteId,
 }) => {
   const { activeNotes, allNotesById } = useMemo(() => {
@@ -94,6 +96,7 @@ export const ContactNotesTimeline: React.FC<ContactNotesTimelineProps> = ({
               note={note}
               isHighlighted={isHighlightedNote(note, selectedAccountId)}
               onAmend={onAmend}
+              onNavigateToAccount={onNavigateToAccount}
               previousVersions={previousVersions}
             />
           </div>

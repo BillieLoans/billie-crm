@@ -21,12 +21,15 @@ import styles from './styles.module.css'
 // Constants
 // =============================================================================
 
-const NOTE_TYPES = [
-  { value: 'phone_inbound', label: 'Inbound Call' },
-  { value: 'phone_outbound', label: 'Outbound Call' },
-  { value: 'email_inbound', label: 'Email Received' },
-  { value: 'email_outbound', label: 'Email Sent' },
+const CHANNEL_OPTIONS = [
+  { value: 'phone', label: 'Phone' },
+  { value: 'email', label: 'Email' },
   { value: 'sms', label: 'SMS' },
+  { value: 'internal', label: 'Internal' },
+  { value: 'system', label: 'System' },
+] as const
+
+const TOPIC_OPTIONS = [
   { value: 'general_enquiry', label: 'General Enquiry' },
   { value: 'complaint', label: 'Complaint' },
   { value: 'escalation', label: 'Escalation' },
@@ -35,29 +38,16 @@ const NOTE_TYPES = [
   { value: 'collections', label: 'Collections Activity' },
 ] as const
 
-/** Note types that require the Direction field */
-const COMMUNICATION_TYPES = new Set([
-  'phone_inbound',
-  'phone_outbound',
-  'email_inbound',
-  'email_outbound',
-  'sms',
-])
-
-/** Auto-fill direction value based on note type */
-const DIRECTION_DEFAULT: Record<string, string> = {
-  phone_inbound: 'inbound',
-  phone_outbound: 'outbound',
-  email_inbound: 'inbound',
-  email_outbound: 'outbound',
-}
+/** Channels that require the Direction field */
+const DIRECTION_CHANNELS = new Set(['phone', 'email', 'sms'])
 
 // =============================================================================
 // Schema
 // =============================================================================
 
 const addNoteSchema = z.object({
-  noteType: z.string().min(1, 'Please select a note type'),
+  channel: z.string().min(1, 'Please select a channel'),
+  topic: z.string().min(1, 'Please select a topic'),
   contactDirection: z.string().optional(),
   loanAccount: z.string().optional(),
   subject: z
@@ -112,7 +102,7 @@ export const AddNoteDrawer: React.FC<AddNoteDrawerProps> = ({
 }) => {
   const [showMore, setShowMore] = useState(false)
   const [contentJSON, setContentJSON] = useState<object | null>(null)
-  const noteTypeRef = useRef<HTMLSelectElement | null>(null)
+  const channelRef = useRef<HTMLSelectElement | null>(null)
   const createNoteMutation = useCreateNote(customerId)
   const amendNoteMutation = useAmendNote(customerId)
   const isAmending = amendingNote != null
@@ -128,7 +118,8 @@ export const AddNoteDrawer: React.FC<AddNoteDrawerProps> = ({
   } = useForm<AddNoteFormValues>({
     resolver: zodResolver(addNoteSchema),
     defaultValues: {
-      noteType: '',
+      channel: '',
+      topic: '',
       contactDirection: '',
       loanAccount: '',
       subject: '',
@@ -138,8 +129,8 @@ export const AddNoteDrawer: React.FC<AddNoteDrawerProps> = ({
     },
   })
 
-  const noteType = watch('noteType')
-  const showDirection = COMMUNICATION_TYPES.has(noteType)
+  const channel = watch('channel')
+  const showDirection = DIRECTION_CHANNELS.has(channel)
 
   const editor = useEditor({
     extensions: [
@@ -167,12 +158,10 @@ export const AddNoteDrawer: React.FC<AddNoteDrawerProps> = ({
   }, [register])
 
   useEffect(() => {
-    if (showDirection) {
-      setValue('contactDirection', DIRECTION_DEFAULT[noteType] ?? '')
-    } else {
+    if (!showDirection) {
       setValue('contactDirection', '')
     }
-  }, [noteType, showDirection, setValue])
+  }, [showDirection, setValue])
 
   useEffect(() => {
     if (isOpen) {
@@ -196,7 +185,8 @@ export const AddNoteDrawer: React.FC<AddNoteDrawerProps> = ({
       })()
 
       reset({
-        noteType: amendingNote?.noteType ?? '',
+        channel: amendingNote?.channel ?? '',
+        topic: amendingNote?.topic ?? '',
         contactDirection: amendingNote?.contactDirection ?? '',
         loanAccount: prefilledAccountId,
         subject: amendingNote?.subject ?? '',
@@ -212,7 +202,7 @@ export const AddNoteDrawer: React.FC<AddNoteDrawerProps> = ({
       }
       setShowMore(!!amendingNote && (amendingNote.priority !== 'normal' || amendingNote.sentiment !== 'neutral'))
 
-      const timer = setTimeout(() => noteTypeRef.current?.focus(), 100)
+      const timer = setTimeout(() => channelRef.current?.focus(), 100)
       return () => clearTimeout(timer)
     }
   }, [isOpen, selectedAccountId, accounts, reset, editor, amendingNote])
@@ -222,7 +212,8 @@ export const AddNoteDrawer: React.FC<AddNoteDrawerProps> = ({
       try {
         const payload = {
           customer: customerId,
-          noteType: values.noteType,
+          channel: values.channel,
+          topic: values.topic,
           subject: values.subject,
           content: contentJSON ?? textToTiptapDoc(values.content),
           ...(values.loanAccount ? { loanAccount: values.loanAccount } : {}),
@@ -277,7 +268,7 @@ export const AddNoteDrawer: React.FC<AddNoteDrawerProps> = ({
     [handleSubmit, onSubmit],
   )
 
-  const { ref: noteTypeRegRef, ...noteTypeRest } = register('noteType')
+  const { ref: channelRegRef, ...channelRest } = register('channel')
 
   return (
     <ContextDrawer isOpen={isOpen} onClose={onClose} title={isAmending ? 'Amend Note' : 'Add Note'}>
@@ -302,37 +293,63 @@ export const AddNoteDrawer: React.FC<AddNoteDrawerProps> = ({
           </div>
         )}
 
-        {/* Note Type */}
+        {/* Channel */}
         <div className={styles.addNoteField}>
-          <label htmlFor="noteType" className={styles.addNoteLabel}>
-            Note Type <span className={styles.required}>*</span>
+          <label htmlFor="channel" className={styles.addNoteLabel}>
+            Channel <span className={styles.required}>*</span>
           </label>
           <select
-            id="noteType"
+            id="channel"
             className={styles.addNoteSelect}
-            {...noteTypeRest}
+            {...channelRest}
             ref={(el) => {
-              noteTypeRegRef(el)
-              noteTypeRef.current = el
+              channelRegRef(el)
+              channelRef.current = el
             }}
             disabled={isPending}
-            data-testid="note-type-select"
+            data-testid="channel-select"
           >
-            <option value="">Select a note type...</option>
-            {NOTE_TYPES.map((t) => (
+            <option value="">Select a channel...</option>
+            {CHANNEL_OPTIONS.map((t) => (
               <option key={t.value} value={t.value}>
                 {t.label}
               </option>
             ))}
           </select>
-          {errors.noteType && (
-            <p className={styles.addNoteError} role="alert" data-testid="note-type-error">
-              {errors.noteType.message}
+          {errors.channel && (
+            <p className={styles.addNoteError} role="alert" data-testid="channel-error">
+              {errors.channel.message}
             </p>
           )}
         </div>
 
-        {/* Direction — only for phone/email/sms types */}
+        {/* Topic */}
+        <div className={styles.addNoteField}>
+          <label htmlFor="topic" className={styles.addNoteLabel}>
+            Topic <span className={styles.required}>*</span>
+          </label>
+          <select
+            id="topic"
+            className={styles.addNoteSelect}
+            {...register('topic')}
+            disabled={isPending}
+            data-testid="topic-select"
+          >
+            <option value="">Select a topic...</option>
+            {TOPIC_OPTIONS.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+          {errors.topic && (
+            <p className={styles.addNoteError} role="alert" data-testid="topic-error">
+              {errors.topic.message}
+            </p>
+          )}
+        </div>
+
+        {/* Direction — only for phone/email/sms channels */}
         {showDirection && (
           <div className={styles.addNoteField} data-testid="direction-field">
             <label htmlFor="contactDirection" className={styles.addNoteLabel}>

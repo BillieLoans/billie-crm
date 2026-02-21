@@ -9,21 +9,91 @@ export interface ContactNoteCardProps {
   note: ContactNoteData
   isHighlighted: boolean
   onAmend?: (noteId: string) => void
+  onNavigateToAccount?: (loanAccountId: string) => void
   previousVersions?: ContactNoteData[]
 }
 
-const TYPE_META: Record<ContactNoteData['noteType'], { icon: string; label: string }> = {
-  phone_inbound: { icon: '📞', label: 'Inbound Call' },
-  phone_outbound: { icon: '📱', label: 'Outbound Call' },
-  email_inbound: { icon: '📨', label: 'Email Received' },
-  email_outbound: { icon: '📧', label: 'Email Sent' },
+const CHANNEL_META: Record<ContactNoteData['channel'], { icon: string; label: string }> = {
+  phone: { icon: '📞', label: 'Phone' },
+  email: { icon: '📧', label: 'Email' },
   sms: { icon: '💬', label: 'SMS' },
-  general_enquiry: { icon: '❓', label: 'General Enquiry' },
-  complaint: { icon: '⚠️', label: 'Complaint' },
-  escalation: { icon: '🔺', label: 'Escalation' },
-  internal_note: { icon: '📋', label: 'Internal Note' },
-  account_update: { icon: '🔄', label: 'Account Update' },
-  collections: { icon: '📊', label: 'Collections Activity' },
+  internal: { icon: '📋', label: 'Internal' },
+  system: { icon: '⚙️', label: 'System' },
+}
+
+const TOPIC_LABELS: Record<ContactNoteData['topic'], string> = {
+  general_enquiry: 'General Enquiry',
+  complaint: 'Complaint',
+  escalation: 'Escalation',
+  internal_note: 'Internal Note',
+  account_update: 'Account Update',
+  collections: 'Collections Activity',
+}
+
+function toTitle(value: string | null | undefined): string {
+  if (!value) return 'Unknown'
+  return value
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+type LegacyNoteType =
+  | 'phone_inbound'
+  | 'phone_outbound'
+  | 'email_inbound'
+  | 'email_outbound'
+  | 'sms'
+  | 'general_enquiry'
+  | 'complaint'
+  | 'escalation'
+  | 'internal_note'
+  | 'account_update'
+  | 'collections'
+
+function deriveMetadata(note: ContactNoteData): {
+  channel: ContactNoteData['channel'] | undefined
+  topic: ContactNoteData['topic'] | undefined
+  contactDirection: ContactNoteData['contactDirection']
+} {
+  const raw = note as ContactNoteData & { noteType?: LegacyNoteType }
+  const legacy = raw.noteType
+  if (note.channel && note.topic) {
+    return {
+      channel: note.channel,
+      topic: note.topic,
+      contactDirection: note.contactDirection,
+    }
+  }
+
+  if (!legacy) {
+    return {
+      channel: note.channel,
+      topic: note.topic,
+      contactDirection: note.contactDirection,
+    }
+  }
+
+  const fromLegacy: Record<LegacyNoteType, { channel: ContactNoteData['channel']; topic: ContactNoteData['topic']; contactDirection?: ContactNoteData['contactDirection'] }> = {
+    phone_inbound: { channel: 'phone', topic: 'general_enquiry', contactDirection: 'inbound' },
+    phone_outbound: { channel: 'phone', topic: 'general_enquiry', contactDirection: 'outbound' },
+    email_inbound: { channel: 'email', topic: 'general_enquiry', contactDirection: 'inbound' },
+    email_outbound: { channel: 'email', topic: 'general_enquiry', contactDirection: 'outbound' },
+    sms: { channel: 'sms', topic: 'general_enquiry' },
+    general_enquiry: { channel: 'phone', topic: 'general_enquiry' },
+    complaint: { channel: 'phone', topic: 'complaint' },
+    escalation: { channel: 'phone', topic: 'escalation' },
+    internal_note: { channel: 'internal', topic: 'internal_note' },
+    account_update: { channel: 'phone', topic: 'account_update' },
+    collections: { channel: 'phone', topic: 'collections' },
+  }
+
+  const mapped = fromLegacy[legacy]
+  return {
+    channel: note.channel ?? mapped.channel,
+    topic: note.topic ?? mapped.topic,
+    contactDirection: note.contactDirection ?? mapped.contactDirection ?? null,
+  }
 }
 
 function formatTimestamp(dateStr: string): string {
@@ -42,6 +112,8 @@ function getAuthorName(createdBy: ContactNoteData['createdBy']): string {
 
 const PreviousVersionCard: React.FC<{ version: ContactNoteData }> = ({ version }) => {
   const [expanded, setExpanded] = useState(false)
+  const metadata = deriveMetadata(version)
+  const versionTopicLabel = metadata.topic ? (TOPIC_LABELS[metadata.topic] ?? 'Unknown') : 'Unknown'
   const { rich, plainText } = useMemo(() => renderNoteContent(version.content), [version.content])
   const hasBody = !!plainText.trim()
 
@@ -52,6 +124,13 @@ const PreviousVersionCard: React.FC<{ version: ContactNoteData }> = ({ version }
         <span className={styles.prevVersionAuthor}>By {getAuthorName(version.createdBy)}</span>
       </div>
       <div className={styles.prevVersionSubject}>{version.subject}</div>
+      <div className={styles.noteMetaRow}>
+        <span className={`${styles.badge} ${styles.badgeMeta}`}>Channel: {toTitle(metadata.channel)}</span>
+        {metadata.contactDirection && (
+          <span className={`${styles.badge} ${styles.badgeMeta}`}>Direction: {toTitle(metadata.contactDirection)}</span>
+        )}
+        <span className={`${styles.badge} ${styles.badgeTopic}`}>{versionTopicLabel}</span>
+      </div>
       {hasBody && (
         <>
           {rich ? (
@@ -80,12 +159,15 @@ export const ContactNoteCard: React.FC<ContactNoteCardProps> = ({
   note,
   isHighlighted,
   onAmend = undefined,
+  onNavigateToAccount,
   previousVersions = [],
 }) => {
   const [expanded, setExpanded] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
 
-  const { icon, label } = TYPE_META[note.noteType]
+  const metadata = deriveMetadata(note)
+  const channelMeta = metadata.channel ? (CHANNEL_META[metadata.channel] ?? { icon: '📝', label: 'Unknown' }) : { icon: '📝', label: 'Unknown' }
+  const topicLabel = metadata.topic ? (TOPIC_LABELS[metadata.topic] ?? 'Unknown') : 'Unknown'
   const { rich: bodyRich, plainText: bodyText } = useMemo(
     () => renderNoteContent(note.content),
     [note.content],
@@ -97,6 +179,10 @@ export const ContactNoteCard: React.FC<ContactNoteCardProps> = ({
   const linkedAccount =
     note.loanAccount && typeof note.loanAccount === 'object' && 'accountNumber' in note.loanAccount
       ? note.loanAccount.accountNumber
+      : null
+  const linkedLoanAccountId =
+    note.loanAccount && typeof note.loanAccount === 'object' && 'loanAccountId' in note.loanAccount
+      ? note.loanAccount.loanAccountId
       : null
 
   const authorName = getAuthorName(note.createdBy)
@@ -113,14 +199,24 @@ export const ContactNoteCard: React.FC<ContactNoteCardProps> = ({
       {/* Header row */}
       <div className={styles.noteCardHeader}>
         <span className={styles.noteTypeLabel}>
-          {icon} {label}
+          {channelMeta.icon} {channelMeta.label}
+          {metadata.contactDirection ? ` (${metadata.contactDirection})` : ''}
         </span>
         <div className={styles.noteCardHeaderRight}>
           {hasPreviousVersions && (
             <span className={`${styles.badge} ${styles.badgeAmendment}`}>AMENDED</span>
           )}
+          <span className={`${styles.badge} ${styles.badgeTopic}`}>{topicLabel}</span>
           <span className={styles.noteTimestamp}>{timestamp}</span>
         </div>
+      </div>
+
+      <div className={styles.noteMetaRow}>
+        <span className={`${styles.badge} ${styles.badgeMeta}`}>Channel: {toTitle(metadata.channel)}</span>
+        {metadata.contactDirection && (
+          <span className={`${styles.badge} ${styles.badgeMeta}`}>Direction: {toTitle(metadata.contactDirection)}</span>
+        )}
+        <span className={`${styles.badge} ${styles.badgeTopic}`}>{topicLabel}</span>
       </div>
 
       {/* Priority / sentiment badges */}
@@ -176,9 +272,18 @@ export const ContactNoteCard: React.FC<ContactNoteCardProps> = ({
 
       {/* Footer */}
       <div className={styles.noteFooter}>
-        {linkedAccount && (
-          <span className={styles.noteLinkedAccount}>🔗 {linkedAccount}</span>
-        )}
+        {linkedAccount &&
+          (linkedLoanAccountId && onNavigateToAccount ? (
+            <button
+              type="button"
+              className={styles.noteAccountLinkBtn}
+              onClick={() => onNavigateToAccount(linkedLoanAccountId)}
+            >
+              🔗 {linkedAccount}
+            </button>
+          ) : (
+            <span className={styles.noteLinkedAccount}>🔗 {linkedAccount}</span>
+          ))}
         <span className={styles.noteAuthor}>By {authorName}</span>
         {onAmend && (
           <button className={styles.amendBtn} type="button" onClick={() => onAmend(note.id)}>

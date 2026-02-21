@@ -10,6 +10,7 @@ vi.mock('@/components/ServicingView/ContactNotes/ContactNoteCard', () => ({
     note: ContactNoteData
     isHighlighted: boolean
     onAmend?: (id: string) => void
+    onNavigateToAccount?: (loanAccountId: string) => void
     previousVersions?: ContactNoteData[]
   }) => {
     mockContactNoteCard(props)
@@ -27,7 +28,8 @@ vi.mock('@/components/ServicingView/ContactNotes/ContactNoteCard', () => ({
 function createNote(overrides: Partial<ContactNoteData> = {}): ContactNoteData {
   return {
     id: 'note-1',
-    noteType: 'internal_note',
+    channel: 'internal',
+    topic: 'internal_note',
     subject: 'Test note',
     content: 'Content',
     priority: 'normal',

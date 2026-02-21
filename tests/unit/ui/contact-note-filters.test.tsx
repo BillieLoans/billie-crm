@@ -25,10 +25,10 @@ const ACCOUNT_B = makeAccount('payload-id-2', 'la-002', 'ACC-002')
 
 describe('ContactNoteFilters', () => {
   const defaultProps = {
-    typeFilter: null,
+    topicFilter: null,
     accountFilter: null,
     accounts: [],
-    onTypeChange: vi.fn(),
+    onTopicChange: vi.fn(),
     onAccountChange: vi.fn(),
   }
 
@@ -40,19 +40,14 @@ describe('ContactNoteFilters', () => {
     cleanup()
   })
 
-  it('renders type dropdown with "All Types" option', () => {
+  it('renders topic dropdown with "All Topics" option', () => {
     render(<ContactNoteFilters {...defaultProps} />)
     expect(screen.getByRole('combobox')).toBeInTheDocument()
-    expect(screen.getByText('All Types')).toBeInTheDocument()
+    expect(screen.getByText('All Topics')).toBeInTheDocument()
   })
 
-  it('renders all 11 note type labels in the type dropdown', () => {
+  it('renders topic labels in the dropdown', () => {
     render(<ContactNoteFilters {...defaultProps} />)
-    expect(screen.getByText('Inbound Call')).toBeInTheDocument()
-    expect(screen.getByText('Outbound Call')).toBeInTheDocument()
-    expect(screen.getByText('Email Received')).toBeInTheDocument()
-    expect(screen.getByText('Email Sent')).toBeInTheDocument()
-    expect(screen.getByText('SMS')).toBeInTheDocument()
     expect(screen.getByText('General Enquiry')).toBeInTheDocument()
     expect(screen.getByText('Complaint')).toBeInTheDocument()
     expect(screen.getByText('Escalation')).toBeInTheDocument()
@@ -78,20 +73,20 @@ describe('ContactNoteFilters', () => {
     expect(screen.getByText('General (no account)')).toBeInTheDocument()
   })
 
-  it('calls onTypeChange with the selected value when a type is chosen', () => {
-    const onTypeChange = vi.fn()
-    render(<ContactNoteFilters {...defaultProps} onTypeChange={onTypeChange} />)
-    const typeSelect = screen.getByTestId('note-type-filter')
-    fireEvent.change(typeSelect, { target: { value: 'complaint' } })
-    expect(onTypeChange).toHaveBeenCalledWith('complaint')
+  it('calls onTopicChange with the selected value when a topic is chosen', () => {
+    const onTopicChange = vi.fn()
+    render(<ContactNoteFilters {...defaultProps} onTopicChange={onTopicChange} />)
+    const topicSelect = screen.getByTestId('note-topic-filter')
+    fireEvent.change(topicSelect, { target: { value: 'complaint' } })
+    expect(onTopicChange).toHaveBeenCalledWith('complaint')
   })
 
-  it('calls onTypeChange with null when "All Types" is selected', () => {
-    const onTypeChange = vi.fn()
-    render(<ContactNoteFilters {...defaultProps} typeFilter="complaint" onTypeChange={onTypeChange} />)
-    const typeSelect = screen.getByTestId('note-type-filter')
-    fireEvent.change(typeSelect, { target: { value: '' } })
-    expect(onTypeChange).toHaveBeenCalledWith(null)
+  it('calls onTopicChange with null when "All Topics" is selected', () => {
+    const onTopicChange = vi.fn()
+    render(<ContactNoteFilters {...defaultProps} topicFilter="complaint" onTopicChange={onTopicChange} />)
+    const topicSelect = screen.getByTestId('note-topic-filter')
+    fireEvent.change(topicSelect, { target: { value: '' } })
+    expect(onTopicChange).toHaveBeenCalledWith(null)
   })
 
   it('calls onAccountChange with the Payload document ID when an account is selected', () => {

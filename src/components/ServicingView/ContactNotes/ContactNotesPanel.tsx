@@ -14,6 +14,7 @@ export interface ContactNotesPanelProps {
   customerName?: string
   selectedAccountId: string | null
   accounts: LoanAccountData[]
+  onNavigateToAccount?: (loanAccountId: string) => void
 }
 
 export const ContactNotesPanel: React.FC<ContactNotesPanelProps> = ({
@@ -21,8 +22,9 @@ export const ContactNotesPanel: React.FC<ContactNotesPanelProps> = ({
   customerName,
   selectedAccountId,
   accounts,
+  onNavigateToAccount,
 }) => {
-  const [typeFilter, setTypeFilter] = useState<string | null>(null)
+  const [topicFilter, setTopicFilter] = useState<string | null>(null)
   const [accountFilter, setAccountFilter] = useState<string | null>(null)
 
   // Drawer state (Story 7.3)
@@ -58,8 +60,8 @@ export const ContactNotesPanel: React.FC<ContactNotesPanelProps> = ({
   // Register N-key hotkey to open the drawer
   useContactNotesHotkeys({ isDrawerOpen: addNoteOpen, onOpenDrawer: handleOpenDrawer })
 
-  const handleTypeChange = (type: string | null) => {
-    setTypeFilter(type)
+  const handleTopicChange = (topic: string | null) => {
+    setTopicFilter(topic)
   }
 
   const handleAccountChange = (id: string | null) => {
@@ -74,7 +76,7 @@ export const ContactNotesPanel: React.FC<ContactNotesPanelProps> = ({
     isFetchingNextPage,
     fetchNextPage,
   } = useContactNotes(customerId, {
-    type: typeFilter ?? undefined,
+    topic: topicFilter ?? undefined,
     accountId: accountFilter ?? undefined,
   })
 
@@ -109,10 +111,10 @@ export const ContactNotesPanel: React.FC<ContactNotesPanelProps> = ({
 
       <div className={styles.filtersBar}>
         <ContactNoteFilters
-          typeFilter={typeFilter}
+          topicFilter={topicFilter}
           accountFilter={accountFilter}
           accounts={accounts}
-          onTypeChange={handleTypeChange}
+          onTopicChange={handleTopicChange}
           onAccountChange={handleAccountChange}
         />
       </div>
@@ -133,6 +135,7 @@ export const ContactNotesPanel: React.FC<ContactNotesPanelProps> = ({
           onLoadMore={() => void fetchNextPage()}
           hasMore={hasNextPage && !isFetchingNextPage}
           onAmend={handleAmend}
+          onNavigateToAccount={onNavigateToAccount}
           newlyAddedNoteId={newlyAddedNoteId}
         />
       )}

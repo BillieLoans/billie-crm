@@ -417,6 +417,7 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
           customerName={customer?.fullName ?? undefined}
           selectedAccountId={selectedAccountId}
           accounts={accounts}
+          onNavigateToAccount={handleSwitchAccount}
         />
       </div>
 

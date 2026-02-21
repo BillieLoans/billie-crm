@@ -6,19 +6,14 @@ import { getAccountStatusLabel } from './labels'
 import styles from './styles.module.css'
 
 export interface ContactNoteFiltersProps {
-  typeFilter: string | null
+  topicFilter: string | null
   accountFilter: string | null
   accounts: LoanAccountData[]
-  onTypeChange: (type: string | null) => void
+  onTopicChange: (topic: string | null) => void
   onAccountChange: (accountId: string | null) => void
 }
 
-const NOTE_TYPE_LABELS: Record<string, string> = {
-  phone_inbound: 'Inbound Call',
-  phone_outbound: 'Outbound Call',
-  email_inbound: 'Email Received',
-  email_outbound: 'Email Sent',
-  sms: 'SMS',
+const NOTE_TOPIC_LABELS: Record<string, string> = {
   general_enquiry: 'General Enquiry',
   complaint: 'Complaint',
   escalation: 'Escalation',
@@ -28,22 +23,22 @@ const NOTE_TYPE_LABELS: Record<string, string> = {
 }
 
 export const ContactNoteFilters: React.FC<ContactNoteFiltersProps> = ({
-  typeFilter,
+  topicFilter,
   accountFilter,
   accounts,
-  onTypeChange,
+  onTopicChange,
   onAccountChange,
 }) => {
   return (
     <div className={styles.filtersGroup}>
       <select
         className={styles.filterSelect}
-        data-testid="note-type-filter"
-        value={typeFilter ?? ''}
-        onChange={(e) => onTypeChange(e.target.value === '' ? null : e.target.value)}
+        data-testid="note-topic-filter"
+        value={topicFilter ?? ''}
+        onChange={(e) => onTopicChange(e.target.value === '' ? null : e.target.value)}
       >
-        <option value="">All Types</option>
-        {Object.entries(NOTE_TYPE_LABELS).map(([value, label]) => (
+        <option value="">All Topics</option>
+        {Object.entries(NOTE_TOPIC_LABELS).map(([value, label]) => (
           <option key={value} value={value}>
             {label}
           </option>

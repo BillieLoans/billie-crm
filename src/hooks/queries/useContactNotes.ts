@@ -3,12 +3,8 @@ import { stringify } from 'qs-esm'
 
 export interface ContactNoteData {
   id: string
-  noteType:
-    | 'phone_inbound'
-    | 'phone_outbound'
-    | 'email_inbound'
-    | 'email_outbound'
-    | 'sms'
+  channel: 'phone' | 'email' | 'sms' | 'internal' | 'system'
+  topic:
     | 'general_enquiry'
     | 'complaint'
     | 'escalation'
@@ -30,7 +26,7 @@ export interface ContactNoteData {
 }
 
 export interface ContactNotesFilters {
-  type?: string | null
+  topic?: string | null
   accountId?: string | null
 }
 
@@ -58,8 +54,8 @@ async function fetchContactNotes(
     { 'customer': { equals: customerId } },
   ]
 
-  if (filters.type) {
-    andClauses.push({ noteType: { equals: filters.type } })
+  if (filters.topic) {
+    andClauses.push({ topic: { equals: filters.topic } })
   }
 
   if (filters.accountId === 'none') {

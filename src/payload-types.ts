@@ -946,22 +946,15 @@ export interface ContactNote {
    */
   conversation?: (string | null) | Conversation;
   /**
-   * Type of customer interaction
+   * Interaction channel
    */
-  noteType:
-    | 'phone_inbound'
-    | 'phone_outbound'
-    | 'email_inbound'
-    | 'email_outbound'
-    | 'sms'
-    | 'general_enquiry'
-    | 'complaint'
-    | 'escalation'
-    | 'internal_note'
-    | 'account_update'
-    | 'collections';
+  channel: 'phone' | 'email' | 'sms' | 'internal' | 'system';
   /**
-   * Direction of contact (for phone, email, and SMS note types)
+   * Reason/topic for the interaction
+   */
+  topic: 'general_enquiry' | 'complaint' | 'escalation' | 'internal_note' | 'account_update' | 'collections';
+  /**
+   * Direction of contact (for phone, email, and SMS channels)
    */
   contactDirection?: ('inbound' | 'outbound') | null;
   /**
@@ -1470,7 +1463,8 @@ export interface ContactNotesSelect<T extends boolean = true> {
   loanAccount?: T;
   application?: T;
   conversation?: T;
-  noteType?: T;
+  channel?: T;
+  topic?: T;
   contactDirection?: T;
   subject?: T;
   content?: T;

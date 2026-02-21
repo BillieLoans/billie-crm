@@ -23,7 +23,8 @@ const mockNotesResponse = {
   docs: [
     {
       id: 'note-1',
-      noteType: 'phone_inbound',
+      channel: 'phone',
+      topic: 'general_enquiry',
       subject: 'Customer enquiry',
       content: {},
       priority: 'normal',
@@ -60,9 +61,9 @@ describe('useContactNotes', () => {
     })
 
     it('should include filters in query key', () => {
-      const filters: ContactNotesFilters = { type: 'complaint', accountId: 'acc-1' }
+      const filters: ContactNotesFilters = { topic: 'complaint', accountId: 'acc-1' }
       const key = contactNotesQueryKey('cust-123', filters)
-      expect(key[2]).toEqual({ type: 'complaint', accountId: 'acc-1' })
+      expect(key[2]).toEqual({ topic: 'complaint', accountId: 'acc-1' })
     })
 
     it('should generate different keys for different customers', () => {
@@ -73,7 +74,7 @@ describe('useContactNotes', () => {
 
     it('should generate different keys for different filters', () => {
       const key1 = contactNotesQueryKey('cust-1', {})
-      const key2 = contactNotesQueryKey('cust-1', { type: 'complaint' })
+      const key2 = contactNotesQueryKey('cust-1', { topic: 'complaint' })
       expect(key1).not.toEqual(key2)
     })
   })
@@ -232,14 +233,14 @@ describe('useContactNotes', () => {
     })
   })
 
-  describe('Type Filter', () => {
-    it('should include noteType equals filter when type is set', async () => {
+  describe('Topic Filter', () => {
+    it('should include topic equals filter when topic is set', async () => {
       ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve(mockNotesResponse),
       })
 
-      renderHook(() => useContactNotes('cust-123', { type: 'complaint' }), {
+      renderHook(() => useContactNotes('cust-123', { topic: 'complaint' }), {
         wrapper: createWrapper(),
       })
 
@@ -248,18 +249,18 @@ describe('useContactNotes', () => {
       })
 
       const callUrl = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0] as string
-      expect(callUrl).toContain('noteType')
+      expect(callUrl).toContain('topic')
       expect(callUrl).toContain('equals')
       expect(callUrl).toContain('complaint')
     })
 
-    it('should not include noteType filter when type is null', async () => {
+    it('should not include topic filter when topic is null', async () => {
       ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve(mockNotesResponse),
       })
 
-      renderHook(() => useContactNotes('cust-123', { type: null }), {
+      renderHook(() => useContactNotes('cust-123', { topic: null }), {
         wrapper: createWrapper(),
       })
 
@@ -268,7 +269,7 @@ describe('useContactNotes', () => {
       })
 
       const callUrl = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0] as string
-      expect(callUrl).not.toContain('noteType')
+      expect(callUrl).not.toContain('topic')
     })
   })
 

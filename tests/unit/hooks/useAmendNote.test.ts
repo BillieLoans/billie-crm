@@ -29,7 +29,8 @@ function createWrapper() {
 const validParams: AmendNoteParams = {
   originalNoteId: 'note-original-1',
   customer: 'cust-123',
-  noteType: 'general_enquiry',
+  channel: 'phone',
+  topic: 'complaint',
   subject: 'Corrected note subject',
   content: { type: 'doc', content: [] },
   priority: 'normal',

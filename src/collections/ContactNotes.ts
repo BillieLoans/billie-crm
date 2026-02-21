@@ -49,7 +49,7 @@ export const ContactNotes: CollectionConfig = {
   admin: {
     useAsTitle: 'subject',
     group: 'Servicing',
-    defaultColumns: ['noteType', 'subject', 'customer', 'status', 'createdAt'],
+    defaultColumns: ['channel', 'topic', 'subject', 'customer', 'status', 'createdAt'],
     description: 'Customer interaction notes — immutable audit trail',
     hidden: hideFromNonAdmins,
   },
@@ -149,15 +149,25 @@ export const ContactNotes: CollectionConfig = {
     // Note Classification
     // ==========================================================================
     {
-      name: 'noteType',
+      name: 'channel',
       type: 'select',
       required: true,
       options: [
-        { label: 'Phone — Inbound', value: 'phone_inbound' },
-        { label: 'Phone — Outbound', value: 'phone_outbound' },
-        { label: 'Email — Inbound', value: 'email_inbound' },
-        { label: 'Email — Outbound', value: 'email_outbound' },
+        { label: 'Phone', value: 'phone' },
+        { label: 'Email', value: 'email' },
         { label: 'SMS', value: 'sms' },
+        { label: 'Internal', value: 'internal' },
+        { label: 'System', value: 'system' },
+      ],
+      admin: {
+        description: 'Interaction channel',
+      },
+    },
+    {
+      name: 'topic',
+      type: 'select',
+      required: true,
+      options: [
         { label: 'General Enquiry', value: 'general_enquiry' },
         { label: 'Complaint', value: 'complaint' },
         { label: 'Escalation', value: 'escalation' },
@@ -166,7 +176,7 @@ export const ContactNotes: CollectionConfig = {
         { label: 'Collections', value: 'collections' },
       ],
       admin: {
-        description: 'Type of customer interaction',
+        description: 'Reason/topic for the interaction',
       },
     },
     {
@@ -177,11 +187,8 @@ export const ContactNotes: CollectionConfig = {
         { label: 'Outbound', value: 'outbound' },
       ],
       admin: {
-        description: 'Direction of contact (for phone, email, and SMS note types)',
-        condition: (data) =>
-          ['phone_inbound', 'phone_outbound', 'email_inbound', 'email_outbound', 'sms'].includes(
-            data?.noteType,
-          ),
+        description: 'Direction of contact (for phone, email, and SMS channels)',
+        condition: (data) => ['phone', 'email', 'sms'].includes(data?.channel),
       },
     },
     // ==========================================================================

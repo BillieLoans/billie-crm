@@ -28,7 +28,8 @@ function createWrapper() {
 
 const validParams: CreateNoteParams = {
   customer: 'cust-123',
-  noteType: 'phone_inbound',
+  channel: 'phone',
+  topic: 'general_enquiry',
   subject: 'Test note',
   content: { root: { type: 'root', children: [] } },
 }

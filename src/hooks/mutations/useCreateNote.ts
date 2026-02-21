@@ -7,7 +7,8 @@ import { toast } from 'sonner'
 
 export interface CreateNoteParams {
   customer: string
-  noteType: string
+  channel: string
+  topic: string
   subject: string
   content: object
   loanAccount?: string | null

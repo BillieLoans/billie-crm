@@ -20,6 +20,8 @@
 .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; }
 .badgeAmended { background: #fef3c7; color: #92400e; }
 .badgeAmendment { background: #dbeafe; color: #1e40af; }
+.badgeTopic { background: var(--theme-elevation-100, #f3f4f6); color: var(--theme-elevation-700, #374151); }
+.badgeMeta { background: var(--theme-elevation-50, #f9fafb); color: var(--theme-elevation-700, #374151); border: 1px solid var(--theme-elevation-150, #e5e7eb); }
 .badgePriorityHigh { background: #fef3c7; color: #92400e; }
 .badgePriorityUrgent { background: #fee2e2; color: #991b1b; }
 .badgePriorityLow { background: #f3f4f6; color: #6b7280; }
@@ -27,6 +29,7 @@
 .badgeSentimentNegative { background: #fee2e2; color: #991b1b; }
 .badgeSentimentEscalation { background: #fee2e2; color: #991b1b; }
 .noteSubject { font-size: 14px; font-weight: 600; color: var(--theme-text, #1a1a1a); margin-bottom: 6px; }
+.noteMetaRow { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
 .amendmentContextRow { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; gap: 8px; }
 .amendmentContextText { font-size: 12px; color: var(--theme-elevation-600, #6b7280); }
 .noteBody { font-size: 13px; color: var(--theme-elevation-700, #374151); line-height: 1.5; }
@@ -43,6 +46,7 @@
 .noteDivider { border: none; border-top: 1px solid var(--theme-elevation-100, #f0f0f0); margin: 10px 0; }
 .noteFooter { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--theme-elevation-600, #6b7280); }
 .noteLinkedAccount { display: flex; align-items: center; gap: 4px; }
+.noteAccountLinkBtn { display: inline-flex; align-items: center; gap: 4px; background: none; border: none; color: var(--theme-success-500, #2563eb); font-size: 12px; cursor: pointer; padding: 0; text-decoration: underline; }
 .noteAuthor { flex: 1; }
 .amendBtn { background: none; border: none; color: var(--theme-success-500, #2563eb); font-size: 12px; cursor: pointer; padding: 0; }
 .amendBtn:hover { text-decoration: underline; }

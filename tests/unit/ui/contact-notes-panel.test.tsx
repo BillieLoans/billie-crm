@@ -123,7 +123,8 @@ const makeEmptyResult = (): UseContactNotesResult => ({
 
 const makeNote = (id: string, subject: string): ContactNoteData => ({
   id,
-  noteType: 'internal_note' as const,
+  channel: 'internal' as const,
+  topic: 'internal_note' as const,
   subject,
   content: {},
   priority: 'normal' as const,

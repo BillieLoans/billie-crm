@@ -272,28 +272,41 @@ describe('Payload Collections Configuration', () => {
       expect(conversationField?.relationTo).toBe('conversations')
     })
 
-    test('should have noteType select with all 11 options', () => {
+    test('should have channel select with supported channel options', () => {
       const fields = ContactNotes.fields || []
-      const noteTypeField = fields.find(f => f.name === 'noteType')
+      const channelField = fields.find(f => f.name === 'channel')
 
-      expect(noteTypeField?.type).toBe('select')
-      expect(noteTypeField?.required).toBe(true)
+      expect(channelField?.type).toBe('select')
+      expect(channelField?.required).toBe(true)
 
-      const options = noteTypeField?.options as Array<{ label: string; value: string }>
+      const options = channelField?.options as Array<{ label: string; value: string }>
       const values = options?.map(o => o.value) || []
 
-      expect(values).toContain('phone_inbound')
-      expect(values).toContain('phone_outbound')
-      expect(values).toContain('email_inbound')
-      expect(values).toContain('email_outbound')
+      expect(values).toContain('phone')
+      expect(values).toContain('email')
       expect(values).toContain('sms')
-      expect(values).toContain('general_enquiry')
-      expect(values).toContain('complaint')
-      expect(values).toContain('escalation')
-      expect(values).toContain('internal_note')
-      expect(values).toContain('account_update')
-      expect(values).toContain('collections')
-      expect(values).toHaveLength(11)
+      expect(values).toContain('internal')
+      expect(values).toContain('system')
+      expect(values).toHaveLength(5)
+    })
+
+    test('should have topic select with supported topic options', () => {
+      const fields = ContactNotes.fields || []
+      const topicField = fields.find(f => f.name === 'topic')
+
+      expect(topicField?.type).toBe('select')
+      expect(topicField?.required).toBe(true)
+
+      const options = topicField?.options as Array<{ label: string; value: string }>
+      const values = options?.map(o => o.value) || []
+      expect(values).toEqual([
+        'general_enquiry',
+        'complaint',
+        'escalation',
+        'internal_note',
+        'account_update',
+        'collections',
+      ])
     })
 
     test('should have subject field with maxLength 200', () => {
@@ -422,7 +435,7 @@ describe('Payload Collections Configuration', () => {
       const hook = ContactNotes.hooks?.beforeChange?.[0]
       expect(hook).toBeDefined()
 
-      const data = { subject: 'Test note', noteType: 'general_enquiry' }
+      const data = { subject: 'Test note', channel: 'phone', topic: 'general_enquiry' }
       const req = { user: { id: 'user-abc-123' } }
 
       const result = await hook?.({ data, operation: 'create', req } as any)
@@ -447,7 +460,8 @@ describe('Payload Collections Configuration', () => {
       const data = {
         status: 'amended',
         subject: 'Attempted edit',
-        noteType: 'complaint',
+        channel: 'internal',
+        topic: 'complaint',
         content: 'Tampered content',
       }
       const req = { user: { id: 'user-abc-123' } }
@@ -456,7 +470,8 @@ describe('Payload Collections Configuration', () => {
 
       expect(result?.status).toBe('amended')
       expect(result?.subject).toBeUndefined()
-      expect(result?.noteType).toBeUndefined()
+      expect(result?.channel).toBeUndefined()
+      expect(result?.topic).toBeUndefined()
       expect(result?.content).toBeUndefined()
     })
 
@@ -536,40 +551,35 @@ describe('Payload Collections Configuration', () => {
       expect(values).toEqual(['inbound', 'outbound'])
     })
 
-    test('should be conditionally shown for phone, email and SMS note types', () => {
+    test('should be conditionally shown for phone, email and SMS channels', () => {
       const fields = ContactNotes.fields || []
       const contactDirectionField = fields.find(f => f.name === 'contactDirection')
       const condition = contactDirectionField?.admin?.condition
 
       expect(condition).toBeDefined()
-      expect(condition?.({ noteType: 'phone_inbound' }, {})).toBe(true)
-      expect(condition?.({ noteType: 'phone_outbound' }, {})).toBe(true)
-      expect(condition?.({ noteType: 'email_inbound' }, {})).toBe(true)
-      expect(condition?.({ noteType: 'email_outbound' }, {})).toBe(true)
+      expect(condition?.({ channel: 'phone' }, {})).toBe(true)
+      expect(condition?.({ channel: 'email' }, {})).toBe(true)
       // SMS has a direction (inbound/outbound) so it also shows the field
-      expect(condition?.({ noteType: 'sms' }, {})).toBe(true)
+      expect(condition?.({ channel: 'sms' }, {})).toBe(true)
     })
 
-    test('should be hidden for non-communication note types', () => {
+    test('should be hidden for non-communication channels', () => {
       const fields = ContactNotes.fields || []
       const contactDirectionField = fields.find(f => f.name === 'contactDirection')
       const condition = contactDirectionField?.admin?.condition
 
-      expect(condition?.({ noteType: 'complaint' }, {})).toBe(false)
-      expect(condition?.({ noteType: 'escalation' }, {})).toBe(false)
-      expect(condition?.({ noteType: 'internal_note' }, {})).toBe(false)
-      expect(condition?.({ noteType: 'general_enquiry' }, {})).toBe(false)
-      expect(condition?.({ noteType: 'collections' }, {})).toBe(false)
+      expect(condition?.({ channel: 'internal' }, {})).toBe(false)
+      expect(condition?.({ channel: 'system' }, {})).toBe(false)
     })
 
-    test('should handle undefined noteType without throwing', () => {
+    test('should handle undefined channel without throwing', () => {
       const fields = ContactNotes.fields || []
       const contactDirectionField = fields.find(f => f.name === 'contactDirection')
       const condition = contactDirectionField?.admin?.condition
 
       expect(() => condition?.({}, {})).not.toThrow()
       expect(condition?.({}, {})).toBeFalsy()
-      expect(condition?.({ noteType: undefined }, {})).toBeFalsy()
+      expect(condition?.({ channel: undefined }, {})).toBeFalsy()
     })
   })
 

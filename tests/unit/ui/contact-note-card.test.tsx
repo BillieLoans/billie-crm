@@ -5,7 +5,8 @@ import type { ContactNoteData } from '@/hooks/queries/useContactNotes'
 
 const createMockNote = (overrides: Partial<ContactNoteData> = {}): ContactNoteData => ({
   id: 'note-1',
-  noteType: 'phone_inbound',
+  channel: 'phone',
+  topic: 'general_enquiry',
   contactDirection: 'inbound',
   subject: 'Follow-up on payment',
   content: 'Customer called to discuss payment arrangement.',
@@ -35,10 +36,10 @@ describe('ContactNoteCard component', () => {
     cleanup()
   })
 
-  test('renders type icon and label for phone_inbound', () => {
+  test('renders channel icon and label for phone', () => {
     render(<ContactNoteCard note={createMockNote()} isHighlighted={false} onAmend={vi.fn()} />)
-    expect(screen.getByText(/📞/)).toBeInTheDocument()
-    expect(screen.getByText(/Inbound Call/)).toBeInTheDocument()
+    expect(screen.getByText(/Phone \(inbound\)/)).toBeInTheDocument()
+    expect(screen.getAllByText(/General Enquiry/).length).toBeGreaterThan(0)
   })
 
   test('renders subject', () => {
@@ -171,6 +172,20 @@ describe('ContactNoteCard component', () => {
       />,
     )
     expect(screen.getByText(/ACC-12345/)).toBeInTheDocument()
+  })
+
+  test('clicking linked account navigates to account view', () => {
+    const onNavigateToAccount = vi.fn()
+    render(
+      <ContactNoteCard
+        note={createMockNote({ loanAccount: { id: 'la-1', loanAccountId: 'LOAN-001', accountNumber: 'ACC-12345' } })}
+        isHighlighted={false}
+        onAmend={vi.fn()}
+        onNavigateToAccount={onNavigateToAccount}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /ACC-12345/ }))
+    expect(onNavigateToAccount).toHaveBeenCalledWith('LOAN-001')
   })
 
   test('hides linked account when loanAccount is null', () => {
