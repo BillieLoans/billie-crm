@@ -85,3 +85,5 @@ event-processor/src/billie_servicing/__pycache__/*
 .env.staging
 .env.prod
 .env.local
+infra/fly/env/.env.*
+!infra/fly/env/.env.*.example

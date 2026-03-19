@@ -30,37 +30,49 @@ fly auth login
 
 ```bash
 # Deploy to demo environment
-make deploy ENV=demo GITHUB_TOKEN="ghp_your_token_here"
+make -C infra/fly deploy ENV=demo GITHUB_TOKEN="ghp_your_token_here"
 
 # Deploy to other environments
-make deploy ENV=dev GITHUB_TOKEN="ghp_your_token_here"
-make deploy ENV=staging GITHUB_TOKEN="ghp_your_token_here"
-make deploy ENV=prod GITHUB_TOKEN="ghp_your_token_here" CONFIRM=1
+make -C infra/fly deploy ENV=dev GITHUB_TOKEN="ghp_your_token_here"
+make -C infra/fly deploy ENV=staging GITHUB_TOKEN="ghp_your_token_here"
+make -C infra/fly deploy ENV=prod GITHUB_TOKEN="ghp_your_token_here" CONFIRM=1
+```
+
+### Migration from Previous Layout
+
+If you previously had Fly config in the project root, copy your secrets to the new location:
+
+```bash
+# If you had .env.demo in the project root:
+cp .env.demo infra/fly/env/.env.demo
+# Repeat for .env.dev, .env.staging, .env.prod as needed
 ```
 
 ## Environment Configuration
 
 ### Config Files
 
-Each environment has its own Fly.io configuration file:
+Each environment has its own Fly.io configuration file under `infra/fly/`:
 
 | Environment | Config File | App Name |
 |-------------|-------------|----------|
-| Development | `fly.dev.toml` | `billie-crm-dev` |
-| Demo | `fly.demo.toml` | `billie-crm-demo` |
-| Staging | `fly.staging.toml` | `billie-crm-staging` |
-| Production | `fly.prod.toml` | `billie-crm-prod` |
+| Development | `infra/fly/fly.dev.toml` | `billie-crm-dev` |
+| Demo | `infra/fly/fly.demo.toml` | `billie-crm-demo` |
+| Staging | `infra/fly/fly.staging.toml` | `billie-crm-staging` |
+| Production | `infra/fly/fly.prod.toml` | `billie-crm-prod` |
 
 ### Secrets Files
 
-Secrets are stored in `.env.<environment>` files (not committed to git):
+Secrets are stored in `infra/fly/env/.env.<environment>` (not committed to git):
 
 ```
-.env.dev      # Development secrets
-.env.demo     # Demo secrets
-.env.staging  # Staging secrets
-.env.prod     # Production secrets
+infra/fly/env/.env.dev      # Development secrets
+infra/fly/env/.env.demo     # Demo secrets
+infra/fly/env/.env.staging  # Staging secrets
+infra/fly/env/.env.prod     # Production secrets
 ```
+
+Copy from the `.env.<env>.example` templates and populate with actual values.
 
 ## Secrets Management
 
@@ -71,13 +83,14 @@ Secrets are stored in `.env.<environment>` files (not committed to git):
 | `DATABASE_URI` | MongoDB Atlas connection string |
 | `REDIS_URL` | Redis/Upstash connection string |
 | `PAYLOAD_SECRET` | Payload CMS secret key |
-| `GITHUB_TOKEN` | GitHub PAT for private SDK access |
+| `GITHUB_TOKEN` | GitHub PAT for private SDK access (build secret only) |
 
 ### Setting Secrets
 
 **Option 1: Import from file**
 ```bash
-make secrets ENV=demo
+# Copy template and populate, then:
+make -C infra/fly secrets ENV=demo
 ```
 
 **Option 2: Set individually**
@@ -93,10 +106,10 @@ The `GITHUB_TOKEN` is required at **build time** to install private SDKs from th
 
 ```bash
 # GITHUB_TOKEN must be passed during deploy
-make deploy ENV=demo GITHUB_TOKEN="ghp_xxxxxxxxxxxx"
+make -C infra/fly deploy ENV=demo GITHUB_TOKEN="ghp_xxxxxxxxxxxx"
 
 # Or directly with fly deploy
-fly deploy -c fly.demo.toml -a billie-crm-demo --build-secret GITHUB_TOKEN="ghp_xxxxxxxxxxxx"
+fly deploy . -c infra/fly/fly.demo.toml -a billie-crm-demo --build-secret GITHUB_TOKEN="ghp_xxxxxxxxxxxx"
 ```
 
 **Creating a GitHub PAT:**
@@ -109,30 +122,38 @@ fly deploy -c fly.demo.toml -a billie-crm-demo --build-secret GITHUB_TOKEN="ghp_
 
 ### Makefile Targets
 
+All targets are run via `make -C infra/fly <target> ENV=<env>`:
+
 ```bash
 # Show help
-make help ENV=demo
+make -C infra/fly help ENV=demo
 
 # Deploy application
-make deploy ENV=demo GITHUB_TOKEN="ghp_xxx"
+make -C infra/fly deploy ENV=demo GITHUB_TOKEN="ghp_xxx"
 
 # Import secrets from .env file
-make secrets ENV=demo
+make -C infra/fly secrets ENV=demo
 
 # View application status
-make status ENV=demo
+make -C infra/fly status ENV=demo
 
 # Tail logs
-make logs ENV=demo
+make -C infra/fly logs ENV=demo
 
 # Restart application
-make restart ENV=demo
+make -C infra/fly restart ENV=demo
 
 # List IP addresses
-make ips ENV=demo
+make -C infra/fly ips ENV=demo
 
 # SSH into machine
-make ssh ENV=demo
+make -C infra/fly ssh ENV=demo
+
+# Create app (first-time setup)
+make -C infra/fly create-app ENV=demo
+
+# Allocate egress IP
+make -C infra/fly allocate-ip ENV=demo
 ```
 
 ### Production Safety
@@ -141,10 +162,19 @@ Production deployments require explicit confirmation:
 
 ```bash
 # This will fail without CONFIRM=1
-make deploy ENV=prod GITHUB_TOKEN="ghp_xxx"
+make -C infra/fly deploy ENV=prod GITHUB_TOKEN="ghp_xxx"
 
 # This will succeed
-make deploy ENV=prod GITHUB_TOKEN="ghp_xxx" CONFIRM=1
+make -C infra/fly deploy ENV=prod GITHUB_TOKEN="ghp_xxx" CONFIRM=1
+```
+
+### Fly Organizations
+
+The Makefile uses separate orgs for prod vs non-prod. Override via environment variables:
+
+```bash
+FLY_ORG_PROD=billie-prod-865      # from fly orgs list
+FLY_ORG_NONPROD=billie-920        # from fly orgs list
 ```
 
 ## Infrastructure Services
@@ -206,14 +236,14 @@ The demo/staging deployments run both services in one container:
 
 ### Environment Variables
 
-Non-sensitive configuration is in `fly.<env>.toml`:
+Non-sensitive configuration is in `infra/fly/fly.<env>.toml`:
 
 ```toml
 [env]
   ENABLE_EVENT_PROCESSING = "true"  # Enable background worker
   LOG_LEVEL = "info"
   NEXT_PUBLIC_APP_URL = "https://billie-crm-demo.fly.dev"
-  LEDGER_SERVICE_URL = "billie-ledger-demo.internal:50051"
+  LEDGER_SERVICE_URL = "billie-platform-services-demo.internal:50051"
 ```
 
 ## Troubleshooting
@@ -224,7 +254,7 @@ The Billie SDKs are installed at **build time** using a GitHub token. If the ima
 
 ```bash
 # Pass GITHUB_TOKEN and force rebuild so the SDK install step runs
-make deploy ENV=demo GITHUB_TOKEN="ghp_your_actual_token" NO_CACHE=1
+make -C infra/fly deploy ENV=demo GITHUB_TOKEN="ghp_your_actual_token" NO_CACHE=1
 ```
 
 Without `NO_CACHE=1`, a previously cached layer (from a build without the token) can be reused and the SDKs will still be missing.
@@ -234,7 +264,7 @@ Without `NO_CACHE=1`, a previously cached layer (from a build without the token)
 Check logs for the specific error:
 
 ```bash
-make logs ENV=demo
+make -C infra/fly logs ENV=demo
 # or
 fly logs -a billie-crm-demo
 ```
