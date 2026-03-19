@@ -61,5 +61,5 @@ primary_region = "syd"
 # =============================================================================
 
 [[vm]]
-  size = "performance-2x"
+  size = "shared-cpu-2x"
   memory = "3gb"

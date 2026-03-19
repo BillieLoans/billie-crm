@@ -125,7 +125,7 @@ create-app:
 
 allocate-ip:
 	$(call PROD_CHECK,allocate-ip)
-	fly ips allocate-v4 --app "$(APP_NAME)" || true
+	fly ips allocate-v4 --shared --app "$(APP_NAME)" || true
 	fly ips allocate-v6 --app "$(APP_NAME)" || true
 	fly ips allocate-egress --app "$(APP_NAME)" -r "$(PRIMARY_REGION)" || true
 	fly ips list -a "$(APP_NAME)"
