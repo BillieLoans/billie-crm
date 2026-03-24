@@ -162,6 +162,14 @@ export interface ApplyLateFeeRequest {
   idempotencyKey?: string
 }
 
+export interface ApplyDishonourFeeRequest {
+  loanAccountId: string
+  feeAmount: string
+  reason?: string
+  referenceId?: string
+  idempotencyKey?: string
+}
+
 export interface WaiveFeeRequest {
   loanAccountId: string
   waiverAmount: string
@@ -1034,6 +1042,12 @@ export class LedgerClient {
     return this.promisify<ApplyLateFeeRequest, TransactionResponse>(this.client.applyLateFee)(
       request,
     )
+  }
+
+  async applyDishonourFee(request: ApplyDishonourFeeRequest): Promise<TransactionResponse> {
+    return this.promisify<ApplyDishonourFeeRequest, TransactionResponse>(
+      this.client.applyDishonourFee,
+    )(request)
   }
 
   async waiveFee(request: WaiveFeeRequest): Promise<TransactionResponse> {

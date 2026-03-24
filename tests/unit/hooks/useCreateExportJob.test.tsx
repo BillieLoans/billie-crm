@@ -97,13 +97,14 @@ describe('useCreateExportJob', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        type: 'audit_trail',
-        format: 'json',
+        exportType: 'EXPORT_TYPE_AUDIT_TRAIL',
+        exportFormat: 'EXPORT_FORMAT_JSON',
         createdBy: 'user-2',
-        options: {
-          accountIds: ['acc-1', 'acc-2'],
-          includeCalculationBreakdown: true,
-        },
+        periodDate: undefined,
+        accountIds: ['acc-1', 'acc-2'],
+        dateRangeStart: undefined,
+        dateRangeEnd: undefined,
+        includeCalculationBreakdown: true,
       }),
     })
   })

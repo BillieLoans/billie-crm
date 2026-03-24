@@ -40,7 +40,10 @@ service AccountingLedgerService {
   
   // Apply a late fee to an account
   rpc ApplyLateFee(ApplyLateFeeRequest) returns (TransactionResponse);
-  
+
+  // Apply a dishonour fee (failed direct debit)
+  rpc ApplyDishonourFee(ApplyDishonourFeeRequest) returns (TransactionResponse);
+
   // Waive fees on an account
   rpc WaiveFee(WaiveFeeRequest) returns (TransactionResponse);
   
@@ -470,6 +473,15 @@ message ApplyLateFeeRequest {
   string fee_amount = 2;  // Fee amount (decimal as string)
   int32 days_past_due = 3;  // Number of days past due
   optional string reason = 4;  // Optional reason/notes
+  optional string idempotency_key = 5;  // Client-provided key for idempotent requests (TTL: 24h)
+}
+
+// Apply a dishonour fee (failed direct debit)
+message ApplyDishonourFeeRequest {
+  string loan_account_id = 1;
+  string fee_amount = 2;        // Fee amount (decimal as string)
+  optional string reason = 3;   // Optional reason (e.g., "direct debit returned")
+  optional string reference_id = 4;  // External payment reference that was dishonoured
   optional string idempotency_key = 5;  // Client-provided key for idempotent requests (TTL: 24h)
 }
 
