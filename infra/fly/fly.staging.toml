@@ -30,7 +30,7 @@ primary_region = "syd"
   WORKER_ID = "1"
   NEXT_PUBLIC_APP_URL = "https://billie-crm-staging.fly.dev"
   GITHUB_ORG = "BillieLoans"
-  SDK_VERSION = "1.0.0"
+  SDK_VERSION = "1.1.0"
   LEDGER_SERVICE_URL = "billie-platform-services-staging.internal:50051"
 
 # =============================================================================

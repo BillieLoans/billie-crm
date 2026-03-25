@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { exportJobsQueryKey, type ExportJobType, type ExportFormat } from '@/hooks/queries/useExportJobs'
 
 export interface CreateExportJobRequest {
@@ -75,20 +76,33 @@ export function useCreateExportJob() {
         includeCalculationBreakdown: request.options?.includeCalculationBreakdown,
       }
 
+      console.log('[ExportJob] Creating export job, request:', JSON.stringify(body, null, 2))
+
       const res = await fetch('/api/export/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
+
+      const data = await res.json().catch(() => ({}))
+      console.log('[ExportJob] Response status:', res.status, 'body:', JSON.stringify(data, null, 2))
+
       if (!res.ok) {
-        const error = await res.json().catch(() => ({}))
-        throw new Error(error.message || 'Failed to create export job')
+        console.error('[ExportJob] Create failed:', res.status, data)
+        throw new Error(data.message || data.error || 'Failed to create export job')
       }
-      return res.json()
+      return data
     },
-    onSuccess: () => {
-      // Invalidate jobs list to show new job
+    onSuccess: (data) => {
+      toast.success('Export job created', {
+        description: `Job ${data.jobId} has been queued and will be available for download shortly.`,
+      })
       queryClient.invalidateQueries({ queryKey: exportJobsQueryKey })
+    },
+    onError: (error) => {
+      toast.error('Failed to create export', {
+        description: error.message,
+      })
     },
   })
 

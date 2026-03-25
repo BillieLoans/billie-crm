@@ -19,6 +19,7 @@ import { RecordRepaymentDrawer } from './RecordRepaymentDrawer'
 import { BulkWaiveFeeDrawer } from './BulkWaiveFeeDrawer'
 import { WriteOffRequestDrawer } from './WriteOffRequestDrawer'
 import { DisburseLoanDrawer } from './DisburseLoanDrawer'
+import { ApplyFeeDrawer, type FeeType } from './ApplyFeeDrawer'
 import { AccountPanel, type TabId } from './AccountPanel'
 import type { SelectedFee } from './FeeList'
 import { ContactNotesPanel } from './ContactNotes/ContactNotesPanel'
@@ -166,6 +167,8 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
   const [selectedFees, setSelectedFees] = useState<SelectedFee[]>([])
   const [writeOffOpen, setWriteOffOpen] = useState(false)
   const [disburseLoanOpen, setDisburseLoanOpen] = useState(false)
+  const [applyFeeOpen, setApplyFeeOpen] = useState(false)
+  const [applyFeeType, setApplyFeeType] = useState<FeeType>('late-fee')
 
   // Derive accounts and selected account
   const accounts = customer?.loanAccounts ?? []
@@ -275,6 +278,20 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
 
   const handleCloseDisburseLoan = useCallback(() => {
     setDisburseLoanOpen(false)
+  }, [])
+
+  const handleOpenApplyLateFee = useCallback(() => {
+    setApplyFeeType('late-fee')
+    setApplyFeeOpen(true)
+  }, [])
+
+  const handleOpenApplyDishonourFee = useCallback(() => {
+    setApplyFeeType('dishonour-fee')
+    setApplyFeeOpen(true)
+  }, [])
+
+  const handleCloseApplyFee = useCallback(() => {
+    setApplyFeeOpen(false)
   }, [])
 
   // Refresh handler - invalidates appropriate queries based on active tab
@@ -397,6 +414,8 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
             onSwitchAccount={handleSwitchAccount}
             onWaiveFee={handleOpenWaiveFee}
             onRecordRepayment={handleOpenRecordRepayment}
+            onApplyLateFee={handleOpenApplyLateFee}
+            onApplyDishonourFee={handleOpenApplyDishonourFee}
             onBulkWaive={handleBulkWaive}
             feesCount={feesCount}
             onRefresh={handleRefresh}
@@ -470,6 +489,16 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
             selectedAccount.balances?.totalOutstanding ??
             0
           }
+        />
+      )}
+
+      {/* Apply Fee Drawer - overlay */}
+      {selectedAccount && (
+        <ApplyFeeDrawer
+          isOpen={applyFeeOpen}
+          onClose={handleCloseApplyFee}
+          loanAccountId={selectedAccount.loanAccountId}
+          feeType={applyFeeType}
         />
       )}
 

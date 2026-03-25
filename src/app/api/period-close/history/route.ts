@@ -1,7 +1,7 @@
 /**
  * API Route: GET /api/period-close/history
  *
- * Get list of closed periods.
+ * Get list of closed periods with details.
  *
  * Query params:
  * - limit: Max periods to return (default: 100)
@@ -22,7 +22,46 @@ export async function GET(request: NextRequest) {
         limit,
       })
 
-      return NextResponse.json(response)
+      // Fetch details for each closed period
+      const periods = await Promise.all(
+        response.periodDates.map(async (periodDate) => {
+          try {
+            const detail = await client.getPeriodClose({ periodDate })
+            return {
+              periodDate: detail.periodDate,
+              closedAt: detail.finalizedAt,
+              closedBy: detail.finalizedBy,
+              totalAccounts: detail.totalAccounts,
+              totalAccruedYield: parseFloat(detail.totalAccruedYield),
+              totalECLAllowance: parseFloat(detail.totalEclAllowance),
+              totalCarryingAmount: parseFloat(detail.totalCarryingAmount),
+              journalEntries: detail.journalEntries.map((j) => ({
+                id: j.entryId,
+                type: j.entryType,
+                amount: parseFloat(j.amount),
+              })),
+            }
+          } catch {
+            // If we can't fetch detail, return minimal info
+            return {
+              periodDate,
+              closedAt: '',
+              closedBy: '',
+              totalAccounts: 0,
+              totalAccruedYield: 0,
+              totalECLAllowance: 0,
+              totalCarryingAmount: 0,
+            }
+          }
+        }),
+      )
+
+      const lastClosedPeriod = periods.length > 0 ? periods[0].periodDate : null
+
+      return NextResponse.json({
+        periods,
+        lastClosedPeriod,
+      })
     } catch (grpcError: unknown) {
       const error = grpcError as { code?: number; message?: string }
       // Handle UNAVAILABLE (14), UNIMPLEMENTED (12), or missing client method

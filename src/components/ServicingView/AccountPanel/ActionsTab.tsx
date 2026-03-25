@@ -9,6 +9,8 @@ export interface ActionsTabProps {
   account: LoanAccountData
   onRecordRepayment: () => void
   onWaiveFee: () => void
+  onApplyLateFee: () => void
+  onApplyDishonourFee: () => void
   onRequestWriteOff?: () => void
   onDisburseLoan?: () => void
   hasPendingWriteOff?: boolean
@@ -28,6 +30,8 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
   account,
   onRecordRepayment,
   onWaiveFee,
+  onApplyLateFee,
+  onApplyDishonourFee,
   onRequestWriteOff,
   onDisburseLoan,
   hasPendingWriteOff = false,
@@ -135,6 +139,56 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
             data-testid="action-waive-fee"
           >
             {hasPendingWaive ? '⏳ Waiving...' : 'Waive Fee'}
+          </button>
+        </div>
+      </div>
+
+      {/* Apply Late Fee Action */}
+      <div className={styles.actionCard}>
+        <div className={styles.actionCardHeader}>
+          <span className={styles.actionCardIcon}>⏰</span>
+          <span className={styles.actionCardTitle}>Apply Late Fee</span>
+        </div>
+        <p className={styles.actionCardDescription}>
+          Apply a late fee for missed or overdue payments on this account.
+        </p>
+        <div className={styles.actionCardFooter}>
+          <span className={styles.actionCardMeta}>
+            Standard fee: {currencyFormatter.format(10)}
+          </span>
+          <button
+            type="button"
+            className={styles.actionCardBtn}
+            onClick={onApplyLateFee}
+            disabled={readOnlyMode}
+            data-testid="action-apply-late-fee"
+          >
+            Apply Late Fee
+          </button>
+        </div>
+      </div>
+
+      {/* Apply Dishonour Fee Action */}
+      <div className={styles.actionCard}>
+        <div className={styles.actionCardHeader}>
+          <span className={styles.actionCardIcon}>🔄</span>
+          <span className={styles.actionCardTitle}>Apply Dishonour Fee</span>
+        </div>
+        <p className={styles.actionCardDescription}>
+          Apply a dishonour fee for a failed direct debit on this account.
+        </p>
+        <div className={styles.actionCardFooter}>
+          <span className={styles.actionCardMeta}>
+            Standard fee: {currencyFormatter.format(10)}
+          </span>
+          <button
+            type="button"
+            className={styles.actionCardBtn}
+            onClick={onApplyDishonourFee}
+            disabled={readOnlyMode}
+            data-testid="action-apply-dishonour-fee"
+          >
+            Apply Dishonour Fee
           </button>
         </div>
       </div>

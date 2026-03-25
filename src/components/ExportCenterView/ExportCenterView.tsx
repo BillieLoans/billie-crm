@@ -78,6 +78,7 @@ export const ExportCenterView: React.FC<ExportCenterViewProps> = ({ userId = 'un
 
   // Hooks
   const { data: jobsData, isLoading: isLoadingJobs } = useExportJobs({
+    userId,
     refetchInterval: (query) => {
       const jobs = query.state.data?.jobs ?? []
       return hasPendingJobs(jobs) ? 5000 : false
@@ -103,6 +104,7 @@ export const ExportCenterView: React.FC<ExportCenterViewProps> = ({ userId = 'un
   const closeWizard = useCallback(() => {
     setWizardOpen(false)
     setWizardStep('type')
+    setCreateError(null)
     setWizardState({
       type: null,
       format: 'csv',
@@ -112,9 +114,12 @@ export const ExportCenterView: React.FC<ExportCenterViewProps> = ({ userId = 'un
     })
   }, [])
 
+  const [createError, setCreateError] = useState<string | null>(null)
+
   const handleCreateExport = useCallback(async () => {
     if (!wizardState.type) return
 
+    setCreateError(null)
     try {
       await createExportJob({
         type: wizardState.type,
@@ -129,8 +134,8 @@ export const ExportCenterView: React.FC<ExportCenterViewProps> = ({ userId = 'un
         },
       })
       closeWizard()
-    } catch {
-      // Error handled by mutation
+    } catch (err) {
+      setCreateError((err as Error).message || 'Failed to create export')
     }
   }, [wizardState, userId, createExportJob, closeWizard])
 
@@ -361,6 +366,11 @@ export const ExportCenterView: React.FC<ExportCenterViewProps> = ({ userId = 'un
           <p className={styles.confirmNote}>
             The export job will be queued and you can download the file when ready.
           </p>
+          {createError && (
+            <p className={styles.confirmNote} style={{ color: '#ef4444', marginTop: '8px' }}>
+              {createError}
+            </p>
+          )}
         </>
       )
     }

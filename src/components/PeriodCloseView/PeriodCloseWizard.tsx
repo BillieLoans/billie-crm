@@ -138,7 +138,7 @@ export const PeriodCloseWizard: React.FC<PeriodCloseWizardProps> = ({
 
     for (let i = 0; i < 12; i++) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 0)
-      const value = d.toISOString().split('T')[0]
+      const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
       const label = d.toLocaleString('en-US', { month: 'long', year: 'numeric' })
       const isClosed = closedPeriodsData?.periods?.some((p) => p.periodDate === value)
 

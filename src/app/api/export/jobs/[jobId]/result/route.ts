@@ -1,11 +1,21 @@
 /**
  * API Route: GET /api/export/jobs/[jobId]/result
  *
- * Get export result data.
+ * Download export result as a file.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getLedgerClient } from '@/server/grpc-client'
+import { getLedgerClient, ExportFormat } from '@/server/grpc-client'
+
+const CONTENT_TYPES: Record<string, string> = {
+  [ExportFormat.EXPORT_FORMAT_CSV]: 'text/csv',
+  [ExportFormat.EXPORT_FORMAT_JSON]: 'application/json',
+}
+
+const FILE_EXTENSIONS: Record<string, string> = {
+  [ExportFormat.EXPORT_FORMAT_CSV]: 'csv',
+  [ExportFormat.EXPORT_FORMAT_JSON]: 'json',
+}
 
 export async function GET(
   request: NextRequest,
@@ -25,20 +35,37 @@ export async function GET(
         jobId,
       })
 
-      return NextResponse.json(response)
+      if (!response.success) {
+        return NextResponse.json(
+          { error: response.errorMessage || 'Export result not available' },
+          { status: 404 },
+        )
+      }
+
+      const contentType = CONTENT_TYPES[response.format] ?? 'application/octet-stream'
+      const ext = FILE_EXTENSIONS[response.format] ?? 'dat'
+      const filename = `export-${jobId}.${ext}`
+
+      return new NextResponse(response.data, {
+        status: 200,
+        headers: {
+          'Content-Type': contentType,
+          'Content-Disposition': `attachment; filename="${filename}"`,
+        },
+      })
     } catch (grpcError: unknown) {
       const error = grpcError as { code?: number; message?: string }
       if (error.code === 14 || error.message?.includes('UNAVAILABLE')) {
-        console.warn('Ledger service unavailable for export result')
+        console.warn('[ExportAPI] Ledger service unavailable for export result')
         return NextResponse.json(
-          { error: 'Ledger service unavailable', _fallback: true },
+          { error: 'Ledger service unavailable' },
           { status: 503 },
         )
       }
       throw grpcError
     }
   } catch (error) {
-    console.error('Error fetching export result:', error)
+    console.error('[ExportAPI] Error fetching export result:', error)
     return NextResponse.json(
       { error: 'Failed to fetch export result', details: (error as Error).message },
       { status: 500 },

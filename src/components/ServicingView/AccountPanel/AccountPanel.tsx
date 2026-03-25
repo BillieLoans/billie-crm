@@ -25,6 +25,8 @@ export interface AccountPanelProps {
   onSwitchAccount: (accountId: string) => void
   onWaiveFee: () => void
   onRecordRepayment: () => void
+  onApplyLateFee: () => void
+  onApplyDishonourFee: () => void
   onBulkWaive: (fees: SelectedFee[]) => void
   /** Number of outstanding fees (for tab badge) */
   feesCount?: number
@@ -58,6 +60,8 @@ export const AccountPanel: React.FC<AccountPanelProps> = ({
   onSwitchAccount,
   onWaiveFee,
   onRecordRepayment,
+  onApplyLateFee,
+  onApplyDishonourFee,
   onBulkWaive,
   feesCount,
   onRefresh,
@@ -147,6 +151,8 @@ export const AccountPanel: React.FC<AccountPanelProps> = ({
             account={account}
             onRecordRepayment={onRecordRepayment}
             onWaiveFee={onWaiveFee}
+            onApplyLateFee={onApplyLateFee}
+            onApplyDishonourFee={onApplyDishonourFee}
             onRequestWriteOff={onRequestWriteOff}
             hasPendingWriteOff={hasPendingWriteOff}
             onDisburseLoan={onDisburseLoan}
