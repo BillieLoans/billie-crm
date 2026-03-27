@@ -31,6 +31,7 @@ primary_region = "syd"
   GITHUB_ORG = "BillieLoans"
   SDK_VERSION = "1.1.0"
   LEDGER_SERVICE_URL = "billie-platform-services-demo.internal:50051"
+  DISABLE_CF_SECRET_CHECK="true"
 
 # =============================================================================
 # HTTP service configuration
