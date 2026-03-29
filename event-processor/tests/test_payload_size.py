@@ -23,10 +23,9 @@ def processor():
     """Create a processor with mocked Redis and DB."""
     proc = EventProcessor()
     proc.redis = MagicMock()
-    proc.redis.exists = AsyncMock(return_value=False)  # No dedup hit
+    proc.redis.set = AsyncMock(return_value=True)  # Atomic dedup: key was set (not a duplicate)
     proc.redis.xack = AsyncMock()
     proc.redis.xadd = AsyncMock()  # DLQ write
-    proc.redis.setex = AsyncMock()
     proc.db = MagicMock()
     return proc
 
@@ -113,5 +112,5 @@ class TestPayloadSizeLimit:
 
         await processor._process_message(message, settings.inbox_stream)
 
-        # Dedup check (redis.exists) should NOT have been called
-        processor.redis.exists.assert_not_called()
+        # Dedup check (redis.set with nx=True) should NOT have been called
+        processor.redis.set.assert_not_called()

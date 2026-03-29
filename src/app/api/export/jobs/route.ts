@@ -56,7 +56,9 @@ function mapExportJob(job: ExportJobResponse) {
     createdAt: job.createdAt,
     createdBy: job.createdBy,
     completedAt: job.completedAt || undefined,
-    sizeBytes: job.resultSizeBytes ? parseInt(job.resultSizeBytes, 10) : undefined,
+    sizeBytes: job.resultSizeBytes && Number.isFinite(Number(job.resultSizeBytes))
+      ? Number(job.resultSizeBytes)
+      : undefined,
     downloadUrl: job.jobId ? `/api/export/jobs/${job.jobId}/result` : undefined,
     errorMessage: job.errorMessage || undefined,
   }
@@ -132,8 +134,13 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams
     const userId = searchParams.get('userId')
-    const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!, 10) : undefined
+    const rawLimit = searchParams.get('limit')
+    const limit = rawLimit ? parseInt(rawLimit, 10) : undefined
     const includeCompleted = searchParams.get('includeCompleted') !== 'false'
+
+    if (limit !== undefined && !Number.isFinite(limit)) {
+      return NextResponse.json({ error: 'Invalid limit parameter' }, { status: 400 })
+    }
 
     if (!userId) {
       return NextResponse.json({ error: 'userId is required' }, { status: 400 })

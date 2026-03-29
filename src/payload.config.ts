@@ -22,6 +22,9 @@ const dirname = path.dirname(filename)
 export default buildConfig({
   // Server URL is critical for cookie handling and authentication
   serverURL: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+  csrf: [
+    process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+  ],
   admin: {
     user: Users.slug,
     importMap: {

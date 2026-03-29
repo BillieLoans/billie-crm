@@ -23,8 +23,13 @@ export async function GET(
 
     const { accountId } = await params
     const searchParams = request.nextUrl.searchParams
-    const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!, 10) : 100
+    const rawLimit = searchParams.get('limit')
+    const limit = rawLimit ? parseInt(rawLimit, 10) : 100
     const cursor = searchParams.get('cursor') || undefined
+
+    if (!Number.isFinite(limit)) {
+      return NextResponse.json({ error: 'Invalid limit parameter' }, { status: 400 })
+    }
 
     if (!accountId) {
       return NextResponse.json({ error: 'accountId is required' }, { status: 400 })

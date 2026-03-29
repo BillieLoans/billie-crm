@@ -393,16 +393,14 @@ async def handle_conversation_summary(db: AsyncIOMotorDatabase, event: dict[str,
 async def _ensure_conversation_exists(
     db: AsyncIOMotorDatabase, conversation_id: str, event: dict[str, Any]
 ) -> None:
-    """Ensure conversation document exists before updating."""
-    # conversation_id is already validated by caller via safe_str
-    existing = await db.conversations.find_one({"conversationId": conversation_id})
-    if not existing:
-        # Create minimal conversation document
-        customer_id = safe_str(event.get("usr") or event.get("user_id"), "customer_id")
-        application_number = event.get("app_number") or event.get("application_number", "")
+    """Ensure conversation document exists before updating (atomic upsert)."""
+    customer_id = safe_str(event.get("usr") or event.get("user_id"), "customer_id")
+    application_number = event.get("app_number") or event.get("application_number", "")
 
-        await db.conversations.insert_one(
-            {
+    await db.conversations.update_one(
+        {"conversationId": conversation_id},
+        {
+            "$setOnInsert": {
                 "conversationId": conversation_id,
                 "customerIdString": customer_id,
                 "applicationNumber": application_number,
@@ -414,8 +412,10 @@ async def _ensure_conversation_exists(
                 "assessments": {},
                 "noticeboard": [],
                 "version": 1,
-            }
-        )
+            },
+        },
+        upsert=True,
+    )
 
 
 async def _sync_customer(

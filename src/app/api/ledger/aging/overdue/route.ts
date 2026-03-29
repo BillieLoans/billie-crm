@@ -25,10 +25,23 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams
     const bucket = searchParams.get('bucket') || undefined
-    const minDpd = searchParams.get('minDpd') ? parseInt(searchParams.get('minDpd')!, 10) : undefined
-    const maxDpd = searchParams.get('maxDpd') ? parseInt(searchParams.get('maxDpd')!, 10) : undefined
+    const rawMinDpd = searchParams.get('minDpd')
+    const minDpd = rawMinDpd ? parseInt(rawMinDpd, 10) : undefined
+    const rawMaxDpd = searchParams.get('maxDpd')
+    const maxDpd = rawMaxDpd ? parseInt(rawMaxDpd, 10) : undefined
     const pageSize = parseInt(searchParams.get('pageSize') || '100', 10)
     const pageToken = searchParams.get('pageToken') || undefined
+
+    if (
+      (minDpd !== undefined && !Number.isFinite(minDpd)) ||
+      (maxDpd !== undefined && !Number.isFinite(maxDpd)) ||
+      !Number.isFinite(pageSize)
+    ) {
+      return NextResponse.json(
+        { error: 'Invalid numeric parameter (minDpd, maxDpd, or pageSize)' },
+        { status: 400 },
+      )
+    }
 
     const client = getLedgerClient()
 

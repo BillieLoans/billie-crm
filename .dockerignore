@@ -57,3 +57,8 @@ Thumbs.db
 bmad-custom-modules-src
 bmad-custom-src
 
+# Secrets and tool config
+infra/fly/env/
+.claude/
+.mcp.json
+

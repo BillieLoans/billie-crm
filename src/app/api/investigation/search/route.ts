@@ -20,7 +20,12 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams
     const query = searchParams.get('q')
-    const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!, 10) : 20
+    const rawLimit = searchParams.get('limit')
+    const limit = rawLimit ? parseInt(rawLimit, 10) : 20
+
+    if (!Number.isFinite(limit)) {
+      return NextResponse.json({ error: 'Invalid limit parameter' }, { status: 400 })
+    }
 
     if (!query) {
       return NextResponse.json({ error: 'q (query) is required' }, { status: 400 })

@@ -516,10 +516,10 @@ class EventProcessor:
             stream_label = "internal" if stream == settings.internal_stream else "external"
             print(f"📥 [{stream_label}] Received event: {event_type} (id: {logical_event_id})")
 
-            # Deduplication check - use Redis entry ID (message_id) as primary key
-            # Redis entry ID is guaranteed unique within a stream
+            # Atomic dedup: SET NX returns True if key was set (not a duplicate)
             dedup_key = f"dedup:{stream}:{message_id_str}"
-            if await self.redis.exists(dedup_key):
+            is_new = await self.redis.set(dedup_key, "1", nx=True, ex=settings.dedup_ttl_seconds)
+            if not is_new:
                 print(f"   ⏭️  Skipping duplicate event")
                 log.debug("Duplicate event, skipping")
                 await self.redis.xack(stream, settings.consumer_group, message_id)
@@ -538,9 +538,6 @@ class EventProcessor:
 
             # Execute handler (writes to MongoDB)
             await handler(self.db, parsed_event)
-
-            # Set dedup key with TTL
-            await self.redis.setex(dedup_key, settings.dedup_ttl_seconds, "1")
 
             # ACK after successful write
             await self.redis.xack(stream, settings.consumer_group, message_id)

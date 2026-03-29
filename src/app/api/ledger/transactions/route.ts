@@ -32,17 +32,21 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'loanAccountId is required' }, { status: 400 })
     }
 
-    const limit = searchParams.get('limit')
+    const rawLimit = searchParams.get('limit')
+    const limit = rawLimit ? parseInt(rawLimit, 10) : undefined
+    if (limit !== undefined && !Number.isFinite(limit)) {
+      return NextResponse.json({ error: 'Invalid limit parameter' }, { status: 400 })
+    }
     const fromDate = searchParams.get('fromDate')
     const toDate = searchParams.get('toDate')
     const type = searchParams.get('type') as TransactionType | null
 
     const client = getLedgerClient()
-    
+
     try {
       const response = await client.getTransactions({
         loanAccountId,
-        limit: limit ? parseInt(limit, 10) : undefined,
+        limit,
         fromDate: fromDate || undefined,
         toDate: toDate || undefined,
         typeFilter: type || undefined,
