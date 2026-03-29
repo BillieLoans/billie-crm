@@ -1,6 +1,6 @@
 import type { CollectionConfig, Access } from 'payload'
 import { z } from 'zod'
-import { canService, isAdmin, hideFromNonAdmins } from '@/lib/access'
+import { canService, isAdmin, hasAnyRole, hideFromNonAdmins } from '@/lib/access'
 
 const tiptapContentSchema = z.object({
   type: z.literal('doc'),
@@ -8,10 +8,10 @@ const tiptapContentSchema = z.object({
 })
 
 /**
- * Access control: Any authenticated user can read contact notes
+ * Access control: Any authenticated user with a valid role can read contact notes
  */
 const canRead: Access = ({ req }) => {
-  return !!req.user
+  return hasAnyRole(req.user)
 }
 
 /**

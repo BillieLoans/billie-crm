@@ -280,7 +280,9 @@ describe('Payload Collections Configuration', () => {
     test('should have basic upload configuration', () => {
       expect(Media.slug).toBe('media')
       expect(Media.upload).toBe(true)
-      expect((Media.access?.read as any)?.()).toBe(true)
+      // Media requires authentication (H10 remediation)
+      expect((Media.access?.read as any)?.({ req: { user: { role: 'readonly' } } })).toBe(true)
+      expect((Media.access?.read as any)?.({ req: { user: null } })).toBe(false)
     })
 
     test('should have alt field for accessibility', () => {

@@ -1,5 +1,5 @@
 import type { CollectionConfig } from 'payload'
-import { hideFromNonAdmins } from '@/lib/access'
+import { hasAnyRole, hideFromNonAdmins } from '@/lib/access'
 
 export const Media: CollectionConfig = {
   slug: 'media',
@@ -8,7 +8,7 @@ export const Media: CollectionConfig = {
     hidden: hideFromNonAdmins,
   },
   access: {
-    read: () => true,
+    read: ({ req }) => hasAnyRole(req.user),
   },
   fields: [
     {

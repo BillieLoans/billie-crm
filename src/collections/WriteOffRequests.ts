@@ -1,11 +1,11 @@
 import type { CollectionConfig, Access } from 'payload'
-import { hideFromNonAdmins, isAdmin, hasApprovalAuthority, canService } from '@/lib/access'
+import { hideFromNonAdmins, isAdmin, hasApprovalAuthority, canService, hasAnyRole } from '@/lib/access'
 
 /**
- * Access control: Any authenticated user can read write-off requests
+ * Access control: Any authenticated user with a valid role can read write-off requests
  */
 const canRead: Access = ({ req }) => {
-  return !!req.user
+  return hasAnyRole(req.user)
 }
 
 /**
