@@ -55,12 +55,87 @@ function verifyCloudflareOrigin(request: NextRequest): NextResponse | null {
  * TODO: Remove the admin redirect workaround when upgrading to a Payload version
  * that fixes the built-in route authentication issue.
  */
+/**
+ * Check if a JWT is structurally valid and not expired.
+ *
+ * This does NOT verify the signature (we don't have PAYLOAD_SECRET in edge
+ * runtime for crypto). It only decodes the payload and checks the `exp` claim.
+ * Full signature verification happens later in `payload.auth()` at the route level.
+ */
+function isJwtNotExpired(token: string | undefined): boolean {
+  if (!token) return false
+  try {
+    const parts = token.split('.')
+    if (parts.length !== 3) return false
+    const payload = JSON.parse(atob(parts[1]))
+    if (typeof payload.exp !== 'number') return false
+    return payload.exp > Math.floor(Date.now() / 1000)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * CSRF protection via Origin header validation.
+ *
+ * For state-changing requests (POST, PUT, PATCH, DELETE), verify that the
+ * Origin or Referer header matches the expected app URL. Browsers always
+ * send Origin on cross-origin requests, so a mismatch indicates CSRF.
+ */
+const MUTATION_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+
+function verifyCsrfOrigin(request: NextRequest): NextResponse | null {
+  if (!MUTATION_METHODS.has(request.method)) return null
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL
+  if (!appUrl) return null // Can't verify without a known origin
+
+  const origin = request.headers.get('origin')
+  const referer = request.headers.get('referer')
+
+  // If neither header is present, the request is likely server-to-server (not browser)
+  if (!origin && !referer) return null
+
+  const allowedOrigin = new URL(appUrl).origin
+
+  if (origin && origin !== allowedOrigin) {
+    return NextResponse.json(
+      { error: { code: 'CSRF_REJECTED', message: 'Cross-origin request blocked.' } },
+      { status: 403 },
+    )
+  }
+
+  if (!origin && referer) {
+    try {
+      const refererOrigin = new URL(referer).origin
+      if (refererOrigin !== allowedOrigin) {
+        return NextResponse.json(
+          { error: { code: 'CSRF_REJECTED', message: 'Cross-origin request blocked.' } },
+          { status: 403 },
+        )
+      }
+    } catch {
+      // Malformed referer — block
+      return NextResponse.json(
+        { error: { code: 'CSRF_REJECTED', message: 'Cross-origin request blocked.' } },
+        { status: 403 },
+      )
+    }
+  }
+
+  return null
+}
+
 function setSecurityHeaders(response: NextResponse): NextResponse {
   response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
   response.headers.set('X-Frame-Options', 'DENY')
   response.headers.set('X-Content-Type-Options', 'nosniff')
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
   response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+  response.headers.set(
+    'Content-Security-Policy',
+    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'",
+  )
   return response
 }
 
@@ -83,11 +158,19 @@ export function middleware(request: NextRequest) {
     if (blocked) return blocked
   }
 
+  // --- CSRF origin validation ---
+  // Block cross-origin mutation requests (POST/PUT/PATCH/DELETE)
+  if (pathname !== '/api/health') {
+    const csrfBlocked = verifyCsrfOrigin(request)
+    if (csrfBlocked) return csrfBlocked
+  }
+
   // --- Admin route redirect workaround ---
   const payloadToken = request.cookies.get('payload-token')
+  const hasValidToken = isJwtNotExpired(payloadToken?.value)
 
   if (pathname === '/admin' || pathname === '/admin/') {
-    if (payloadToken?.value) {
+    if (hasValidToken) {
       return setSecurityHeaders(NextResponse.redirect(new URL('/admin/dashboard', request.url)))
     } else {
       return setSecurityHeaders(NextResponse.redirect(new URL('/admin/login', request.url)))
@@ -95,7 +178,7 @@ export function middleware(request: NextRequest) {
   }
 
   if (pathname === '/admin/login' || pathname === '/admin/login/') {
-    if (payloadToken?.value) {
+    if (hasValidToken) {
       return setSecurityHeaders(NextResponse.redirect(new URL('/admin/dashboard', request.url)))
     }
   }
