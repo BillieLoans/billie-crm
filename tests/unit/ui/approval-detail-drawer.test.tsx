@@ -63,6 +63,7 @@ const mockApproval: WriteOffApproval = {
   requestedByName: 'Jane Smith',
   requestedAt: '2025-12-01T10:00:00Z',
   createdAt: '2025-12-01T10:00:00Z',
+  updatedAt: '2025-12-01T10:00:00Z',
 }
 
 describe('ApprovalDetailDrawer', () => {

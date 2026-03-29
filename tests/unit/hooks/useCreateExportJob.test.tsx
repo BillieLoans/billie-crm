@@ -34,7 +34,7 @@ describe('useCreateExportJob', () => {
 
     const { result } = renderHook(() => useCreateExportJob(), { wrapper: createWrapper() })
 
-    let response
+    let response: any
     await act(async () => {
       response = await result.current.createExportJob({
         type: 'journal_entries',

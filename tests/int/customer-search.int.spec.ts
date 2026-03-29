@@ -7,7 +7,7 @@
 
 import { describe, test, expect, beforeAll } from 'vitest'
 import configPromise from '@payload-config'
-import { getPayload, Payload } from 'payload'
+import { getPayload, Payload, Where } from 'payload'
 
 describe('Customer Search API', () => {
   let payload: Payload
@@ -135,7 +135,7 @@ describe('Customer Search API', () => {
 
   test('or query combines multiple fields correctly', async () => {
     // Verify that the OR query syntax works with Payload
-    const orQuery = {
+    const orQuery: Where = {
       or: [
         { fullName: { contains: 'test' } },
         { emailAddress: { contains: 'test' } },

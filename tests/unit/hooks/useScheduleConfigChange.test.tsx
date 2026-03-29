@@ -33,7 +33,7 @@ describe('useScheduleConfigChange', () => {
 
     const { result } = renderHook(() => useScheduleConfigChange(), { wrapper: createWrapper() })
 
-    let response
+    let response: any
     await act(async () => {
       response = await result.current.scheduleChange({
         parameter: 'overlay_multiplier',
@@ -60,7 +60,7 @@ describe('useScheduleConfigChange', () => {
 
     const { result } = renderHook(() => useScheduleConfigChange(), { wrapper: createWrapper() })
 
-    let response
+    let response: any
     await act(async () => {
       response = await result.current.scheduleChange({
         parameter: 'pd_rate',

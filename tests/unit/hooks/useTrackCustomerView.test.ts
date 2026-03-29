@@ -15,7 +15,7 @@ describe('useTrackCustomerView', () => {
     vi.clearAllMocks()
     vi.mocked(useRecentCustomersStore).mockImplementation((selector) => {
       if (typeof selector === 'function') {
-        return selector({ addCustomer: mockAddCustomer })
+        return selector({ addCustomer: mockAddCustomer, customers: [], clearHistory: vi.fn() })
       }
       return mockAddCustomer
     })

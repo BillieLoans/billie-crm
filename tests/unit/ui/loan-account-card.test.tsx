@@ -28,8 +28,11 @@ const createMockAccount = (overrides: Partial<LoanAccountData> = {}): LoanAccoun
     scheduleId: 'sched-1',
     numberOfPayments: 12,
     paymentFrequency: 'monthly',
+    payments: [],
+    createdDate: null,
   },
   createdAt: '2024-01-15T00:00:00Z',
+  updatedAt: '2024-01-15T00:00:00Z',
   ...overrides,
 })
 

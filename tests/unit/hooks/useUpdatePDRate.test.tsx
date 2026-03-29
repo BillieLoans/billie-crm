@@ -35,7 +35,7 @@ describe('useUpdatePDRate', () => {
 
     const { result } = renderHook(() => useUpdatePDRate(), { wrapper: createWrapper() })
 
-    let response
+    let response: any
     await act(async () => {
       response = await result.current.updatePDRate({
         bucket: 'BUCKET_1',

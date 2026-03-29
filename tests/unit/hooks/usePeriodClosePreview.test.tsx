@@ -63,7 +63,7 @@ describe('usePeriodClosePreview', () => {
       wrapper: createWrapper(),
     })
 
-    let preview
+    let preview: any
     await act(async () => {
       preview = await result.current.generatePreview({
         periodDate: '2026-01-31',

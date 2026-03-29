@@ -188,6 +188,7 @@ describe('BulkWaiveFeeDrawer', () => {
         error: null,
         isReadOnlyMode: false,
         hasPendingWaive: false,
+        isVersionConflict: false,
       })
 
       const handleClose = vi.fn()
@@ -252,6 +253,7 @@ describe('BulkWaiveFeeDrawer', () => {
         error: null,
         isReadOnlyMode: false,
         hasPendingWaive: true,
+        isVersionConflict: false,
       })
 
       render(
@@ -277,6 +279,7 @@ describe('BulkWaiveFeeDrawer', () => {
         error: null,
         isReadOnlyMode: true,
         hasPendingWaive: false,
+        isVersionConflict: false,
       })
 
       render(
@@ -302,6 +305,7 @@ describe('BulkWaiveFeeDrawer', () => {
         error: null,
         isReadOnlyMode: false,
         hasPendingWaive: false,
+        isVersionConflict: false,
       })
 
       render(

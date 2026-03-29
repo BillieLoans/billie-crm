@@ -125,12 +125,12 @@ describe('Billie Servicing App Integration Tests', () => {
         const customer = result.docs[0]
 
         expect(customer.residentialAddress).toBeDefined()
-        expect(customer.residentialAddress.streetNumber).toBe('123')
-        expect(customer.residentialAddress.streetName).toBe('Test')
-        expect(customer.residentialAddress.suburb).toBe('Sydney')
-        expect(customer.residentialAddress.state).toBe('NSW')
-        expect(customer.residentialAddress.postcode).toBe('2000')
-        expect(customer.residentialAddress.fullAddress).toContain('123 Test St')
+        expect(customer.residentialAddress!.streetNumber).toBe('123')
+        expect(customer.residentialAddress!.streetName).toBe('Test')
+        expect(customer.residentialAddress!.suburb).toBe('Sydney')
+        expect(customer.residentialAddress!.state).toBe('NSW')
+        expect(customer.residentialAddress!.postcode).toBe('2000')
+        expect(customer.residentialAddress!.fullAddress).toContain('123 Test St')
       })
 
       it('should display identity verification status', async () => {
@@ -293,7 +293,7 @@ describe('Billie Servicing App Integration Tests', () => {
           where: { loanAccountId: { equals: 'TEST-ACC-001' } },
         })
 
-        const loanTerms = account.docs[0].loanTerms
+        const loanTerms = account.docs[0].loanTerms!
         expect(loanTerms.loanAmount).toBe(500.0)
         expect(loanTerms.loanFee).toBe(80.0)
         expect(loanTerms.totalPayable).toBe(580.0)
@@ -306,7 +306,7 @@ describe('Billie Servicing App Integration Tests', () => {
           where: { loanAccountId: { equals: 'TEST-ACC-001' } },
         })
 
-        const balances = account.docs[0].balances
+        const balances = account.docs[0].balances!
         expect(balances.currentBalance).toBe(350.0)
         expect(balances.totalOutstanding).toBe(350.0)
         expect(balances.totalPaid).toBe(230.0)
@@ -319,7 +319,7 @@ describe('Billie Servicing App Integration Tests', () => {
         })
 
         expect(account.docs[0].lastPayment).toBeDefined()
-        expect(account.docs[0].lastPayment.amount).toBe(115.0)
+        expect(account.docs[0].lastPayment!.amount).toBe(115.0)
       })
     })
 
@@ -375,7 +375,7 @@ describe('Billie Servicing App Integration Tests', () => {
           where: { loanAccountId: { equals: 'TEST-ACC-001' } },
         })
 
-        const schedule = account.docs[0].repaymentSchedule
+        const schedule = account.docs[0].repaymentSchedule!
         expect(schedule).toBeDefined()
         expect(schedule.scheduleId).toBe('SCHED-001')
         expect(schedule.numberOfPayments).toBe(4)
@@ -388,7 +388,7 @@ describe('Billie Servicing App Integration Tests', () => {
           where: { loanAccountId: { equals: 'TEST-ACC-001' } },
         })
 
-        const payments = account.docs[0].repaymentSchedule.payments
+        const payments = account.docs[0].repaymentSchedule!.payments!
         expect(payments.length).toBe(4)
         expect(payments[0].paymentNumber).toBe(1)
         expect(payments[0].amount).toBe(145.0)
@@ -402,7 +402,7 @@ describe('Billie Servicing App Integration Tests', () => {
           where: { loanAccountId: { equals: 'TEST-ACC-001' } },
         })
 
-        const payments = account.docs[0].repaymentSchedule.payments
+        const payments = account.docs[0].repaymentSchedule!.payments!
         const paidPayments = payments.filter((p: any) => p.status === 'paid')
         const scheduledPayments = payments.filter((p: any) => p.status === 'scheduled')
 
@@ -459,7 +459,7 @@ describe('Billie Servicing App Integration Tests', () => {
         })
 
         expect(conv.docs[0].utterances).toBeDefined()
-        expect(conv.docs[0].utterances.length).toBe(3)
+        expect(conv.docs[0].utterances!.length).toBe(3)
       })
 
       it('should identify customer vs assistant messages', async () => {
@@ -468,7 +468,7 @@ describe('Billie Servicing App Integration Tests', () => {
           where: { conversationId: { equals: 'CONV-001' } },
         })
 
-        const utterances = conv.docs[0].utterances
+        const utterances = conv.docs[0].utterances!
         expect(utterances[0].username).toBe('assistant')
         expect(utterances[1].username).toBe('customer')
       })
@@ -481,7 +481,7 @@ describe('Billie Servicing App Integration Tests', () => {
 
         expect(conv.docs[0].purpose).toBe('Loan application')
         expect(conv.docs[0].facts).toBeDefined()
-        expect(conv.docs[0].facts.length).toBeGreaterThanOrEqual(1)
+        expect(conv.docs[0].facts!.length).toBeGreaterThanOrEqual(1)
       })
     })
 
@@ -493,8 +493,8 @@ describe('Billie Servicing App Integration Tests', () => {
         })
 
         expect(conv.docs[0].assessments).toBeDefined()
-        expect(conv.docs[0].assessments.identityRisk).toBeDefined()
-        expect(conv.docs[0].assessments.identityRisk.score).toBe(85)
+        expect((conv.docs[0].assessments as any).identityRisk).toBeDefined()
+        expect((conv.docs[0].assessments as any).identityRisk.score).toBe(85)
       })
 
       it('should display serviceability assessment', async () => {
@@ -503,8 +503,8 @@ describe('Billie Servicing App Integration Tests', () => {
           where: { conversationId: { equals: 'CONV-001' } },
         })
 
-        expect(conv.docs[0].assessments.serviceability).toBeDefined()
-        expect(conv.docs[0].assessments.serviceability.result).toBe('pass')
+        expect((conv.docs[0].assessments as any).serviceability).toBeDefined()
+        expect((conv.docs[0].assessments as any).serviceability.result).toBe('pass')
       })
 
       it('should display fraud check assessment', async () => {
@@ -513,8 +513,8 @@ describe('Billie Servicing App Integration Tests', () => {
           where: { conversationId: { equals: 'CONV-001' } },
         })
 
-        expect(conv.docs[0].assessments.fraudCheck).toBeDefined()
-        expect(conv.docs[0].assessments.fraudCheck.result).toBe('clear')
+        expect((conv.docs[0].assessments as any).fraudCheck).toBeDefined()
+        expect((conv.docs[0].assessments as any).fraudCheck.result).toBe('clear')
       })
 
       it('should display final decision', async () => {

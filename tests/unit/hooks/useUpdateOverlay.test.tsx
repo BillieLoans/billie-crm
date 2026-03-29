@@ -34,7 +34,7 @@ describe('useUpdateOverlay', () => {
 
     const { result } = renderHook(() => useUpdateOverlay(), { wrapper: createWrapper() })
 
-    let response
+    let response: any
     await act(async () => {
       response = await result.current.updateOverlay({
         value: 1.3,

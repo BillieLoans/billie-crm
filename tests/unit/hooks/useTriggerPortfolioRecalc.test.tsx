@@ -34,7 +34,7 @@ describe('useTriggerPortfolioRecalc', () => {
 
     const { result } = renderHook(() => useTriggerPortfolioRecalc(), { wrapper: createWrapper() })
 
-    let response
+    let response: any
     await act(async () => {
       response = await result.current.triggerRecalc({
         triggeredBy: 'user-1',

@@ -161,7 +161,6 @@ describe('useRecentCustomersStore', () => {
       expect(Array.isArray(state.customers)).toBe(true)
 
       // Zustand persist adds persist method to store
-      // @ts-expect-error - persist adds this method
       const persistOptions = useRecentCustomersStore.persist
       expect(persistOptions).toBeDefined()
       expect(persistOptions.getOptions().name).toBe('billie-recent-customers')
@@ -176,7 +175,6 @@ describe('useRecentCustomersStore', () => {
       })
 
       // Get the persisted state structure
-      // @ts-expect-error - persist adds this method
       const persistOptions = useRecentCustomersStore.persist
       const storageName = persistOptions.getOptions().name
 
@@ -191,7 +189,7 @@ describe('useRecentCustomersStore', () => {
         expect(typeof c.customerId).toBe('string')
         expect(typeof c.viewedAt).toBe('number')
         // Verify no PII fields exist (type assertion for testing)
-        const anyC = c as Record<string, unknown>
+        const anyC = c as unknown as Record<string, unknown>
         expect(anyC.name).toBeUndefined()
         expect(anyC.email).toBeUndefined()
         expect(anyC.phone).toBeUndefined()

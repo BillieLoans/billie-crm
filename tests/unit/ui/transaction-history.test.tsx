@@ -77,7 +77,7 @@ describe('TransactionHistory component', () => {
       isLoading: false,
       isError: false,
       isFetching: false,
-    } as ReturnType<typeof useTransactions>)
+    } as unknown as ReturnType<typeof useTransactions>)
   })
 
   afterEach(() => {
@@ -101,7 +101,7 @@ describe('TransactionHistory component', () => {
       isLoading: true,
       isError: false,
       isFetching: true,
-    } as ReturnType<typeof useTransactions>)
+    } as unknown as ReturnType<typeof useTransactions>)
 
     render(<TransactionHistory loanAccountId="LOAN-001" />, { wrapper: createWrapper() })
     expect(screen.getByText('Loading transactions...')).toBeInTheDocument()
@@ -113,7 +113,7 @@ describe('TransactionHistory component', () => {
       isLoading: false,
       isError: false,
       isFetching: false,
-    } as ReturnType<typeof useTransactions>)
+    } as unknown as ReturnType<typeof useTransactions>)
 
     render(<TransactionHistory loanAccountId="LOAN-001" />, { wrapper: createWrapper() })
     expect(screen.getByText('No transactions found')).toBeInTheDocument()
@@ -131,7 +131,7 @@ describe('TransactionHistory component', () => {
       isLoading: false,
       isError: false,
       isFetching: false,
-    } as ReturnType<typeof useTransactions>)
+    } as unknown as ReturnType<typeof useTransactions>)
 
     render(<TransactionHistory loanAccountId="LOAN-001" />, { wrapper: createWrapper() })
     expect(screen.getByText('Ledger service unavailable')).toBeInTheDocument()
@@ -143,7 +143,7 @@ describe('TransactionHistory component', () => {
       isLoading: false,
       isError: false,
       isFetching: false,
-    } as ReturnType<typeof useTransactions>)
+    } as unknown as ReturnType<typeof useTransactions>)
 
     render(<TransactionHistory loanAccountId="LOAN-001" />, { wrapper: createWrapper() })
     // Check for transaction badges (appear in both table and cards, so use getAllByText)
@@ -182,7 +182,7 @@ describe('TransactionHistory component', () => {
       isLoading: false,
       isError: false,
       isFetching: false,
-    } as ReturnType<typeof useTransactions>)
+    } as unknown as ReturnType<typeof useTransactions>)
 
     render(<TransactionHistory loanAccountId="LOAN-001" />, { wrapper: createWrapper() })
     expect(screen.getByText(/Load more/)).toBeInTheDocument()

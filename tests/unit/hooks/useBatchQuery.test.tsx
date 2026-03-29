@@ -38,7 +38,7 @@ describe('useBatchQuery', () => {
 
     const { result } = renderHook(() => useBatchQuery(), { wrapper: createWrapper() })
 
-    let response
+    let response: any
     await act(async () => {
       response = await result.current.batchQuery({
         accountIds: ['acc-1', 'acc-2', 'acc-3'],

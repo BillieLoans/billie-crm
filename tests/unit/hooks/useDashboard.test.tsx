@@ -54,6 +54,8 @@ const mockDashboardResponse: DashboardResponse = {
       createdAt: new Date().toISOString(),
     },
   ],
+  pendingDisbursements: [],
+  pendingDisbursementsCount: 0,
   upcomingPayments: [
     {
       loanAccountId: 'LA-001',
