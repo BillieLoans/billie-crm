@@ -87,15 +87,10 @@ export async function PUT(request: NextRequest) {
         console.warn('Ledger service unavailable or method not implemented for PD rate update')
         return NextResponse.json(
           {
-            success: true,
-            bucket: data.bucket,
-            newRate: data.rate,
-            previousRate: data.rate,
-            updatedAt: new Date().toISOString(),
-            _fallback: true,
-            _message: 'PD rate update service not available',
+            error: 'Ledger service unavailable',
+            message: 'PD rate update could not be applied. Please try again later.',
           },
-          { status: 200 },
+          { status: 503 },
         )
       }
       throw grpcError

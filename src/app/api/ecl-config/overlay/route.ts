@@ -87,14 +87,10 @@ export async function PUT(request: NextRequest) {
         console.warn('Ledger service unavailable or method not implemented for overlay update')
         return NextResponse.json(
           {
-            success: true,
-            newValue: overlayValue,
-            previousValue: overlayValue,
-            updatedAt: new Date().toISOString(),
-            _fallback: true,
-            _message: 'Overlay update service not available',
+            error: 'Ledger service unavailable',
+            message: 'Overlay update could not be applied. Please try again later.',
           },
-          { status: 200 },
+          { status: 503 },
         )
       }
       throw grpcError
