@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Error generating sample:', error)
     return NextResponse.json(
-      { error: 'Failed to generate sample', details: (error as Error).message },
+      { error: 'Failed to generate sample', details: 'An internal error occurred. Please try again.' },
       { status: 500 },
     )
   }

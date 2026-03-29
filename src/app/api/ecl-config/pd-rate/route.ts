@@ -109,7 +109,7 @@ export async function PUT(request: NextRequest) {
   } catch (error) {
     console.error('Error updating PD rate:', error)
     return NextResponse.json(
-      { error: 'Failed to update PD rate', details: (error as Error).message },
+      { error: 'Failed to update PD rate', details: 'An internal error occurred. Please try again.' },
       { status: 500 },
     )
   }

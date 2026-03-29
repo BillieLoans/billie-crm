@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Error fetching balance:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch balance', details: (error as Error).message },
+      { error: 'Failed to fetch balance', details: 'An internal error occurred. Please try again.' },
       { status: 500 },
     )
   }

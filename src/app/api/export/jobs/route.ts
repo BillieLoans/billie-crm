@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('[ExportAPI] Unhandled error creating export job:', error)
     return NextResponse.json(
-      { error: 'Failed to create export job', message: (error as Error).message },
+      { error: 'Failed to create export job', message: 'An internal error occurred. Please try again.' },
       { status: 500 },
     )
   }
@@ -187,7 +187,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Error listing export jobs:', error)
     return NextResponse.json(
-      { error: 'Failed to list export jobs', details: (error as Error).message },
+      { error: 'Failed to list export jobs', details: 'An internal error occurred. Please try again.' },
       { status: 500 },
     )
   }

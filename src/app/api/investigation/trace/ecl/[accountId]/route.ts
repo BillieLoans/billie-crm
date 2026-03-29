@@ -51,7 +51,7 @@ export async function GET(
   } catch (error) {
     console.error('Error tracing ECL:', error)
     return NextResponse.json(
-      { error: 'Failed to trace ECL', details: (error as Error).message },
+      { error: 'Failed to trace ECL', details: 'An internal error occurred. Please try again.' },
       { status: 500 },
     )
   }

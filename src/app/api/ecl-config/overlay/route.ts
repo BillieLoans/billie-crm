@@ -100,7 +100,7 @@ export async function PUT(request: NextRequest) {
   } catch (error) {
     console.error('Error updating overlay multiplier:', error)
     return NextResponse.json(
-      { error: 'Failed to update overlay multiplier', details: (error as Error).message },
+      { error: 'Failed to update overlay multiplier', details: 'An internal error occurred. Please try again.' },
       { status: 500 },
     )
   }

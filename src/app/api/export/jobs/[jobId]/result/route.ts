@@ -72,7 +72,7 @@ export async function GET(
   } catch (error) {
     console.error('[ExportAPI] Error fetching export result:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch export result', details: (error as Error).message },
+      { error: 'Failed to fetch export result', details: 'An internal error occurred. Please try again.' },
       { status: 500 },
     )
   }

@@ -88,7 +88,7 @@ export async function GET(
   } catch (error) {
     console.error('Error fetching accrual history:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch accrual history', details: (error as Error).message },
+      { error: 'Failed to fetch accrual history', details: 'An internal error occurred. Please try again.' },
       { status: 500 },
     )
   }

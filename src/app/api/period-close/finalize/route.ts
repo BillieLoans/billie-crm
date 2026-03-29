@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Error finalizing period close:', error)
     return NextResponse.json(
-      { error: 'Failed to finalize period close', details: (error as Error).message },
+      { error: 'Failed to finalize period close', details: 'An internal error occurred. Please try again.' },
       { status: 500 },
     )
   }

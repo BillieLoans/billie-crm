@@ -46,7 +46,7 @@ export async function DELETE(
   } catch (error) {
     console.error('Error cancelling config change:', error)
     return NextResponse.json(
-      { error: 'Failed to cancel config change', details: (error as Error).message },
+      { error: 'Failed to cancel config change', details: 'An internal error occurred. Please try again.' },
       { status: 500 },
     )
   }

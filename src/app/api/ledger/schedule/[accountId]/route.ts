@@ -48,7 +48,7 @@ export async function GET(
   } catch (error) {
     console.error('Error fetching schedule:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch schedule', details: (error as Error).message },
+      { error: 'Failed to fetch schedule', details: 'An internal error occurred. Please try again.' },
       { status: 500 },
     )
   }

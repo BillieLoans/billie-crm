@@ -102,7 +102,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Error fetching portfolio ECL:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch portfolio ECL', details: (error as Error).message },
+      { error: 'Failed to fetch portfolio ECL', details: 'An internal error occurred. Please try again.' },
       { status: 500 },
     )
   }

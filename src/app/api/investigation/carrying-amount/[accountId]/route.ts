@@ -77,7 +77,7 @@ export async function GET(
   } catch (error) {
     console.error('Error fetching carrying amount:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch carrying amount', details: (error as Error).message },
+      { error: 'Failed to fetch carrying amount', details: 'An internal error occurred. Please try again.' },
       { status: 500 },
     )
   }

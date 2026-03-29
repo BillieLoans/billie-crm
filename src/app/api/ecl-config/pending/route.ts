@@ -194,7 +194,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Error fetching pending config changes:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch pending config changes', details: (error as Error).message },
+      { error: 'Failed to fetch pending config changes', details: 'An internal error occurred. Please try again.' },
       { status: 500 },
     )
   }

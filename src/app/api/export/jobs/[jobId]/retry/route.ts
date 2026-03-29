@@ -33,7 +33,7 @@ export async function POST(
   } catch (error) {
     console.error('Error retrying export:', error)
     return NextResponse.json(
-      { error: 'Failed to retry export', details: (error as Error).message },
+      { error: 'Failed to retry export', details: 'An internal error occurred. Please try again.' },
       { status: 500 },
     )
   }

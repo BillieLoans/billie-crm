@@ -62,7 +62,7 @@ export async function GET(
   } catch (error) {
     console.error('Error fetching aging:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch aging', details: (error as Error).message },
+      { error: 'Failed to fetch aging', details: 'An internal error occurred. Please try again.' },
       { status: 500 },
     )
   }

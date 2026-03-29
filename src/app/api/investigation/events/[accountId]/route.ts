@@ -119,7 +119,7 @@ export async function GET(
   } catch (error) {
     console.error('Error fetching event history:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch event history', details: (error as Error).message },
+      { error: 'Failed to fetch event history', details: 'An internal error occurred. Please try again.' },
       { status: 500 },
     )
   }

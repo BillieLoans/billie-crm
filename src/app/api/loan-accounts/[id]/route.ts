@@ -34,7 +34,7 @@ export async function GET(
   } catch (error: any) {
     console.error('Error fetching loan account:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch loan account', details: error.message },
+      { error: 'Failed to fetch loan account', details: 'An internal error occurred. Please try again.' },
       { status: 500 }
     )
   }

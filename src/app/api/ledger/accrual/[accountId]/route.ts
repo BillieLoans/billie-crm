@@ -123,7 +123,7 @@ export async function GET(
   } catch (error) {
     console.error('Error fetching accrued yield:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch accrued yield', details: (error as Error).message },
+      { error: 'Failed to fetch accrued yield', details: 'An internal error occurred. Please try again.' },
       { status: 500 },
     )
   }

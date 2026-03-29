@@ -201,7 +201,7 @@ export async function GET() {
   } catch (error) {
     console.error('Error fetching ECL config:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch ECL config', details: (error as Error).message },
+      { error: 'Failed to fetch ECL config', details: 'An internal error occurred. Please try again.' },
       { status: 500 },
     )
   }

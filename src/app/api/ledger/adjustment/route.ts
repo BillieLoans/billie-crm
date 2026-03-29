@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Error making adjustment:', error)
     return NextResponse.json(
-      { error: 'Failed to make adjustment', details: (error as Error).message },
+      { error: 'Failed to make adjustment', details: 'An internal error occurred. Please try again.' },
       { status: 500 },
     )
   }

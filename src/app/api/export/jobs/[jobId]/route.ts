@@ -45,7 +45,7 @@ export async function GET(
   } catch (error) {
     console.error('Error fetching export status:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch export status', details: (error as Error).message },
+      { error: 'Failed to fetch export status', details: 'An internal error occurred. Please try again.' },
       { status: 500 },
     )
   }

@@ -142,7 +142,7 @@ export async function GET(
   } catch (error) {
     console.error('Error fetching customer data:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch customer data', details: (error as Error).message },
+      { error: 'Failed to fetch customer data', details: 'An internal error occurred. Please try again.' },
       { status: 500 }
     )
   }

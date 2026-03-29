@@ -87,7 +87,7 @@ export function handleApiError(
         details: {
           ...(context?.action && { action: context.action }),
           ...(context?.accountId && { accountId: context.accountId }),
-          originalError: error.message,
+          service: 'ledger',
         },
       })
     }
@@ -112,7 +112,7 @@ export function handleApiError(
     details: {
       ...(context?.action && { action: context.action }),
       ...(context?.accountId && { accountId: context.accountId }),
-      originalError: error instanceof Error ? error.message : String(error),
+      reason: 'An unexpected error occurred.',
     },
   })
 }

@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Error generating period close preview:', error)
     return NextResponse.json(
-      { error: 'Failed to generate preview', details: (error as Error).message },
+      { error: 'Failed to generate preview', details: 'An internal error occurred. Please try again.' },
       { status: 500 },
     )
   }

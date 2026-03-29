@@ -51,7 +51,7 @@ export async function GET(
   } catch (error) {
     console.error('Error fetching period close:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch period close', details: (error as Error).message },
+      { error: 'Failed to fetch period close', details: 'An internal error occurred. Please try again.' },
       { status: 500 },
     )
   }

@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Error acknowledging anomaly:', error)
     return NextResponse.json(
-      { error: 'Failed to acknowledge anomaly', details: (error as Error).message },
+      { error: 'Failed to acknowledge anomaly', details: 'An internal error occurred. Please try again.' },
       { status: 500 },
     )
   }

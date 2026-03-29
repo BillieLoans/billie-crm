@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Error batch querying accounts:', error)
     return NextResponse.json(
-      { error: 'Failed to batch query accounts', details: (error as Error).message },
+      { error: 'Failed to batch query accounts', details: 'An internal error occurred. Please try again.' },
       { status: 500 },
     )
   }

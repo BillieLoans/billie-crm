@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
     }
     
     return NextResponse.json(
-      { error: 'Failed to fetch ledger record', details: error.message },
+      { error: 'Failed to fetch ledger record', details: 'An internal error occurred. Please try again.' },
       { status: 500 }
     )
   }
