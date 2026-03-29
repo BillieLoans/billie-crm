@@ -31,5 +31,12 @@ COPY src/ src/
 # Set Python path
 ENV PYTHONPATH=/app/src
 
+# Run as non-root user
+RUN addgroup --system --gid 1001 appgroup && \
+    adduser --system --uid 1001 appuser
+RUN chown -R appuser:appgroup /app
+
+USER appuser
+
 # Run the processor
 CMD ["python", "-m", "billie_servicing.main"]

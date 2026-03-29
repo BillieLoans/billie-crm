@@ -10,31 +10,19 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { headers } from 'next/headers'
-import { getPayload } from 'payload'
-import configPromise from '@payload-config'
 import { WriteOffCancelCommandSchema } from '@/lib/events/schemas'
 import { EVENT_TYPE_WRITEOFF_CANCELLED } from '@/lib/events/config'
 import type { WriteOffCancelledPayload } from '@/lib/events/types'
 import { createAndPublishEvent, EventPublishError } from '@/server/event-publisher'
+import { requireAuth } from '@/lib/auth'
+import { canService } from '@/lib/access'
 
 export async function POST(request: NextRequest) {
   try {
-    // 1. Authenticate user
-    const payload = await getPayload({ config: configPromise })
-    const headersList = await headers()
-    const cookieHeader = headersList.get('cookie') || ''
-
-    const { user } = await payload.auth({
-      headers: new Headers({ cookie: cookieHeader }),
-    })
-
-    if (!user) {
-      return NextResponse.json(
-        { error: { code: 'UNAUTHENTICATED', message: 'Please log in to continue.' } },
-        { status: 401 },
-      )
-    }
+    // 1. Authenticate user and verify servicing role
+    const auth = await requireAuth(canService)
+    if ('error' in auth) return auth.error
+    const { user } = auth
 
     // 2. Parse and validate request body
     const body = await request.json()

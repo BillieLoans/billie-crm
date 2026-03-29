@@ -19,35 +19,30 @@ import {
 } from '@/server/grpc-client'
 import { requireAuth } from '@/lib/auth'
 import { canService } from '@/lib/access'
-
-interface ApplyDishonourFeeBody {
-  loanAccountId: string
-  feeAmount: string
-  reason?: string
-  referenceId?: string
-}
+import { ApplyDishonourFeeSchema } from '@/lib/schemas/ledger'
 
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(canService)
     if ('error' in auth) return auth.error
 
-    const body: ApplyDishonourFeeBody = await request.json()
-
-    if (!body.loanAccountId) {
-      return NextResponse.json({ error: 'loanAccountId is required' }, { status: 400 })
+    const body = await request.json()
+    const parseResult = ApplyDishonourFeeSchema.safeParse(body)
+    if (!parseResult.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', details: parseResult.error.flatten().fieldErrors },
+        { status: 400 },
+      )
     }
-    if (!body.feeAmount) {
-      return NextResponse.json({ error: 'feeAmount is required' }, { status: 400 })
-    }
+    const data = parseResult.data
 
     const client = getLedgerClient()
     const idempotencyKey = generateIdempotencyKey('dishonourfee')
     const response = await client.applyDishonourFee({
-      loanAccountId: body.loanAccountId,
-      feeAmount: body.feeAmount,
-      reason: body.reason,
-      referenceId: body.referenceId,
+      loanAccountId: data.loanAccountId,
+      feeAmount: data.feeAmount,
+      reason: data.reason,
+      referenceId: data.referenceId,
       idempotencyKey,
     })
 

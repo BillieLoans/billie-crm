@@ -19,39 +19,30 @@ import {
 } from '@/server/grpc-client'
 import { requireAuth } from '@/lib/auth'
 import { canService } from '@/lib/access'
-
-interface ApplyLateFeeBody {
-  loanAccountId: string
-  feeAmount: string
-  daysPastDue: number
-  reason?: string
-}
+import { ApplyLateFeeSchema } from '@/lib/schemas/ledger'
 
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(canService)
     if ('error' in auth) return auth.error
 
-    const body: ApplyLateFeeBody = await request.json()
-
-    // Validation
-    if (!body.loanAccountId) {
-      return NextResponse.json({ error: 'loanAccountId is required' }, { status: 400 })
+    const body = await request.json()
+    const parseResult = ApplyLateFeeSchema.safeParse(body)
+    if (!parseResult.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', details: parseResult.error.flatten().fieldErrors },
+        { status: 400 },
+      )
     }
-    if (!body.feeAmount) {
-      return NextResponse.json({ error: 'feeAmount is required' }, { status: 400 })
-    }
-    if (body.daysPastDue === undefined || body.daysPastDue < 0) {
-      return NextResponse.json({ error: 'daysPastDue is required and must be >= 0' }, { status: 400 })
-    }
+    const data = parseResult.data
 
     const client = getLedgerClient()
     const idempotencyKey = generateIdempotencyKey('latefee')
     const response = await client.applyLateFee({
-      loanAccountId: body.loanAccountId,
-      feeAmount: body.feeAmount,
-      daysPastDue: body.daysPastDue,
-      reason: body.reason,
+      loanAccountId: data.loanAccountId,
+      feeAmount: data.feeAmount,
+      daysPastDue: data.daysPastDue,
+      reason: data.reason,
       idempotencyKey,
     })
 

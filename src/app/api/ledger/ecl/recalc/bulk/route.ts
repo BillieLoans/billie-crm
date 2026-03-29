@@ -10,8 +10,6 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getLedgerClient } from '@/server/grpc-client'
-import { getPayload } from 'payload'
-import configPromise from '@payload-config'
 import { requireAuth } from '@/lib/auth'
 import { canService } from '@/lib/access'
 
@@ -24,6 +22,7 @@ export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(canService)
     if ('error' in auth) return auth.error
+    const { user, payload } = auth
 
     const body: BulkRecalcBody = await request.json()
 
@@ -31,41 +30,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'accountIds is required' }, { status: 400 })
     }
 
-    if (!body.triggeredBy) {
-      return NextResponse.json({ error: 'triggeredBy is required' }, { status: 400 })
-    }
-
     if (body.accountIds.length > 100) {
       return NextResponse.json({ error: 'Maximum 100 accounts per request' }, { status: 400 })
     }
 
-    // Look up username from user GUID
-    let triggeredByName = body.triggeredBy
-    if (body.triggeredBy && body.triggeredBy.length === 24) {
-      // Looks like a MongoDB ObjectId (user GUID), try to look up the username
-      try {
-        const payload = await getPayload({ config: configPromise })
-        const userResult = await payload.findByID({
-          collection: 'users',
-          id: body.triggeredBy,
-        })
-        
-        if (userResult) {
-          triggeredByName = userResult.firstName && userResult.lastName
-            ? `${userResult.firstName} ${userResult.lastName}`
-            : userResult.email || body.triggeredBy
-        }
-      } catch (userError) {
-        console.warn('[Bulk Recalc] Could not look up user, using GUID:', userError)
-        // Continue with GUID if lookup fails
+    // Look up username from authenticated user
+    let triggeredByName = String(user.id)
+    try {
+      const userResult = await payload.findByID({
+        collection: 'users',
+        id: String(user.id),
+      })
+      if (userResult) {
+        triggeredByName = userResult.firstName && userResult.lastName
+          ? `${userResult.firstName} ${userResult.lastName}`
+          : userResult.email || String(user.id)
       }
+    } catch (userError) {
+      console.warn('[Bulk Recalc] Could not look up user, using ID:', userError)
     }
 
     const client = getLedgerClient()
 
     const response = await client.triggerBulkECLRecalculation({
       accountIds: body.accountIds,
-      triggeredBy: triggeredByName, // Send username instead of GUID
+      triggeredBy: triggeredByName,
     })
 
     return NextResponse.json(response)

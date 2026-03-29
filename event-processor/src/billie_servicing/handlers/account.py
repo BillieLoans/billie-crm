@@ -408,7 +408,7 @@ async def handle_schedule_updated(db: AsyncIOMotorDatabase, parsed_event: Any) -
             upsert_result = await db["loan-accounts"].update_one(
                 {"loanAccountId": account_id},
                 {
-                    "$push": {"repaymentSchedule.payments": placeholder_payment},
+                    "$push": {"repaymentSchedule.payments": {"$each": [placeholder_payment], "$slice": 100}},
                     "$set": {
                         "updatedAt": datetime.utcnow(),
                     },

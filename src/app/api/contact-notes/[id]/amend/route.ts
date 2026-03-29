@@ -81,7 +81,7 @@ export async function PATCH(
       {
         error: {
           code: 'INTERNAL_ERROR',
-          message: error instanceof Error ? error.message : 'An unexpected error occurred.',
+          message: 'An unexpected error occurred.',
         },
       },
       { status: 500 },

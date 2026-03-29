@@ -18,49 +18,38 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getLedgerClient, generateIdempotencyKey } from '@/server/grpc-client'
-import { createValidationError, handleApiError } from '@/lib/utils/api-error'
+import { handleApiError } from '@/lib/utils/api-error'
 import { requireAuth } from '@/lib/auth'
 import { canService } from '@/lib/access'
-
-interface DisburseLoanBody {
-  loanAccountId: string
-  disbursementAmount?: string
-  bankReference: string
-  paymentMethod?: string
-  attachmentLocation: string
-  notes?: string
-}
+import { DisburseLoanSchema } from '@/lib/schemas/ledger'
 
 export async function POST(request: NextRequest) {
-  let body: DisburseLoanBody | undefined
+  let loanAccountId: string | undefined
   try {
     const auth = await requireAuth(canService)
     if ('error' in auth) return auth.error
 
-    body = await request.json()
-
-    if (!body) {
-      return NextResponse.json({ error: 'Request body is required' }, { status: 400 })
+    const body = await request.json()
+    const parseResult = DisburseLoanSchema.safeParse(body)
+    if (!parseResult.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', details: parseResult.error.flatten().fieldErrors },
+        { status: 400 },
+      )
     }
-
-    // Validation
-    if (!body.loanAccountId) {
-      return createValidationError('loanAccountId')
-    }
-    if (!body.bankReference) {
-      return createValidationError('bankReference')
-    }
+    const data = parseResult.data
+    loanAccountId = data.loanAccountId
 
     const client = getLedgerClient()
     const idempotencyKey = generateIdempotencyKey('disburse')
 
     const response = await client.disburseLoan({
-      loanAccountId: body.loanAccountId,
-      disbursementAmount: body.disbursementAmount || '',
-      bankReference: body.bankReference,
-      paymentMethod: body.paymentMethod || 'bank_transfer',
-      attachmentLocation: body.attachmentLocation || '',
-      notes: body.notes || '',
+      loanAccountId: data.loanAccountId,
+      disbursementAmount: data.disbursementAmount || '',
+      bankReference: data.bankReference,
+      paymentMethod: data.paymentMethod || 'bank_transfer',
+      attachmentLocation: data.attachmentLocation,
+      notes: data.notes || '',
       idempotencyKey,
     })
 
@@ -83,9 +72,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error: 'ALREADY_DISBURSED',
-          message:
-            grpcDetails ||
-            'This account has already been disbursed. Please refresh to see the latest status.',
+          message: 'This account has already been disbursed. Please check the account status.',
         },
         { status: 409 },
       )
@@ -93,7 +80,7 @@ export async function POST(request: NextRequest) {
 
     return handleApiError(error, {
       action: 'disburse-loan',
-      accountId: body?.loanAccountId,
+      accountId: loanAccountId,
     })
   }
 }

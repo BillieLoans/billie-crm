@@ -44,7 +44,7 @@ COPY . .
 # These are needed for type generation and config validation during build
 # Set placeholder values for build only -- real values come from runtime env
 ENV DATABASE_URI=mongodb://placeholder:27017/build
-ENV PAYLOAD_SECRET=build-time-placeholder-not-for-production
+ENV PAYLOAD_SECRET=build-placeholder-not-for-production
 
 # Build Next.js for production
 RUN pnpm run build || (echo "Build failed!" && exit 1)

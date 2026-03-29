@@ -238,7 +238,7 @@ async def handle_assessment(db: AsyncIOMotorDatabase, event: dict[str, Any]) -> 
         log.warning("Unknown assessment type")
         return
 
-    assessment_data = event.get("payload") or event
+    assessment_data = strip_dollar_keys(event.get("payload") or event)
 
     result = await db.conversations.update_one(
         {"conversationId": conversation_id},

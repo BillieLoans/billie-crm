@@ -23,23 +23,19 @@ export async function DELETE(
   try {
     const auth = await requireAuth(hasApprovalAuthority)
     if ('error' in auth) return auth.error
+    const { user } = auth
 
     const { changeId } = await params
-    const body: CancelBody = await request.json()
 
     if (!changeId) {
       return NextResponse.json({ error: 'changeId is required' }, { status: 400 })
-    }
-
-    if (!body.cancelledBy) {
-      return NextResponse.json({ error: 'cancelledBy is required' }, { status: 400 })
     }
 
     const client = getLedgerClient()
 
     const response = await client.cancelPendingConfigChange({
       changeId,
-      cancelledBy: body.cancelledBy,
+      cancelledBy: String(user.id),
     })
 
     return NextResponse.json(response)

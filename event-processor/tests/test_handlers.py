@@ -514,13 +514,15 @@ class TestScheduleUpdatedHandler:
         
         update_doc = upsert_call[0][1]
         assert "$push" in update_doc
-        pushed_payment = update_doc["$push"]["repaymentSchedule.payments"]
+        push_op = update_doc["$push"]["repaymentSchedule.payments"]
+        pushed_payment = push_op["$each"][0]
         assert pushed_payment["paymentNumber"] == 1
         assert pushed_payment["status"] == "paid"
         assert pushed_payment["paidDate"] == "2024-01-22"
         assert pushed_payment["amountPaid"] == 145.00
         assert pushed_payment["amountRemaining"] == 0
         assert pushed_payment["linkedTransactionIds"] == ["TXN-001"]
+        assert push_op["$slice"] == 100
 
 
 class TestScheduleCreatedOutOfOrder:
