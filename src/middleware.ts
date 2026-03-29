@@ -18,7 +18,12 @@ function verifyCloudflareOrigin(request: NextRequest): NextResponse | null {
 
   const cfSecret = process.env.CF_SECRET
   if (!cfSecret) {
-    // No secret configured — skip check (same as disabled)
+    // In production, fail closed — deny requests if CF_SECRET is not configured.
+    // In non-production (dev/staging), allow through for flexibility.
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[Middleware] CF_SECRET is not set in production — blocking request')
+      return new NextResponse('Forbidden', { status: 403 })
+    }
     return null
   }
 
