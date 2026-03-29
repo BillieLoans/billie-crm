@@ -64,7 +64,7 @@ function mapExportJob(job: ExportJobResponse) {
 interface CreateExportBody {
   exportType: ExportType
   exportFormat?: ExportFormat
-  createdBy: string
+  createdBy?: string
   periodDate?: string
   accountIds?: string[]
   dateRangeStart?: string
@@ -76,6 +76,7 @@ export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(canService)
     if ('error' in auth) return auth.error
+    const { user } = auth
 
     const body: CreateExportBody = await request.json()
     console.log('[ExportAPI] POST /api/export/jobs - body:', JSON.stringify(body, null, 2))
@@ -85,11 +86,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'exportType is required' }, { status: 400 })
     }
 
-    if (!body.createdBy) {
-      console.warn('[ExportAPI] Missing createdBy in request')
-      return NextResponse.json({ error: 'createdBy is required' }, { status: 400 })
-    }
-
     const client = getLedgerClient()
     console.log('[ExportAPI] Got ledger client, calling createExportJob...')
 
@@ -97,7 +93,7 @@ export async function POST(request: NextRequest) {
       const response = await client.createExportJob({
         exportType: body.exportType,
         exportFormat: body.exportFormat,
-        createdBy: body.createdBy,
+        createdBy: String(user.id),
         periodDate: body.periodDate,
         accountIds: body.accountIds,
         dateRangeStart: body.dateRangeStart,

@@ -5,7 +5,7 @@
  *
  * Body:
  * - previewId: string (required) - Preview ID to finalize
- * - finalizedBy: string (required) - User finalizing
+ * - finalizedBy: string (optional, server-derived) - User finalizing
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -15,13 +15,14 @@ import { hasApprovalAuthority } from '@/lib/access'
 
 interface FinalizeBody {
   previewId: string
-  finalizedBy: string
+  finalizedBy?: string
 }
 
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(hasApprovalAuthority)
     if ('error' in auth) return auth.error
+    const { user } = auth
 
     const body: FinalizeBody = await request.json()
 
@@ -29,15 +30,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'previewId is required' }, { status: 400 })
     }
 
-    if (!body.finalizedBy) {
-      return NextResponse.json({ error: 'finalizedBy is required' }, { status: 400 })
-    }
-
     const client = getLedgerClient()
 
     const response = await client.finalizePeriodClose({
       previewId: body.previewId,
-      finalizedBy: body.finalizedBy,
+      finalizedBy: String(user.id),
     })
 
     return NextResponse.json(response)

@@ -8,7 +8,7 @@
  * - principalDelta (required): Change to principal (can be negative)
  * - feeDelta (required): Change to fees (can be negative)
  * - reason (required): Reason for adjustment
- * - approvedBy (required): Approver ID
+ * - approvedBy (optional): Ignored — derived from authenticated session
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -26,13 +26,14 @@ interface MakeAdjustmentBody {
   principalDelta: string
   feeDelta: string
   reason: string
-  approvedBy: string
+  approvedBy?: string
 }
 
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(hasApprovalAuthority)
     if ('error' in auth) return auth.error
+    const { user } = auth
 
     const body: MakeAdjustmentBody = await request.json()
 
@@ -49,10 +50,6 @@ export async function POST(request: NextRequest) {
     if (!body.reason) {
       return NextResponse.json({ error: 'reason is required' }, { status: 400 })
     }
-    if (!body.approvedBy) {
-      return NextResponse.json({ error: 'approvedBy is required' }, { status: 400 })
-    }
-
     const client = getLedgerClient()
     const idempotencyKey = generateIdempotencyKey('adjust')
     const response = await client.makeAdjustment({
@@ -60,7 +57,7 @@ export async function POST(request: NextRequest) {
       principalDelta: body.principalDelta,
       feeDelta: body.feeDelta,
       reason: body.reason,
-      approvedBy: body.approvedBy,
+      approvedBy: String(user.id),
       idempotencyKey,
     })
 

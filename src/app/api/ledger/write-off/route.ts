@@ -6,7 +6,7 @@
  * Request body:
  * - loanAccountId (required): Loan account ID
  * - reason (required): Reason for write-off
- * - approvedBy (required): Approver ID
+ * - approvedBy (optional): Ignored — derived from authenticated session
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -22,13 +22,14 @@ import { hasApprovalAuthority } from '@/lib/access'
 interface WriteOffBody {
   loanAccountId: string
   reason: string
-  approvedBy: string
+  approvedBy?: string
 }
 
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(hasApprovalAuthority)
     if ('error' in auth) return auth.error
+    const { user } = auth
 
     const body: WriteOffBody = await request.json()
 
@@ -39,16 +40,12 @@ export async function POST(request: NextRequest) {
     if (!body.reason) {
       return NextResponse.json({ error: 'reason is required' }, { status: 400 })
     }
-    if (!body.approvedBy) {
-      return NextResponse.json({ error: 'approvedBy is required' }, { status: 400 })
-    }
-
     const client = getLedgerClient()
     const idempotencyKey = generateIdempotencyKey('writeoff')
     const response = await client.writeOff({
       loanAccountId: body.loanAccountId,
       reason: body.reason,
-      approvedBy: body.approvedBy,
+      approvedBy: String(user.id),
       idempotencyKey,
     })
 

@@ -6,7 +6,7 @@
  * Body:
  * - bucket: string (required) - Bucket name
  * - rate: number (required) - New PD rate
- * - updatedBy: string (required) - User making the change
+ * - updatedBy: string (optional, server-derived) - User making the change
  * - reason: string (optional) - Reason for change
  */
 
@@ -18,7 +18,7 @@ import { hasApprovalAuthority } from '@/lib/access'
 interface UpdatePDRateBody {
   bucket: string
   rate: number
-  updatedBy: string
+  updatedBy?: string
   reason?: string
 }
 
@@ -26,6 +26,7 @@ export async function PUT(request: NextRequest) {
   try {
     const auth = await requireAuth(hasApprovalAuthority)
     if ('error' in auth) return auth.error
+    const { user } = auth
 
     const body: UpdatePDRateBody = await request.json()
 
@@ -37,23 +38,19 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'rate is required' }, { status: 400 })
     }
 
-    if (!body.updatedBy) {
-      return NextResponse.json({ error: 'updatedBy is required' }, { status: 400 })
-    }
-
     const client = getLedgerClient()
 
     try {
       console.log('[PD Rate Update] Calling gRPC with:', {
         bucket: body.bucket,
         rate: body.rate,
-        updatedBy: body.updatedBy,
+        updatedBy: String(user.id),
       })
 
       const response = await client.updatePDRate({
         bucket: body.bucket,
         pdRate: body.rate.toString(),
-        updatedBy: body.updatedBy,
+        updatedBy: String(user.id),
       })
 
       console.log('[PD Rate Update] gRPC response:', JSON.stringify(response, null, 2))
@@ -63,7 +60,7 @@ export async function PUT(request: NextRequest) {
       const overlayMultiplier = parseFloat(grpcResponse.overlayMultiplier ?? grpcResponse.overlay_multiplier ?? '1.0')
       const pdRatesMap = grpcResponse.pdRates ?? grpcResponse.pd_rates ?? {}
       const lastUpdated = grpcResponse.lastUpdated ?? grpcResponse.last_updated ?? new Date().toISOString()
-      const updatedBy = grpcResponse.updatedBy ?? grpcResponse.updated_by ?? body.updatedBy
+      const updatedBy = grpcResponse.updatedBy ?? grpcResponse.updated_by ?? String(user.id)
 
       // Find the updated bucket's previous rate (if available)
       const previousRate = pdRatesMap[body.bucket] ? parseFloat(pdRatesMap[body.bucket] as string) : body.rate

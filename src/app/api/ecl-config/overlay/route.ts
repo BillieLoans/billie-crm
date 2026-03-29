@@ -5,7 +5,7 @@
  *
  * Body:
  * - overlayMultiplier: string (required) - New overlay value
- * - updatedBy: string (required) - User making the change
+ * - updatedBy: string (optional, server-derived) - User making the change
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -16,7 +16,7 @@ import { hasApprovalAuthority } from '@/lib/access'
 interface UpdateOverlayBody {
   value?: number        // Frontend sends 'value'
   overlayMultiplier?: string  // Or 'overlayMultiplier' as string
-  updatedBy: string
+  updatedBy?: string
   reason?: string
 }
 
@@ -24,18 +24,15 @@ export async function PUT(request: NextRequest) {
   try {
     const auth = await requireAuth(hasApprovalAuthority)
     if ('error' in auth) return auth.error
+    const { user } = auth
 
     const body: UpdateOverlayBody = await request.json()
 
     // Handle both 'value' (number) and 'overlayMultiplier' (string) for backward compatibility
     const overlayValue = body.value ?? (body.overlayMultiplier ? parseFloat(body.overlayMultiplier) : undefined)
-    
+
     if (overlayValue === undefined || isNaN(overlayValue)) {
       return NextResponse.json({ error: 'overlayMultiplier or value is required and must be a valid number' }, { status: 400 })
-    }
-
-    if (!body.updatedBy) {
-      return NextResponse.json({ error: 'updatedBy is required' }, { status: 400 })
     }
 
     const client = getLedgerClient()
@@ -43,12 +40,12 @@ export async function PUT(request: NextRequest) {
     try {
       console.log('[Overlay Update] Calling gRPC with:', {
         overlayMultiplier: overlayValue.toString(),
-        updatedBy: body.updatedBy,
+        updatedBy: String(user.id),
       })
 
       const response = await client.updateOverlayMultiplier({
         overlayMultiplier: overlayValue.toString(), // gRPC expects string
-        updatedBy: body.updatedBy,
+        updatedBy: String(user.id),
       })
 
       console.log('[Overlay Update] gRPC response:', JSON.stringify(response, null, 2))
@@ -58,7 +55,7 @@ export async function PUT(request: NextRequest) {
       const overlayMultiplier = parseFloat(grpcResponse.overlayMultiplier ?? grpcResponse.overlay_multiplier ?? overlayValue.toString())
       const pdRatesMap = grpcResponse.pdRates ?? grpcResponse.pd_rates ?? {}
       const lastUpdated = grpcResponse.lastUpdated ?? grpcResponse.last_updated ?? new Date().toISOString()
-      const updatedBy = grpcResponse.updatedBy ?? grpcResponse.updated_by ?? body.updatedBy
+      const updatedBy = grpcResponse.updatedBy ?? grpcResponse.updated_by ?? String(user.id)
 
       return NextResponse.json({
         success: true,

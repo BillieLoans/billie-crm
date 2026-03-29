@@ -6,7 +6,7 @@
  * Body:
  * - previewId: string (required) - Preview ID
  * - anomalyId: string (required) - Anomaly ID to acknowledge
- * - acknowledgedBy: string (required) - User acknowledging
+ * - acknowledgedBy: string (optional, server-derived) - User acknowledging
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -17,19 +17,20 @@ import { hasApprovalAuthority } from '@/lib/access'
 interface AcknowledgeBody {
   previewId: string
   anomalyId: string
-  acknowledgedBy: string
+  acknowledgedBy?: string
 }
 
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(hasApprovalAuthority)
     if ('error' in auth) return auth.error
+    const { user } = auth
 
     const body: AcknowledgeBody = await request.json()
 
-    if (!body.previewId || !body.anomalyId || !body.acknowledgedBy) {
+    if (!body.previewId || !body.anomalyId) {
       return NextResponse.json(
-        { error: 'previewId, anomalyId, and acknowledgedBy are required' },
+        { error: 'previewId and anomalyId are required' },
         { status: 400 },
       )
     }
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest) {
     const response = await client.acknowledgeAnomaly({
       previewId: body.previewId,
       anomalyId: body.anomalyId,
-      acknowledgedBy: body.acknowledgedBy,
+      acknowledgedBy: String(user.id),
     })
 
     return NextResponse.json(response)

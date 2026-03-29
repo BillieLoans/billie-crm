@@ -7,7 +7,7 @@
  * - fieldName: string (required) - Field to change
  * - newValue: string (required) - New value
  * - effectiveDate: string (required) - When change takes effect (YYYY-MM-DD)
- * - createdBy: string (required) - User scheduling the change
+ * - createdBy: string (optional, server-derived) - User scheduling the change
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -21,7 +21,7 @@ interface ScheduleChangeBody {
   bucket?: string     // For PD rate changes
   newValue: number | string  // Frontend sends number, API converts to string
   effectiveDate: string
-  createdBy: string
+  createdBy?: string
   reason?: string
 }
 
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(hasApprovalAuthority)
     if ('error' in auth) return auth.error
-    const { payload } = auth
+    const { user, payload } = auth
 
     const body: ScheduleChangeBody = await request.json()
 
@@ -79,32 +79,26 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!body.createdBy) {
-      return NextResponse.json(
-        { error: 'createdBy is required' },
-        { status: 400 },
-      )
-    }
-
     // Convert newValue to string (gRPC expects Decimal as string)
     const newValueStr = typeof body.newValue === 'number' 
       ? body.newValue.toString() 
       : body.newValue
 
-    // Look up username from user GUID
-    let createdByName = body.createdBy
-    if (body.createdBy && body.createdBy.length === 24) {
+    // Look up username from user ID
+    const userId = String(user.id)
+    let createdByName = userId
+    if (userId.length === 24) {
       // Looks like a MongoDB ObjectId (user GUID), try to look up the username
       try {
         const userResult = await payload.findByID({
           collection: 'users',
-          id: body.createdBy,
+          id: userId,
         })
-        
+
         if (userResult) {
           createdByName = userResult.firstName && userResult.lastName
             ? `${userResult.firstName} ${userResult.lastName}`
-            : userResult.email || body.createdBy
+            : userResult.email || userId
         }
       } catch (userError) {
         console.warn('[Schedule Config] Could not look up user, using GUID:', userError)
@@ -120,7 +114,7 @@ export async function POST(request: NextRequest) {
         newValue: newValueStr,
         effectiveDate: body.effectiveDate,
         createdBy: createdByName,
-        originalUserId: body.createdBy,
+        originalUserId: userId,
       })
 
       const response = await client.scheduleECLConfigChange({

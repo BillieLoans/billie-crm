@@ -7,7 +7,7 @@
  * - loanAccountId (required): Loan account ID
  * - waiverAmount (required): Amount to waive as string
  * - reason (required): Reason for waiver
- * - approvedBy (required): Approver ID
+ * - approvedBy (optional): Ignored — derived from authenticated session
  * - expectedVersion (optional): Expected updatedAt for version conflict detection
  */
 
@@ -27,7 +27,7 @@ interface WaiveFeeBody {
   loanAccountId: string
   waiverAmount: string
   reason: string
-  approvedBy: string
+  approvedBy?: string
   expectedVersion?: string
 }
 
@@ -36,6 +36,7 @@ export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(hasApprovalAuthority)
     if ('error' in auth) return auth.error
+    const { user } = auth
 
     body = await request.json()
 
@@ -54,10 +55,6 @@ export async function POST(request: NextRequest) {
     if (!body.reason) {
       return createValidationError('reason')
     }
-    if (!body.approvedBy) {
-      return createValidationError('approvedBy')
-    }
-
     // Version conflict check (if expectedVersion provided)
     const versionResult = await checkVersion(body.loanAccountId, body.expectedVersion)
     if (!versionResult.isValid) {
@@ -70,7 +67,7 @@ export async function POST(request: NextRequest) {
       loanAccountId: body.loanAccountId,
       waiverAmount: body.waiverAmount,
       reason: body.reason,
-      approvedBy: body.approvedBy,
+      approvedBy: String(user.id),
       idempotencyKey,
     })
 
