@@ -451,6 +451,19 @@ class EventProcessor:
                 for k, v in fields.items()
             }
 
+            # Reject oversized payloads to prevent DoS / document bloat
+            payload_size = sum(len(str(v)) for v in sanitized.values())
+            if payload_size > settings.max_payload_bytes:
+                logger.warning(
+                    "Rejecting oversized event payload",
+                    message_id=message_id_str,
+                    payload_size=payload_size,
+                    max_size=settings.max_payload_bytes,
+                )
+                await self._move_to_dlq(message_id, fields, f"Payload too large: {payload_size} bytes")
+                await self.redis.xack(stream, settings.consumer_group, message_id)
+                return
+
             # Get event type
             event_type = (
                 sanitized.get("msg_type")

@@ -20,6 +20,7 @@ import structlog
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from .sanitize import safe_str, strip_dollar_keys
+from ..config import settings
 
 logger = structlog.get_logger()
 
@@ -135,7 +136,7 @@ async def handle_utterance(db: AsyncIOMotorDatabase, event: dict[str, Any]) -> N
     result = await db.conversations.update_one(
         {"conversationId": conversation_id},
         {
-            "$push": {"utterances": utterance},
+            "$push": {"utterances": {"$each": [utterance], "$slice": -settings.max_utterances}},
             "$set": {
                 "updatedAt": datetime.utcnow(),
                 "lastUtteranceTime": utterance["createdAt"],
@@ -288,7 +289,7 @@ async def handle_noticeboard_updated(db: AsyncIOMotorDatabase, event: dict[str, 
     result = await db.conversations.update_one(
         {"conversationId": conversation_id},
         {
-            "$push": {"noticeboard": noticeboard_entry},
+            "$push": {"noticeboard": {"$each": [noticeboard_entry], "$slice": -settings.max_noticeboard_entries}},
             "$set": {"updatedAt": datetime.utcnow()},
             "$inc": {"version": 1},
         },

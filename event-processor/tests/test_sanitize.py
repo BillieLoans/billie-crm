@@ -152,3 +152,52 @@ class TestWriteoffHandlerSanitization:
         }
         with pytest.raises(ValueError, match="request_id"):
             await handle_writeoff_approved(mock_db, malicious_event)
+
+
+class TestUtteranceSlice:
+    """M9: Verify utterances $push uses $slice to cap array size."""
+
+    @pytest.mark.asyncio
+    async def test_utterance_push_uses_slice(self, mock_db):
+        """M9: $push for utterances should include $slice to prevent unbounded growth."""
+        event = {
+            "typ": "user_input",
+            "cid": "CONV-001",
+            "usr": "CUS-001",
+            "payload": {"utterance": "hello"},
+        }
+        # Ensure conversation exists so it doesn't try to insert first
+        mock_db.conversations.find_one = AsyncMock(return_value={"conversationId": "CONV-001"})
+
+        await handle_utterance(mock_db, event)
+
+        call_args = mock_db.conversations.update_one.call_args
+        push_op = call_args[0][1]["$push"]
+        # Should use $each + $slice, not a bare value
+        assert "utterances" in push_op
+        utterances_push = push_op["utterances"]
+        assert "$each" in utterances_push
+        assert "$slice" in utterances_push
+        assert utterances_push["$slice"] < 0  # Negative = keep most recent
+
+    @pytest.mark.asyncio
+    async def test_noticeboard_push_uses_slice(self, mock_db):
+        """M9: $push for noticeboard should include $slice to prevent unbounded growth."""
+        from billie_servicing.handlers.conversation import handle_noticeboard_updated
+
+        event = {
+            "typ": "noticeboard_updated",
+            "cid": "CONV-001",
+            "agentName": "test_agent",
+            "content": "some note",
+        }
+
+        await handle_noticeboard_updated(mock_db, event)
+
+        call_args = mock_db.conversations.update_one.call_args
+        push_op = call_args[0][1]["$push"]
+        assert "noticeboard" in push_op
+        noticeboard_push = push_op["noticeboard"]
+        assert "$each" in noticeboard_push
+        assert "$slice" in noticeboard_push
+        assert noticeboard_push["$slice"] < 0

@@ -71,6 +71,9 @@ Environment variables:
 | `DB_NAME` | `billie-servicing` | MongoDB database name |
 | `MAX_RETRIES` | `3` | Max retries before DLQ |
 | `DEDUP_TTL_SECONDS` | `86400` | Deduplication key TTL (24h) |
+| `MAX_PAYLOAD_BYTES` | `262144` | Max event payload size (256 KB). Oversized events are rejected to DLQ. |
+| `MAX_UTTERANCES` | `2000` | Max utterances per conversation document (oldest trimmed) |
+| `MAX_NOTICEBOARD_ENTRIES` | `500` | Max noticeboard entries per conversation document (oldest trimmed) |
 | `LOG_LEVEL` | `INFO` | Logging level |
 
 ## Running

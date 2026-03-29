@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     dedup_ttl_seconds: int = 86400  # 24 hours
     batch_size: int = 10
     block_timeout_ms: int = 1000
+    max_payload_bytes: int = 262144  # 256 KB per event
+    max_utterances: int = 2000  # Cap utterances array per conversation
+    max_noticeboard_entries: int = 500  # Cap noticeboard array per conversation
 
     # Logging
     log_level: str = "INFO"
