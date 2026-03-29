@@ -738,8 +738,9 @@ class TestConversationHandlers:
         mock_db.conversations.update_one.assert_called()
         call_args = mock_db.conversations.update_one.call_args
         
-        # Verify $push operation for utterances
-        push_doc = call_args[0][1]["$push"]["utterances"]
+        # Verify $push operation for utterances (uses $each/$slice for bounded arrays)
+        push_op = call_args[0][1]["$push"]["utterances"]
+        push_doc = push_op["$each"][0]
         assert push_doc["username"] == "customer"
         assert push_doc["utterance"] == "I need a loan of $500"
 
@@ -764,8 +765,9 @@ class TestConversationHandlers:
         await handle_utterance(mock_db, event)
 
         call_args = mock_db.conversations.update_one.call_args
-        push_doc = call_args[0][1]["$push"]["utterances"]
-        
+        push_op = call_args[0][1]["$push"]["utterances"]
+        push_doc = push_op["$each"][0]
+
         assert push_doc["username"] == "assistant"
         assert push_doc["utterance"] == "I can help you with that."
         assert push_doc["rationale"] == "Customer requested loan"
@@ -872,8 +874,9 @@ class TestConversationHandlers:
         await handle_noticeboard_updated(mock_db, event)
 
         call_args = mock_db.conversations.update_one.call_args
-        push_doc = call_args[0][1]["$push"]["noticeboard"]
-        
+        push_op = call_args[0][1]["$push"]["noticeboard"]
+        push_doc = push_op["$each"][0]
+
         assert push_doc["agentName"] == "serviceability_agent::Serviceability Assessment"
         assert push_doc["topic"] == "Serviceability Assessment"
         assert "income verified" in push_doc["content"]

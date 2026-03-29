@@ -28,6 +28,30 @@ from .config import settings
 logger = structlog.get_logger()
 
 
+def _check_tls_urls(redis_url: str, database_uri: str) -> None:
+    """Warn if non-TLS connection URLs are used in production.
+
+    In production (NODE_ENV=production), Redis should use rediss:// and
+    MongoDB should use mongodb+srv:// (which defaults to TLS) or include tls=true.
+    """
+    if os.environ.get("NODE_ENV") != "production":
+        return
+
+    if redis_url and not redis_url.startswith("rediss://"):
+        logger.warning(
+            "Redis URL does not use TLS (rediss://) in production",
+            url_scheme=redis_url.split("://")[0] if "://" in redis_url else "unknown",
+        )
+
+    if database_uri and not (
+        database_uri.startswith("mongodb+srv://") or "tls=true" in database_uri
+    ):
+        logger.warning(
+            "MongoDB URI does not appear to use TLS in production",
+            url_scheme=database_uri.split("://")[0] if "://" in database_uri else "unknown",
+        )
+
+
 def sanitize_envelope(data: dict[str, Any]) -> dict[str, Any]:
     """
     Sanitize message envelope fields for SDK compatibility.
@@ -98,6 +122,8 @@ class EventProcessor:
         self.redis_url = redis_url or settings.redis_url
         self.database_uri = database_uri or settings.database_uri
         self.db_name = db_name or settings.db_name
+
+        _check_tls_urls(self.redis_url, self.database_uri)
 
         self.redis: redis.Redis | None = None
         self.mongo: AsyncIOMotorClient | None = None
