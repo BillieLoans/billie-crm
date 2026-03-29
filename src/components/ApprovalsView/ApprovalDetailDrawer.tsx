@@ -30,7 +30,7 @@ export const ApprovalDetailDrawer: React.FC<ApprovalDetailDrawerProps> = ({
   isOpen,
   onClose,
   currentUserId,
-  _currentUserName,
+  currentUserName: _currentUserName,
 }) => {
   const [modalOpen, setModalOpen] = useState(false)
   const [modalAction, setModalAction] = useState<ActionType>('approve')
