@@ -159,8 +159,13 @@ def main() -> None:
     print("=" * 60)
     print("BILLIE SERVICING EVENT PROCESSOR")
     print("=" * 60)
-    print(f"Redis URL:       {settings.redis_url}")
-    print(f"Database URI:    {settings.database_uri}")
+    def _redact_url(url: str) -> str:
+        """Redact credentials from connection URLs."""
+        import re
+        return re.sub(r"://[^@]*@", "://***@", url) if "@" in url else "[configured]"
+
+    print(f"Redis URL:       {_redact_url(settings.redis_url)}")
+    print(f"Database URI:    {_redact_url(settings.database_uri)}")
     print(f"Database:        {settings.db_name}")
     print(f"External Stream: {settings.inbox_stream}")
     print(f"Internal Stream: {settings.internal_stream}")
@@ -171,8 +176,8 @@ def main() -> None:
 
     logger.info(
         "Starting Billie Servicing Event Processor",
-        redis_url=settings.redis_url,
-        database_uri=settings.database_uri,
+        redis_url=_redact_url(settings.redis_url),
+        database_uri=_redact_url(settings.database_uri),
         db_name=settings.db_name,
         external_stream=settings.inbox_stream,
         internal_stream=settings.internal_stream,

@@ -54,7 +54,8 @@ export function getRedisClient(): Redis {
     })
 
     redisClient.on('connect', () => {
-      console.log('[Redis] Connected to', REDIS_URL)
+      const redactedUrl = REDIS_URL.replace(/:\/\/[^@]*@/, '://***@')
+      console.log('[Redis] Connected to', redactedUrl)
     })
 
     redisClient.on('close', () => {
