@@ -9,12 +9,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import type { LoanAccountSearchResult, LoanAccountSearchResponse } from '@/types/search'
+import type { LoanAccountSearchResult } from '@/types/search'
 import { requireAuth } from '@/lib/auth'
 import { hasAnyRole } from '@/lib/access'
-
-// Re-export types for consumers
-export type { LoanAccountSearchResult, LoanAccountSearchResponse } from '@/types/search'
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams

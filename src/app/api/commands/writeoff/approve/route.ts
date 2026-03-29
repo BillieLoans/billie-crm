@@ -18,7 +18,7 @@ import { EVENT_TYPE_WRITEOFF_APPROVED } from '@/lib/events/config'
 import type { WriteOffApprovedPayload } from '@/lib/events/types'
 import { createAndPublishEvent, EventPublishError } from '@/server/event-publisher'
 import { hasApprovalAuthority } from '@/lib/access'
-import { getLedgerClient, generateIdempotencyKey } from '@/server/grpc-client'
+import { getLedgerClient } from '@/server/grpc-client'
 
 export async function POST(request: NextRequest) {
   try {

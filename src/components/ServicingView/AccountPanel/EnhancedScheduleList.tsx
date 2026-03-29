@@ -8,7 +8,7 @@
  */
 
 import { useState, useMemo, useCallback, useEffect } from 'react'
-import { useScheduleWithStatus, type InstalmentWithStatus, type ScheduleSummary } from '@/hooks/queries'
+import { useScheduleWithStatus } from '@/hooks/queries'
 import { useUIStore } from '@/stores/ui'
 import styles from './styles.module.css'
 

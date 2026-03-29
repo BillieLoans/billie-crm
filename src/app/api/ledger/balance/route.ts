@@ -8,7 +8,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getLedgerClient, timestampToDate } from '@/server/grpc-client'
+import { getLedgerClient } from '@/server/grpc-client'
 import { requireAuth } from '@/lib/auth'
 import { hasAnyRole } from '@/lib/access'
 

@@ -20,20 +20,6 @@ import { requireAuth } from '@/lib/auth'
 import { canService } from '@/lib/access'
 import { PresignedUrlSchema } from '@/lib/schemas/api'
 
-/** Allowed MIME types for attachments */
-const ALLOWED_CONTENT_TYPES = [
-  'application/pdf',
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // xlsx
-  'application/vnd.ms-excel', // xls
-  'text/csv',
-]
-
-/** Max file name length */
-const MAX_FILENAME_LENGTH = 255
-
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(canService)

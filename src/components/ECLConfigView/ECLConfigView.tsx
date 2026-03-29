@@ -53,7 +53,7 @@ export const ECLConfigView: React.FC<ECLConfigViewProps> = ({
 
   // Mutation hooks
   const { updateOverlay, isPending: isUpdatingOverlay } = useUpdateOverlay()
-  const { updatePDRate, isPending: isUpdatingPDRate, error: pdRateError } = useUpdatePDRate()
+  const { updatePDRate, isPending: isUpdatingPDRate, error: _pdRateError } = useUpdatePDRate()
   const { scheduleChange, isPending: isScheduling } = useScheduleConfigChange()
   const { cancelChange, isPending: isCancelling } = useCancelConfigChange()
   const { triggerRecalc, isPending: isRecalculating } = useTriggerPortfolioRecalc()

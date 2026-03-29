@@ -15,7 +15,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import {
   getLedgerClient,
   TransactionType,
-  timestampToDate,
   getTransactionTypeLabel,
 } from '@/server/grpc-client'
 import { requireAuth } from '@/lib/auth'

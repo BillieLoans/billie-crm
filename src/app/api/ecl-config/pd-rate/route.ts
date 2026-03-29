@@ -51,10 +51,10 @@ export async function PUT(request: NextRequest) {
 
       // Transform the gRPC response to match expected format
       const grpcResponse = response as any
-      const overlayMultiplier = parseFloat(grpcResponse.overlayMultiplier ?? grpcResponse.overlay_multiplier ?? '1.0')
+      const _overlayMultiplier = parseFloat(grpcResponse.overlayMultiplier ?? grpcResponse.overlay_multiplier ?? '1.0')
       const pdRatesMap = grpcResponse.pdRates ?? grpcResponse.pd_rates ?? {}
       const lastUpdated = grpcResponse.lastUpdated ?? grpcResponse.last_updated ?? new Date().toISOString()
-      const updatedBy = grpcResponse.updatedBy ?? grpcResponse.updated_by ?? String(user.id)
+      const _updatedBy = grpcResponse.updatedBy ?? grpcResponse.updated_by ?? String(user.id)
 
       // Find the updated bucket's previous rate (if available)
       const previousRate = pdRatesMap[data.bucket] ? parseFloat(pdRatesMap[data.bucket] as string) : data.rate

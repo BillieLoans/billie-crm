@@ -55,9 +55,9 @@ export async function PUT(request: NextRequest) {
       // Transform the gRPC response to match expected format
       const grpcResponse = response as any
       const overlayMultiplier = parseFloat(grpcResponse.overlayMultiplier ?? grpcResponse.overlay_multiplier ?? overlayValue.toString())
-      const pdRatesMap = grpcResponse.pdRates ?? grpcResponse.pd_rates ?? {}
+      const _pdRatesMap = grpcResponse.pdRates ?? grpcResponse.pd_rates ?? {}
       const lastUpdated = grpcResponse.lastUpdated ?? grpcResponse.last_updated ?? new Date().toISOString()
-      const updatedBy = grpcResponse.updatedBy ?? grpcResponse.updated_by ?? String(user.id)
+      const _updatedBy = grpcResponse.updatedBy ?? grpcResponse.updated_by ?? String(user.id)
 
       return NextResponse.json({
         success: true,

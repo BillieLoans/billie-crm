@@ -3,7 +3,6 @@ import type { AdminViewServerProps } from 'payload'
 import { headers as getHeaders } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { getPayload } from 'payload'
-import React from 'react'
 
 import config from '@/payload.config'
 

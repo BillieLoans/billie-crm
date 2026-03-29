@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
       
       // The gRPC response has 'events' array (proto: repeated ECLConfigChangeEvent events)
       const events = grpcResponse.events ?? []
-      const totalCount = grpcResponse.totalCount ?? grpcResponse.total_count ?? events.length
+      const _totalCount = grpcResponse.totalCount ?? grpcResponse.total_count ?? events.length
 
       // Type for transformed history entries
       type HistoryEntry = {

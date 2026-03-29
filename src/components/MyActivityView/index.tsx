@@ -6,7 +6,6 @@ import { stringify } from 'qs-esm'
 import Link from 'next/link'
 import { Breadcrumb } from '@/components/Breadcrumb'
 import { formatCurrency, formatDateShort } from '@/lib/formatters'
-import { DEFAULT_PAGE_SIZE } from '@/lib/constants'
 import { useCancelWriteOff } from '@/hooks/mutations/useCancelWriteOff'
 import styles from './styles.module.css'
 
