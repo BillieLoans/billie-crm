@@ -197,7 +197,7 @@ describe('Payload Collections Configuration', () => {
       const roleField = fields.find(f => f.name === 'role')
       
       expect(roleField?.type).toBe('select')
-      expect(roleField?.defaultValue).toBe('supervisor')
+      expect(roleField?.defaultValue).toBe('readonly')
       
       // Roles are now objects with label/value
       const options = roleField?.options as Array<{ label: string; value: string }>
@@ -222,6 +222,57 @@ describe('Payload Collections Configuration', () => {
       expect(Users.access?.read?.({ ...mockAdminRequest, id: 'any-id' })).toBe(true)
       expect(Users.access?.read?.({ ...mockSupervisorRequest, id: 'user123' })).toBe(true)
       expect(Users.access?.read?.({ ...mockSupervisorRequest, id: 'user456' })).toBe(false)
+    })
+  })
+
+  describe('Users Collection - Security (C2 Remediation)', () => {
+    const fields = Users.fields || []
+    const roleField = fields.find(f => f.name === 'role')
+
+    test('the role field has an access.update function defined', () => {
+      expect(roleField?.access?.update).toBeDefined()
+      expect(typeof roleField?.access?.update).toBe('function')
+    })
+
+    test('role field access.update returns true for admin users', () => {
+      const result = roleField?.access?.update?.({
+        req: { user: { role: 'admin' } },
+      } as any)
+      expect(result).toBe(true)
+    })
+
+    test('role field access.update returns false for supervisor users', () => {
+      const result = roleField?.access?.update?.({
+        req: { user: { role: 'supervisor' } },
+      } as any)
+      expect(result).toBe(false)
+    })
+
+    test('role field access.update returns false for operations users', () => {
+      const result = roleField?.access?.update?.({
+        req: { user: { role: 'operations' } },
+      } as any)
+      expect(result).toBe(false)
+    })
+
+    test('role field access.update returns false for readonly users', () => {
+      const result = roleField?.access?.update?.({
+        req: { user: { role: 'readonly' } },
+      } as any)
+      expect(result).toBe(false)
+    })
+
+    test('role field access.update returns false for null/undefined user', () => {
+      expect(
+        roleField?.access?.update?.({ req: { user: null } } as any),
+      ).toBe(false)
+      expect(
+        roleField?.access?.update?.({ req: { user: undefined } } as any),
+      ).toBe(false)
+    })
+
+    test('the default role is readonly', () => {
+      expect(roleField?.defaultValue).toBe('readonly')
     })
   })
 

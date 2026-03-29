@@ -985,7 +985,14 @@ export class LedgerClient {
 
   constructor(serviceUrl?: string) {
     const url = serviceUrl || process.env.LEDGER_SERVICE_URL || 'localhost:50051'
-    this.client = new AccountingLedgerService(url, grpc.credentials.createInsecure())
+    // Use insecure credentials for Fly.io internal addresses (already WireGuard-encrypted)
+    // and localhost (local dev). Require TLS for any other address.
+    const isInternalOrLocal =
+      url.includes('.internal') || url.startsWith('localhost') || url.startsWith('127.')
+    const creds = isInternalOrLocal
+      ? grpc.credentials.createInsecure()
+      : grpc.credentials.createSsl()
+    this.client = new AccountingLedgerService(url, creds)
   }
 
   // Helper to promisify gRPC calls
