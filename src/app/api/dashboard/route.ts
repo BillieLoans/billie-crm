@@ -90,10 +90,8 @@ export async function GET(request: NextRequest) {
     // 3. Determine if user can see approvals count
     const canSeeApprovals = hasApprovalAuthority(user)
 
-    // 4. Get base URL for internal API calls
-    const protocol = request.headers.get('x-forwarded-proto') || 'http'
-    const host = request.headers.get('host') || 'localhost:3000'
-    const baseUrl = `${protocol}://${host}`
+    // 4. Get base URL for internal API calls (from trusted env, not request headers)
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
 
     // 5. Parallel fetch all data
     const [approvalsResult, ledgerHealth, customersResult, recentAccountsResult, allAccountsWithSchedule, pendingDisbursementResult] = await Promise.all([

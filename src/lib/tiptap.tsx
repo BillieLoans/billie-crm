@@ -34,12 +34,13 @@ function applyMarks(
     if (markType === 'italic') return <em key={markKey}>{acc}</em>
     if (markType === 'underline') return <u key={markKey}>{acc}</u>
     if (markType === 'link') {
-      const href =
+      const rawHref =
         typeof mark.attrs === 'object' && mark.attrs && 'href' in mark.attrs
           ? String((mark.attrs as Record<string, unknown>).href ?? '')
           : ''
-      return href ? (
-        <a key={markKey} href={href} target="_blank" rel="noopener noreferrer">
+      const isSafeUrl = /^https?:\/\//i.test(rawHref)
+      return isSafeUrl ? (
+        <a key={markKey} href={rawHref} target="_blank" rel="noopener noreferrer">
           {acc}
         </a>
       ) : (

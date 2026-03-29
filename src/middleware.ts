@@ -59,8 +59,17 @@ function setSecurityHeaders(response: NextResponse): NextResponse {
   return response
 }
 
+const hasPayloadSecret =
+  !!process.env.PAYLOAD_SECRET && process.env.PAYLOAD_SECRET !== 'build-placeholder-not-for-production'
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
+
+  // --- Runtime env validation ---
+  // Block all non-health requests if PAYLOAD_SECRET is missing (misconfigured deploy)
+  if (!hasPayloadSecret && pathname !== '/api/health') {
+    return new NextResponse('Service misconfigured', { status: 503 })
+  }
 
   // --- Cloudflare origin verification ---
   // Skip for health check (Fly.io internal probes don't go through Cloudflare)

@@ -106,18 +106,12 @@ export default buildConfig({
   },
   collections: [Users, Media, Customers, Conversations, Applications, LoanAccounts, WriteOffRequests, ContactNotes],
   editor: lexicalEditor(),
-  secret: (() => {
-    if (!process.env.PAYLOAD_SECRET) throw new Error('PAYLOAD_SECRET environment variable is required')
-    return process.env.PAYLOAD_SECRET
-  })(),
+  secret: process.env.PAYLOAD_SECRET || 'build-placeholder-not-for-production',
   typescript: {
     outputFile: path.resolve(dirname, 'payload-types.ts'),
   },
   db: mongooseAdapter({
-    url: (() => {
-      if (!process.env.DATABASE_URI) throw new Error('DATABASE_URI environment variable is required')
-      return process.env.DATABASE_URI
-    })(),
+    url: process.env.DATABASE_URI || 'mongodb://build-placeholder:27017/build',
   }),
   sharp,
   plugins: [

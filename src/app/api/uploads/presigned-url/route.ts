@@ -43,6 +43,7 @@ export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(canService)
     if ('error' in auth) return auth.error
+    const { payload } = auth
 
     const body: PresignedUrlRequestBody = await request.json()
 
@@ -51,6 +52,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'accountNumber is required' },
         { status: 400 },
+      )
+    }
+
+    // Verify the account exists
+    const accountResult = await payload.find({
+      collection: 'loan-accounts',
+      where: { accountNumber: { equals: body.accountNumber } },
+      limit: 1,
+    })
+    if (accountResult.docs.length === 0) {
+      return NextResponse.json(
+        { error: 'Loan account not found' },
+        { status: 404 },
       )
     }
     if (!body.fileName) {
@@ -85,9 +99,12 @@ export async function POST(request: NextRequest) {
     // Sanitize file name: keep alphanumeric, hyphens, underscores, dots
     const sanitizedFileName = body.fileName.replace(/[^a-zA-Z0-9._-]/g, '_')
 
+    // Sanitize account number to prevent S3 path traversal
+    const sanitizedAccountNumber = body.accountNumber.replace(/[^a-zA-Z0-9._-]/g, '_')
+
     // Build S3 key: {account_number}/docs/{timestamp}-{fileName}
     const timestamp = Date.now()
-    const s3Key = `${body.accountNumber}/docs/${timestamp}-${sanitizedFileName}`
+    const s3Key = `${sanitizedAccountNumber}/docs/${timestamp}-${sanitizedFileName}`
 
     // Generate presigned URL (5 minute expiry)
     const uploadUrl = await generatePresignedUploadUrl(s3Key, body.contentType, 300)
