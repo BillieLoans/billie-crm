@@ -60,10 +60,17 @@ ENV APP_DIR=/opt/app
 ENV PYTHONPATH=/opt/app/event-processor/src
 ENV NODE_ENV=production
 
+# Run as non-root user
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
+RUN chown -R nextjs:nodejs /opt/app
+
 EXPOSE 3000
 
 # Start script runs both services (HTTP mode)
 COPY start-http.sh /start-http.sh
 RUN chmod +x /start-http.sh
+
+USER nextjs
 
 CMD ["/start-http.sh"]

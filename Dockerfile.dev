@@ -41,10 +41,17 @@ COPY . .
 # Set Python path for event processor
 ENV PYTHONPATH=/app/event-processor/src
 
+# Run as non-root user
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
+RUN chown -R nextjs:nodejs /app
+
 EXPOSE 3000
 
 # Start script runs both services
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
+
+USER nextjs
 
 CMD ["/start.sh"]

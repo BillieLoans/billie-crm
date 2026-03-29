@@ -89,14 +89,30 @@ python -m billie_servicing.main
 docker-compose up event-processor
 ```
 
+### AWS SSO in Docker
+
+The Docker Compose config mounts only `~/.aws/config` (SSO profile definitions) and
+`~/.aws/sso/` (cached SSO tokens) into the container — not `~/.aws/credentials`. This
+prevents accidental exposure of long-lived access keys for other AWS accounts.
+
+Before starting the container, authenticate via SSO on the host:
+
+```bash
+aws sso login --profile your-profile
+docker-compose up
+```
+
+The cached SSO token is shared read-only with the container.
+
 ## Development
 
 ```bash
-# Run tests
-poetry run pytest
+# Run tests (use requirements-dev.txt for test dependencies)
+pip install -r requirements-dev.txt
+pytest
 
 # Run with coverage
-poetry run pytest --cov=billie_servicing
+pytest --cov=billie_servicing
 
 # Type checking
 poetry run mypy src

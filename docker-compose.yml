@@ -13,13 +13,14 @@ services:
     volumes:
       - .:/app
       - node_modules:/app/node_modules
-      - ${HOME}/.aws:/root/.aws:ro
+      # Mount only AWS SSO config and token cache (not credentials file)
+      - ${HOME}/.aws/config:/home/nextjs/.aws/config:ro
+      - ${HOME}/.aws/sso:/home/nextjs/.aws/sso:ro
     env_file:
       - .env
     environment:
       - PYTHONPATH=/app/event-processor/src
-      - AWS_CONFIG_FILE=/root/.aws/config
-      - AWS_SHARED_CREDENTIALS_FILE=/root/.aws/credentials
+      - AWS_CONFIG_FILE=/home/nextjs/.aws/config
     extra_hosts:
       # Allows container to reach host machine's localhost services
       - "host.docker.internal:host-gateway"
