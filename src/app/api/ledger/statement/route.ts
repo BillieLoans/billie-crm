@@ -11,9 +11,14 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getLedgerClient, timestampToDate } from '@/server/grpc-client'
+import { requireAuth } from '@/lib/auth'
+import { hasAnyRole } from '@/lib/access'
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireAuth(hasAnyRole)
+    if ('error' in auth) return auth.error
+
     const searchParams = request.nextUrl.searchParams
     const accountId = searchParams.get('accountId')
     const periodStart = searchParams.get('periodStart')

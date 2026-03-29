@@ -6,12 +6,17 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getLedgerClient } from '@/server/grpc-client'
+import { requireAuth } from '@/lib/auth'
+import { hasAnyRole } from '@/lib/access'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ jobId: string }> },
 ) {
   try {
+    const auth = await requireAuth(hasAnyRole)
+    if ('error' in auth) return auth.error
+
     const { jobId } = await params
 
     if (!jobId) {

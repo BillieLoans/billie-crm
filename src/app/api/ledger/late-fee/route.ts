@@ -17,6 +17,8 @@ import {
   getTransactionTypeLabel,
   generateIdempotencyKey,
 } from '@/server/grpc-client'
+import { requireAuth } from '@/lib/auth'
+import { canService } from '@/lib/access'
 
 interface ApplyLateFeeBody {
   loanAccountId: string
@@ -27,6 +29,9 @@ interface ApplyLateFeeBody {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAuth(canService)
+    if ('error' in auth) return auth.error
+
     const body: ApplyLateFeeBody = await request.json()
 
     // Validation

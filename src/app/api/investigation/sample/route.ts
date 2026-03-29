@@ -16,6 +16,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getLedgerClient } from '@/server/grpc-client'
+import { requireAuth } from '@/lib/auth'
+import { hasAnyRole } from '@/lib/access'
 
 interface SampleBody {
   bucket?: string
@@ -30,6 +32,9 @@ interface SampleBody {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAuth(hasAnyRole)
+    if ('error' in auth) return auth.error
+
     const body: SampleBody = await request.json()
 
     const client = getLedgerClient()

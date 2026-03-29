@@ -6,8 +6,8 @@
 
 import { NextResponse } from 'next/server'
 import { getLedgerClient } from '@/server/grpc-client'
-import { getPayload } from 'payload'
-import configPromise from '@payload-config'
+import { requireAuth } from '@/lib/auth'
+import { hasAnyRole } from '@/lib/access'
 
 /**
  * Map old bucket names to new bucket structure
@@ -30,6 +30,10 @@ function mapBucketName(bucket: string): string {
 
 export async function GET() {
   try {
+    const auth = await requireAuth(hasAnyRole)
+    if ('error' in auth) return auth.error
+    const { payload } = auth
+
     const client = getLedgerClient()
 
     try {
@@ -99,7 +103,6 @@ export async function GET() {
         })
 
       // Enrich updatedBy GUIDs with user names from Payload
-      const payload = await getPayload({ config: configPromise })
       
       // Collect unique user IDs (overlay + all PD rates)
       const userIds = new Set<string>()

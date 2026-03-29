@@ -21,6 +21,8 @@ import {
 } from '@/server/grpc-client'
 import { checkVersion, createVersionConflictResponse } from '@/lib/utils/version-check'
 import { createValidationError, handleApiError } from '@/lib/utils/api-error'
+import { requireAuth } from '@/lib/auth'
+import { canService } from '@/lib/access'
 
 interface RecordRepaymentBody {
   loanAccountId: string
@@ -34,6 +36,9 @@ interface RecordRepaymentBody {
 export async function POST(request: NextRequest) {
   let body: RecordRepaymentBody | undefined
   try {
+    const auth = await requireAuth(canService)
+    if ('error' in auth) return auth.error
+
     body = await request.json()
 
     // Ensure body is defined

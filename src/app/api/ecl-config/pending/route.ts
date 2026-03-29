@@ -9,11 +9,15 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getLedgerClient } from '@/server/grpc-client'
-import { getPayload } from 'payload'
-import configPromise from '@payload-config'
+import { requireAuth } from '@/lib/auth'
+import { hasAnyRole } from '@/lib/access'
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireAuth(hasAnyRole)
+    if ('error' in auth) return auth.error
+    const { payload } = auth
+
     const searchParams = request.nextUrl.searchParams
     const includePast = searchParams.get('includePast') === 'true'
 
@@ -147,7 +151,6 @@ export async function GET(request: NextRequest) {
       const userMap = new Map<string, string>()
       if (userIds.length > 0) {
         try {
-          const payload = await getPayload({ config: configPromise })
           const usersResult = await payload.find({
             collection: 'users',
             where: {

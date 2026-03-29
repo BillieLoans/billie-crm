@@ -10,6 +10,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getLedgerClient } from '@/server/grpc-client'
+import { requireAuth } from '@/lib/auth'
+import { hasApprovalAuthority } from '@/lib/access'
 
 interface UpdateOverlayBody {
   value?: number        // Frontend sends 'value'
@@ -20,6 +22,9 @@ interface UpdateOverlayBody {
 
 export async function PUT(request: NextRequest) {
   try {
+    const auth = await requireAuth(hasApprovalAuthority)
+    if ('error' in auth) return auth.error
+
     const body: UpdateOverlayBody = await request.json()
 
     // Handle both 'value' (number) and 'overlayMultiplier' (string) for backward compatibility

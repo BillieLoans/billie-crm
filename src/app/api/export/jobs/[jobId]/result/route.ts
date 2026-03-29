@@ -6,6 +6,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getLedgerClient, ExportFormat } from '@/server/grpc-client'
+import { requireAuth } from '@/lib/auth'
+import { hasAnyRole } from '@/lib/access'
 
 const CONTENT_TYPES: Record<string, string> = {
   [ExportFormat.EXPORT_FORMAT_CSV]: 'text/csv',
@@ -22,6 +24,9 @@ export async function GET(
   { params }: { params: Promise<{ jobId: string }> },
 ) {
   try {
+    const auth = await requireAuth(hasAnyRole)
+    if ('error' in auth) return auth.error
+
     const { jobId } = await params
 
     if (!jobId) {

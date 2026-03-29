@@ -10,14 +10,17 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getLedgerClient } from '@/server/grpc-client'
-import { getPayload } from 'payload'
-import configPromise from '@payload-config'
+import { requireAuth } from '@/lib/auth'
+import { hasAnyRole } from '@/lib/access'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ accountId: string }> },
 ) {
   try {
+    const auth = await requireAuth(hasAnyRole)
+    if ('error' in auth) return auth.error
+
     const { accountId } = await params
     const searchParams = request.nextUrl.searchParams
     const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!, 10) : 100
@@ -55,8 +58,7 @@ export async function GET(
       const userMap = new Map<string, string>()
       if (userIds.size > 0) {
         try {
-          const payload = await getPayload({ config: configPromise })
-          const usersResult = await payload.find({
+          const usersResult = await auth.payload.find({
             collection: 'users',
             where: {
               id: { in: Array.from(userIds) },

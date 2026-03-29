@@ -16,6 +16,8 @@ import {
   getTransactionTypeLabel,
   generateIdempotencyKey,
 } from '@/server/grpc-client'
+import { requireAuth } from '@/lib/auth'
+import { hasApprovalAuthority } from '@/lib/access'
 
 interface WriteOffBody {
   loanAccountId: string
@@ -25,6 +27,9 @@ interface WriteOffBody {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAuth(hasApprovalAuthority)
+    if ('error' in auth) return auth.error
+
     const body: WriteOffBody = await request.json()
 
     // Validation

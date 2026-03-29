@@ -12,6 +12,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLedgerClient } from '@/server/grpc-client'
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
+import { requireAuth } from '@/lib/auth'
+import { canService } from '@/lib/access'
 
 interface BulkRecalcBody {
   accountIds: string[]
@@ -20,6 +22,9 @@ interface BulkRecalcBody {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAuth(canService)
+    if ('error' in auth) return auth.error
+
     const body: BulkRecalcBody = await request.json()
 
     if (!body.accountIds || body.accountIds.length === 0) {

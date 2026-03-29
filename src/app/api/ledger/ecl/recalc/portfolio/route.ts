@@ -12,6 +12,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLedgerClient } from '@/server/grpc-client'
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
+import { requireAuth } from '@/lib/auth'
+import { canService } from '@/lib/access'
 
 interface RecalcBody {
   triggeredBy: string
@@ -20,6 +22,9 @@ interface RecalcBody {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAuth(canService)
+    if ('error' in auth) return auth.error
+
     const body: RecalcBody = await request.json()
 
     if (!body.triggeredBy) {

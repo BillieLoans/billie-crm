@@ -15,9 +15,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLedgerClient } from '@/server/grpc-client'
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
+import { requireAuth } from '@/lib/auth'
+import { hasAnyRole } from '@/lib/access'
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireAuth(hasAnyRole)
+    if ('error' in auth) return auth.error
+
     const searchParams = request.nextUrl.searchParams
     const bucket = searchParams.get('bucket') || undefined
     const minDpd = searchParams.get('minDpd') ? parseInt(searchParams.get('minDpd')!, 10) : undefined

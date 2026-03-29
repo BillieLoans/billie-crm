@@ -16,6 +16,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { generatePresignedUploadUrl, buildS3Uri } from '@/server/s3-client'
+import { requireAuth } from '@/lib/auth'
+import { canService } from '@/lib/access'
 
 interface PresignedUrlRequestBody {
   accountNumber: string
@@ -39,6 +41,9 @@ const MAX_FILENAME_LENGTH = 255
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAuth(canService)
+    if ('error' in auth) return auth.error
+
     const body: PresignedUrlRequestBody = await request.json()
 
     // Validation

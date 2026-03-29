@@ -9,11 +9,15 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getLedgerClient } from '@/server/grpc-client'
-import { getPayload } from 'payload'
-import configPromise from '@payload-config'
+import { requireAuth } from '@/lib/auth'
+import { hasAnyRole } from '@/lib/access'
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireAuth(hasAnyRole)
+    if ('error' in auth) return auth.error
+    const { payload } = auth
+
     const searchParams = request.nextUrl.searchParams
     const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!, 10) : undefined
     const parameter = searchParams.get('parameter') || undefined
@@ -105,8 +109,6 @@ export async function GET(request: NextRequest) {
       }
 
       // Enrich changedBy GUIDs with user names from Payload
-      const payload = await getPayload({ config: configPromise })
-      
       // Collect unique user IDs
       const userIds = [...new Set(filteredEntries.map((e: HistoryEntry) => e.changedBy).filter((id: string) => id && id !== 'system'))]
       

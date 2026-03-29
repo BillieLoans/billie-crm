@@ -18,9 +18,14 @@ import {
   timestampToDate,
   getTransactionTypeLabel,
 } from '@/server/grpc-client'
+import { requireAuth } from '@/lib/auth'
+import { hasAnyRole } from '@/lib/access'
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireAuth(hasAnyRole)
+    if ('error' in auth) return auth.error
+
     const searchParams = request.nextUrl.searchParams
     const loanAccountId = searchParams.get('loanAccountId')
 

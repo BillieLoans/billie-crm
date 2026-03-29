@@ -9,17 +9,19 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import configPromise from '@payload-config'
-import { getPayload } from 'payload'
 import { getLedgerClient, timestampToDate } from '@/server/grpc-client'
+import { requireAuth } from '@/lib/auth'
+import { hasAnyRole } from '@/lib/access'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ customerId: string }> }
 ) {
   try {
+    const auth = await requireAuth(hasAnyRole)
+    if ('error' in auth) return auth.error
+    const { payload } = auth
     const { customerId } = await params
-    const payload = await getPayload({ config: configPromise })
 
     // 1. Get customer details
     const customersResult = await payload.find({

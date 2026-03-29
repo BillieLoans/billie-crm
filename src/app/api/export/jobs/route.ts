@@ -13,6 +13,8 @@ import {
   ExportStatus,
   type ExportJobResponse,
 } from '@/server/grpc-client'
+import { requireAuth } from '@/lib/auth'
+import { hasAnyRole, canService } from '@/lib/access'
 
 /**
  * Maps gRPC export type enums to UI-friendly names.
@@ -72,6 +74,9 @@ interface CreateExportBody {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAuth(canService)
+    if ('error' in auth) return auth.error
+
     const body: CreateExportBody = await request.json()
     console.log('[ExportAPI] POST /api/export/jobs - body:', JSON.stringify(body, null, 2))
 
@@ -134,6 +139,9 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireAuth(hasAnyRole)
+    if ('error' in auth) return auth.error
+
     const searchParams = request.nextUrl.searchParams
     const userId = searchParams.get('userId')
     const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!, 10) : undefined

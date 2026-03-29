@@ -9,6 +9,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getLedgerClient } from '@/server/grpc-client'
+import { requireAuth } from '@/lib/auth'
+import { canService } from '@/lib/access'
 
 interface BatchQueryBody {
   accountIds: string[]
@@ -16,6 +18,9 @@ interface BatchQueryBody {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAuth(canService)
+    if ('error' in auth) return auth.error
+
     const body: BatchQueryBody = await request.json()
 
     if (!body.accountIds || body.accountIds.length === 0) {

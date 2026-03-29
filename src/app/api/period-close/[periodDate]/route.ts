@@ -9,12 +9,17 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getLedgerClient } from '@/server/grpc-client'
+import { requireAuth } from '@/lib/auth'
+import { hasAnyRole } from '@/lib/access'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ periodDate: string }> },
 ) {
   try {
+    const auth = await requireAuth(hasAnyRole)
+    if ('error' in auth) return auth.error
+
     const { periodDate } = await params
     const searchParams = request.nextUrl.searchParams
     const includeCorrections = searchParams.get('includeCorrections') === 'true'

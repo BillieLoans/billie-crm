@@ -12,6 +12,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getLedgerClient } from '@/server/grpc-client'
+import { requireAuth } from '@/lib/auth'
+import { hasApprovalAuthority } from '@/lib/access'
 
 interface UpdatePDRateBody {
   bucket: string
@@ -22,6 +24,9 @@ interface UpdatePDRateBody {
 
 export async function PUT(request: NextRequest) {
   try {
+    const auth = await requireAuth(hasApprovalAuthority)
+    if ('error' in auth) return auth.error
+
     const body: UpdatePDRateBody = await request.json()
 
     if (!body.bucket) {

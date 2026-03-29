@@ -12,8 +12,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getLedgerClient } from '@/server/grpc-client'
-import { getPayload } from 'payload'
-import configPromise from '@payload-config'
+import { requireAuth } from '@/lib/auth'
+import { hasApprovalAuthority } from '@/lib/access'
 
 interface ScheduleChangeBody {
   parameter?: string  // Frontend sends 'parameter' (overlay_multiplier, pd_rate, lgd)
@@ -27,6 +27,10 @@ interface ScheduleChangeBody {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAuth(hasApprovalAuthority)
+    if ('error' in auth) return auth.error
+    const { payload } = auth
+
     const body: ScheduleChangeBody = await request.json()
 
     // Handle both 'parameter' (from frontend) and 'fieldName' (direct API call)
@@ -92,7 +96,6 @@ export async function POST(request: NextRequest) {
     if (body.createdBy && body.createdBy.length === 24) {
       // Looks like a MongoDB ObjectId (user GUID), try to look up the username
       try {
-        const payload = await getPayload({ config: configPromise })
         const userResult = await payload.findByID({
           collection: 'users',
           id: body.createdBy,

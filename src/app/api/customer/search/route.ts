@@ -3,22 +3,17 @@
  *
  * Search customers by name, email, phone, or customer ID.
  * Returns a subset of customer fields for display in command palette.
- *
- * Authentication: This route is accessed from within the Payload admin UI,
- * which already requires authentication. The command palette only renders
- * for authenticated users via Payload's admin.components.providers registration.
- * Additional withAuth wrapper is not needed here as it would duplicate auth checks.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import configPromise from '@payload-config'
-import { getPayload } from 'payload'
 import type { CustomerSearchResult, SearchResponse } from '@/types/search'
+import { requireAuth } from '@/lib/auth'
+import { hasAnyRole } from '@/lib/access'
 
 // Re-export types for consumers who import from this route
 export type { CustomerSearchResult, SearchResponse } from '@/types/search'
 
-export async function GET(request: NextRequest): Promise<NextResponse<SearchResponse>> {
+export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   const query = searchParams.get('q')?.trim() || ''
 
@@ -28,7 +23,9 @@ export async function GET(request: NextRequest): Promise<NextResponse<SearchResp
   }
 
   try {
-    const payload = await getPayload({ config: configPromise })
+    const auth = await requireAuth(hasAnyRole)
+    if ('error' in auth) return auth.error
+    const { payload } = auth
 
     const results = await payload.find({
       collection: 'customers',

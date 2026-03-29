@@ -9,6 +9,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getLedgerClient } from '@/server/grpc-client'
+import { requireAuth } from '@/lib/auth'
+import { hasApprovalAuthority } from '@/lib/access'
 
 interface CancelBody {
   cancelledBy: string
@@ -19,6 +21,9 @@ export async function DELETE(
   { params }: { params: Promise<{ changeId: string }> },
 ) {
   try {
+    const auth = await requireAuth(hasApprovalAuthority)
+    if ('error' in auth) return auth.error
+
     const { changeId } = await params
     const body: CancelBody = await request.json()
 

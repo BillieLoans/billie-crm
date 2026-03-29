@@ -10,6 +10,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getLedgerClient } from '@/server/grpc-client'
+import { requireAuth } from '@/lib/auth'
+import { hasApprovalAuthority } from '@/lib/access'
 
 interface FinalizeBody {
   previewId: string
@@ -18,6 +20,9 @@ interface FinalizeBody {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAuth(hasApprovalAuthority)
+    if ('error' in auth) return auth.error
+
     const body: FinalizeBody = await request.json()
 
     if (!body.previewId) {

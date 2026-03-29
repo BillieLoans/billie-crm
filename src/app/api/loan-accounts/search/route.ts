@@ -9,14 +9,14 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import configPromise from '@payload-config'
-import { getPayload } from 'payload'
 import type { LoanAccountSearchResult, LoanAccountSearchResponse } from '@/types/search'
+import { requireAuth } from '@/lib/auth'
+import { hasAnyRole } from '@/lib/access'
 
 // Re-export types for consumers
 export type { LoanAccountSearchResult, LoanAccountSearchResponse } from '@/types/search'
 
-export async function GET(request: NextRequest): Promise<NextResponse<LoanAccountSearchResponse>> {
+export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   const query = searchParams.get('q')?.trim() || ''
 
@@ -26,7 +26,9 @@ export async function GET(request: NextRequest): Promise<NextResponse<LoanAccoun
   }
 
   try {
-    const payload = await getPayload({ config: configPromise })
+    const auth = await requireAuth(hasAnyRole)
+    if ('error' in auth) return auth.error
+    const { payload } = auth
 
     const results = await payload.find({
       collection: 'loan-accounts',

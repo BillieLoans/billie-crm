@@ -19,6 +19,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLedgerClient, generateIdempotencyKey } from '@/server/grpc-client'
 import { createValidationError, handleApiError } from '@/lib/utils/api-error'
+import { requireAuth } from '@/lib/auth'
+import { canService } from '@/lib/access'
 
 interface DisburseLoanBody {
   loanAccountId: string
@@ -32,6 +34,9 @@ interface DisburseLoanBody {
 export async function POST(request: NextRequest) {
   let body: DisburseLoanBody | undefined
   try {
+    const auth = await requireAuth(canService)
+    if ('error' in auth) return auth.error
+
     body = await request.json()
 
     if (!body) {

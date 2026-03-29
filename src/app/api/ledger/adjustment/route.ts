@@ -18,6 +18,8 @@ import {
   getTransactionTypeLabel,
   generateIdempotencyKey,
 } from '@/server/grpc-client'
+import { requireAuth } from '@/lib/auth'
+import { hasApprovalAuthority } from '@/lib/access'
 
 interface MakeAdjustmentBody {
   loanAccountId: string
@@ -29,6 +31,9 @@ interface MakeAdjustmentBody {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAuth(hasApprovalAuthority)
+    if ('error' in auth) return auth.error
+
     const body: MakeAdjustmentBody = await request.json()
 
     // Validation
