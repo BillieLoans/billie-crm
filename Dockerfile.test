@@ -28,12 +28,13 @@ RUN grep -v "git+https" event-processor/requirements.txt > /tmp/base-requirement
     pip3 install --no-cache-dir --break-system-packages -r /tmp/base-requirements.txt
 
 # Install Billie SDKs from requirements.txt (requires GITHUB_TOKEN at build time)
-ARG GITHUB_TOKEN
-RUN if [ -n "$GITHUB_TOKEN" ]; then \
-    git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/" && \
-    grep "git+https.*billie-event-sdks" event-processor/requirements.txt | \
-    sed "s/\${GITHUB_TOKEN}/${GITHUB_TOKEN}/g" | \
-    xargs -I {} pip3 install --no-cache-dir --break-system-packages "{}"; \
+# Use: docker build --secret id=GITHUB_TOKEN,env=GITHUB_TOKEN .
+COPY event-processor/scripts/subst-sdk-requirements.py ./event-processor/scripts/
+RUN --mount=type=secret,id=GITHUB_TOKEN \
+    if [ -f /run/secrets/GITHUB_TOKEN ]; then \
+    python3 event-processor/scripts/subst-sdk-requirements.py /run/secrets/GITHUB_TOKEN event-processor/requirements.txt /tmp/sdk-requirements.txt && \
+    pip3 install --no-cache-dir --break-system-packages -r /tmp/sdk-requirements.txt && \
+    rm -f /tmp/sdk-requirements.txt; \
     else echo "GITHUB_TOKEN not set, skipping SDK install"; fi
 
 # Copy the rest of the application
@@ -41,10 +42,9 @@ COPY . .
 
 # Build-time environment variables required by Payload CMS
 # These are needed for type generation and config validation during build
-ARG DATABASE_URI
-ARG PAYLOAD_SECRET
-ENV DATABASE_URI=${DATABASE_URI}
-ENV PAYLOAD_SECRET=${PAYLOAD_SECRET}
+# Set placeholder values for build only -- real values come from runtime env
+ENV DATABASE_URI=mongodb://placeholder:27017/build
+ENV PAYLOAD_SECRET=build-time-placeholder-not-for-production
 
 # Build Next.js for production
 RUN pnpm run build || (echo "Build failed!" && exit 1)

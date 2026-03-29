@@ -16,15 +16,14 @@ RUN grep -v "git+https" requirements.txt > /tmp/base-requirements.txt && \
     pip install --no-cache-dir -r /tmp/base-requirements.txt
 
 # Install Billie Event SDKs from requirements.txt (requires GITHUB_TOKEN at build time)
-ARG GITHUB_TOKEN
-
-# Configure git to use the token for GitHub authentication
-RUN git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
-
-# Install the SDKs from requirements.txt
-RUN grep "git+https.*billie-event-sdks" requirements.txt | \
-    sed "s/\${GITHUB_TOKEN}/${GITHUB_TOKEN}/g" | \
-    xargs -I {} pip install --no-cache-dir "{}"
+# Use: docker build --secret id=GITHUB_TOKEN,env=GITHUB_TOKEN .
+COPY scripts/subst-sdk-requirements.py ./scripts/
+RUN --mount=type=secret,id=GITHUB_TOKEN \
+    if [ -f /run/secrets/GITHUB_TOKEN ]; then \
+    python3 scripts/subst-sdk-requirements.py /run/secrets/GITHUB_TOKEN requirements.txt /tmp/sdk-requirements.txt && \
+    pip install --no-cache-dir -r /tmp/sdk-requirements.txt && \
+    rm -f /tmp/sdk-requirements.txt; \
+    else echo "GITHUB_TOKEN not set, skipping SDK install"; fi
 
 # Copy application code
 COPY src/ src/
