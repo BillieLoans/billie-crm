@@ -42,8 +42,11 @@ export const Users: CollectionConfig = {
         { label: 'Operations', value: 'operations' },
         { label: 'Read Only', value: 'readonly' },
       ],
-      defaultValue: 'supervisor',
+      defaultValue: 'readonly',
       required: true,
+      access: {
+        update: ({ req }) => isAdmin(req.user),
+      },
     },
     {
       name: 'firstName',
