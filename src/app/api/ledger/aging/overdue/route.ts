@@ -52,19 +52,6 @@ export async function GET(request: NextRequest) {
         const totalOverdueAmount = account.totalOverdueAmount ?? account.total_overdue_amount ?? '0'
         const lastUpdated = account.lastUpdated ?? account.last_updated ?? new Date().toISOString()
 
-        // Debug logging for first account to diagnose field mapping issues
-        if (accountId && (totalOverdueAmount === '0' || totalOverdueAmount === '')) {
-          console.log(`[Overdue Accounts] Account ${accountId} has zero/empty totalOverdueAmount. Raw fields:`, {
-            accountId,
-            totalOverdueAmount,
-            'account.totalOverdueAmount': account.totalOverdueAmount,
-            'account.total_overdue_amount': account.total_overdue_amount,
-            'account keys': Object.keys(account),
-            dpd,
-            bucket: bucketValue,
-          })
-        }
-
         return {
           accountId,
           dpd,

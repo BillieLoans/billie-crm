@@ -28,8 +28,6 @@ export async function GET(request: NextRequest) {
         includePast,
       })
 
-      console.log('[Pending Config Changes] Raw gRPC response:', JSON.stringify(response, null, 2))
-
       // Transform the gRPC response to match the expected frontend interface
       const grpcResponse = response as any
       const pendingChanges = grpcResponse.changes ?? grpcResponse.pendingChanges ?? []

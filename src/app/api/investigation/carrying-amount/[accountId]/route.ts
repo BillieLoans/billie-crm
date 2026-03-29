@@ -50,18 +50,6 @@ export async function GET(
         calculationTimestamp: grpcResponse.calculationTimestamp ?? grpcResponse.calculation_timestamp ?? new Date().toISOString(),
       }
 
-      // Debug logging to verify field mapping
-      console.log(`[Carrying Amount Breakdown] Account: ${accountId}, Mapped fields:`, {
-        feeBalance: transformedResponse.feeBalance,
-        establishmentFee: transformedResponse.establishmentFee,
-        principalBalance: transformedResponse.principalBalance,
-        accruedYield: transformedResponse.accruedYield,
-        'raw.feeBalance': grpcResponse.feeBalance,
-        'raw.fee_balance': grpcResponse.fee_balance,
-        'raw.establishmentFee': grpcResponse.establishmentFee,
-        'raw.establishment_fee': grpcResponse.establishment_fee,
-      })
-
       return NextResponse.json(transformedResponse)
     } catch (grpcError: unknown) {
       const error = grpcError as { code?: number; message?: string }

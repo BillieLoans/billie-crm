@@ -39,9 +39,6 @@ export async function GET() {
     try {
       const response = await client.getECLConfig({})
 
-      // Debug logging to see what we get from gRPC
-      console.log('[ECL Config] Raw gRPC response:', JSON.stringify(response, null, 2))
-
       // Transform the gRPC response to match the expected frontend interface
       // Handle both camelCase (from proto loader) and snake_case field names
       const grpcResponse = response as any

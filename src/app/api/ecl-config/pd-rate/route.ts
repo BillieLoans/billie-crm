@@ -35,19 +35,11 @@ export async function PUT(request: NextRequest) {
     const client = getLedgerClient()
 
     try {
-      console.log('[PD Rate Update] Calling gRPC with:', {
-        bucket: data.bucket,
-        rate: data.rate,
-        updatedBy: String(user.id),
-      })
-
       const response = await client.updatePDRate({
         bucket: data.bucket,
         pdRate: data.rate.toString(),
         updatedBy: String(user.id),
       })
-
-      console.log('[PD Rate Update] gRPC response:', JSON.stringify(response, null, 2))
 
       // Transform the gRPC response to match expected format
       const grpcResponse = response as any

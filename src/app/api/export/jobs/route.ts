@@ -69,7 +69,6 @@ export async function POST(request: NextRequest) {
     const { user } = auth
 
     const body = await request.json()
-    console.log('[ExportAPI] POST /api/export/jobs - body:', JSON.stringify(body, null, 2))
 
     const parseResult = CreateExportJobSchema.safeParse(body)
     if (!parseResult.success) {
@@ -82,7 +81,6 @@ export async function POST(request: NextRequest) {
     const data = parseResult.data
 
     const client = getLedgerClient()
-    console.log('[ExportAPI] Got ledger client, calling createExportJob...')
 
     try {
       const response = await client.createExportJob({
@@ -96,7 +94,6 @@ export async function POST(request: NextRequest) {
         includeCalculationBreakdown: data.includeCalculationBreakdown,
       })
 
-      console.log('[ExportAPI] createExportJob success:', JSON.stringify(response, null, 2))
       return NextResponse.json(response)
     } catch (grpcError: unknown) {
       const error = grpcError as { code?: number; message?: string }
@@ -143,7 +140,6 @@ export async function GET(request: NextRequest) {
     }
 
     const client = getLedgerClient()
-    console.log('[ExportAPI] GET /api/export/jobs - userId:', userId, 'limit:', limit)
 
     try {
       const response = await client.listExportJobs({
@@ -153,7 +149,6 @@ export async function GET(request: NextRequest) {
       })
 
       const mappedJobs = (response?.jobs ?? []).map(mapExportJob)
-      console.log('[ExportAPI] listExportJobs success, jobs count:', mappedJobs.length)
       return NextResponse.json({ jobs: mappedJobs, totalCount: mappedJobs.length })
     } catch (grpcError: unknown) {
       const error = grpcError as { code?: number; message?: string }

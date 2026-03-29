@@ -17,11 +17,7 @@ export async function GET(_request: NextRequest) {
     const client = getLedgerClient()
 
     try {
-      console.log('[System Status] Calling gRPC getEventProcessingStatus')
-
       const response = await client.getEventProcessingStatus({})
-
-      console.log('[System Status] Raw gRPC response:', JSON.stringify(response, null, 2))
 
       // Transform the gRPC response to match the expected frontend interface
       const grpcResponse = response as any
@@ -61,8 +57,6 @@ export async function GET(_request: NextRequest) {
         warning,
         errorMessage,
       }
-
-      console.log('[System Status] Transformed response:', JSON.stringify(transformedResponse, null, 2))
 
       return NextResponse.json(transformedResponse)
     } catch (grpcError: unknown) {

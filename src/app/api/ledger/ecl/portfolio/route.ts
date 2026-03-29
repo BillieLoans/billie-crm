@@ -17,11 +17,7 @@ export async function GET(_request: NextRequest) {
     const client = getLedgerClient()
 
     try {
-      console.log('[Portfolio ECL] Calling gRPC getPortfolioECL')
-
       const response = await client.getPortfolioECL({})
-
-      console.log('[Portfolio ECL] Raw gRPC response:', JSON.stringify(response, null, 2))
 
       // Transform the gRPC response to match the expected frontend interface
       const grpcResponse = response as any
@@ -62,8 +58,6 @@ export async function GET(_request: NextRequest) {
         totalCarryingAmount,
         buckets,
       }
-
-      console.log('[Portfolio ECL] Transformed response:', JSON.stringify(transformedResponse, null, 2))
 
       return NextResponse.json(transformedResponse)
     } catch (grpcError: unknown) {

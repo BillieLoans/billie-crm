@@ -56,18 +56,10 @@ export async function POST(request: NextRequest) {
     const client = getLedgerClient()
 
     try {
-      console.log('[Portfolio Recalc] Calling gRPC with:', {
-        triggeredBy: triggeredByName,
-        originalUserId: body.triggeredBy,
-        batchSize: body.batchSize,
-      })
-
       const response = await client.triggerPortfolioECLRecalculation({
         triggeredBy: triggeredByName, // Send username instead of GUID
         batchSize: body.batchSize,
       })
-
-      console.log('[Portfolio Recalc] gRPC response:', JSON.stringify(response, null, 2))
 
       // Transform the gRPC response to match expected format
       const grpcResponse = response as any

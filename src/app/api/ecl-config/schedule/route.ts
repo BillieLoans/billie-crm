@@ -109,22 +109,12 @@ export async function POST(request: NextRequest) {
     const client = getLedgerClient()
 
     try {
-      console.log('[Schedule Config] Calling gRPC with:', {
-        fieldName,
-        newValue: newValueStr,
-        effectiveDate: body.effectiveDate,
-        createdBy: createdByName,
-        originalUserId: userId,
-      })
-
       const response = await client.scheduleECLConfigChange({
         fieldName,
         newValue: newValueStr,
         effectiveDate: body.effectiveDate,
         createdBy: createdByName, // Send username instead of GUID
       })
-
-      console.log('[Schedule Config] gRPC response:', JSON.stringify(response, null, 2))
 
       // Transform the gRPC response
       const grpcResponse = response as any

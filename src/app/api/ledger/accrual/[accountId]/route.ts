@@ -43,21 +43,6 @@ export async function GET(
       const lastUpdated = (response as any).lastUpdated ?? (response as any).last_updated ?? new Date().toISOString()
       const responseAccountId = (response as any).accountId ?? (response as any).account_id ?? accountId
 
-      // Debug logging to diagnose field mapping issues
-      console.log(`[Accrued Yield] Account: ${accountId}, Raw response fields:`, {
-        'response.cumulativeAccrued': (response as any).cumulativeAccrued,
-        'response.cumulative_accrued': (response as any).cumulative_accrued,
-        'response.daysAccrued': (response as any).daysAccrued,
-        'response.days_accrued': (response as any).days_accrued,
-        'response.feeAmount': (response as any).feeAmount,
-        'response.fee_amount': (response as any).fee_amount,
-        'response.termDays': (response as any).termDays,
-        'response.term_days': (response as any).term_days,
-        'response.dailyRate': (response as any).dailyRate,
-        'response.daily_rate': (response as any).daily_rate,
-        rawResponse: response,
-      })
-
       // Transform the response to match the expected frontend interface
       const feeAmountNum = parseFloat(feeAmount)
       const cumulativeAccruedNum = parseFloat(cumulativeAccrued)
@@ -85,12 +70,6 @@ export async function GET(
         updatedAt: lastUpdated,
         _fallback: false,
       }
-
-      console.log(`[Accrued Yield] Account: ${accountId}, Transformed response:`, {
-        accruedAmount: transformedResponse.accruedAmount,
-        daysAccrued: transformedResponse.daysAccrued,
-        termDays: transformedResponse.termDays,
-      })
 
       return NextResponse.json(transformedResponse)
     } catch (grpcError: unknown) {

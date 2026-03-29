@@ -40,17 +40,10 @@ export async function PUT(request: NextRequest) {
     const client = getLedgerClient()
 
     try {
-      console.log('[Overlay Update] Calling gRPC with:', {
-        overlayMultiplier: overlayValue.toString(),
-        updatedBy: String(user.id),
-      })
-
       const response = await client.updateOverlayMultiplier({
         overlayMultiplier: overlayValue.toString(), // gRPC expects string
         updatedBy: String(user.id),
       })
-
-      console.log('[Overlay Update] gRPC response:', JSON.stringify(response, null, 2))
 
       // Transform the gRPC response to match expected format
       const grpcResponse = response as any

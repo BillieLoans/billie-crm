@@ -110,7 +110,6 @@ export async function POST(request: NextRequest) {
         approvedBy: String(user.id),
         idempotencyKey,
       })
-      console.log('[WriteOff Approve] Ledger write-off posted:', ledgerResponse.eventId)
     } catch (ledgerError) {
       console.error('[WriteOff Approve] Ledger error:', ledgerError)
       return NextResponse.json(

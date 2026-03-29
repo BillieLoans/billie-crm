@@ -25,13 +25,9 @@ export async function GET(request: NextRequest) {
     const client = getLedgerClient()
 
     try {
-      console.log('[ECL Config History] Calling gRPC with limit:', limit)
-      
       const response = await client.getECLConfigHistory({
         limit: limit || 100,
       })
-
-      console.log('[ECL Config History] Raw gRPC response:', JSON.stringify(response, null, 2))
 
       // Transform the gRPC response to match the expected frontend interface
       // Handle both camelCase (from proto loader) and snake_case field names
@@ -149,8 +145,6 @@ export async function GET(request: NextRequest) {
         entries: enrichedEntries,
         totalCount: enrichedEntries.length,
       }
-
-      console.log('[ECL Config History] Transformed response:', JSON.stringify(transformedResponse, null, 2))
 
       return NextResponse.json(transformedResponse)
     } catch (grpcError: unknown) {

@@ -94,12 +94,6 @@ export async function GET(
         _fallback: false,
       }
 
-      console.log(`[ECL API] Transformed response for account ${accountId}:`, {
-        eclAmount: transformedResponse.eclAmount,
-        bucket: transformedResponse.bucket,
-        pdRate: transformedResponse.pdRate,
-      })
-
       return NextResponse.json(transformedResponse)
     } catch (grpcError: unknown) {
       const error = grpcError as { code?: number; message?: string; details?: string }

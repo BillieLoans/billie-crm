@@ -89,15 +89,6 @@ export async function GET() {
         checkedAt,
       }
 
-      // Debug logging for health check results
-      if (status !== 'connected') {
-        console.log('[Ledger Health] Status check result:', {
-          status,
-          latencyMs,
-          checkedAt,
-        })
-      }
-
       return NextResponse.json(response)
     } catch (error: unknown) {
       lastError = error
