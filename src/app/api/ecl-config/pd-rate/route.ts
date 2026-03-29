@@ -14,13 +14,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLedgerClient } from '@/server/grpc-client'
 import { requireAuth } from '@/lib/auth'
 import { hasApprovalAuthority } from '@/lib/access'
-
-interface UpdatePDRateBody {
-  bucket: string
-  rate: number
-  updatedBy?: string
-  reason?: string
-}
+import { UpdatePDRateSchema } from '@/lib/schemas/api'
 
 export async function PUT(request: NextRequest) {
   try {
@@ -28,28 +22,28 @@ export async function PUT(request: NextRequest) {
     if ('error' in auth) return auth.error
     const { user } = auth
 
-    const body: UpdatePDRateBody = await request.json()
-
-    if (!body.bucket) {
-      return NextResponse.json({ error: 'bucket is required' }, { status: 400 })
+    const body = await request.json()
+    const parseResult = UpdatePDRateSchema.safeParse(body)
+    if (!parseResult.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', details: parseResult.error.flatten().fieldErrors },
+        { status: 400 },
+      )
     }
-
-    if (body.rate === undefined || body.rate === null) {
-      return NextResponse.json({ error: 'rate is required' }, { status: 400 })
-    }
+    const data = parseResult.data
 
     const client = getLedgerClient()
 
     try {
       console.log('[PD Rate Update] Calling gRPC with:', {
-        bucket: body.bucket,
-        rate: body.rate,
+        bucket: data.bucket,
+        rate: data.rate,
         updatedBy: String(user.id),
       })
 
       const response = await client.updatePDRate({
-        bucket: body.bucket,
-        pdRate: body.rate.toString(),
+        bucket: data.bucket,
+        pdRate: data.rate.toString(),
         updatedBy: String(user.id),
       })
 
@@ -63,12 +57,12 @@ export async function PUT(request: NextRequest) {
       const updatedBy = grpcResponse.updatedBy ?? grpcResponse.updated_by ?? String(user.id)
 
       // Find the updated bucket's previous rate (if available)
-      const previousRate = pdRatesMap[body.bucket] ? parseFloat(pdRatesMap[body.bucket] as string) : body.rate
+      const previousRate = pdRatesMap[data.bucket] ? parseFloat(pdRatesMap[data.bucket] as string) : data.rate
 
       return NextResponse.json({
         success: true,
-        bucket: body.bucket,
-        newRate: body.rate,
+        bucket: data.bucket,
+        newRate: data.rate,
         previousRate: previousRate,
         updatedAt: lastUpdated,
       })
@@ -94,9 +88,9 @@ export async function PUT(request: NextRequest) {
         return NextResponse.json(
           {
             success: true,
-            bucket: body.bucket,
-            newRate: body.rate,
-            previousRate: body.rate,
+            bucket: data.bucket,
+            newRate: data.rate,
+            previousRate: data.rate,
             updatedAt: new Date().toISOString(),
             _fallback: true,
             _message: 'PD rate update service not available',

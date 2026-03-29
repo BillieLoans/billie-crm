@@ -12,11 +12,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLedgerClient } from '@/server/grpc-client'
 import { requireAuth } from '@/lib/auth'
 import { hasApprovalAuthority } from '@/lib/access'
-
-interface FinalizeBody {
-  previewId: string
-  finalizedBy?: string
-}
+import { FinalizePeriodCloseSchema } from '@/lib/schemas/api'
 
 export async function POST(request: NextRequest) {
   try {
@@ -24,16 +20,20 @@ export async function POST(request: NextRequest) {
     if ('error' in auth) return auth.error
     const { user } = auth
 
-    const body: FinalizeBody = await request.json()
-
-    if (!body.previewId) {
-      return NextResponse.json({ error: 'previewId is required' }, { status: 400 })
+    const body = await request.json()
+    const parseResult = FinalizePeriodCloseSchema.safeParse(body)
+    if (!parseResult.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', details: parseResult.error.flatten().fieldErrors },
+        { status: 400 },
+      )
     }
+    const data = parseResult.data
 
     const client = getLedgerClient()
 
     const response = await client.finalizePeriodClose({
-      previewId: body.previewId,
+      previewId: data.previewId,
       finalizedBy: String(user.id),
     })
 

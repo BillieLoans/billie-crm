@@ -15,6 +15,7 @@ import {
 } from '@/server/grpc-client'
 import { requireAuth } from '@/lib/auth'
 import { hasAnyRole, canService } from '@/lib/access'
+import { CreateExportJobSchema } from '@/lib/schemas/api'
 
 /**
  * Maps gRPC export type enums to UI-friendly names.
@@ -61,44 +62,38 @@ function mapExportJob(job: ExportJobResponse) {
   }
 }
 
-interface CreateExportBody {
-  exportType: ExportType
-  exportFormat?: ExportFormat
-  createdBy?: string
-  periodDate?: string
-  accountIds?: string[]
-  dateRangeStart?: string
-  dateRangeEnd?: string
-  includeCalculationBreakdown?: boolean
-}
-
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(canService)
     if ('error' in auth) return auth.error
     const { user } = auth
 
-    const body: CreateExportBody = await request.json()
+    const body = await request.json()
     console.log('[ExportAPI] POST /api/export/jobs - body:', JSON.stringify(body, null, 2))
 
-    if (!body.exportType) {
-      console.warn('[ExportAPI] Missing exportType in request')
-      return NextResponse.json({ error: 'exportType is required' }, { status: 400 })
+    const parseResult = CreateExportJobSchema.safeParse(body)
+    if (!parseResult.success) {
+      console.warn('[ExportAPI] Validation failed:', parseResult.error.flatten().fieldErrors)
+      return NextResponse.json(
+        { error: 'Validation failed', details: parseResult.error.flatten().fieldErrors },
+        { status: 400 },
+      )
     }
+    const data = parseResult.data
 
     const client = getLedgerClient()
     console.log('[ExportAPI] Got ledger client, calling createExportJob...')
 
     try {
       const response = await client.createExportJob({
-        exportType: body.exportType,
-        exportFormat: body.exportFormat,
+        exportType: data.exportType as ExportType,
+        exportFormat: data.exportFormat as ExportFormat | undefined,
         createdBy: String(user.id),
-        periodDate: body.periodDate,
-        accountIds: body.accountIds,
-        dateRangeStart: body.dateRangeStart,
-        dateRangeEnd: body.dateRangeEnd,
-        includeCalculationBreakdown: body.includeCalculationBreakdown,
+        periodDate: data.periodDate,
+        accountIds: data.accountIds,
+        dateRangeStart: data.dateRangeStart,
+        dateRangeEnd: data.dateRangeEnd,
+        includeCalculationBreakdown: data.includeCalculationBreakdown,
       })
 
       console.log('[ExportAPI] createExportJob success:', JSON.stringify(response, null, 2))

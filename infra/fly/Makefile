@@ -47,7 +47,7 @@ define PROD_CHECK
 	fi
 endef
 
-.PHONY: help info validate check-config check-secrets init create-app allocate-ip ips secrets \
+.PHONY: help info validate check-config check-secrets preflight init create-app allocate-ip ips secrets \
         secrets-list deploy deploy-local scale-count restart logs status scale ssh clean destroy
 
 help:
@@ -140,7 +140,13 @@ secrets: check-secrets
 secrets-list:
 	fly secrets list -a "$(APP_NAME)"
 
-deploy: check-config
+preflight:
+	@echo "Running pre-deploy checks..."
+	@cd "$(WORKTREE_ROOT)" && pnpm run typecheck
+	@cd "$(WORKTREE_ROOT)" && pnpm run lint
+	@echo "✓ Pre-deploy checks passed"
+
+deploy: check-config preflight
 	$(call PROD_CHECK,deploy)
 	@echo ""
 	@echo "Deploying $(SERVICE) to $(ENV)..."

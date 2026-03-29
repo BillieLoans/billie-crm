@@ -19,44 +19,31 @@ import {
   generateIdempotencyKey,
 } from '@/server/grpc-client'
 import { checkVersion, createVersionConflictResponse } from '@/lib/utils/version-check'
-import { createValidationError, handleApiError } from '@/lib/utils/api-error'
+import { handleApiError } from '@/lib/utils/api-error'
 import { requireAuth } from '@/lib/auth'
 import { hasApprovalAuthority } from '@/lib/access'
-
-interface WaiveFeeBody {
-  loanAccountId: string
-  waiverAmount: string
-  reason: string
-  approvedBy?: string
-  expectedVersion?: string
-}
+import { WaiveFeeSchema } from '@/lib/schemas/ledger'
+import type { z } from 'zod'
 
 export async function POST(request: NextRequest) {
-  let body: WaiveFeeBody | undefined
+  let data: z.infer<typeof WaiveFeeSchema> | undefined
   try {
     const auth = await requireAuth(hasApprovalAuthority)
     if ('error' in auth) return auth.error
     const { user } = auth
 
-    body = await request.json()
+    const body = await request.json()
+    const parseResult = WaiveFeeSchema.safeParse(body)
+    if (!parseResult.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', details: parseResult.error.flatten().fieldErrors },
+        { status: 400 },
+      )
+    }
+    data = parseResult.data
 
-    // Ensure body is defined
-    if (!body) {
-      return NextResponse.json({ error: 'Request body is required' }, { status: 400 })
-    }
-
-    // Validation
-    if (!body.loanAccountId) {
-      return createValidationError('loanAccountId')
-    }
-    if (!body.waiverAmount) {
-      return createValidationError('waiverAmount')
-    }
-    if (!body.reason) {
-      return createValidationError('reason')
-    }
     // Version conflict check (if expectedVersion provided)
-    const versionResult = await checkVersion(body.loanAccountId, body.expectedVersion)
+    const versionResult = await checkVersion(data.loanAccountId, data.expectedVersion)
     if (!versionResult.isValid) {
       return NextResponse.json(createVersionConflictResponse(versionResult), { status: 409 })
     }
@@ -64,9 +51,9 @@ export async function POST(request: NextRequest) {
     const client = getLedgerClient()
     const idempotencyKey = generateIdempotencyKey('waive')
     const response = await client.waiveFee({
-      loanAccountId: body.loanAccountId,
-      waiverAmount: body.waiverAmount,
-      reason: body.reason,
+      loanAccountId: data.loanAccountId,
+      waiverAmount: data.waiverAmount,
+      reason: data.reason,
       approvedBy: String(user.id),
       idempotencyKey,
     })
@@ -91,7 +78,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     return handleApiError(error, {
       action: 'waive-fee',
-      accountId: body?.loanAccountId,
+      accountId: data?.loanAccountId,
     })
   }
 }

@@ -12,13 +12,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLedgerClient } from '@/server/grpc-client'
 import { requireAuth } from '@/lib/auth'
 import { hasApprovalAuthority } from '@/lib/access'
-
-interface UpdateOverlayBody {
-  value?: number        // Frontend sends 'value'
-  overlayMultiplier?: string  // Or 'overlayMultiplier' as string
-  updatedBy?: string
-  reason?: string
-}
+import { UpdateOverlaySchema } from '@/lib/schemas/api'
 
 export async function PUT(request: NextRequest) {
   try {
@@ -26,10 +20,18 @@ export async function PUT(request: NextRequest) {
     if ('error' in auth) return auth.error
     const { user } = auth
 
-    const body: UpdateOverlayBody = await request.json()
+    const body = await request.json()
+    const parseResult = UpdateOverlaySchema.safeParse(body)
+    if (!parseResult.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', details: parseResult.error.flatten().fieldErrors },
+        { status: 400 },
+      )
+    }
+    const data = parseResult.data
 
     // Handle both 'value' (number) and 'overlayMultiplier' (string) for backward compatibility
-    const overlayValue = body.value ?? (body.overlayMultiplier ? parseFloat(body.overlayMultiplier) : undefined)
+    const overlayValue = data.value ?? (data.overlayMultiplier ? parseFloat(data.overlayMultiplier) : undefined)
 
     if (overlayValue === undefined || isNaN(overlayValue)) {
       return NextResponse.json({ error: 'overlayMultiplier or value is required and must be a valid number' }, { status: 400 })

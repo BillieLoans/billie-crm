@@ -12,32 +12,29 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLedgerClient } from '@/server/grpc-client'
 import { requireAuth } from '@/lib/auth'
 import { canService } from '@/lib/access'
-
-interface PreviewBody {
-  periodDate: string
-  requestedBy: string
-}
+import { PeriodClosePreviewSchema } from '@/lib/schemas/api'
 
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(canService)
     if ('error' in auth) return auth.error
+    const { user } = auth
 
-    const body: PreviewBody = await request.json()
-
-    if (!body.periodDate) {
-      return NextResponse.json({ error: 'periodDate is required' }, { status: 400 })
+    const body = await request.json()
+    const parseResult = PeriodClosePreviewSchema.safeParse(body)
+    if (!parseResult.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', details: parseResult.error.flatten().fieldErrors },
+        { status: 400 },
+      )
     }
-
-    if (!body.requestedBy) {
-      return NextResponse.json({ error: 'requestedBy is required' }, { status: 400 })
-    }
+    const data = parseResult.data
 
     const client = getLedgerClient()
 
     const response = await client.previewPeriodClose({
-      periodDate: body.periodDate,
-      requestedBy: body.requestedBy,
+      periodDate: data.periodDate,
+      requestedBy: String(user.id),
     })
 
     return NextResponse.json(response)

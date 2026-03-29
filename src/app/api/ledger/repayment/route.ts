@@ -20,45 +20,30 @@ import {
   generateIdempotencyKey,
 } from '@/server/grpc-client'
 import { checkVersion, createVersionConflictResponse } from '@/lib/utils/version-check'
-import { createValidationError, handleApiError } from '@/lib/utils/api-error'
+import { handleApiError } from '@/lib/utils/api-error'
 import { requireAuth } from '@/lib/auth'
 import { canService } from '@/lib/access'
-
-interface RecordRepaymentBody {
-  loanAccountId: string
-  amount: string
-  paymentId: string
-  paymentMethod?: string
-  paymentReference?: string
-  expectedVersion?: string
-}
+import { RecordRepaymentSchema } from '@/lib/schemas/ledger'
+import type { z } from 'zod'
 
 export async function POST(request: NextRequest) {
-  let body: RecordRepaymentBody | undefined
+  let data: z.infer<typeof RecordRepaymentSchema> | undefined
   try {
     const auth = await requireAuth(canService)
     if ('error' in auth) return auth.error
 
-    body = await request.json()
-
-    // Ensure body is defined
-    if (!body) {
-      return NextResponse.json({ error: 'Request body is required' }, { status: 400 })
+    const body = await request.json()
+    const parseResult = RecordRepaymentSchema.safeParse(body)
+    if (!parseResult.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', details: parseResult.error.flatten().fieldErrors },
+        { status: 400 },
+      )
     }
-
-    // Validation
-    if (!body.loanAccountId) {
-      return createValidationError('loanAccountId')
-    }
-    if (!body.amount) {
-      return createValidationError('amount')
-    }
-    if (!body.paymentId) {
-      return createValidationError('paymentId')
-    }
+    data = parseResult.data
 
     // Version conflict check (if expectedVersion provided)
-    const versionResult = await checkVersion(body.loanAccountId, body.expectedVersion)
+    const versionResult = await checkVersion(data.loanAccountId, data.expectedVersion)
     if (!versionResult.isValid) {
       return NextResponse.json(createVersionConflictResponse(versionResult), { status: 409 })
     }
@@ -66,11 +51,11 @@ export async function POST(request: NextRequest) {
     const client = getLedgerClient()
     const idempotencyKey = generateIdempotencyKey('repay')
     const response = await client.recordRepayment({
-      loanAccountId: body.loanAccountId,
-      amount: body.amount,
-      paymentId: body.paymentId,
-      paymentMethod: body.paymentMethod,
-      paymentReference: body.paymentReference,
+      loanAccountId: data.loanAccountId,
+      amount: data.amount,
+      paymentId: data.paymentId,
+      paymentMethod: data.paymentMethod,
+      paymentReference: data.paymentReference,
       idempotencyKey,
     })
 
@@ -104,7 +89,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     return handleApiError(error, {
       action: 'record-repayment',
-      accountId: body?.loanAccountId,
+      accountId: data?.loanAccountId,
     })
   }
 }

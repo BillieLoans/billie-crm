@@ -13,12 +13,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLedgerClient } from '@/server/grpc-client'
 import { requireAuth } from '@/lib/auth'
 import { hasApprovalAuthority } from '@/lib/access'
-
-interface AcknowledgeBody {
-  previewId: string
-  anomalyId: string
-  acknowledgedBy?: string
-}
+import { AcknowledgeAnomalySchema } from '@/lib/schemas/api'
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,20 +21,21 @@ export async function POST(request: NextRequest) {
     if ('error' in auth) return auth.error
     const { user } = auth
 
-    const body: AcknowledgeBody = await request.json()
-
-    if (!body.previewId || !body.anomalyId) {
+    const body = await request.json()
+    const parseResult = AcknowledgeAnomalySchema.safeParse(body)
+    if (!parseResult.success) {
       return NextResponse.json(
-        { error: 'previewId and anomalyId are required' },
+        { error: 'Validation failed', details: parseResult.error.flatten().fieldErrors },
         { status: 400 },
       )
     }
+    const data = parseResult.data
 
     const client = getLedgerClient()
 
     const response = await client.acknowledgeAnomaly({
-      previewId: body.previewId,
-      anomalyId: body.anomalyId,
+      previewId: data.previewId,
+      anomalyId: data.anomalyId,
       acknowledgedBy: String(user.id),
     })
 

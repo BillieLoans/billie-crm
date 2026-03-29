@@ -18,12 +18,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { generatePresignedUploadUrl, buildS3Uri } from '@/server/s3-client'
 import { requireAuth } from '@/lib/auth'
 import { canService } from '@/lib/access'
-
-interface PresignedUrlRequestBody {
-  accountNumber: string
-  fileName: string
-  contentType: string
-}
+import { PresignedUrlSchema } from '@/lib/schemas/api'
 
 /** Allowed MIME types for attachments */
 const ALLOWED_CONTENT_TYPES = [
@@ -45,20 +40,20 @@ export async function POST(request: NextRequest) {
     if ('error' in auth) return auth.error
     const { payload } = auth
 
-    const body: PresignedUrlRequestBody = await request.json()
-
-    // Validation
-    if (!body.accountNumber) {
+    const body = await request.json()
+    const parseResult = PresignedUrlSchema.safeParse(body)
+    if (!parseResult.success) {
       return NextResponse.json(
-        { error: 'accountNumber is required' },
+        { error: 'Validation failed', details: parseResult.error.flatten().fieldErrors },
         { status: 400 },
       )
     }
+    const data = parseResult.data
 
     // Verify the account exists
     const accountResult = await payload.find({
       collection: 'loan-accounts',
-      where: { accountNumber: { equals: body.accountNumber } },
+      where: { accountNumber: { equals: data.accountNumber } },
       limit: 1,
     })
     if (accountResult.docs.length === 0) {
@@ -67,47 +62,19 @@ export async function POST(request: NextRequest) {
         { status: 404 },
       )
     }
-    if (!body.fileName) {
-      return NextResponse.json(
-        { error: 'fileName is required' },
-        { status: 400 },
-      )
-    }
-    if (!body.contentType) {
-      return NextResponse.json(
-        { error: 'contentType is required' },
-        { status: 400 },
-      )
-    }
-
-    if (!ALLOWED_CONTENT_TYPES.includes(body.contentType)) {
-      return NextResponse.json(
-        {
-          error: `Unsupported file type: ${body.contentType}. Allowed types: PDF, JPEG, PNG, WebP, Excel, CSV.`,
-        },
-        { status: 400 },
-      )
-    }
-
-    if (body.fileName.length > MAX_FILENAME_LENGTH) {
-      return NextResponse.json(
-        { error: `File name must be ${MAX_FILENAME_LENGTH} characters or fewer` },
-        { status: 400 },
-      )
-    }
 
     // Sanitize file name: keep alphanumeric, hyphens, underscores, dots
-    const sanitizedFileName = body.fileName.replace(/[^a-zA-Z0-9._-]/g, '_')
+    const sanitizedFileName = data.fileName.replace(/[^a-zA-Z0-9._-]/g, '_')
 
     // Sanitize account number to prevent S3 path traversal
-    const sanitizedAccountNumber = body.accountNumber.replace(/[^a-zA-Z0-9._-]/g, '_')
+    const sanitizedAccountNumber = data.accountNumber.replace(/[^a-zA-Z0-9._-]/g, '_')
 
     // Build S3 key: {account_number}/docs/{timestamp}-{fileName}
     const timestamp = Date.now()
     const s3Key = `${sanitizedAccountNumber}/docs/${timestamp}-${sanitizedFileName}`
 
     // Generate presigned URL (5 minute expiry)
-    const uploadUrl = await generatePresignedUploadUrl(s3Key, body.contentType, 300)
+    const uploadUrl = await generatePresignedUploadUrl(s3Key, data.contentType, 300)
     const s3Uri = buildS3Uri(s3Key)
 
     return NextResponse.json({

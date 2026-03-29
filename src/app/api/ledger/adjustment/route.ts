@@ -20,14 +20,7 @@ import {
 } from '@/server/grpc-client'
 import { requireAuth } from '@/lib/auth'
 import { hasApprovalAuthority } from '@/lib/access'
-
-interface MakeAdjustmentBody {
-  loanAccountId: string
-  principalDelta: string
-  feeDelta: string
-  reason: string
-  approvedBy?: string
-}
+import { MakeAdjustmentSchema } from '@/lib/schemas/ledger'
 
 export async function POST(request: NextRequest) {
   try {
@@ -35,28 +28,23 @@ export async function POST(request: NextRequest) {
     if ('error' in auth) return auth.error
     const { user } = auth
 
-    const body: MakeAdjustmentBody = await request.json()
+    const body = await request.json()
+    const parseResult = MakeAdjustmentSchema.safeParse(body)
+    if (!parseResult.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', details: parseResult.error.flatten().fieldErrors },
+        { status: 400 },
+      )
+    }
+    const data = parseResult.data
 
-    // Validation
-    if (!body.loanAccountId) {
-      return NextResponse.json({ error: 'loanAccountId is required' }, { status: 400 })
-    }
-    if (body.principalDelta === undefined) {
-      return NextResponse.json({ error: 'principalDelta is required' }, { status: 400 })
-    }
-    if (body.feeDelta === undefined) {
-      return NextResponse.json({ error: 'feeDelta is required' }, { status: 400 })
-    }
-    if (!body.reason) {
-      return NextResponse.json({ error: 'reason is required' }, { status: 400 })
-    }
     const client = getLedgerClient()
     const idempotencyKey = generateIdempotencyKey('adjust')
     const response = await client.makeAdjustment({
-      loanAccountId: body.loanAccountId,
-      principalDelta: body.principalDelta,
-      feeDelta: body.feeDelta,
-      reason: body.reason,
+      loanAccountId: data.loanAccountId,
+      principalDelta: data.principalDelta,
+      feeDelta: data.feeDelta,
+      reason: data.reason,
       approvedBy: String(user.id),
       idempotencyKey,
     })
