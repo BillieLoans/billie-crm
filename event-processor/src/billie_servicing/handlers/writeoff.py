@@ -19,6 +19,8 @@ from typing import Any
 import structlog
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
+from .sanitize import safe_str
+
 logger = structlog.get_logger()
 
 
@@ -66,10 +68,10 @@ async def handle_writeoff_requested(
     - requestedBy, requestedByName
     """
     payload = _parse_payload(parsed_event)
-    
-    request_id = parsed_event.get("conv", "")
-    event_id = parsed_event.get("cause", "")
-    
+
+    request_id = safe_str(parsed_event.get("conv", ""), "request_id")
+    event_id = safe_str(parsed_event.get("cause", ""), "event_id")
+
     log = logger.bind(
         request_id=request_id,
         event_id=event_id,
@@ -140,10 +142,10 @@ async def handle_writeoff_approved(
     - approvedBy, approvedByName
     """
     payload = _parse_payload(parsed_event)
-    
-    request_id = parsed_event.get("conv", "")
-    event_id = parsed_event.get("cause", "")
-    
+
+    request_id = safe_str(parsed_event.get("conv", ""), "request_id")
+    event_id = safe_str(parsed_event.get("cause", ""), "event_id")
+
     log = logger.bind(
         request_id=request_id,
         event_id=event_id,
@@ -194,10 +196,10 @@ async def handle_writeoff_rejected(
     - rejectedBy, rejectedByName
     """
     payload = _parse_payload(parsed_event)
-    
-    request_id = parsed_event.get("conv", "")
-    event_id = parsed_event.get("cause", "")
-    
+
+    request_id = safe_str(parsed_event.get("conv", ""), "request_id")
+    event_id = safe_str(parsed_event.get("cause", ""), "event_id")
+
     log = logger.bind(
         request_id=request_id,
         event_id=event_id,
@@ -247,10 +249,10 @@ async def handle_writeoff_cancelled(
     - cancelledBy, cancelledByName
     """
     payload = _parse_payload(parsed_event)
-    
-    request_id = parsed_event.get("conv", "")
-    event_id = parsed_event.get("cause", "")
-    
+
+    request_id = safe_str(parsed_event.get("conv", ""), "request_id")
+    event_id = safe_str(parsed_event.get("cause", ""), "event_id")
+
     log = logger.bind(
         request_id=request_id,
         event_id=event_id,

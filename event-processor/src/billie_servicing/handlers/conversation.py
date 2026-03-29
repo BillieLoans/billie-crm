@@ -19,6 +19,8 @@ from typing import Any
 import structlog
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
+from .sanitize import safe_str, strip_dollar_keys
+
 logger = structlog.get_logger()
 
 
@@ -28,8 +30,10 @@ async def handle_conversation_started(db: AsyncIOMotorDatabase, event: dict[str,
 
     Creates a new conversation record.
     """
-    conversation_id = event.get("cid") or event.get("conv") or event.get("conversation_id")
-    customer_id = event.get("usr") or event.get("user_id")
+    conversation_id = safe_str(
+        event.get("cid") or event.get("conv") or event.get("conversation_id"), "conversation_id"
+    )
+    customer_id = safe_str(event.get("usr") or event.get("user_id"), "customer_id")
     application_number = event.get("app_number") or event.get("application_number", "")
 
     # Try to get application_number from payload
@@ -86,7 +90,9 @@ async def handle_utterance(db: AsyncIOMotorDatabase, event: dict[str, Any]) -> N
 
     Appends utterance to conversation.
     """
-    conversation_id = event.get("cid") or event.get("conv") or event.get("conversation_id")
+    conversation_id = safe_str(
+        event.get("cid") or event.get("conv") or event.get("conversation_id"), "conversation_id"
+    )
     event_type = event.get("msg_type") or event.get("typ") or event.get("event_type", "")
 
     log = logger.bind(conversation_id=conversation_id, event_type=event_type)
@@ -154,23 +160,29 @@ async def handle_application_detail_changed(
 
     Updates customer data and application details.
     """
-    conversation_id = event.get("cid") or event.get("conv") or event.get("conversation_id")
+    conversation_id = safe_str(
+        event.get("cid") or event.get("conv") or event.get("conversation_id"), "conversation_id"
+    )
 
     log = logger.bind(conversation_id=conversation_id)
     log.info("Processing applicationDetail_changed")
 
     # Handle customer data from event.customer
     customer_data = event.get("customer")
-    if customer_data:
-        customer_id = customer_data.get("customer_id") or event.get("customer_id")
+    if isinstance(customer_data, dict):
+        customer_id = safe_str(
+            customer_data.get("customer_id") or event.get("customer_id"), "customer_id"
+        )
         if customer_id:
             await _sync_customer(db, customer_id, customer_data)
 
     # Handle customer data from event.payload.customer
     payload = event.get("payload", {})
-    if isinstance(payload, dict) and payload.get("customer"):
+    if isinstance(payload, dict) and isinstance(payload.get("customer"), dict):
         customer_data = payload["customer"]
-        customer_id = customer_data.get("customer_id") or customer_data.get("customerId")
+        customer_id = safe_str(
+            customer_data.get("customer_id") or customer_data.get("customerId"), "customer_id"
+        )
         if customer_id:
             await _sync_customer(db, customer_id, customer_data)
 
@@ -187,10 +199,10 @@ async def handle_application_detail_changed(
     if application_number:
         update_doc["applicationNumber"] = application_number
 
-    # Store application data
+    # Store application data (strip $-prefixed keys to prevent operator injection)
     app_data = {k: v for k, v in event.items() if k not in ["typ", "agt", "timestamp", "customer"]}
     if app_data:
-        update_doc["applicationData"] = app_data
+        update_doc["applicationData"] = strip_dollar_keys(app_data)
 
     await db.conversations.update_one(
         {"conversationId": conversation_id},
@@ -205,7 +217,9 @@ async def handle_assessment(db: AsyncIOMotorDatabase, event: dict[str, Any]) -> 
     - serviceability_assessment_results
     - fraudCheck_assessment
     """
-    conversation_id = event.get("cid") or event.get("conv") or event.get("conversation_id")
+    conversation_id = safe_str(
+        event.get("cid") or event.get("conv") or event.get("conversation_id"), "conversation_id"
+    )
     event_type = event.get("msg_type") or event.get("typ") or event.get("event_type", "")
 
     log = logger.bind(conversation_id=conversation_id, event_type=event_type)
@@ -249,7 +263,9 @@ async def handle_noticeboard_updated(db: AsyncIOMotorDatabase, event: dict[str, 
 
     Adds agent notes to noticeboard with version history.
     """
-    conversation_id = event.get("cid") or event.get("conv") or event.get("conversation_id")
+    conversation_id = safe_str(
+        event.get("cid") or event.get("conv") or event.get("conversation_id"), "conversation_id"
+    )
 
     log = logger.bind(conversation_id=conversation_id)
     log.info("Processing noticeboard_updated")
@@ -291,7 +307,9 @@ async def handle_final_decision(db: AsyncIOMotorDatabase, event: dict[str, Any])
 
     Updates conversation status based on decision.
     """
-    conversation_id = event.get("cid") or event.get("conv") or event.get("conversation_id")
+    conversation_id = safe_str(
+        event.get("cid") or event.get("conv") or event.get("conversation_id"), "conversation_id"
+    )
     decision = (event.get("decision") or event.get("outcome", "")).upper()
 
     log = logger.bind(conversation_id=conversation_id, decision=decision)
@@ -331,7 +349,9 @@ async def handle_conversation_summary(db: AsyncIOMotorDatabase, event: dict[str,
 
     Stores purpose and key facts from conversation summary.
     """
-    conversation_id = event.get("cid") or event.get("conv") or event.get("conversation_id")
+    conversation_id = safe_str(
+        event.get("cid") or event.get("conv") or event.get("conversation_id"), "conversation_id"
+    )
 
     log = logger.bind(conversation_id=conversation_id)
     log.info("Processing conversation_summary")
@@ -373,10 +393,11 @@ async def _ensure_conversation_exists(
     db: AsyncIOMotorDatabase, conversation_id: str, event: dict[str, Any]
 ) -> None:
     """Ensure conversation document exists before updating."""
+    # conversation_id is already validated by caller via safe_str
     existing = await db.conversations.find_one({"conversationId": conversation_id})
     if not existing:
         # Create minimal conversation document
-        customer_id = event.get("usr") or event.get("user_id")
+        customer_id = safe_str(event.get("usr") or event.get("user_id"), "customer_id")
         application_number = event.get("app_number") or event.get("application_number", "")
 
         await db.conversations.insert_one(
@@ -399,7 +420,10 @@ async def _ensure_conversation_exists(
 async def _sync_customer(
     db: AsyncIOMotorDatabase, customer_id: str, customer_data: dict[str, Any]
 ) -> None:
-    """Sync customer data to customers collection."""
+    """Sync customer data to customers collection.
+
+    customer_id is expected to be pre-validated as a string by the caller.
+    """
     log = logger.bind(customer_id=customer_id)
 
     # Build full name
