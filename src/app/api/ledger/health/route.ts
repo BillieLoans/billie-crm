@@ -13,6 +13,8 @@
 
 import { NextResponse } from 'next/server'
 import { getLedgerClient } from '@/server/grpc-client'
+import { requireAuth } from '@/lib/auth'
+import { hasAnyRole } from '@/lib/access'
 import {
   HEALTH_CHECK_TEST_ACCOUNT,
   HEALTH_DEGRADED_THRESHOLD_MS,
@@ -51,6 +53,9 @@ function getStatusMessage(status: LedgerHealthStatus): string {
 }
 
 export async function GET() {
+  const auth = await requireAuth(hasAnyRole)
+  if ('error' in auth) return auth.error
+
   const startTime = performance.now()
   const checkedAt = new Date().toISOString()
 

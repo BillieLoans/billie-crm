@@ -23,7 +23,7 @@ primary_region = "syd"
 # =============================================================================
 
 [env]
-  NODE_ENV = "staging"
+  NODE_ENV = "production"
   LOG_LEVEL = "info"
   PORT = "3000"
   ENABLE_EVENT_PROCESSING = "true"

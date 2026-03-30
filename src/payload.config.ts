@@ -109,12 +109,24 @@ export default buildConfig({
   },
   collections: [Users, Media, Customers, Conversations, Applications, LoanAccounts, WriteOffRequests, ContactNotes],
   editor: lexicalEditor(),
-  secret: process.env.PAYLOAD_SECRET || 'build-placeholder-not-for-production',
+  secret: (() => {
+    const secret = process.env.PAYLOAD_SECRET
+    if (!secret && process.env.NODE_ENV === 'production') {
+      throw new Error('PAYLOAD_SECRET must be set in production')
+    }
+    return secret || 'build-placeholder-not-for-production'
+  })(),
   typescript: {
     outputFile: path.resolve(dirname, 'payload-types.ts'),
   },
   db: mongooseAdapter({
-    url: process.env.DATABASE_URI || 'mongodb://build-placeholder:27017/build',
+    url: (() => {
+      const uri = process.env.DATABASE_URI
+      if (!uri && process.env.NODE_ENV === 'production') {
+        throw new Error('DATABASE_URI must be set in production')
+      }
+      return uri || 'mongodb://build-placeholder:27017/build'
+    })(),
   }),
   sharp,
   plugins: [

@@ -89,7 +89,7 @@ async def handle_customer_changed(db: AsyncIOMotorDatabase, parsed_event: Any) -
 
     log.info(
         "Customer upserted",
-        full_name=full_name,
+        customer_id=customer_id,
         matched=result.matched_count,
         modified=result.modified_count,
         upserted_id=str(result.upserted_id) if result.upserted_id else None,

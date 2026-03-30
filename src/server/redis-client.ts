@@ -17,6 +17,15 @@ import Redis from 'ioredis'
  */
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6383'
 
+// Warn if Redis is not using TLS in production
+if (
+  process.env.NODE_ENV === 'production' &&
+  REDIS_URL &&
+  !REDIS_URL.startsWith('rediss://')
+) {
+  console.warn('[Redis] WARNING: Redis URL does not use TLS (rediss://) in production')
+}
+
 // =============================================================================
 // Singleton Instance
 // =============================================================================

@@ -95,6 +95,11 @@ export async function getObjectByUri(s3Uri: string): Promise<{
   contentLength?: number
 } | null> {
   const { bucket, key } = parseS3Uri(s3Uri)
+  // Validate that the URI refers to the configured bucket to prevent cross-bucket access
+  const expectedBucket = process.env.S3_BUCKET_NAME
+  if (expectedBucket && bucket !== expectedBucket) {
+    throw new Error(`S3 URI bucket "${bucket}" does not match configured bucket "${expectedBucket}"`)
+  }
   const client = getS3Client()
   try {
     const response = await client.send(

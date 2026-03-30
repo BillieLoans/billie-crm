@@ -18,24 +18,22 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLedgerClient } from '@/server/grpc-client'
 import { requireAuth } from '@/lib/auth'
 import { hasAnyRole } from '@/lib/access'
-
-interface SampleBody {
-  bucket?: string
-  eclMin?: string
-  eclMax?: string
-  carryingAmountMin?: string
-  carryingAmountMax?: string
-  sampleSize?: number
-  seed?: string
-  allowFullScan?: boolean
-}
+import { SampleQuerySchema } from '@/lib/schemas/api'
 
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(hasAnyRole)
     if ('error' in auth) return auth.error
 
-    const body: SampleBody = await request.json()
+    const rawBody = await request.json()
+    const parseResult = SampleQuerySchema.safeParse(rawBody)
+    if (!parseResult.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', details: parseResult.error.flatten().fieldErrors },
+        { status: 400 },
+      )
+    }
+    const body = parseResult.data
 
     const client = getLedgerClient()
 

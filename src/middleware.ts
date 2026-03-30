@@ -88,13 +88,25 @@ function verifyCsrfOrigin(request: NextRequest): NextResponse | null {
   if (!MUTATION_METHODS.has(request.method)) return null
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL
-  if (!appUrl) return null // Can't verify without a known origin
+  if (!appUrl) {
+    // Fail closed: block mutations if we can't verify the origin
+    return NextResponse.json(
+      { error: { code: 'CSRF_REJECTED', message: 'Server misconfigured — cannot verify request origin.' } },
+      { status: 403 },
+    )
+  }
 
   const origin = request.headers.get('origin')
   const referer = request.headers.get('referer')
 
-  // If neither header is present, the request is likely server-to-server (not browser)
-  if (!origin && !referer) return null
+  // If neither header is present, block the request. Modern browsers always send
+  // Origin on cross-origin requests. Missing both headers on a mutation is suspicious.
+  if (!origin && !referer) {
+    return NextResponse.json(
+      { error: { code: 'CSRF_REJECTED', message: 'Missing Origin and Referer headers on mutation request.' } },
+      { status: 403 },
+    )
+  }
 
   const allowedOrigin = new URL(appUrl).origin
 
@@ -127,14 +139,14 @@ function verifyCsrfOrigin(request: NextRequest): NextResponse | null {
 }
 
 function setSecurityHeaders(response: NextResponse): NextResponse {
-  response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+  response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload')
   response.headers.set('X-Frame-Options', 'DENY')
   response.headers.set('X-Content-Type-Options', 'nosniff')
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
   response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
   response.headers.set(
     'Content-Security-Policy',
-    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'",
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'",
   )
   return response
 }
@@ -163,6 +175,19 @@ export function middleware(request: NextRequest) {
   if (pathname !== '/api/health') {
     const csrfBlocked = verifyCsrfOrigin(request)
     if (csrfBlocked) return csrfBlocked
+  }
+
+  // --- GraphQL + /api/access auth gate ---
+  // These built-in Payload endpoints must require authentication to prevent
+  // schema disclosure and unauthenticated mutations (C3, H1).
+  if (pathname === '/api/graphql' || pathname === '/api/access') {
+    const payloadTokenForApi = request.cookies.get('payload-token')
+    if (!isJwtNotExpired(payloadTokenForApi?.value)) {
+      return NextResponse.json(
+        { error: { code: 'UNAUTHENTICATED', message: 'Please log in to continue.' } },
+        { status: 401 },
+      )
+    }
   }
 
   // --- Admin route redirect workaround ---

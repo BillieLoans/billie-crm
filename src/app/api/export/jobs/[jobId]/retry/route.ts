@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLedgerClient } from '@/server/grpc-client'
 import { requireAuth } from '@/lib/auth'
-import { canService } from '@/lib/access'
+import { canService, isAdmin } from '@/lib/access'
 
 export async function POST(
   request: NextRequest,
@@ -16,6 +16,7 @@ export async function POST(
   try {
     const auth = await requireAuth(canService)
     if ('error' in auth) return auth.error
+    const { user } = auth
 
     const { jobId } = await params
 
@@ -24,6 +25,15 @@ export async function POST(
     }
 
     const client = getLedgerClient()
+
+    // Verify ownership before retrying
+    const status = await client.getExportStatus({ jobId })
+    if (status.createdBy && status.createdBy !== String(user.id) && !isAdmin(user)) {
+      return NextResponse.json(
+        { error: 'You do not have permission to retry this export job' },
+        { status: 403 },
+      )
+    }
 
     const response = await client.retryExport({
       jobId,

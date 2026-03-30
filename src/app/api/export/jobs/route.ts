@@ -131,9 +131,9 @@ export async function GET(request: NextRequest) {
   try {
     const auth = await requireAuth(hasAnyRole)
     if ('error' in auth) return auth.error
+    const { user } = auth
 
     const searchParams = request.nextUrl.searchParams
-    const userId = searchParams.get('userId')
     const rawLimit = searchParams.get('limit')
     const limit = rawLimit ? parseInt(rawLimit, 10) : undefined
     const includeCompleted = searchParams.get('includeCompleted') !== 'false'
@@ -142,9 +142,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid limit parameter' }, { status: 400 })
     }
 
-    if (!userId) {
-      return NextResponse.json({ error: 'userId is required' }, { status: 400 })
-    }
+    // Always use the authenticated user's ID to prevent IDOR
+    const userId = String(user.id)
 
     const client = getLedgerClient()
 

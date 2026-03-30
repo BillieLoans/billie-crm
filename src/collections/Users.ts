@@ -2,6 +2,7 @@ import type { CollectionConfig, Access } from 'payload'
 import { hideFromNonAdmins, isAdmin } from '@/lib/access'
 
 const canReadUsers: Access = ({ req, id }) => {
+  if (!req.user) return false
   if (isAdmin(req.user)) {
     return true
   }
@@ -10,6 +11,7 @@ const canReadUsers: Access = ({ req, id }) => {
 }
 
 const canUpdateUsers: Access = ({ req, id }) => {
+  if (!req.user) return false
   if (isAdmin(req.user)) {
     return true
   }

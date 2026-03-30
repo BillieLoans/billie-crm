@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLedgerClient, ExportFormat } from '@/server/grpc-client'
 import { requireAuth } from '@/lib/auth'
-import { hasAnyRole } from '@/lib/access'
+import { hasAnyRole, isAdmin } from '@/lib/access'
 
 const CONTENT_TYPES: Record<string, string> = {
   [ExportFormat.EXPORT_FORMAT_CSV]: 'text/csv',
@@ -26,6 +26,7 @@ export async function GET(
   try {
     const auth = await requireAuth(hasAnyRole)
     if ('error' in auth) return auth.error
+    const { user } = auth
 
     const { jobId } = await params
 
@@ -36,6 +37,15 @@ export async function GET(
     const client = getLedgerClient()
 
     try {
+      // Verify ownership before returning result
+      const status = await client.getExportStatus({ jobId })
+      if (status.createdBy && status.createdBy !== String(user.id) && !isAdmin(user)) {
+        return NextResponse.json(
+          { error: 'You do not have permission to download this export' },
+          { status: 403 },
+        )
+      }
+
       const response = await client.getExportResult({
         jobId,
       })

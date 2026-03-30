@@ -12,11 +12,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLedgerClient } from '@/server/grpc-client'
 import { requireAuth } from '@/lib/auth'
 import { canService } from '@/lib/access'
-
-interface RecalcBody {
-  triggeredBy: string
-  batchSize?: number
-}
+import { PortfolioRecalcSchema } from '@/lib/schemas/api'
 
 export async function POST(request: NextRequest) {
   try {
@@ -24,7 +20,15 @@ export async function POST(request: NextRequest) {
     if ('error' in auth) return auth.error
     const { user, payload } = auth
 
-    const body: RecalcBody = await request.json()
+    const rawBody = await request.json()
+    const parseResult = PortfolioRecalcSchema.safeParse(rawBody)
+    if (!parseResult.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', details: parseResult.error.flatten().fieldErrors },
+        { status: 400 },
+      )
+    }
+    const body = parseResult.data
 
     // Look up username from authenticated user
     let triggeredByName = String(user.id)

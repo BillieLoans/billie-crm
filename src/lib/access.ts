@@ -16,9 +16,12 @@ type UserRole = User['role']
  * Safely extract the role from a user object.
  * Handles cases where user might be undefined or have an unexpected shape.
  */
+const VALID_ROLES: readonly string[] = ['admin', 'supervisor', 'operations', 'readonly']
+
 export function getUserRole(user: unknown): UserRole | undefined {
   if (user && typeof user === 'object' && 'role' in user) {
-    return (user as User).role
+    const role = (user as User).role
+    if (VALID_ROLES.includes(role)) return role
   }
   return undefined
 }

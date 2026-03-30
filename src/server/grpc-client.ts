@@ -988,7 +988,7 @@ export class LedgerClient {
     // Use insecure credentials for Fly.io internal addresses (already WireGuard-encrypted)
     // and localhost (local dev). Require TLS for any other address.
     const isInternalOrLocal =
-      url.includes('.internal') || url.startsWith('localhost') || url.startsWith('127.')
+      /\.internal(:\d+)?$/.test(url) || url.startsWith('localhost') || url.startsWith('127.')
     const creds = isInternalOrLocal
       ? grpc.credentials.createInsecure()
       : grpc.credentials.createSsl()

@@ -32,12 +32,25 @@ def safe_str(value: object, field_name: str = "unknown") -> str:
 
 
 def strip_dollar_keys(data: dict) -> dict:
-    """Remove keys starting with '$' from a dict to prevent MongoDB operator injection.
+    """Recursively remove keys starting with '$' from a dict to prevent MongoDB operator injection.
 
-    Only strips top-level keys. Returns a new dict.
+    Strips at all nesting levels. Returns a new dict.
     """
-    cleaned = {k: v for k, v in data.items() if not k.startswith("$")}
-    if len(cleaned) != len(data):
-        stripped = [k for k in data if k.startswith("$")]
-        logger.warning("Stripped dollar-prefixed keys from event data", keys=stripped)
+    cleaned = {}
+    stripped_keys: list[str] = []
+    for k, v in data.items():
+        if k.startswith("$"):
+            stripped_keys.append(k)
+            continue
+        if isinstance(v, dict):
+            cleaned[k] = strip_dollar_keys(v)
+        elif isinstance(v, list):
+            cleaned[k] = [
+                strip_dollar_keys(item) if isinstance(item, dict) else item
+                for item in v
+            ]
+        else:
+            cleaned[k] = v
+    if stripped_keys:
+        logger.warning("Stripped dollar-prefixed keys from event data", keys=stripped_keys)
     return cleaned

@@ -4,6 +4,8 @@ import { withPayload } from '@payloadcms/next/withPayload'
 const nextConfig = {
   // Enable standalone output for Docker deployment
   output: 'standalone',
+  // Remove X-Powered-By header to reduce fingerprinting surface
+  poweredByHeader: false,
   
   webpack: (webpackConfig) => {
     webpackConfig.resolve.extensionAlias = {

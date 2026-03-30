@@ -38,9 +38,9 @@ def _check_tls_urls(redis_url: str, database_uri: str) -> None:
         return
 
     if redis_url and not redis_url.startswith("rediss://"):
-        logger.warning(
-            "Redis URL does not use TLS (rediss://) in production",
-            url_scheme=redis_url.split("://")[0] if "://" in redis_url else "unknown",
+        raise ValueError(
+            f"Redis URL must use TLS (rediss://) in production, "
+            f"got scheme: {redis_url.split('://')[0] if '://' in redis_url else 'unknown'}"
         )
 
     if database_uri and not (
@@ -619,5 +619,5 @@ class EventProcessor:
             "moved_at": datetime.utcnow().isoformat(),
         }
 
-        await self.redis.xadd(settings.dlq_stream, dlq_entry)
+        await self.redis.xadd(settings.dlq_stream, dlq_entry, maxlen=10000)
 

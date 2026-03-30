@@ -15,14 +15,14 @@ import { EVENT_TYPE_WRITEOFF_CANCELLED } from '@/lib/events/config'
 import type { WriteOffCancelledPayload } from '@/lib/events/types'
 import { createAndPublishEvent, EventPublishError } from '@/server/event-publisher'
 import { requireAuth } from '@/lib/auth'
-import { canService } from '@/lib/access'
+import { canService, hasApprovalAuthority } from '@/lib/access'
 
 export async function POST(request: NextRequest) {
   try {
     // 1. Authenticate user and verify servicing role
     const auth = await requireAuth(canService)
     if ('error' in auth) return auth.error
-    const { user } = auth
+    const { user, payload } = auth
 
     // 2. Parse and validate request body
     const body = await request.json()
@@ -43,9 +43,28 @@ export async function POST(request: NextRequest) {
 
     const command = parseResult.data
 
-    // Note: Authorization check (original requester or supervisor) would require
-    // looking up the original request. For now, any authenticated user can cancel.
-    // The event processor can enforce business rules if needed.
+    // Authorization: only the original requester or a supervisor/admin can cancel
+    const existingRequest = await payload.find({
+      collection: 'write-off-requests',
+      where: { requestId: { equals: command.requestId } },
+      limit: 1,
+    })
+
+    if (existingRequest.docs.length > 0) {
+      const originalRequest = existingRequest.docs[0]
+      const isOriginalRequester = String(originalRequest.requestedBy) === String(user.id)
+      if (!isOriginalRequester && !hasApprovalAuthority(user)) {
+        return NextResponse.json(
+          {
+            error: {
+              code: 'FORBIDDEN',
+              message: 'Only the original requester or a supervisor can cancel this request.',
+            },
+          },
+          { status: 403 },
+        )
+      }
+    }
 
     // 3. Build event payload with user info
     const eventPayload: WriteOffCancelledPayload = {

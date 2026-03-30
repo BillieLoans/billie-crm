@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLedgerClient } from '@/server/grpc-client'
 import { requireAuth } from '@/lib/auth'
-import { hasAnyRole } from '@/lib/access'
+import { hasAnyRole, isAdmin } from '@/lib/access'
 
 export async function GET(
   request: NextRequest,
@@ -16,6 +16,7 @@ export async function GET(
   try {
     const auth = await requireAuth(hasAnyRole)
     if ('error' in auth) return auth.error
+    const { user } = auth
 
     const { jobId } = await params
 
@@ -29,6 +30,14 @@ export async function GET(
       const response = await client.getExportStatus({
         jobId,
       })
+
+      // Verify ownership: only the job creator or an admin can view
+      if (response.createdBy && response.createdBy !== String(user.id) && !isAdmin(user)) {
+        return NextResponse.json(
+          { error: 'You do not have permission to view this export job' },
+          { status: 403 },
+        )
+      }
 
       return NextResponse.json(response)
     } catch (grpcError: unknown) {

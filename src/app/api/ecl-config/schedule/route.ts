@@ -14,16 +14,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLedgerClient } from '@/server/grpc-client'
 import { requireAuth } from '@/lib/auth'
 import { hasApprovalAuthority } from '@/lib/access'
-
-interface ScheduleChangeBody {
-  parameter?: string  // Frontend sends 'parameter' (overlay_multiplier, pd_rate, lgd)
-  fieldName?: string  // Or 'fieldName' directly
-  bucket?: string     // For PD rate changes
-  newValue: number | string  // Frontend sends number, API converts to string
-  effectiveDate: string
-  createdBy?: string
-  reason?: string
-}
+import { ScheduleConfigChangeSchema } from '@/lib/schemas/api'
 
 export async function POST(request: NextRequest) {
   try {
@@ -31,7 +22,15 @@ export async function POST(request: NextRequest) {
     if ('error' in auth) return auth.error
     const { user, payload } = auth
 
-    const body: ScheduleChangeBody = await request.json()
+    const rawBody = await request.json()
+    const parseResult = ScheduleConfigChangeSchema.safeParse(rawBody)
+    if (!parseResult.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', details: parseResult.error.flatten().fieldErrors },
+        { status: 400 },
+      )
+    }
+    const body = parseResult.data
 
     // Handle both 'parameter' (from frontend) and 'fieldName' (direct API call)
     let fieldName: string

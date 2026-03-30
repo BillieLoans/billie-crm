@@ -12,11 +12,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLedgerClient } from '@/server/grpc-client'
 import { requireAuth } from '@/lib/auth'
 import { canService } from '@/lib/access'
-
-interface BulkRecalcBody {
-  accountIds: string[]
-  triggeredBy: string
-}
+import { BulkRecalcSchema } from '@/lib/schemas/api'
 
 export async function POST(request: NextRequest) {
   try {
@@ -24,15 +20,15 @@ export async function POST(request: NextRequest) {
     if ('error' in auth) return auth.error
     const { user, payload } = auth
 
-    const body: BulkRecalcBody = await request.json()
-
-    if (!body.accountIds || body.accountIds.length === 0) {
-      return NextResponse.json({ error: 'accountIds is required' }, { status: 400 })
+    const rawBody = await request.json()
+    const parseResult = BulkRecalcSchema.safeParse(rawBody)
+    if (!parseResult.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', details: parseResult.error.flatten().fieldErrors },
+        { status: 400 },
+      )
     }
-
-    if (body.accountIds.length > 100) {
-      return NextResponse.json({ error: 'Maximum 100 accounts per request' }, { status: 400 })
-    }
+    const body = parseResult.data
 
     // Look up username from authenticated user
     let triggeredByName = String(user.id)

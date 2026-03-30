@@ -54,6 +54,55 @@ export const CreateExportJobSchema = z.object({
 })
 
 // =============================================================================
+// ECL Config Schedule Schema
+// =============================================================================
+
+export const ScheduleConfigChangeSchema = z.object({
+  parameter: z.string().optional(),
+  fieldName: z.string().optional(),
+  bucket: z.string().optional(),
+  newValue: z.union([z.number(), z.string()]),
+  effectiveDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD'),
+  createdBy: z.string().optional(),
+  reason: z.string().max(1000).optional(),
+}).refine((data) => data.parameter || data.fieldName, {
+  message: 'Either parameter or fieldName is required',
+})
+
+// =============================================================================
+// Investigation Schemas
+// =============================================================================
+
+export const BatchQuerySchema = z.object({
+  accountIds: z.array(z.string().min(1)).min(1, 'At least one account ID is required').max(100, 'Maximum 100 accounts per request'),
+})
+
+export const SampleQuerySchema = z.object({
+  bucket: z.string().optional(),
+  eclMin: z.string().optional(),
+  eclMax: z.string().optional(),
+  carryingAmountMin: z.string().optional(),
+  carryingAmountMax: z.string().optional(),
+  sampleSize: z.number().int().min(1).max(500).optional(),
+  seed: z.string().optional(),
+  allowFullScan: z.boolean().optional(),
+})
+
+// =============================================================================
+// ECL Recalculation Schemas
+// =============================================================================
+
+export const BulkRecalcSchema = z.object({
+  accountIds: z.array(z.string().min(1)).min(1, 'At least one account ID is required').max(100, 'Maximum 100 accounts per request'),
+  triggeredBy: z.string().optional(),
+})
+
+export const PortfolioRecalcSchema = z.object({
+  triggeredBy: z.string().optional(),
+  batchSize: z.number().int().min(1).max(10000).optional(),
+})
+
+// =============================================================================
 // Upload Schemas
 // =============================================================================
 

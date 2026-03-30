@@ -63,8 +63,16 @@ export async function POST(request: NextRequest) {
       },
       eventId: response.eventId,
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error applying dishonour fee:', error)
+
+    if (error.code === 9) {
+      return NextResponse.json(
+        { error: error.details || 'The ledger rejected this operation due to a business rule.' },
+        { status: 422 },
+      )
+    }
+
     return NextResponse.json(
       { error: 'Failed to apply dishonour fee', details: 'An internal error occurred. Please try again.' },
       { status: 500 },
