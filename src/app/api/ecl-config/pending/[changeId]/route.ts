@@ -12,10 +12,6 @@ import { getLedgerClient } from '@/server/grpc-client'
 import { requireAuth } from '@/lib/auth'
 import { hasApprovalAuthority } from '@/lib/access'
 
-interface CancelBody {
-  cancelledBy: string
-}
-
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ changeId: string }> },

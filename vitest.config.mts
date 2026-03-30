@@ -6,6 +6,7 @@ export default defineConfig({
   plugins: [tsconfigPaths(), react()],
   test: {
     environment: 'jsdom',
+    globalSetup: ['./tests/utils/globalSetup.ts'],
     setupFiles: ['./vitest.setup.ts'],
     include: ['tests/int/**/*.int.spec.ts', 'tests/unit/**/*.test.ts', 'tests/unit/**/*.test.tsx'],
     // Run test files sequentially to avoid MongoDB race conditions
@@ -16,6 +17,15 @@ export default defineConfig({
     },
     // Handle CSS imports from node_modules
     css: true,
+    // Integration tests need more time to initialize Payload + MongoMemoryServer
+    hookTimeout: 30000,
+    // Single-threaded so globalSetup env vars are inherited by tests
+    pool: 'forks',
+    poolOptions: {
+      forks: {
+        singleFork: true,
+      },
+    },
   },
   resolve: {
     alias: {
