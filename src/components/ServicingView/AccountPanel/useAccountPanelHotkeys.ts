@@ -31,7 +31,7 @@ interface UseAccountPanelHotkeysOptions {
  * - Escape: Close the panel
  */
 export function useAccountPanelHotkeys({
-  activeTab,
+  activeTab: _activeTab,
   onTabChange,
   accountIds,
   selectedAccountId,
@@ -97,7 +97,7 @@ export function useAccountPanelHotkeys({
         return
       }
     },
-    [isActive, activeTab, onTabChange, accountIds, selectedAccountId, onSwitchAccount, onClose]
+    [isActive, onTabChange, accountIds, selectedAccountId, onSwitchAccount, onClose]
   )
 
   useEffect(() => {

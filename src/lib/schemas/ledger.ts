@@ -113,7 +113,7 @@ export const DisburseLoanSchema = z.object({
   disbursementAmount: positiveDecimalString.optional(),
   bankReference: z.string().min(1, 'Bank reference is required'),
   paymentMethod: z.string().optional(),
-  attachmentLocation: z.string().min(1, 'Attachment location is required'),
+  attachmentLocation: z.string().optional(),
   notes: z.string().max(2000).optional(),
 })
 

@@ -167,22 +167,26 @@ export function SortableTable<T>({
             : undefined
 
           return (
-            <button
+            <div
               key={column.key}
-              type="button"
-              className={`${styles.headerCell} ${isSortable ? styles.sortable : ''} ${isActive ? styles.active : ''} ${column.className ?? ''}`}
-              onClick={() => handleHeaderClick(column.key, isSortable)}
-              disabled={!isSortable}
+              role="columnheader"
               aria-sort={ariaSort}
-              data-testid={`header-${column.key}`}
             >
-              <span className={styles.headerLabel}>{column.label}</span>
-              {isSortable && (
-                <span className={styles.sortIndicator} aria-hidden="true">
-                  {isActive ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
-                </span>
-              )}
-            </button>
+              <button
+                type="button"
+                className={`${styles.headerCell} ${isSortable ? styles.sortable : ''} ${isActive ? styles.active : ''} ${column.className ?? ''}`}
+                onClick={() => handleHeaderClick(column.key, isSortable)}
+                disabled={!isSortable}
+                data-testid={`header-${column.key}`}
+              >
+                <span className={styles.headerLabel}>{column.label}</span>
+                {isSortable && (
+                  <span className={styles.sortIndicator} aria-hidden="true">
+                    {isActive ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                  </span>
+                )}
+              </button>
+            </div>
           )
         })}
       </div>

@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
       disbursementAmount: data.disbursementAmount || '',
       bankReference: data.bankReference,
       paymentMethod: data.paymentMethod || 'bank_transfer',
-      attachmentLocation: data.attachmentLocation,
+      attachmentLocation: data.attachmentLocation || '',
       notes: data.notes || '',
       idempotencyKey,
     })

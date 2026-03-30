@@ -89,7 +89,7 @@ export const DisburseLoanDrawer: React.FC<DisburseLoanDrawerProps> = ({
     setSelectedFile(file)
   }, [])
 
-  const uploadFileToS3 = async (file: File): Promise<string> => {
+  const uploadFileToS3 = useCallback(async (file: File): Promise<string> => {
     setProgressMessage('Requesting upload URL...')
 
     const presignedRes = await fetch('/api/uploads/presigned-url', {
@@ -122,7 +122,7 @@ export const DisburseLoanDrawer: React.FC<DisburseLoanDrawerProps> = ({
     }
 
     return s3Uri
-  }
+  }, [accountNumber])
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -195,7 +195,6 @@ export const DisburseLoanDrawer: React.FC<DisburseLoanDrawerProps> = ({
     },
     [
       loanAccountId,
-      accountNumber,
       disbursementAmount,
       bankReference,
       paymentMethod,
@@ -203,6 +202,7 @@ export const DisburseLoanDrawer: React.FC<DisburseLoanDrawerProps> = ({
       selectedFile,
       onClose,
       onSuccess,
+      uploadFileToS3,
     ],
   )
 

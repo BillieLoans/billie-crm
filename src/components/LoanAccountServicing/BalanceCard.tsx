@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import styles from './styles.module.css'
 
 interface BalanceData {
@@ -23,7 +23,7 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({ loanAccountId, refresh
   const [error, setError] = useState<string | null>(null)
   const [isFallback, setIsFallback] = useState(false)
 
-  const fetchBalance = async () => {
+  const fetchBalance = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
@@ -40,11 +40,11 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({ loanAccountId, refresh
     } finally {
       setLoading(false)
     }
-  }
+  }, [loanAccountId])
 
   useEffect(() => {
     fetchBalance()
-  }, [loanAccountId, refreshKey])
+  }, [fetchBalance, refreshKey])
 
   const formatCurrency = (amount: string) => {
     const num = parseFloat(amount || '0')

@@ -171,7 +171,7 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
   const [applyFeeType, setApplyFeeType] = useState<FeeType>('late-fee')
 
   // Derive accounts and selected account
-  const accounts = customer?.loanAccounts ?? []
+  const accounts = useMemo(() => customer?.loanAccounts ?? [], [customer?.loanAccounts])
   const selectedAccount = useMemo(() => {
     if (!selectedAccountId) return null
     return accounts.find((a) => a.loanAccountId === selectedAccountId) ?? null

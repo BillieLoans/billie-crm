@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import styles from './styles.module.css'
 
 interface Transaction {
@@ -41,14 +41,14 @@ export const TransactionList: React.FC<TransactionListProps> = ({ loanAccountId,
   const [isFallback, setIsFallback] = useState(false)
   const [fallbackMessage, setFallbackMessage] = useState<string | null>(null)
 
-  const fetchTransactions = async () => {
+  const fetchTransactions = useCallback(async () => {
     setLoading(true)
     try {
       let url = `/api/ledger/transactions?loanAccountId=${loanAccountId}&limit=${limit}`
       if (typeFilter) {
         url += `&type=${typeFilter}`
       }
-      
+
       const res = await fetch(url)
       if (!res.ok) {
         const errorData = await res.json()
@@ -67,11 +67,11 @@ export const TransactionList: React.FC<TransactionListProps> = ({ loanAccountId,
     } finally {
       setLoading(false)
     }
-  }
+  }, [loanAccountId, limit, typeFilter])
 
   useEffect(() => {
     fetchTransactions()
-  }, [loanAccountId, refreshKey, typeFilter, offset])
+  }, [fetchTransactions, refreshKey, offset])
 
   const formatCurrency = (amount: string) => {
     const num = parseFloat(amount || '0')
