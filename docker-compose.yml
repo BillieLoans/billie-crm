@@ -1,12 +1,16 @@
 name: billie-platform-crm
 
+secrets:
+  GITHUB_TOKEN:
+    environment: GITHUB_TOKEN
+
 services:
   app:
     build:
       context: .
       dockerfile: Dockerfile.dev
-      args:
-        - GITHUB_TOKEN=${GITHUB_TOKEN}
+      secrets:
+        - GITHUB_TOKEN
     container_name: billie-platform-crm
     ports:
       - '3000:3000'
