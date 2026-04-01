@@ -8,6 +8,7 @@ import type { User } from '@/payload-types'
  * - supervisor: Operations + approval authority, no raw collection access
  * - operations: Day-to-day servicing, no raw collection access
  * - readonly: View-only access, no raw collection access
+ * - service: API-only account for inter-service auth (e.g. billie-realtime role lookups)
  */
 
 type UserRole = User['role']
@@ -16,7 +17,7 @@ type UserRole = User['role']
  * Safely extract the role from a user object.
  * Handles cases where user might be undefined or have an unexpected shape.
  */
-const VALID_ROLES: readonly string[] = ['admin', 'supervisor', 'operations', 'readonly']
+const VALID_ROLES: readonly string[] = ['admin', 'supervisor', 'operations', 'readonly', 'service']
 
 export function getUserRole(user: unknown): UserRole | undefined {
   if (user && typeof user === 'object' && 'role' in user) {

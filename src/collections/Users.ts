@@ -1,11 +1,18 @@
 import type { CollectionConfig, Access } from 'payload'
 import { hideFromNonAdmins, isAdmin } from '@/lib/access'
 
+const isServiceAccount = (user: unknown): boolean => {
+  if (user && typeof user === 'object' && 'role' in user) {
+    return (user as { role: string }).role === 'service'
+  }
+  return false
+}
+
 const canReadUsers: Access = ({ req, id }) => {
   if (!req.user) return false
-  if (isAdmin(req.user)) {
-    return true
-  }
+  if (isAdmin(req.user)) return true
+  // Service accounts can read all users (for inter-service role lookups)
+  if (isServiceAccount(req.user)) return true
   // Users can read their own record
   return (req.user as { id?: string })?.id === id
 }
@@ -27,7 +34,9 @@ export const Users: CollectionConfig = {
     // Hide from sidebar for non-admins (Story 6.7)
     hidden: hideFromNonAdmins,
   },
-  auth: true,
+  auth: {
+    useAPIKey: true,
+  },
   access: {
     read: canReadUsers,
     create: ({ req: { user } }) => isAdmin(user),
@@ -43,6 +52,7 @@ export const Users: CollectionConfig = {
         { label: 'Supervisor', value: 'supervisor' },
         { label: 'Operations', value: 'operations' },
         { label: 'Read Only', value: 'readonly' },
+        { label: 'Service', value: 'service' },
       ],
       defaultValue: 'readonly',
       required: true,

@@ -131,12 +131,15 @@ export interface UserAuthOperations {
  */
 export interface User {
   id: string;
-  role: 'admin' | 'supervisor' | 'operations' | 'readonly';
+  role: 'admin' | 'supervisor' | 'operations' | 'readonly' | 'service';
   firstName: string;
   lastName: string;
   avatar?: (string | null) | Media;
   updatedAt: string;
   createdAt: string;
+  enableAPIKey?: boolean | null;
+  apiKey?: string | null;
+  apiKeyIndex?: string | null;
   email: string;
   resetPasswordToken?: string | null;
   resetPasswordExpiration?: string | null;
@@ -1091,6 +1094,9 @@ export interface UsersSelect<T extends boolean = true> {
   avatar?: T;
   updatedAt?: T;
   createdAt?: T;
+  enableAPIKey?: T;
+  apiKey?: T;
+  apiKeyIndex?: T;
   email?: T;
   resetPasswordToken?: T;
   resetPasswordExpiration?: T;
