@@ -37,7 +37,7 @@ export async function AdminRootRedirect(
   }
 
   // If not authenticated, redirect to login
-  redirect('/admin/login')
+  redirect('/admin/login?invalidate')
 }
 
 export default AdminRootRedirect

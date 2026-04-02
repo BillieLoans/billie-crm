@@ -146,7 +146,7 @@ function setSecurityHeaders(response: NextResponse): NextResponse {
   response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
   response.headers.set(
     'Content-Security-Policy',
-    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'",
+    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://www.gravatar.com; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'",
   )
   return response
 }
@@ -203,6 +203,15 @@ export function middleware(request: NextRequest) {
   }
 
   if (pathname === '/admin/login' || pathname === '/admin/login/') {
+    // If a protected view rejected the token (Payload auth failed despite valid JWT structure),
+    // clear the stale cookie to break the login ↔ dashboard redirect loop.
+    if (request.nextUrl.searchParams.has('invalidate')) {
+      const loginUrl = new URL('/admin/login', request.url)
+      loginUrl.searchParams.delete('invalidate')
+      const response = NextResponse.redirect(loginUrl)
+      response.cookies.delete('payload-token')
+      return setSecurityHeaders(response)
+    }
     if (hasValidToken) {
       return setSecurityHeaders(NextResponse.redirect(new URL('/admin/dashboard', request.url)))
     }

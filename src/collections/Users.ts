@@ -1,4 +1,4 @@
-import type { CollectionConfig, Access } from 'payload'
+import type { CollectionConfig, Access, AuthStrategyResult } from 'payload'
 import { hideFromNonAdmins, isAdmin } from '@/lib/access'
 
 const isServiceAccount = (user: unknown): boolean => {
@@ -36,6 +36,40 @@ export const Users: CollectionConfig = {
   },
   auth: {
     useAPIKey: true,
+    strategies: [
+      {
+        name: 'custom-jwt',
+        authenticate: async ({ headers, payload }) => {
+          try {
+            const { extractJWT } = await import('payload')
+            const { jwtVerify } = await import('jose')
+
+            const token = extractJWT({ headers, payload })
+            if (!token) return { user: null }
+
+            const secretKey = new TextEncoder().encode(payload.secret)
+            const { payload: decoded } = await jwtVerify(token, secretKey)
+
+            if (!decoded.id || !decoded.collection) return { user: null }
+
+            const user = (await payload.findByID({
+              id: decoded.id as string,
+              collection: 'users',
+              overrideAccess: true,
+            })) as AuthStrategyResult['user']
+
+            if (user) {
+              user.collection = 'users'
+              user._strategy = 'custom-jwt'
+              return { user }
+            }
+          } catch {
+            // Fall through to next strategy
+          }
+          return { user: null }
+        },
+      },
+    ],
   },
   access: {
     read: canReadUsers,

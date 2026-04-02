@@ -20,7 +20,7 @@ export async function MyActivityViewWithTemplate({
 }: AdminViewServerProps) {
   // Guard: redirect to login if not authenticated
   if (!initPageResult?.req?.user) {
-    redirect('/admin/login')
+    redirect('/admin/login?invalidate')
   }
 
   const user = initPageResult.req.user

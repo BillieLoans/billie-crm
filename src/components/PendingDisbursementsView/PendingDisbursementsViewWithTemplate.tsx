@@ -11,7 +11,7 @@ export async function PendingDisbursementsViewWithTemplate({
   searchParams,
 }: AdminViewServerProps) {
   if (!initPageResult?.req?.user) {
-    redirect('/admin/login')
+    redirect('/admin/login?invalidate')
   }
 
   return (

@@ -20,7 +20,7 @@ export async function ServicingViewWithTemplate({
 }: AdminViewServerProps) {
   // Guard: redirect to login if not authenticated
   if (!initPageResult?.req?.user) {
-    redirect('/admin/login')
+    redirect('/admin/login?invalidate')
   }
 
   // Extract customerId from route params

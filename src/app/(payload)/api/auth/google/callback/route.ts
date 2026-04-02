@@ -8,14 +8,13 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import crypto from 'node:crypto'
+import { SignJWT } from 'jose'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || ''
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || ''
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-const PAYLOAD_SECRET = process.env.PAYLOAD_SECRET || ''
 
 interface GoogleTokenResponse {
   access_token: string
@@ -50,41 +49,33 @@ function decodeJwtPayload(jwt: string): GoogleIdTokenPayload {
   return JSON.parse(payload)
 }
 
+/** Token expiration in seconds (2 hours) */
+const TOKEN_EXPIRATION = 7200
+
 /**
- * Sign a Payload-compatible JWT using the same secret derivation that
- * Payload uses internally: SHA-256 hash of PAYLOAD_SECRET, truncated to
- * 32 hex characters, then HMAC-SHA256.
+ * Sign a Payload-compatible JWT using jose (same library Payload uses internally).
+ * Uses payload.secret directly to guarantee compatibility.
  */
-function signPayloadToken(user: { id: string; email: string; collection: string }): string {
-  const hashedSecret = crypto
-    .createHash('sha256')
-    .update(PAYLOAD_SECRET)
-    .digest('hex')
-    .slice(0, 32)
-
-  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url')
-
+async function signPayloadToken(
+  user: { id: string; email: string; collection: string },
+  secret: string,
+): Promise<string> {
+  const secretKey = new TextEncoder().encode(secret)
   const now = Math.floor(Date.now() / 1000)
-  const payload = Buffer.from(
-    JSON.stringify({
-      id: user.id,
-      collection: user.collection,
-      email: user.email,
-      iat: now,
-      exp: now + 7200, // 2 hours
-    })
-  ).toString('base64url')
 
-  const signature = crypto
-    .createHmac('sha256', hashedSecret)
-    .update(`${header}.${payload}`)
-    .digest('base64url')
-
-  return `${header}.${payload}.${signature}`
+  return new SignJWT({
+    id: user.id,
+    collection: user.collection,
+    email: user.email,
+  })
+    .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+    .setIssuedAt(now)
+    .setExpirationTime(now + TOKEN_EXPIRATION)
+    .sign(secretKey)
 }
 
-function redirectWithError(request: NextRequest, error: string): NextResponse {
-  const url = new URL('/admin/login', request.url)
+function redirectWithError(_request: NextRequest, error: string): NextResponse {
+  const url = new URL('/admin/login', APP_URL)
   url.searchParams.set('error', error)
   const response = NextResponse.redirect(url)
   response.cookies.delete('google_oauth_state')
@@ -166,13 +157,12 @@ export async function GET(request: NextRequest) {
     }
 
     // 6. Generate payload-token JWT and set as cookie
-    const payloadToken = signPayloadToken({
-      id: String(user.id),
-      email: user.email,
-      collection: 'users',
-    })
+    const payloadToken = await signPayloadToken(
+      { id: String(user.id), email: user.email, collection: 'users' },
+      payload.secret,
+    )
 
-    const response = NextResponse.redirect(new URL('/admin/dashboard', request.url))
+    const response = NextResponse.redirect(new URL('/admin/dashboard', APP_URL))
 
     response.cookies.set('payload-token', payloadToken, {
       httpOnly: true,

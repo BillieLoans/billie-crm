@@ -1,5 +1,6 @@
 import { LoanAccountServicing as LoanAccountServicing_ddd43f8b2788d92f39012f5e3f407ad6 } from '@/components/LoanAccountServicing'
 import { NotificationAction as NotificationAction_ff7594e27eaf34e7ce9acae213b05415 } from '@/components/Notifications/NotificationAction'
+import { GoogleLoginButton as GoogleLoginButton_f8eb56cd8fd98e23e8bcaf648a37c729 } from '@/components/Auth/GoogleLoginButton'
 import { NavSearchTrigger as NavSearchTrigger_aef8b4b7b9afc7097ff45e7590131c08 } from '@/components/navigation/NavSearchTrigger'
 import { NavDashboardLink as NavDashboardLink_8ed26f5dfcf4b8f60da98c3488976ae8 } from '@/components/navigation/NavDashboardLink'
 import { NavCollectionsLink as NavCollectionsLink_cace573cc395aa45fa1be624b4874bcd } from '@/components/navigation/NavCollectionsLink'
@@ -24,6 +25,7 @@ import { InvestigationViewWithTemplate as InvestigationViewWithTemplate_da95a625
 export const importMap = {
   "@/components/LoanAccountServicing#LoanAccountServicing": LoanAccountServicing_ddd43f8b2788d92f39012f5e3f407ad6,
   "@/components/Notifications/NotificationAction#NotificationAction": NotificationAction_ff7594e27eaf34e7ce9acae213b05415,
+  "@/components/Auth/GoogleLoginButton#GoogleLoginButton": GoogleLoginButton_f8eb56cd8fd98e23e8bcaf648a37c729,
   "@/components/navigation/NavSearchTrigger#NavSearchTrigger": NavSearchTrigger_aef8b4b7b9afc7097ff45e7590131c08,
   "@/components/navigation/NavDashboardLink#NavDashboardLink": NavDashboardLink_8ed26f5dfcf4b8f60da98c3488976ae8,
   "@/components/navigation/NavCollectionsLink#NavCollectionsLink": NavCollectionsLink_cace573cc395aa45fa1be624b4874bcd,

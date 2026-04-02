@@ -18,7 +18,7 @@ export async function InvestigationViewWithTemplate({
 }: AdminViewServerProps) {
   // Guard: redirect to login if not authenticated
   if (!initPageResult?.req?.user) {
-    redirect('/admin/login')
+    redirect('/admin/login?invalidate')
   }
 
   const userId = initPageResult.req.user?.id?.toString()

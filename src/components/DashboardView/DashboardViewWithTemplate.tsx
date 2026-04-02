@@ -7,7 +7,7 @@ import { DashboardView } from './index'
 
 /**
  * Dashboard view for Payload admin.
- * 
+ *
  * Uses DefaultTemplate to render with the Payload sidebar and navigation.
  * This is a server component that receives AdminViewServerProps from Payload's RootPage.
  *
@@ -20,7 +20,7 @@ export async function DashboardViewWithTemplate({
 }: AdminViewServerProps) {
   // Guard: redirect to login if not authenticated
   if (!initPageResult?.req?.user) {
-    redirect('/admin/login')
+    redirect('/admin/login?invalidate')
   }
 
   return (

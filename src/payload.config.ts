@@ -45,7 +45,7 @@ export default buildConfig({
       ],
       // Notification bell in header actions (next to user profile button)
       actions: ['@/components/Notifications/NotificationAction#NotificationAction'],
-      afterLogin: ['@/components/auth/GoogleLoginButton#GoogleLoginButton'],
+      afterLogin: ['@/components/Auth/GoogleLoginButton#GoogleLoginButton'],
       // Custom views with Payload admin template (includes sidebar)
       // Note: /admin root redirect is handled by Next.js middleware (src/middleware.ts)
       // to work around Payload's built-in route redirect loop issue.
