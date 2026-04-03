@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect } from 'react'
+import { useAuth } from '@payloadcms/ui'
 import { QueryClientProvider } from './query-client'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { Toaster, toast } from 'sonner'
@@ -123,6 +124,27 @@ const GlobalCommandPalette: React.FC = () => {
   )
 }
 
+/**
+ * Components that require an authenticated user session.
+ * Hidden on the login screen to avoid false "offline" / "read-only" indicators
+ * caused by unauthenticated health-check requests.
+ */
+const AuthenticatedIndicators: React.FC = () => {
+  const { user } = useAuth()
+
+  if (!user) return null
+
+  return (
+    <>
+      <ReadOnlyModeSync />
+      <ReadOnlyBanner />
+      <GlobalCommandPalette />
+      <LedgerStatusIndicator />
+      <FailedActionsBadge />
+    </>
+  )
+}
+
 export const Providers: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
@@ -130,14 +152,9 @@ export const Providers: React.FC<{ children: React.ReactNode }> = ({
     <QueryClientProvider>
       {/* SECURITY: Detect user changes and clear session data to prevent cross-user data leakage */}
       <UserSessionGuard />
-      {/* Read-only mode sync - must be first to set state before render */}
-      <ReadOnlyModeSync />
-      <ReadOnlyBanner />
+      <AuthenticatedIndicators />
       {children}
       <Toaster position="top-right" richColors />
-      <GlobalCommandPalette />
-      <LedgerStatusIndicator />
-      <FailedActionsBadge />
       {process.env.NODE_ENV === 'development' && (
         <ReactQueryDevtools initialIsOpen={false} />
       )}
