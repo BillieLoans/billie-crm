@@ -1,3 +1,6 @@
 export { useOptimisticStore } from './optimistic'
 export { useRecentCustomersStore } from './recentCustomers'
 export { useUIStore } from './ui'
+export { useConversationFiltersStore } from './conversationFilters'
+export type { ConversationFilters } from './conversationFilters'
+export { useMonitoringGridStore } from './monitoringGrid'

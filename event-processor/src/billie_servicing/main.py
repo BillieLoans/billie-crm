@@ -23,9 +23,21 @@ from .handlers import (
     handle_utterance,
     handle_final_decision,
     handle_conversation_summary,
+    handle_conversation_summary_changed,
     handle_application_detail_changed,
     handle_assessment,
     handle_noticeboard_updated,
+    # Statement capture handlers
+    handle_statement_consent_initiated,
+    handle_statement_consent_complete,
+    handle_statement_consent_cancelled,
+    handle_basiq_job_created,
+    handle_statement_retrieval_complete,
+    handle_affordability_report_complete,
+    handle_statement_checks_complete,
+    # Credit assessment & post-identity handlers
+    handle_post_identity_risk_check,
+    handle_credit_assessment_complete,
     # Write-off handlers (CRM-originated events)
     handle_writeoff_requested,
     handle_writeoff_approved,
@@ -97,17 +109,31 @@ def setup_handlers(processor: EventProcessor) -> None:
 
     # Assessments
     processor.register_handler("identityRisk_assessment", handle_assessment)
-    processor.register_handler("serviceability_assessment_results", handle_assessment)
-    processor.register_handler("fraudCheck_assessment", handle_assessment)
+    processor.register_handler("credit_assessment_serviceability_result", handle_assessment)
 
     # Noticeboard
     processor.register_handler("noticeboard_updated", handle_noticeboard_updated)
 
     # Final decision
-    processor.register_handler("final_decision", handle_final_decision)
+    processor.register_handler("final_credit_decision", handle_final_decision)
 
     # Summary
     processor.register_handler("conversation_summary", handle_conversation_summary)
+    processor.register_handler("conversationSummary_changed", handle_conversation_summary_changed)
+
+    # Statement capture flow
+    processor.register_handler("statement_consent_initiated", handle_statement_consent_initiated)
+    processor.register_handler("statement_consent_complete", handle_statement_consent_complete)
+    processor.register_handler("statement_consent_cancelled", handle_statement_consent_cancelled)
+    processor.register_handler("basiq_job_created", handle_basiq_job_created)
+    processor.register_handler("statement_retrieval_complete", handle_statement_retrieval_complete)
+    processor.register_handler("affordability_report_complete", handle_affordability_report_complete)
+    processor.register_handler("statement_checks_complete", handle_statement_checks_complete)
+
+    # Credit assessments & post-identity
+    processor.register_handler("credit_assessment_accountConduct_result", handle_assessment)
+    processor.register_handler("post_identity_risk_checks_complete", handle_post_identity_risk_check)
+    processor.register_handler("credit_assessment_complete", handle_credit_assessment_complete)
 
     # =========================================================================
     # Write-off events (CRM-originated, manual parsing)

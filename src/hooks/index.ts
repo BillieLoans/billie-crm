@@ -44,6 +44,11 @@ export type { BatchQueryRequest, BatchQueryAccountResult, BatchQueryResponse } f
 export { useRandomSample } from './mutations/useRandomSample'
 export type { RandomSampleRequest, RandomSampleResponse } from './mutations/useRandomSample'
 
+// Conversations queries (billie-crm-applications)
+export { useConversations, useCustomerConversations } from './queries/useConversations'
+export { useConversation } from './queries/useConversation'
+export { useAccountConductAssessment, useServiceabilityAssessment } from './queries/useAssessments'
+
 // Re-export types from canonical location
 export type {
   CustomerSearchResult,

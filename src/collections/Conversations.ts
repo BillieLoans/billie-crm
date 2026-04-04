@@ -222,14 +222,52 @@ export const Conversations: CollectionConfig = {
         {
           name: 'serviceability',
           type: 'json',
-          admin: { description: 'Serviceability assessment data' },
+          admin: { description: 'Serviceability assessment data (includes s3Key and decision)' },
         },
         {
           name: 'fraudCheck',
           type: 'json',
           admin: { description: 'Fraud check assessment data' },
         },
+        {
+          name: 'accountConduct',
+          type: 'json',
+          admin: { description: 'Account conduct assessment data (includes s3Key and decision)' },
+        },
+        {
+          name: 'postIdentityRisk',
+          type: 'json',
+          admin: { description: 'Post-identity risk check data' },
+        },
+        {
+          name: 'creditAssessmentComplete',
+          type: 'json',
+          admin: { description: 'Credit assessment completion data' },
+        },
       ],
+    },
+    {
+      name: 'statementCapture',
+      type: 'json',
+      admin: {
+        readOnly: true,
+        description: 'Statement capture flow state (consent, Basiq job, retrieval, affordability)',
+      },
+    },
+    {
+      name: 'decisionStatus',
+      type: 'select',
+      options: [
+        { label: 'Approved', value: 'approved' },
+        { label: 'Declined', value: 'declined' },
+        { label: 'Referred', value: 'referred' },
+        { label: 'No Decision', value: 'no_decision' },
+      ],
+      index: true,
+      admin: {
+        readOnly: true,
+        description: 'Final decision outcome for filtering in monitoring view',
+      },
     },
     {
       name: 'noticeboard',

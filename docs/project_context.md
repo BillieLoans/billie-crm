@@ -1,7 +1,7 @@
 ---
 project_name: 'billie-crm'
 user_name: 'Rohan'
-date: '2025-12-11'
+date: '2026-04-03'
 sections_completed:
   - technology_stack
   - language_rules
@@ -32,6 +32,7 @@ _This file contains critical rules and patterns that AI agents must follow when 
 | @grpc/grpc-js | 1.14.1 | For Ledger service communication |
 | Vitest | 3.2.3 | Unit + integration tests |
 | Playwright | 1.50.0 | E2E tests |
+| DOMPurify | latest | HTML sanitization for conversation messages |
 
 **New Dependencies (to be installed):**
 - `@tanstack/react-query` v5 — Server state management
@@ -365,6 +366,93 @@ types/      → anything except other types/  (types are leaf nodes)
 
 ---
 
+## Conversations/Applications Feature Rules
+
+### HTML Sanitization (CRITICAL)
+
+```typescript
+// ALL conversation message HTML MUST go through SanitizedHTML
+import { SanitizedHTML } from '@/components/views/ConversationDetailView'
+
+// ✅ CORRECT
+<SanitizedHTML content={message.html} />
+
+// ❌ NEVER use dangerouslySetInnerHTML directly for conversation content
+<div dangerouslySetInnerHTML={{ __html: message.html }} />
+```
+
+### S3 Assessment Data
+
+```
+✅ DO: Fetch S3 data server-side in API routes, return parsed JSON to client
+❌ NOT: Return S3 pre-signed URLs or bucket keys to the client
+❌ NOT: Fetch S3 directly from browser
+
+✅ DO: Cache with staleTime: Infinity (assessment data is immutable)
+❌ NOT: Add server-side caching for assessments (unnecessary complexity)
+```
+
+### Polling Strategy
+
+```
+View-specific intervals — do NOT use a single global interval:
+  - Monitoring grid (useConversations):      5s poll, 5s stale
+  - Conversation detail (useConversation):   3s poll, 3s stale
+  - ServicingView panel (useCustomerConversations): 30s poll, 30s stale
+  - Assessment detail (useAssessment):       no poll, staleTime: Infinity
+
+ALL polling hooks MUST set refetchIntervalInBackground: false
+```
+
+### Conversation Status Values (canonical)
+
+```
+MongoDB stores lowercase snake_case — map to display labels client-side only:
+  active    → Active (green, pulsing)
+  paused    → Paused (amber)
+  soft_end  → Soft End (blue)
+  hard_end  → Hard End (grey)
+  approved  → Approved (green)
+  declined  → Declined (red)
+  ended     → Ended (grey)
+
+Use STATUS_CONFIG constant for mapping — do NOT hardcode badge colours
+```
+
+### Conversations Collection — READ ONLY from Web Layer
+
+```
+⚠️ The conversations collection follows the same CQRS rule as accounts/customers:
+  - Event Processor (Python) is the SOLE WRITER
+  - Payload/Next.js is READ ONLY
+  - Do NOT add Payload hooks or API routes that mutate conversations
+```
+
+### Conversations API Routes
+
+```
+Conversations routes live under /api/conversations/ (NOT /api/ledger/):
+  - These routes read from MongoDB, not gRPC
+  - Use withAuth() but NOT withLedgerHealth (no ledger dependency)
+  - Assessment routes additionally require rate limiting (30 req/min/user)
+```
+
+### Event Processor — New Handler Pattern
+
+```python
+# All conversation handlers MUST:
+# 1. Extract conversation_id with 3-field fallback
+conversation_id = safe_str(
+    event.get("cid") or event.get("conv") or event.get("conversation_id"),
+    "conversation_id"
+)
+# 2. Use upsert=True (events may arrive out of order)
+# 3. Use safe_str() from sanitize.py for all string extraction
+# 4. Bind structured logger with conversation_id
+```
+
+---
+
 ## Quick Reference
 
 ### Import Patterns
@@ -399,4 +487,4 @@ import { generateIdempotencyKey } from '@/lib/utils/idempotency'
 
 ---
 
-_Last updated: 2025-12-11 | Refer to `docs/architecture.md` for full architectural decisions._
+_Last updated: 2026-04-03 | Refer to `docs/architecture.md` for core architecture and `_bmad-output/planning-artifacts/architecture.md` for conversations/applications architecture._

@@ -1,497 +1,793 @@
 ---
-stepsCompleted: [1]
-status: 'in-progress'
+stepsCompleted:
+  - 1
+  - 2
+  - 3
+  - 4
+status: complete
+completedAt: '2026-04-03'
 inputDocuments:
-  - billie-platform-services/docs/USER_MANUAL.md
-  - billie-platform-services/docs/PLATFORM_SERVICES_DOCUMENTATION.md
-  - billie-platform-services/proto/accounting_ledger.proto
-  - billie-platform-services/_bmad-output/planning-artifacts/epics.md
-  - billie-crm/docs/architecture-billie-crm-web.md
-  - billie-crm/docs/ux-design-specification.md
-documentCounts:
-  prd: 1
-  architecture: 2
-  ux: 1
-  apiSpecs: 1
-  backendEpics: 1
-workflowType: 'epics'
-projectName: 'billie-crm'
-featureSet: 'Ledger Frontend Integration'
-date: '2026-01-17'
-gapAnalysisCompleted: true
+  - _bmad-output/planning-artifacts/prd.md
+  - _bmad-output/planning-artifacts/architecture.md
+  - _bmad-output/planning-artifacts/ux-design-specification.md
+workflowType: 'epics-and-stories'
+project_name: 'billie-crm-applications'
+user_name: 'Rohan'
+date: '2026-04-03'
 ---
 
-# Ledger Frontend Integration - Epic Breakdown
+# billie-crm-applications - Epic Breakdown
 
 ## Overview
 
-This document provides the complete epic and story breakdown for **Ledger Frontend Integration** in billie-crm. This feature set adds comprehensive UI components to interact with the new Revenue Recognition & ECL backend services (billie-platform-services).
-
-## Gap Analysis Summary
-
-### ✅ Existing Implementation (No New Work Required)
-
-The following features are **already fully implemented** in billie-crm:
-
-| Category | Status | Components |
-|----------|--------|------------|
-| Account Detail View | ✅ COMPLETE | `AccountPanel.tsx`, `AccountHeader.tsx`, `OverviewTab.tsx` |
-| Balance Display | ✅ COMPLETE | `BalanceCard.tsx`, live balance integration |
-| Transaction List | ✅ COMPLETE | `TransactionsTab.tsx`, `TransactionHistory.tsx` |
-| Schedule View (Basic) | ✅ COMPLETE | `RepaymentScheduleList.tsx` |
-| Fees Tab | ✅ COMPLETE | `FeesTab.tsx`, `FeeList.tsx` |
-| Record Payment | ✅ COMPLETE | `RecordRepaymentDrawer.tsx`, `RecordPaymentModal.tsx` |
-| Fee Waiver | ✅ COMPLETE | `WaiveFeeDrawer.tsx`, `WaiveFeeModal.tsx`, `BulkWaiveFeeDrawer.tsx` |
-| Write-off Request | ✅ COMPLETE | `WriteOffRequestDrawer.tsx`, `WriteOffModal.tsx` |
-| Adjustment Entry | ✅ COMPLETE | `AdjustmentModal.tsx` |
-| Late Fee Application | ✅ COMPLETE | `ApplyLateFeeModal.tsx` |
-| Approval Workflow | ✅ COMPLETE | `ApprovalsView/*` (10 files) |
-| Basic Dashboard | ✅ COMPLETE | `DashboardView` (needs enhancement) |
-
-**Existing API Routes:**
-- `/api/ledger/adjustment` ✅
-- `/api/ledger/balance` ✅
-- `/api/ledger/health` ✅
-- `/api/ledger/late-fee` ✅
-- `/api/ledger/record` ✅
-- `/api/ledger/repayment` ✅
-- `/api/ledger/statement` ✅
-- `/api/ledger/transactions` ✅
-- `/api/ledger/waive-fee` ✅
-- `/api/ledger/write-off` ✅
-
-**Existing gRPC Client Methods:**
-- `getTransactions`, `getBalance`, `getLedgerRecord`, `getStatement`
-- `watchTransactions`, `recordRepayment`, `applyLateFee`, `waiveFee`
-- `writeOff`, `makeAdjustment`
-
-### 🔧 Enhancement Required (Existing + New Features)
-
-| Feature | Existing | New Additions |
-|---------|----------|---------------|
-| Schedule View | Basic schedule display | Add instalment status (PENDING/PARTIAL/PAID/OVERDUE) via `GetScheduleWithStatus` |
-| Dashboard | Basic greeting, recent customers | Add Portfolio ECL widget, Aging summary, System health |
-| Account Search | Basic search | Enhanced search via `SearchAccounts` with more filters |
-
-### 🆕 New Modules Required (35 New gRPC Endpoints)
-
-| Module | New gRPC Methods | New Components Needed |
-|--------|-----------------|----------------------|
-| **Schedule/Aging** | `GetScheduleWithStatus`, `GetAccountAging`, `GetOverdueAccounts` | 3 |
-| **Revenue Recognition** | `GetAccruedYield`, `GetAccrualEventHistory` | 2 |
-| **ECL Management** | `GetECLAllowance`, `GetPortfolioECL`, `TriggerPortfolioECLRecalculation`, `TriggerBulkECLRecalculation` | 4 |
-| **ECL Configuration** | `GetECLConfig`, `UpdateOverlayMultiplier`, `UpdatePDRate`, `GetECLConfigHistory`, `ScheduleECLConfigChange`, `GetPendingConfigChanges`, `CancelPendingConfigChange`, `ApplyPendingConfigChanges` | 8 |
-| **Period Close** | `PreviewPeriodClose`, `FinalizePeriodClose`, `GetPeriodClose`, `GetClosedPeriods`, `AcknowledgeAnomaly` | 5 |
-| **Export** | `CreateExportJob`, `GetExportStatus`, `GetExportResult`, `RetryExport`, `ListExportJobs` | 5 |
-| **Investigation** | `GetEventHistory`, `TraceECLToSource`, `TraceAccruedYieldToSource`, `BatchAccountQuery`, `GenerateRandomSample`, `GetCarryingAmountBreakdown` | 6 |
-| **System Monitoring** | `GetEventProcessingStatus` | 1 |
-
----
+This document provides the complete epic and story breakdown for billie-crm-applications, decomposing the requirements from the PRD, UX Design, and Architecture into implementable stories. The feature replatforms the standalone billie-realtime supervisor dashboard into billie-crm, consolidating loan origination conversation monitoring into the existing staff servicing application.
 
 ## Requirements Inventory
 
-### Functional Requirements - EXISTING (No Stories Needed)
+### Functional Requirements
 
-**Account Management UI - ✅ ALREADY IMPLEMENTED**
-- ~~FR-UI-1: Account Detail View~~ → `AccountPanel.tsx` ✅
-- ~~FR-UI-2: Balance Display~~ → `OverviewTab.tsx`, `BalanceCard.tsx` ✅
-- ~~FR-UI-3: Transaction List~~ → `TransactionsTab.tsx`, `TransactionHistory.tsx` ✅
-- ~~FR-UI-4: Statement Generation~~ → `/api/ledger/statement` ✅
+FR1: Supervisors can view all conversations in a card grid showing customer name, application number, status badge, loan amount/purpose, last message preview, message count, and time indicators
+FR2: Supervisors can see conversation status badges reflecting current state (active, paused, soft end, hard end, approved, declined, ended)
+FR3: Supervisors can see the conversation grid update automatically at regular intervals without manual refresh
+FR4: Supervisors can paginate or infinite-scroll through conversations sorted by most recent activity
+FR5: Users can search conversations by customer name or application number
+FR6: Users can filter conversations by decision status (approved, declined, no decision)
+FR7: Users can filter conversations by conversation status (active, paused, ended)
+FR8: Users can filter conversations by date range
+FR9: Users can combine multiple search and filter criteria simultaneously
+FR10: Users can view the full message transcript with messages attributed to customer or AI assistant
+FR11: Users can view the AI assistant's rationale for each response when available
+FR12: Users can view assessment data organised by category (Application, Identity, Credit, Statements, Noticeboard)
+FR13: Users can expand and collapse individual assessment sections
+FR14: Users can view noticeboard posts with version history
+FR15: Users can see conversation detail update automatically at regular intervals
+FR16: Users can view application details (loan amount, purpose, term) within the conversation
+FR17: Users can view full account conduct assessment: overall decision, individual rule results, pass/fail indicators, scoring details
+FR18: Users can view full serviceability assessment: overall decision, monthly metrics, rule results, processed files
+FR19: Users can navigate from a conversation's assessment panel to the detailed assessment view
+FR20: Users can navigate from a conversation to the associated customer's ServicingView record
+FR21: Users can navigate from a customer's record to their associated conversations
+FR22: Users can see conversations alongside loan accounts, contact notes, and servicing history in the ServicingView
+FR23: Conversations are linked to both customer and application records
+FR24: Users can see conversation status and last message preview from within the ServicingView
+FR25: The system consumes and processes all conversation event types from inbox:billie-servicing
+FR26: The system stores full conversation state in MongoDB: utterances, all assessment types, noticeboard posts, application details, final decisions
+FR27: The system handles statement capture flow events (consent initiated/complete/cancelled, basiq job, retrieval, affordability report, statement checks)
+FR28: The system handles credit assessment result events (account conduct, serviceability) including S3 file location references
+FR29: The system handles post-identity risk check events
+FR30: The system sanitises all conversation message HTML before rendering
+FR31: Users can view formatted message content (bold, italic, links, lists) within sanitised boundaries
+FR32: Admin, supervisor, and operations roles can access conversation monitoring and details
+FR33: Readonly users can view conversations but cannot perform write actions
+FR34: The conversation monitoring nav link is visible to authorised roles in the Payload admin sidebar
+FR35: Users can access the conversation monitoring view from the Payload admin sidebar
+FR36: Users can navigate between monitoring view, conversation detail, customer record, and assessment detail seamlessly
+FR37: The conversation monitoring view operates within the Payload admin template (with sidebar)
 
-**Transaction Processing UI - ✅ ALREADY IMPLEMENTED**
-- ~~FR-UI-8: Payment Entry~~ → `RecordRepaymentDrawer.tsx`, `RecordPaymentModal.tsx` ✅
-- ~~FR-UI-9: Late Fee Application~~ → `ApplyLateFeeModal.tsx` ✅
-- ~~FR-UI-10: Fee Waiver~~ → `WaiveFeeDrawer.tsx`, `WaiveFeeModal.tsx` ✅
-- ~~FR-UI-11: Write-off Processing~~ → `WriteOffRequestDrawer.tsx`, `WriteOffModal.tsx` ✅
-- ~~FR-UI-12: Adjustment Entry~~ → `AdjustmentModal.tsx` ✅
+### NonFunctional Requirements
 
-### Functional Requirements - ENHANCEMENT (Stories Required)
+NFR1: All Conversations view initial load < 2 seconds
+NFR2: Conversation detail load < 1 second
+NFR3: Search and filter results < 1 second
+NFR4: Polling cycles complete without visible UI jank
+NFR5: Credit assessment detail pages (S3 fetch + render) < 3 seconds
+NFR6: 15+ concurrent users on monitoring view without degradation
+NFR7: All message HTML sanitised before rendering (DOMPurify, strict allowlist)
+NFR8: S3 assessment URLs validated against bucket allowlist with path traversal prevention
+NFR9: Assessment detail API routes rate-limited (30 requests/minute/user)
+NFR10: Conversation data accessible only to authenticated users with valid roles
+NFR11: No customer PII in application logs or error messages
+NFR12: All data access follows Payload CMS RBAC — no custom auth bypass
+NFR13: New event handlers do not break existing account, customer, or write-off handlers
+NFR14: New handlers follow existing patterns: at-least-once delivery, deduplication, DLQ after 3 failures
+NFR15: Conversations collection schema extensions backward-compatible with existing Payload collection
+NFR16: S3 assessment fetching uses existing s3-client.ts
+NFR17: Polling failure on one view does not affect other views
+NFR18: Event processor unavailability does not prevent reading existing conversation data
+NFR19: MongoDB queries use appropriate indexes to prevent collection scans
 
-**Account Management UI - 🔧 ENHANCEMENTS**
-- FR-UI-5: Enhanced Schedule View with instalment status (PENDING, PARTIAL, PAID, OVERDUE)
-- FR-UI-6: Enhanced account search via `SearchAccounts` RPC
-- FR-UI-7: Bulk account lookups via `BatchAccountQuery` RPC
+### Additional Requirements
 
-### Functional Requirements - NEW (Full Stories Required)
+**From Architecture:**
+- No starter template needed (brownfield extension of existing Next.js 15 / Payload CMS 3.45.0 application)
+- 1 new dependency required: dompurify + @types/dompurify
+- Implementation sequence: Event handlers → MongoDB indexes → API routes → Hooks → Components → View registration
+- MongoDB compound indexes: { status: 1, decisionStatus: 1, updatedAt: -1 }, { customerId: 1, updatedAt: -1 }, { applicationNumber: 1 }
+- Conversations collection schema extensions must use optional fields for backward compatibility
+- All new Python handlers must follow upsert pattern with safe_str() and 3-field conversation ID fallback (cid, conv, conversation_id)
+- SanitizedHTML component is the single source of truth for DOMPurify usage
+- S3 assessment data proxied server-side — pre-signed URLs never exposed to client
+- API response format: { conversations[], cursor, hasMore, total } for lists, { conversation } for detail
+- Rate limiting middleware on assessment routes (30 req/min/user)
+- Status values use lowercase snake_case in MongoDB, mapped to display labels client-side via STATUS_CONFIG constant
+- API routes grouped under /api/conversations/ with feature-grouped structure
+- React Query hooks: useConversations (5s poll), useConversation (3s poll), useCustomerConversations (30s poll), useAccountConductAssessment (staleTime: Infinity), useServiceabilityAssessment (staleTime: Infinity)
+- Component structure: views/ for new views, ServicingView/ConversationsPanel/ for extension
+- Event handler pattern: one file per domain, ~11 new handlers in existing conversation.py
+- All new event types follow external naming (not our choice): statement_consent_initiated, statement_consent_complete, etc.
 
-**Account Aging & Collections UI (4 FRs) - 🆕 ALL NEW**
-- FR-UI-13: Aging Status Card showing DPD, bucket, and days until overdue
-- FR-UI-14: Overdue Queue with filtering by bucket and DPD range
-- FR-UI-15: Sort and filter overdue accounts by amount, DPD, and bucket
-- FR-UI-16: Quick navigation from overdue queue to account detail
+**From UX Design:**
+- Responsive: 3 breakpoints — desktop (>1200px, 3-col grid), tablet (768-1200px, 2-col), mobile (<768px, 1-col)
+- Accessibility: WCAG 2.1 Level AA, colour independence on all badges, keyboard navigation, screen reader support
+- Keyboard shortcuts: arrow keys for grid nav, Enter to open, Escape to go back, / for search focus, [ ] for assessment collapse/expand
+- Polling update pattern: in-place updates (no card reorder during poll), subtle fade transitions (200ms), freshness indicator in header
+- Navigation state preservation: scroll position + filter state saved to Zustand store, restored on return
+- Loading states: skeleton loaders matching content layout (card-shaped for grid, bubble-shaped for transcript), never spinners
+- Empty states with actionable messages ("Clear filters", "Check back later")
+- Filter URL sync: filter state reflected in URL query params for shareable filtered views
+- Context-dependent naming: "Applications" in ServicingView, "Conversations" in monitoring grid (same data, different framing)
+- "Live" indicator: pulsing blue dot for active conversations in ServicingView applications panel
+- prefers-reduced-motion support: disable pulse animations, card entrance animations, fade transitions
+- Split panel: 60/40 desktop, stacked tablet, transcript-only with toggle on mobile
+- Pre-fetch conversation detail on card hover for instant drill-down
+- Contact notes as universal output — all journeys end with option to create a note linked to the conversation
 
-**Revenue Recognition UI (4 FRs) - 🆕 ALL NEW**
-- FR-UI-17: Yield Summary showing cumulative accrued yield per account
-- FR-UI-18: Accrual Timeline showing daily accrual events
-- FR-UI-19: Query accrued yield as of a specific date
-- FR-UI-20: Accrual calculation breakdown (fee amount, term days, daily rate)
+### FR Coverage Map
 
-**Expected Credit Loss (ECL) UI (10 FRs) - 🆕 ALL NEW**
-- FR-UI-21: ECL Detail View showing current allowance per account
-- FR-UI-22: Portfolio Dashboard with ECL aggregated by bucket
-- FR-UI-23: ECL Config Panel (overlay multiplier, PD rates)
-- FR-UI-24: ECL Config History/Audit Trail
-- FR-UI-25: Schedule future ECL parameter changes
-- FR-UI-26: View and manage pending config changes
-- FR-UI-27: Cancel scheduled config changes
-- FR-UI-28: Trigger portfolio-wide ECL recalculation
-- FR-UI-29: Trigger selective ECL recalculation for specific accounts
-- FR-UI-30: ECL movement analysis (prior vs current period)
-
-**Period-End Close UI (7 FRs) - 🆕 ALL NEW**
-- FR-UI-31: Initiate Period Close Preview for a specific date
-- FR-UI-32: Preview Dashboard with totals and breakdown
-- FR-UI-33: Review and acknowledge Anomalies before finalization
-- FR-UI-34: ECL Movement analysis in preview
-- FR-UI-35: Finalize Period Close (with confirmation)
-- FR-UI-36: Close History for past periods
-- FR-UI-37: Generated Journal Entries from close
-
-**Export & Integration UI (6 FRs) - 🆕 ALL NEW**
-- FR-UI-38: Export Wizard (journal entries, audit trail, methodology)
-- FR-UI-39: Export format selection (CSV, JSON)
-- FR-UI-40: Export Job Status and progress
-- FR-UI-41: Download completed exports
-- FR-UI-42: Retry failed exports
-- FR-UI-43: Export History
-
-**Investigation & Traceability UI (9 FRs) - 🆕 ALL NEW**
-- FR-UI-44: Full Event Timeline for an account
-- FR-UI-45: ECL Drilldown trace to source aging event
-- FR-UI-46: Yield Drilldown trace to source accrual events
-- FR-UI-47: Enhanced search with filters
-- FR-UI-48: Batch Account Query for multiple accounts
-- FR-UI-49: Random Samples by criteria (bucket, ECL range, etc.)
-- FR-UI-50: Carrying Amount Breakdown for verification
-- FR-UI-51: System Status Dashboard (event processing health)
-- FR-UI-52: Per-stream processing status and backlog metrics
-
-### Non-Functional Requirements (Frontend)
-
-**Performance (4 NFRs)**
-- NFR-UI-P1: UI must show optimistic updates within 100ms of user action
-- NFR-UI-P2: Account detail views must load within 1.5 seconds (FCP)
-- NFR-UI-P3: Lists (overdue accounts, transactions) must support pagination/virtualization for 10K+ items
-- NFR-UI-P4: Real-time data must refresh every 10 seconds with immediate revalidation on mutations
-
-**Usability (5 NFRs)**
-- NFR-UI-U1: All primary actions must be keyboard accessible
-- NFR-UI-U2: Error states must provide clear recovery actions (retry, refresh)
-- NFR-UI-U3: Forms must validate inputs and show errors inline
-- NFR-UI-U4: Financial values must use consistent formatting (2 decimal places, currency symbol)
-- NFR-UI-U5: Status badges must be visually distinct (color + icon)
-
-**Consistency (3 NFRs)**
-- NFR-UI-C1: New components must follow existing Payload CMS design patterns
-- NFR-UI-C2: New views must use existing navigation and layout patterns
-- NFR-UI-C3: New modals/drawers must follow existing interaction patterns (esc to close, focus trap)
-
-**Accessibility (3 NFRs)**
-- NFR-UI-A1: All interactive elements must have visible focus states
-- NFR-UI-A2: Status changes must be announced to screen readers (aria-live)
-- NFR-UI-A3: Color must not be the only indicator of state (use icons/text)
-
-### Additional Requirements from Architecture
-
-**From billie-crm Architecture:**
-- All new views inject into Payload Admin UI via `components.views`
-- New API routes follow existing patterns in `src/app/api/`
-- gRPC client calls via existing `src/server/grpc-client.ts`
-- State management using existing React Query patterns in `src/hooks/`
-- Optimistic UI updates using existing mutation patterns
-
-**From Platform Services Documentation:**
-- All write operations support idempotency keys
-- All read operations return data from projections (eventually consistent)
-- Event processing status can be monitored via GetEventProcessingStatus RPC
-- Export jobs are asynchronous - poll for status
-
-**From Existing UX Patterns:**
-- Slide-over drawers for detail views (maintain list context)
-- Modals for write actions (focused attention)
-- Toast notifications for action feedback
-- Skeleton loaders during data fetch
-- Command palette (Cmd+K) for navigation
-
----
-
-## FR Coverage Map
-
-### Already Implemented (No New API/Components)
-
-| Frontend FR | Status | Existing Component |
-|-------------|--------|-------------------|
-| FR-UI-1 | ✅ DONE | `AccountPanel.tsx` |
-| FR-UI-2 | ✅ DONE | `OverviewTab.tsx`, `BalanceCard.tsx` |
-| FR-UI-3 | ✅ DONE | `TransactionsTab.tsx`, `TransactionHistory.tsx` |
-| FR-UI-4 | ✅ DONE | `/api/ledger/statement` |
-| FR-UI-8 | ✅ DONE | `RecordRepaymentDrawer.tsx`, `RecordPaymentModal.tsx` |
-| FR-UI-9 | ✅ DONE | `ApplyLateFeeModal.tsx` |
-| FR-UI-10 | ✅ DONE | `WaiveFeeDrawer.tsx`, `WaiveFeeModal.tsx` |
-| FR-UI-11 | ✅ DONE | `WriteOffRequestDrawer.tsx`, `WriteOffModal.tsx` |
-| FR-UI-12 | ✅ DONE | `AdjustmentModal.tsx` |
-
-### Enhancement Required (Extend Existing)
-
-| Frontend FR | Backend API | Existing | New Work |
-|-------------|-------------|----------|----------|
-| FR-UI-5 | `GetScheduleWithStatus` | `RepaymentScheduleList.tsx` | Add instalment status badges |
-| FR-UI-6 | `SearchAccounts` | CommandPalette search | Add new gRPC endpoint |
-| FR-UI-7 | `BatchAccountQuery` | None | Add batch lookup panel |
-
-### New Components Required
-
-| Frontend FR | Backend API | UI Component | Epic |
-|-------------|-------------|--------------|------|
-| FR-UI-13 | `GetAccountAging` | `AgingStatusCard.tsx` | Epic 2 |
-| FR-UI-14 | `GetOverdueAccounts` | `OverdueQueue.tsx` | Epic 1 |
-| FR-UI-15 | `GetOverdueAccounts` | Filter/sort UI | Epic 1 |
-| FR-UI-16 | N/A | Navigation action | Epic 1 |
-| FR-UI-17 | `GetAccruedYield` | `YieldSummary.tsx` | Epic 2 |
-| FR-UI-18 | `GetAccrualEventHistory` | `AccrualTimeline.tsx` | Epic 2 |
-| FR-UI-19 | `GetAccruedYield` | Date picker query | Epic 2 |
-| FR-UI-20 | `GetAccruedYield` | Calculation breakdown | Epic 2 |
-| FR-UI-21 | `GetECLAllowance` | `ECLDetailView.tsx` | Epic 2 |
-| FR-UI-22 | `GetPortfolioECL` | `PortfolioDashboard.tsx` | Epic 1 |
-| FR-UI-23 | `GetECLConfig`, `UpdateOverlayMultiplier`, `UpdatePDRate` | `ECLConfigPanel.tsx` | Epic 4 |
-| FR-UI-24 | `GetECLConfigHistory` | `ConfigHistory.tsx` | Epic 4 |
-| FR-UI-25 | `ScheduleECLConfigChange` | `ScheduleChangeForm.tsx` | Epic 4 |
-| FR-UI-26 | `GetPendingConfigChanges` | `PendingChangesList.tsx` | Epic 4 |
-| FR-UI-27 | `CancelPendingConfigChange` | Action button | Epic 4 |
-| FR-UI-28 | `TriggerPortfolioECLRecalculation` | `RecalcModal.tsx` | Epic 4 |
-| FR-UI-29 | `TriggerBulkECLRecalculation` | `BulkRecalcModal.tsx` | Epic 4 |
-| FR-UI-30 | `PreviewPeriodClose` | `ECLMovementAnalysis.tsx` | Epic 3 |
-| FR-UI-31 | `PreviewPeriodClose` | `PeriodCloseWizard.tsx` | Epic 3 |
-| FR-UI-32 | `PreviewPeriodClose` | Preview dashboard | Epic 3 |
-| FR-UI-33 | `AcknowledgeAnomaly` | Anomaly review panel | Epic 3 |
-| FR-UI-34 | `PreviewPeriodClose` | Movement analysis | Epic 3 |
-| FR-UI-35 | `FinalizePeriodClose` | Finalize button | Epic 3 |
-| FR-UI-36 | `GetPeriodClose`, `GetClosedPeriods` | `CloseHistory.tsx` | Epic 3 |
-| FR-UI-37 | `FinalizePeriodClose` | Journal entries view | Epic 3 |
-| FR-UI-38 | `CreateExportJob` | `ExportWizard.tsx` | Epic 5 |
-| FR-UI-39 | `CreateExportJob` | Format selector | Epic 5 |
-| FR-UI-40 | `GetExportStatus` | `ExportJobStatus.tsx` | Epic 5 |
-| FR-UI-41 | `GetExportResult` | Download action | Epic 5 |
-| FR-UI-42 | `RetryExport` | Retry action | Epic 5 |
-| FR-UI-43 | `ListExportJobs` | `ExportHistory.tsx` | Epic 5 |
-| FR-UI-44 | `GetEventHistory` | `EventTimeline.tsx` | Epic 6 |
-| FR-UI-45 | `TraceECLToSource` | `ECLDrilldown.tsx` | Epic 6 |
-| FR-UI-46 | `TraceAccruedYieldToSource` | `YieldDrilldown.tsx` | Epic 6 |
-| FR-UI-47 | `SearchAccounts` | Enhanced search | Epic 6 |
-| FR-UI-48 | `BatchAccountQuery` | `BatchQueryPanel.tsx` | Epic 6 |
-| FR-UI-49 | `GenerateRandomSample` | `SamplingTool.tsx` | Epic 6 |
-| FR-UI-50 | `GetCarryingAmountBreakdown` | `CarryingAmountBreakdown.tsx` | Epic 2 |
-| FR-UI-51 | `GetEventProcessingStatus` | `SystemStatusDashboard.tsx` | Epic 1 |
-| FR-UI-52 | `GetEventProcessingStatus` | Stream status panel | Epic 1 |
-
----
+| FR | Epic | Description |
+|:---|:---|:---|
+| FR1 | Epic 2 | Card grid with conversation data |
+| FR2 | Epic 2 | Status badges (7 states) |
+| FR3 | Epic 2 | Auto-updating grid (5s polling) |
+| FR4 | Epic 2 | Pagination/infinite scroll |
+| FR5 | Epic 2 | Search by customer name/app number |
+| FR6 | Epic 2 | Filter by decision status |
+| FR7 | Epic 2 | Filter by conversation status |
+| FR8 | Epic 2 | Filter by date range |
+| FR9 | Epic 2 | Combine multiple filters |
+| FR10 | Epic 3 | Full message transcript |
+| FR11 | Epic 3 | AI assistant rationale |
+| FR12 | Epic 3 | Assessment data by category |
+| FR13 | Epic 3 | Collapsible assessment sections |
+| FR14 | Epic 3 | Noticeboard with version history |
+| FR15 | Epic 3 | Auto-updating detail (3s polling) |
+| FR16 | Epic 3 | Application details in conversation |
+| FR17 | Epic 3 | Account conduct assessment detail |
+| FR18 | Epic 3 | Serviceability assessment detail |
+| FR19 | Epic 3 | Navigate to assessment detail |
+| FR20 | Epic 4 | Navigate conversation → customer |
+| FR21 | Epic 4 | Navigate customer → conversations |
+| FR22 | Epic 4 | Conversations in ServicingView |
+| FR23 | Epic 4 | Linked to customer + application |
+| FR24 | Epic 4 | Status + preview in ServicingView |
+| FR25 | Epic 1 | Consume all event types |
+| FR26 | Epic 1 | Store full conversation state |
+| FR27 | Epic 1 | Statement capture flow events |
+| FR28 | Epic 1 | Credit assessment events + S3 refs |
+| FR29 | Epic 1 | Post-identity risk events |
+| FR30 | Epic 3 | HTML sanitisation |
+| FR31 | Epic 3 | Formatted content display |
+| FR32 | Epic 2 | Role-based access |
+| FR33 | Epic 2 | Readonly can view |
+| FR34 | Epic 2 | Nav link in sidebar |
+| FR35 | Epic 2 | Access from sidebar |
+| FR36 | Epic 4 | Seamless navigation between views |
+| FR37 | Epic 2 | Operates within Payload admin template |
 
 ## Epic List
 
-### Epic 0: gRPC Client & API Foundation
-**Goal:** Extend gRPC client with all new backend methods and create API route layer
-
-Before any UI work can begin, we must:
-1. Update `proto/accounting_ledger.proto` with new service methods
-2. Extend `src/server/grpc-client.ts` with typed methods for 35 new RPCs
-3. Create API routes in `src/app/api/` for new endpoints
-
-**Scope:**
-- Copy updated proto from billie-platform-services
-- Add TypeScript interfaces for all new message types
-- Implement client methods for each new RPC
-- Create ~25 new API routes
-
+### Epic 1: Data Pipeline & API Foundation
+The system captures all conversation events and provides API access to conversation data — enabling monitoring, detail, and customer context features.
+**FRs covered:** FR25, FR26, FR27, FR28, FR29
+**NFRs covered:** NFR7-NFR9, NFR13-NFR16, NFR19
 **Dependencies:** None (foundational)
 
-**Stories:** 3-5 stories covering proto update, client extension, API routes by domain
+### Epic 2: Conversation Monitoring View
+Supervisors can monitor all live conversations in a real-time card grid with search, filters, status badges, and automatic updates.
+**FRs covered:** FR1, FR2, FR3, FR4, FR5, FR6, FR7, FR8, FR9, FR32, FR33, FR34, FR35, FR37
+**NFRs covered:** NFR1, NFR3, NFR4, NFR6, NFR10-NFR12
+**Dependencies:** Epic 1
+
+### Epic 3: Conversation Detail & Assessments
+Users can view full conversation transcripts with chat bubbles, assessment data in collapsible sections, noticeboard history, and detailed credit assessment reports.
+**FRs covered:** FR10, FR11, FR12, FR13, FR14, FR15, FR16, FR17, FR18, FR19, FR30, FR31
+**NFRs covered:** NFR2, NFR5, NFR7, NFR8, NFR9, NFR17
+**Dependencies:** Epic 1, Epic 2
+
+### Epic 4: Customer & Application Context
+Staff see applications alongside customer records in ServicingView and navigate seamlessly between conversations, customers, and applications.
+**FRs covered:** FR20, FR21, FR22, FR23, FR24, FR36
+**NFRs covered:** NFR17, NFR18
+**Dependencies:** Epic 1, Epic 3
 
 ---
 
-### Epic 1: Portfolio Dashboard & Collections Queue
-**Goal:** Finance and Collections can view portfolio health and manage overdue accounts
+## Epic 1: Data Pipeline & API Foundation
 
-Provides executive-level visibility into portfolio ECL by bucket, total receivables, and system health. Collections can efficiently triage and manage overdue accounts.
+The system captures all conversation events from the loan origination process and provides API access to conversation data — enabling monitoring, detail viewing, and customer context features in subsequent epics.
 
-**FRs covered:** FR-UI-14, FR-UI-15, FR-UI-16, FR-UI-22, FR-UI-51, FR-UI-52
+### Story 1.1: Statement Capture Flow Event Handlers
 
-**NFRs covered:** NFR-UI-P2, NFR-UI-P3, NFR-UI-U5
+As the system,
+I want to process statement capture flow events from the Redis stream,
+So that conversation records include complete statement consent and retrieval data.
 
-**New Components:**
-- `PortfolioDashboard.tsx` - Main dashboard with ECL breakdown
-- `OverdueQueue.tsx` - Paginated list of overdue accounts
-- `SystemStatusPanel.tsx` - Event processing health indicator
-- Dashboard enhancement - Add portfolio widgets to existing dashboard
+**Acceptance Criteria:**
 
-**Dependencies:** Epic 0 (gRPC client)
+**Given** a `statement_consent_initiated` event arrives on `inbox:billie-servicing`
+**When** the event processor handles the event
+**Then** the conversations document is upserted with `statementCapture.consentStatus` set to `initiated`
+**And** the handler uses the 3-field conversation ID fallback (`cid`, `conv`, `conversation_id`)
+**And** `safe_str()` is used for all string extraction
+
+**Given** a `statement_consent_complete` event arrives
+**When** the event processor handles the event
+**Then** `statementCapture.consentStatus` is updated to `complete`
+
+**Given** a `statement_consent_cancelled` event arrives
+**When** the event processor handles the event
+**Then** `statementCapture.consentStatus` is updated to `cancelled`
+
+**Given** a `basiq_job_created` event arrives
+**When** the event processor handles the event
+**Then** `statementCapture.basiqJobId` is stored
+
+**Given** a `statement_retrieval_complete` event arrives
+**When** the event processor handles the event
+**Then** `statementCapture.retrievalComplete` is set to `true`
+
+**Given** an `affordability_report_complete` event arrives
+**When** the event processor handles the event
+**Then** `statementCapture.affordabilityReport` is stored as the event payload
+
+**Given** a `statement_checks_complete` event arrives
+**When** the event processor handles the event
+**Then** `statementCapture.checksComplete` is set to `true`
+
+**Given** any handler fails processing
+**When** the failure count reaches 3
+**Then** the event is moved to the DLQ following existing patterns (NFR14)
+
+**Given** existing conversation event handlers
+**When** the new handlers are deployed
+**Then** existing handlers for accounts, customers, and write-offs continue to function (NFR13)
+
+### Story 1.2: Credit Assessment & Post-Identity Event Handlers
+
+As the system,
+I want to process credit assessment results and post-identity risk check events,
+So that conversation records include assessment outcomes and S3 file references.
+
+**Acceptance Criteria:**
+
+**Given** an `account_conduct_assessment_results` event arrives with an S3 key in the payload
+**When** the event processor handles the event
+**Then** the conversations document is upserted with `assessments.accountConduct.s3Key` and `assessments.accountConduct.decision`
+
+**Given** a `serviceability_assessment_results` event arrives with an S3 key in the payload
+**When** the event processor handles the event
+**Then** the conversations document is upserted with `assessments.serviceability.s3Key` and `assessments.serviceability.decision`
+
+**Given** a `post_identity_risk_check` event arrives
+**When** the event processor handles the event
+**Then** the conversations document is upserted with `assessments.postIdentityRisk` containing the risk assessment data
+
+**Given** a `credit_assessment_complete` event arrives
+**When** the event processor handles the event
+**Then** the relevant assessment fields are updated on the conversation document
+
+**Given** events arrive out of order (e.g., assessment before identity)
+**When** the handler processes them
+**Then** `upsert=True` ensures the document is created or updated without error
+
+**Given** all new handlers are registered
+**When** the event processor starts
+**Then** the `__init__.py` handler map includes all new event type to handler function mappings
+
+### Story 1.3: Conversations Collection Schema & Indexes
+
+As a developer,
+I want the Conversations Payload collection extended with new optional fields and MongoDB indexes created,
+So that the API routes can query conversations efficiently and the schema matches the event processor output.
+
+**Acceptance Criteria:**
+
+**Given** the existing Conversations Payload collection
+**When** the schema is extended
+**Then** new fields are added as optional: `statementCapture` (object), `assessments.accountConduct.s3Key` (text), `assessments.serviceability.s3Key` (text), `assessments.postIdentityRisk` (object)
+**And** existing fields are unchanged (NFR15 — backward compatible)
+
+**Given** the MongoDB conversations collection
+**When** indexes are created
+**Then** a compound index exists on `{ status: 1, decisionStatus: 1, updatedAt: -1 }`
+**And** an index exists on `{ customerId: 1, updatedAt: -1 }`
+**And** an index exists on `{ applicationNumber: 1 }`
+**And** queries for the monitoring grid use the compound index (NFR19)
+
+**Given** the Payload collection definition is updated
+**When** `pnpm generate:types` is run
+**Then** `src/payload-types.ts` includes the new optional fields
+**And** `pnpm generate:importmap` regenerates the import map
+
+### Story 1.4: Conversations List & Search API Route
+
+As a developer building the monitoring view,
+I want a GET `/api/conversations` endpoint that returns paginated, filterable conversation data,
+So that the frontend can display and search conversations.
+
+**Acceptance Criteria:**
+
+**Given** an authenticated user with a valid role (admin, supervisor, operations, readonly)
+**When** they call `GET /api/conversations`
+**Then** a paginated list of conversations is returned in the format `{ conversations: [], cursor: string | null, hasMore: boolean, total: number }`
+
+**Given** query parameters `?status=active&decision=approved&from=2026-01-01&to=2026-04-01&q=john&limit=20`
+**When** the API processes the request
+**Then** filters are composed with AND logic against the conversations collection
+**And** text search uses case-insensitive regex on `customer.fullName` and `applicationNumber`
+**And** results are sorted by `updatedAt` descending
+
+**Given** a `cursor` parameter from a previous response
+**When** the next page is requested
+**Then** results continue from the cursor position using `updatedAt` + `_id`
+
+**Given** an unauthenticated request
+**When** the API route is called
+**Then** a 401 error is returned (NFR10)
+
+**Given** the API response
+**When** it contains conversation data
+**Then** each conversation summary includes: `conversationId`, `customer.fullName`, `customer.customerId`, `applicationNumber`, `status`, `decisionStatus`, `application.loanAmount`, `application.purpose`, `messageCount`, `lastMessageAt`, `updatedAt`
+
+**Given** the API route
+**When** a Zod schema validates the response
+**Then** the schema is defined in `src/lib/schemas/conversations.ts`
+
+### Story 1.5: Conversation Detail API Route
+
+As a developer building the detail view,
+I want a GET `/api/conversations/:conversationId` endpoint that returns full conversation data,
+So that the frontend can display transcripts, assessments, and noticeboard.
+
+**Acceptance Criteria:**
+
+**Given** an authenticated user with a valid role
+**When** they call `GET /api/conversations/:conversationId` with a valid ID
+**Then** the full conversation is returned in the format `{ conversation: ConversationDetail }`
+**And** the response includes: `utterances[]`, `assessments` (all types), `statementCapture`, `noticeboard[]`, `customer`, `application`, `status`, `decisionStatus`, `summary`
+
+**Given** a non-existent conversationId
+**When** the API route is called
+**Then** a 404 error is returned: `{ error: { code: "NOT_FOUND", message: "Conversation not found" } }`
+
+**Given** no customer PII
+**When** an error is logged server-side
+**Then** the log does not include customer names, addresses, or other PII (NFR11)
+
+### Story 1.6: Credit Assessment S3 Proxy API Routes
+
+As a developer building the assessment detail pages,
+I want API routes that fetch credit assessment JSON from S3 and return it to the client,
+So that assessment data is accessible without exposing S3 credentials or URLs to the browser.
+
+**Acceptance Criteria:**
+
+**Given** an authenticated user with a valid role
+**When** they call `GET /api/conversations/:conversationId/assessments/account-conduct`
+**Then** the API fetches the assessment JSON from S3 using the `s3Key` stored on the conversation document
+**And** returns the parsed JSON in the format `{ assessment: AccountConductAssessment }`
+**And** S3 pre-signed URLs are never returned to the client (NFR8)
+
+**Given** an authenticated user
+**When** they call `GET /api/conversations/:conversationId/assessments/serviceability`
+**Then** the serviceability assessment JSON is fetched from S3 and returned similarly
+
+**Given** the S3 bucket name in the key
+**When** the route validates the request
+**Then** the bucket is checked against the allowlist in existing `s3-client.ts` (NFR8, NFR16)
+**And** path traversal is prevented
+
+**Given** a user making more than 30 requests per minute to assessment routes
+**When** the rate limit is exceeded
+**Then** a 429 status is returned with `{ error: { code: "RATE_LIMITED", message: "Too many requests" } }` (NFR9)
+
+**Given** the conversation has no assessment data (S3 key is null)
+**When** the API route is called
+**Then** a 404 is returned: `{ error: { code: "NOT_FOUND", message: "Assessment not available" } }`
+
+**Given** `dompurify` is not yet installed in the project
+**When** this story is implemented
+**Then** `pnpm add dompurify @types/dompurify` is run and the dependency is available for Epic 3
 
 ---
 
-### Epic 2: Enhanced Account Detail (Aging, Yield, ECL)
-**Goal:** Staff can see complete account picture including aging, accrued yield, and ECL
+## Epic 2: Conversation Monitoring View
 
-Extends existing account detail view with new tabs/panels for aging status, revenue recognition, and ECL allowance with full traceability.
+Supervisors can monitor all live conversations in a real-time card grid with search, filters, status badges, and automatic updates.
 
-**FRs covered:** FR-UI-5, FR-UI-13, FR-UI-17, FR-UI-18, FR-UI-19, FR-UI-20, FR-UI-21, FR-UI-50
+### Story 2.1: ApplicationsView Scaffold & Navigation
 
-**NFRs covered:** NFR-UI-P1, NFR-UI-P2, NFR-UI-C1
+As a supervisor,
+I want an "Applications" link in the Payload admin sidebar that opens a monitoring view,
+So that I can access conversation monitoring from anywhere in the CRM.
 
-**New Components:**
-- `AgingStatusCard.tsx` - DPD, bucket, overdue amount
-- `AccrualTab.tsx` - Yield summary and calculation breakdown
-- `ECLTab.tsx` - ECL allowance and trace
-- `CarryingAmountBreakdown.tsx` - Detailed breakdown for audit
-- Enhancement to `RepaymentScheduleList.tsx` - Add instalment status
+**Acceptance Criteria:**
 
-**Dependencies:** Epic 0 (gRPC client)
+**Given** a user with role admin, supervisor, or operations
+**When** they view the Payload admin sidebar
+**Then** an "Applications" nav link is visible (FR34, FR35)
 
----
+**Given** a user with role readonly
+**When** they view the Payload admin sidebar
+**Then** the "Applications" nav link is visible (FR33 — readonly can view)
 
-### Epic 3: Period-End Close Wizard
-**Goal:** Operations and Finance can complete period-end close with preview and validation
+**Given** a user clicks the "Applications" nav link
+**When** the view loads
+**Then** the ApplicationsView renders within the Payload admin template with sidebar (FR37)
+**And** the view uses the `ApplicationsViewWithTemplate` wrapper pattern
+**And** the route is `/admin/applications`
 
-Multi-step wizard guides users through preview, anomaly review, and finalization with full visibility into ECL movement and generated journals.
+**Given** the ApplicationsView is registered
+**When** `pnpm generate:importmap` is run
+**Then** the import map is regenerated to include the new view
 
-**FRs covered:** FR-UI-30, FR-UI-31, FR-UI-32, FR-UI-33, FR-UI-34, FR-UI-35, FR-UI-36, FR-UI-37
+**Given** an unauthenticated user
+**When** they navigate to `/admin/applications`
+**Then** they are redirected to the login page (NFR10)
 
-**NFRs covered:** NFR-UI-U2, NFR-UI-U3, NFR-UI-C2
+### Story 2.2: ConversationCard & StatusBadge Components
 
-**New Components:**
-- `PeriodCloseWizard.tsx` - Multi-step wizard container
-- `PreviewStep.tsx` - Preview with totals and anomalies
-- `AnomalyReviewStep.tsx` - Review and acknowledge anomalies
-- `ECLMovementAnalysis.tsx` - Prior vs current comparison
-- `FinalizeStep.tsx` - Confirmation and finalization
-- `CloseHistory.tsx` - Past period closes
-- `JournalEntriesView.tsx` - Generated journal entries
+As a supervisor,
+I want each conversation displayed as a card with status badge, customer name, application details, and message preview,
+So that I can scan conversations and understand their state at a glance.
 
-**Dependencies:** Epic 0 (gRPC client), Epic 2 (ECL display)
+**Acceptance Criteria:**
 
----
+**Given** a conversation with status `active`
+**When** the ConversationCard renders
+**Then** it displays: status badge (blue dot + "Active" label), customer name (bold, 14px), application number (mono, 12px), loan amount and purpose, last message preview (truncated to 2 lines, muted), message count, and relative time indicator (FR1)
 
-### Epic 4: ECL Configuration Management
-**Goal:** Finance Admin can manage ECL parameters with full audit trail
+**Given** each of the 7 conversation statuses (active, paused, soft_end, hard_end, approved, declined, ended)
+**When** the StatusBadge renders
+**Then** each status shows the correct colour dot + icon + text label as defined in the visual foundation (FR2)
+**And** the badge is accessible with `aria-label="Status: {status name}"`
 
-Complete configuration panel for overlay multiplier, PD rates, scheduled changes, and configuration history.
+**Given** a conversation with status `paused` for more than 5 minutes
+**When** the card renders
+**Then** the card has an amber left border accent to draw attention
 
-**FRs covered:** FR-UI-23, FR-UI-24, FR-UI-25, FR-UI-26, FR-UI-27, FR-UI-28, FR-UI-29
+**Given** the monitoring grid is viewed on mobile (<768px)
+**When** cards render
+**Then** the message preview is hidden and the card shows a compact layout
+**And** the card tap area is the full card surface (minimum 44px touch target)
 
-**NFRs covered:** NFR-UI-U3, NFR-UI-A1
+**Given** a ConversationCard
+**When** the user hovers with a mouse
+**Then** the card shows a darker border and subtle shadow
 
-**New Components:**
-- `ECLConfigPanel.tsx` - Main config view
-- `OverlayEditor.tsx` - Edit overlay multiplier
-- `PDRateEditor.tsx` - Edit PD rates by bucket
-- `ScheduleChangeForm.tsx` - Schedule future changes
-- `PendingChangesList.tsx` - View/cancel pending changes
-- `ConfigHistory.tsx` - Audit trail of changes
-- `RecalcModal.tsx` - Trigger portfolio recalc
-- `BulkRecalcModal.tsx` - Selective account recalc
+### Story 2.3: Monitoring Grid with Real-Time Polling
 
-**Dependencies:** Epic 0 (gRPC client)
+As a supervisor,
+I want the conversation grid to update automatically every 5 seconds without layout jank,
+So that I can see conversation status changes in near-real-time without manual refresh.
 
----
+**Acceptance Criteria:**
 
-### Epic 5: Export Center
-**Goal:** Finance and Auditors can export data for external systems and audit purposes
+**Given** the ApplicationsView loads
+**When** the `useConversations` hook fetches data
+**Then** conversations are displayed in a responsive CSS Grid: 3 columns (>1200px), 2 columns (768-1200px), 1 column (<768px)
+**And** conversations are sorted by most recent activity (FR4)
 
-Unified export interface for journal entries (Xero format), audit trails, and methodology documentation with job management.
+**Given** the grid is displayed
+**When** the `useConversations` hook polls at 5-second intervals (FR3)
+**Then** card content updates in-place with a subtle fade transition (200ms)
+**And** card positions do NOT reorder during a poll cycle (NFR4)
+**And** polling stops when the browser tab is not focused (`refetchIntervalInBackground: false`)
 
-**FRs covered:** FR-UI-38, FR-UI-39, FR-UI-40, FR-UI-41, FR-UI-42, FR-UI-43
+**Given** the grid is loading for the first time
+**When** data has not yet arrived
+**Then** 6 skeleton card placeholders are displayed matching the card layout (NFR1)
 
-**NFRs covered:** NFR-UI-P4, NFR-UI-U2
+**Given** the grid has loaded
+**When** the FreshnessIndicator component renders in the page header
+**Then** it is hidden when data is fresh (< 10s), shows grey text at 10-30s, amber text at 30-60s, and an amber badge after 60s
 
-**New Components:**
-- `ExportCenter.tsx` - Main export view
-- `ExportWizard.tsx` - Create export wizard
-- `ExportJobsList.tsx` - Active/completed jobs
-- `ExportProgress.tsx` - Real-time progress
-- Download action handlers
+**Given** more conversations exist than the page size
+**When** the user scrolls to the bottom or clicks "Load more"
+**Then** the next page is fetched using cursor-based pagination
+**And** scroll position is preserved during pagination
 
-**Dependencies:** Epic 0 (gRPC client)
+**Given** 15+ concurrent users are viewing the monitoring grid
+**When** all are polling at 5s intervals
+**Then** the system handles the load without degradation (NFR6)
 
----
+### Story 2.4: Conversation Search & Filtering
 
-### Epic 6: Investigation & Traceability Tools
-**Goal:** Engineering and Auditors can trace any value back to source events
+As a supervisor,
+I want to search conversations by customer name or application number and filter by status, decision, and date range,
+So that I can find specific conversations quickly for monitoring or investigation.
 
-Comprehensive investigation tools including event timeline, ECL/yield drilldown, batch queries, and random sampling.
+**Acceptance Criteria:**
 
-**FRs covered:** FR-UI-44, FR-UI-45, FR-UI-46, FR-UI-47, FR-UI-48, FR-UI-49
+**Given** the filter bar is displayed at the top of the monitoring grid
+**When** the user types in the search input
+**Then** results filter by customer name or application number with 300ms debounce (FR5)
 
-**NFRs covered:** NFR-UI-P3, NFR-UI-C3
+**Given** the decision status dropdown
+**When** the user selects "Declined"
+**Then** only conversations with `decisionStatus: declined` are shown (FR6)
 
-**New Components:**
-- `InvestigationView.tsx` - Main investigation dashboard
-- `EventTimeline.tsx` - Full event history
-- `ECLDrilldown.tsx` - Trace ECL to source
-- `YieldDrilldown.tsx` - Trace yield to source
-- `BatchQueryPanel.tsx` - Multi-account queries
-- `SamplingTool.tsx` - Random sample generation
-- Enhanced search integration
+**Given** the conversation status dropdown
+**When** the user selects "Active"
+**Then** only conversations with `status: active` are shown (FR7)
 
-**Dependencies:** Epic 0 (gRPC client), Epic 2 (account detail)
+**Given** the date range picker
+**When** the user sets a from and to date
+**Then** only conversations updated within that range are shown (FR8)
 
----
+**Given** multiple filters are applied (e.g., status: active + decision: approved + date range)
+**When** the results render
+**Then** all filters combine with AND logic (FR9)
+**And** results update immediately on each filter change — no "Apply" button needed (NFR3)
 
-## Cross-Cutting Acceptance Criteria
+**Given** filters are applied
+**When** the user clicks "Clear filters"
+**Then** all filters reset to default and the full conversation list is shown
 
-The following requirements apply as acceptance criteria on ALL stories:
+**Given** active filters
+**When** the URL is inspected
+**Then** filter state is reflected in URL query params (e.g., `?status=declined&from=2026-03-27`)
+**And** sharing this URL reproduces the filtered view
 
-| Requirement | Acceptance Criteria |
-|-------------|---------------------|
-| NFR-UI-C1 | Component follows Payload CMS design patterns |
-| NFR-UI-C2 | View integrates with existing navigation |
-| NFR-UI-U4 | Financial values formatted consistently |
-| NFR-UI-A1 | All interactive elements have focus states |
-| Optimistic UI | Write actions show immediate feedback |
-| Error Handling | Failures show clear recovery options |
+**Given** the user navigates to conversation detail and returns
+**When** the monitoring grid reloads
+**Then** filter state is restored from the `useConversationFiltersStore` (Zustand)
 
----
+**Given** no conversations match the active filters
+**When** the grid renders
+**Then** an empty state message is shown: "No conversations match your filters. [Clear filters]"
 
-## Implementation Priority
+**Given** the monitoring grid is focused
+**When** the user presses `/`
+**Then** the search input is focused
 
-Based on dependencies and business value:
-
-| Priority | Epic | Rationale |
-|----------|------|-----------|
-| P0 | Epic 0: gRPC Foundation | Blocking - all other work depends on this |
-| P1 | Epic 2: Enhanced Account Detail | High value, extends existing UI |
-| P1 | Epic 1: Portfolio Dashboard | High visibility, management requirement |
-| P2 | Epic 3: Period-End Close | Critical for month-end process |
-| P2 | Epic 4: ECL Configuration | Required for ECL management |
-| P3 | Epic 5: Export Center | Integration with external systems |
-| P3 | Epic 6: Investigation Tools | Audit and debugging support |
-
----
-
-## Effort Estimates (High-Level)
-
-| Epic | New Components | API Routes | Stories | T-Shirt |
-|------|----------------|------------|---------|---------|
-| Epic 0 | 0 | ~25 | 3-5 | M |
-| Epic 1 | 4 | 4 | 6-8 | L |
-| Epic 2 | 5 | 5 | 8-10 | L |
-| Epic 3 | 7 | 5 | 8-10 | XL |
-| Epic 4 | 8 | 8 | 10-12 | XL |
-| Epic 5 | 4 | 5 | 5-7 | M |
-| Epic 6 | 6 | 6 | 8-10 | L |
-| **Total** | **34** | **~58** | **48-62** | - |
-
----
-
-## Related Documents
-
-- **UX Design:** [docs/ux-design/ledger-integration-ux.md](../docs/ux-design/ledger-integration-ux.md)
-- **Existing UX Spec:** [docs/ux-design-specification.md](../docs/ux-design-specification.md)
-- **Architecture:** [docs/architecture-billie-crm-web.md](../docs/architecture-billie-crm-web.md)
+**Given** the user presses arrow keys
+**When** cards are focused
+**Then** focus moves between cards, and Enter opens the selected conversation detail
 
 ---
 
-## Next Steps
+## Epic 3: Conversation Detail & Assessments
 
-1. ✅ Gap analysis complete
-2. ✅ UX design for new features complete
-3. ✅ Create detailed stories for all epics — see [stories.md](./stories.md)
-4. ⏳ Review and confirm epic/story breakdown with stakeholders
-5. ⏳ Begin implementation of Epic 0 (gRPC Foundation)
+Users can view full conversation transcripts with chat bubbles, assessment data in collapsible sections, noticeboard history, and detailed credit assessment reports.
+
+### Story 3.1: ConversationDetailView with Split-Panel Layout
+
+As a supervisor,
+I want to click a conversation card and see a split-panel view with the transcript on the left and assessments on the right,
+So that I can review the full conversation and assessment data side by side.
+
+**Acceptance Criteria:**
+
+**Given** the user clicks a ConversationCard in the monitoring grid
+**When** the ConversationDetailView loads at `/admin/applications/:conversationId`
+**Then** a split-panel layout renders: 60% left (transcript), 40% right (assessments)
+**And** the view is wrapped in `ConversationDetailViewWithTemplate` within the Payload admin template
+
+**Given** the ConversationDetailView
+**When** it renders
+**Then** a ConversationHeader displays: breadcrumb ("Applications > Customer Name > APP-XXXXX"), status badge, loan amount/purpose, and a "View profile →" link to the customer's ServicingView (FR16)
+
+**Given** the `useConversation` hook
+**When** data loads
+**Then** the conversation detail is fetched from `GET /api/conversations/:conversationId`
+**And** the hook polls at 3-second intervals (FR15)
+**And** `refetchIntervalInBackground: false`
+
+**Given** the detail view is loading
+**When** data has not yet arrived
+**Then** skeleton placeholders render: message bubble shapes on the left, section shapes on the right (NFR2 — load < 1 second)
+
+**Given** the view on a tablet (768-1200px)
+**When** the layout renders
+**Then** the panels stack vertically: transcript on top, assessments below (collapsible)
+
+**Given** the view on mobile (<768px)
+**When** the layout renders
+**Then** only the transcript is shown by default with an "Assessments" toggle button
+**And** the customer link is a sticky button at bottom of screen
+
+**Given** the user presses Escape
+**When** in the conversation detail view
+**Then** they navigate back to the monitoring grid
+
+### Story 3.2: Chat Transcript & HTML Sanitisation
+
+As a supervisor,
+I want to read the conversation transcript as chat bubbles with customer messages on the left and AI assistant messages on the right,
+So that I can follow the conversation flow naturally and safely view formatted content.
+
+**Acceptance Criteria:**
+
+**Given** a conversation with utterances
+**When** the MessagePanel renders
+**Then** customer messages are displayed as left-aligned bubbles on `--theme-elevation-100` background
+**And** AI assistant messages are displayed as right-aligned bubbles on `--theme-primary-100` background (FR10)
+
+**Given** an assistant message with rationale data
+**When** the MessageBubble renders
+**Then** the rationale is displayed as italic sub-text below the bubble in `--theme-text-secondary` colour (FR11)
+
+**Given** messages within the same 1-minute window
+**When** they render
+**Then** they share a single timestamp header between message groups rather than individual timestamps
+
+**Given** a message containing HTML content (bold, italic, links, lists)
+**When** the SanitizedHTML component renders it
+**Then** HTML is sanitised via DOMPurify with strict allowlist: `b`, `i`, `em`, `strong`, `a`, `p`, `br`, `ul`, `ol`, `li`, `span` (FR30, FR31, NFR7)
+**And** `dangerouslySetInnerHTML` is ONLY used inside the SanitizedHTML component
+**And** no other component in the codebase uses `dangerouslySetInnerHTML` directly
+
+**Given** new messages arrive during 3s polling
+**When** the user has not scrolled up
+**Then** new messages append at the bottom and the view auto-scrolls
+
+**Given** the user has scrolled up in the transcript
+**When** new messages arrive via polling
+**Then** messages append at the bottom but the scroll position is preserved (user is not auto-scrolled)
+
+**Given** a message bubble
+**When** a screen reader encounters it
+**Then** `aria-label` announces the speaker: "Customer message" or "Assistant message"
+
+### Story 3.3: Assessment Panel & Noticeboard
+
+As a supervisor,
+I want to view assessment data organised by category in collapsible sections alongside the conversation,
+So that I can quickly triage which assessments need review without scrolling through all details.
+
+**Acceptance Criteria:**
+
+**Given** the AssessmentPanel renders in the right panel
+**When** assessment data is available
+**Then** sections are displayed for: Application Details, Identity, Credit (Account Conduct), Credit (Serviceability), Statements, Noticeboard (FR12)
+
+**Given** all assessment sections
+**When** the panel first loads
+**Then** all sections are collapsed by default showing one-line summaries (FR13):
+- Application: "$5,000 · 12mo · Debt Consolidation"
+- Identity: "✓ Verified · Low risk" or "⚠ Refer · Medium risk"
+- Credit (Account Conduct): "PASS" or "FAIL" with "View full details →" link
+- Credit (Serviceability): "PASS" or "FAIL" with "View full details →" link
+- Statements: "Consent: Complete · 3 files"
+- Noticeboard: latest post preview
+
+**Given** a collapsed section
+**When** the user clicks the section header
+**Then** the section expands to show full detail
+**And** `aria-expanded` toggles appropriately
+
+**Given** the Noticeboard section
+**When** it expands
+**Then** all noticeboard posts are displayed with version history (FR14)
+**And** the latest version is prominent, prior versions are expandable
+
+**Given** the user presses `[`
+**When** in the conversation detail view
+**Then** all assessment sections collapse
+
+**Given** the user presses `]`
+**When** in the conversation detail view
+**Then** all assessment sections expand
+
+### Story 3.4: Credit Assessment Detail Pages
+
+As a supervisor,
+I want to click through from an assessment summary to a full-page credit assessment detail view,
+So that I can review individual rule results, scoring details, and processed files.
+
+**Acceptance Criteria:**
+
+**Given** the Account Conduct assessment section shows "PASS" or "FAIL"
+**When** the user clicks "View full details →"
+**Then** they navigate to `/admin/applications/:conversationId/assessment/account-conduct` (FR19)
+**And** the breadcrumb shows "Applications > Customer Name > APP-XXXXX > Account Conduct"
+
+**Given** the account conduct detail page
+**When** it loads
+**Then** it displays: overall decision, individual rule results with pass/fail indicators, scoring details (FR17)
+**And** data is fetched via `useAccountConductAssessment` hook with `staleTime: Infinity` (immutable data)
+**And** the page loads within 3 seconds including S3 fetch (NFR5)
+
+**Given** the Serviceability assessment section
+**When** the user clicks "View full details →"
+**Then** they navigate to `/admin/applications/:conversationId/assessment/serviceability`
+**And** the page displays: overall decision, monthly metrics, rule results, processed files (FR18)
+
+**Given** a conversation with no assessment data (S3 key is null)
+**When** the detail page loads
+**Then** a message is shown: "No assessment data available for this conversation."
+
+**Given** the user on the assessment detail page
+**When** they click the breadcrumb or press Escape
+**Then** they return to the conversation detail view with the split panel state preserved
+
+---
+
+## Epic 4: Customer & Application Context
+
+Staff see applications alongside customer records in ServicingView and navigate seamlessly between conversations, customers, and applications.
+
+### Story 4.1: ApplicationsPanel in ServicingView
+
+As an operations staff member,
+I want to see a customer's loan applications listed below contact notes in the ServicingView,
+So that I know their application history and whether they have an active application right now.
+
+**Acceptance Criteria:**
+
+**Given** a customer's ServicingView is loaded
+**When** the ApplicationsPanel renders below ContactNotesPanel
+**Then** the panel header shows "Applications (N)" with the count of applications (FR22)
+
+**Given** the `useCustomerConversations` hook
+**When** it fetches data
+**Then** it returns conversations for the current customer filtered by `customerId`
+**And** polls at 30-second intervals (background context)
+
+**Given** a customer with applications
+**When** the panel renders
+**Then** each application is displayed as a compact card showing: status badge, application number, loan amount, purpose, date (FR24)
+**And** active applications are shown first with a pulsing blue dot "Live" indicator
+**And** historical applications are sorted by date (newest first)
+
+**Given** an application that was approved and a loan was disbursed
+**When** the card renders
+**Then** a link icon connects to the corresponding loan account in the AccountPanel above (FR23)
+
+**Given** a customer with no applications
+**When** the panel renders
+**Then** an empty state shows: "No applications found for this customer."
+
+**Given** the panel is loading
+**When** data has not yet arrived
+**Then** 2 skeleton compact card placeholders are displayed
+
+**Given** the panel encounters a fetch error
+**When** it renders
+**Then** an inline "Unable to load" message is shown without blocking the rest of the ServicingView (NFR18)
+
+**Given** the `prefers-reduced-motion` system setting is enabled
+**When** an active application card renders
+**Then** the "Live" indicator shows a static blue dot instead of pulsing animation
+
+### Story 4.2: Bidirectional Navigation & State Preservation
+
+As a supervisor or operations staff member,
+I want to navigate between conversations, customers, and applications seamlessly with my position preserved,
+So that I can investigate across views without losing context.
+
+**Acceptance Criteria:**
+
+**Given** the ConversationDetailView header shows "Customer: John Smith — View profile →"
+**When** the user clicks the customer link
+**Then** they navigate to `/admin/servicing/:customerId` (FR20)
+**And** the conversation detail state is preserved in browser history
+
+**Given** an application card in the ServicingView ApplicationsPanel
+**When** the user clicks the card
+**Then** they navigate to the ConversationDetailView at `/admin/applications/:conversationId` (FR21)
+**And** the breadcrumb shows "Servicing > Customer Name > APP-XXXXX" (context-aware based on entry point)
+
+**Given** the user navigated from the monitoring grid to conversation detail to customer ServicingView
+**When** they press the browser back button
+**Then** each step is reversed correctly: ServicingView → conversation detail → monitoring grid
+**And** browser history is not manipulated (standard back/forward behaviour)
+
+**Given** the user returns to the monitoring grid after viewing a conversation
+**When** the grid renders
+**Then** the scroll position is restored from the `useMonitoringGridStore` (Zustand)
+**And** filter state is restored from `useConversationFiltersStore`
+
+**Given** the user returns to ServicingView from a conversation detail
+**When** the view renders
+**Then** the scroll position is preserved via browser history
+
+**Given** all views in the navigation graph (monitoring grid, conversation detail, assessment detail, ServicingView)
+**When** the user navigates between them
+**Then** every node is reachable from every other node in 1-2 clicks (FR36)
+**And** all "View profile →" and application card links open in the same tab (not new tab)
+
+**Given** an approved application card in the ApplicationsPanel
+**When** the user clicks the loan account link icon
+**Then** the AccountPanel scrolls to and selects the corresponding loan account

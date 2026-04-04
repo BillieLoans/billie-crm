@@ -1,0 +1,134 @@
+{
+  "workflow_version": "1.2.0",
+  "timestamps": {
+    "started": "2025-12-11T12:00:00Z",
+    "last_updated": "2025-12-11T12:15:00Z",
+    "completed": "2025-12-11T12:15:00Z"
+  },
+  "mode": "initial_scan",
+  "scan_level": "deep",
+  "project_root": "/Users/rohansharp/workspace/billie-crm",
+  "output_folder": "/Users/rohansharp/workspace/billie-crm/docs",
+  "completed_steps": [
+    {
+      "step": "step_1",
+      "status": "completed",
+      "timestamp": "2025-12-11T12:01:00Z",
+      "summary": "Classified as multi-part project with 2 parts"
+    },
+    {
+      "step": "step_2",
+      "status": "completed",
+      "timestamp": "2025-12-11T12:02:00Z",
+      "summary": "Found 4 existing docs"
+    },
+    {
+      "step": "step_3",
+      "status": "completed",
+      "timestamp": "2025-12-11T12:03:00Z",
+      "summary": "Tech stack: Next.js (Web), Python (Event Processor)"
+    },
+    {
+      "step": "step_4",
+      "status": "completed",
+      "timestamp": "2025-12-11T12:05:00Z",
+      "summary": "Conditional analysis complete, 5 files generated"
+    },
+    {
+      "step": "step_5",
+      "status": "completed",
+      "timestamp": "2025-12-11T12:06:00Z",
+      "summary": "Source tree documented"
+    },
+    {
+      "step": "step_6",
+      "status": "completed",
+      "timestamp": "2025-12-11T12:07:00Z",
+      "summary": "Dev/deployment guides written"
+    },
+    {
+      "step": "step_7",
+      "status": "completed",
+      "timestamp": "2025-12-11T12:08:00Z",
+      "summary": "Integration architecture documented"
+    },
+    {
+      "step": "step_8",
+      "status": "completed",
+      "timestamp": "2025-12-11T12:09:00Z",
+      "summary": "Architecture docs written for 2 parts"
+    },
+    {
+      "step": "step_9",
+      "status": "completed",
+      "timestamp": "2025-12-11T12:10:00Z",
+      "summary": "All supporting docs written"
+    },
+    {
+      "step": "step_10",
+      "status": "completed",
+      "timestamp": "2025-12-11T12:11:00Z",
+      "summary": "Master index generated"
+    },
+    {
+      "step": "step_11",
+      "status": "completed",
+      "timestamp": "2025-12-11T12:14:00Z",
+      "summary": "Validation and review complete"
+    },
+    {
+      "step": "step_12",
+      "status": "completed",
+      "timestamp": "2025-12-11T12:15:00Z",
+      "summary": "Workflow complete"
+    }
+  ],
+  "current_step": "completed",
+  "findings": {
+    "project_classification": {
+      "repository_type": "multi-part",
+      "parts_count": 2,
+      "primary_tech": "TypeScript/Python"
+    },
+    "project_parts": [
+      {
+        "part_id": "billie-crm-web",
+        "root_path": ".",
+        "project_type_id": "web",
+        "display_name": "Billie CRM Web"
+      },
+      {
+        "part_id": "event-processor",
+        "root_path": "event-processor/",
+        "project_type_id": "backend",
+        "display_name": "Event Processor"
+      }
+    ],
+    "technology_stack": {
+      "billie-crm-web": {
+        "framework": "Next.js",
+        "cms": "Payload CMS v3",
+        "database": "MongoDB"
+      },
+      "event-processor": {
+        "language": "Python 3.12",
+        "libraries": ["billie-event-sdks", "redis", "motor"]
+      }
+    }
+  },
+  "outputs_generated": [
+    "project-scan-report.json",
+    "project-overview.md",
+    "source-tree-analysis.md",
+    "integration-architecture.md",
+    "architecture-billie-crm-web.md",
+    "architecture-event-processor.md",
+    "index.md",
+    "api-contracts-billie-crm-web.md",
+    "data-models-billie-crm-web.md",
+    "component-inventory-billie-crm-web.md",
+    "development-guide-billie-crm-web.md",
+    "development-guide-event-processor.md"
+  ],
+  "resume_instructions": "Workflow completed"
+}

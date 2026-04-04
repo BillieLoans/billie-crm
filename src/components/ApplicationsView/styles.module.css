@@ -1,0 +1,130 @@
+.container {
+  padding: 24px;
+  max-width: 1600px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.title {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--theme-elevation-900, #111);
+  margin: 0;
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Responsive grid */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 1200px) {
+  .grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .container {
+    padding: 16px;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .title {
+    font-size: 20px;
+  }
+}
+
+/* Skeleton loader */
+.skeletonCard {
+  background: var(--theme-elevation-50, #f5f5f5);
+  border-radius: 8px;
+  padding: 16px;
+  height: 160px;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Empty state */
+.emptyState {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 64px 24px;
+  color: var(--theme-elevation-500, #888);
+}
+
+.emptyStateTitle {
+  font-size: 18px;
+  font-weight: 500;
+  margin-bottom: 8px;
+  color: var(--theme-elevation-700, #555);
+}
+
+.emptyStateText {
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+
+.clearFiltersBtn {
+  background: none;
+  border: 1px solid var(--theme-elevation-300, #ddd);
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 14px;
+  cursor: pointer;
+  color: var(--theme-elevation-700, #555);
+  transition: all 0.15s ease;
+}
+
+.clearFiltersBtn:hover {
+  background: var(--theme-elevation-50, #f5f5f5);
+}
+
+/* Load more */
+.loadMore {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: center;
+  padding: 16px;
+}
+
+.loadMoreBtn {
+  background: none;
+  border: 1px solid var(--theme-elevation-300, #ddd);
+  border-radius: 6px;
+  padding: 10px 24px;
+  font-size: 14px;
+  cursor: pointer;
+  color: var(--theme-elevation-700, #555);
+  transition: all 0.15s ease;
+}
+
+.loadMoreBtn:hover {
+  background: var(--theme-elevation-50, #f5f5f5);
+}
+
+.loadMoreBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

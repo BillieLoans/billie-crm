@@ -1,0 +1,128 @@
+.container {
+  padding: 24px;
+  max-width: 900px;
+}
+
+.breadcrumb {
+  font-size: 12px;
+  color: var(--theme-elevation-500, #888);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.breadcrumbLink {
+  color: var(--theme-success-700, #0369a1);
+  text-decoration: none;
+}
+
+.breadcrumbLink:hover {
+  text-decoration: underline;
+}
+
+.breadcrumbSep {
+  color: var(--theme-elevation-300, #ccc);
+}
+
+.title {
+  font-size: 22px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--theme-elevation-900, #111);
+}
+
+.decision {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 24px;
+}
+
+.pass {
+  color: #15803d;
+}
+
+.fail {
+  color: #b91c1c;
+}
+
+/* Rule results table */
+.rulesTable {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 24px;
+}
+
+.rulesTable th,
+.rulesTable td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--theme-elevation-100, #f3f4f6);
+  font-size: 13px;
+}
+
+.rulesTable th {
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  color: var(--theme-elevation-500, #888);
+  letter-spacing: 0.05em;
+  background: var(--theme-elevation-50, #fafafa);
+}
+
+.rulePASS {
+  color: #15803d;
+  font-weight: 600;
+}
+
+.ruleFAIL {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+/* Raw JSON section */
+.rawSection {
+  margin-top: 24px;
+}
+
+.rawTitle {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--theme-elevation-700, #444);
+}
+
+.rawJson {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  background: var(--theme-elevation-50, #f9fafb);
+  padding: 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  max-height: 300px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Not available */
+.notAvailable {
+  padding: 48px 0;
+  color: var(--theme-elevation-500, #888);
+  text-align: center;
+}
+
+/* Skeleton */
+.skeleton {
+  height: 32px;
+  border-radius: 6px;
+  background: var(--theme-elevation-50, #f5f5f5);
+  margin-bottom: 8px;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}

@@ -586,7 +586,7 @@ export interface Conversation {
       | boolean
       | null;
     /**
-     * Serviceability assessment data
+     * Serviceability assessment data (includes s3Key and decision)
      */
     serviceability?:
       | {
@@ -609,7 +609,59 @@ export interface Conversation {
       | number
       | boolean
       | null;
+    /**
+     * Account conduct assessment data (includes s3Key and decision)
+     */
+    accountConduct?:
+      | {
+          [k: string]: unknown;
+        }
+      | unknown[]
+      | string
+      | number
+      | boolean
+      | null;
+    /**
+     * Post-identity risk check data
+     */
+    postIdentityRisk?:
+      | {
+          [k: string]: unknown;
+        }
+      | unknown[]
+      | string
+      | number
+      | boolean
+      | null;
+    /**
+     * Credit assessment completion data
+     */
+    creditAssessmentComplete?:
+      | {
+          [k: string]: unknown;
+        }
+      | unknown[]
+      | string
+      | number
+      | boolean
+      | null;
   };
+  /**
+   * Statement capture flow state (consent, Basiq job, retrieval, affordability)
+   */
+  statementCapture?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Final decision outcome for filtering in monitoring view
+   */
+  decisionStatus?: ('approved' | 'declined' | 'referred' | 'no_decision') | null;
   /**
    * Agent noticeboard posts
    */
@@ -1238,7 +1290,12 @@ export interface ConversationsSelect<T extends boolean = true> {
         identityRisk?: T;
         serviceability?: T;
         fraudCheck?: T;
+        accountConduct?: T;
+        postIdentityRisk?: T;
+        creditAssessmentComplete?: T;
       };
+  statementCapture?: T;
+  decisionStatus?: T;
   noticeboard?:
     | T
     | {

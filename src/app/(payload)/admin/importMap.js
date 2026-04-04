@@ -9,6 +9,7 @@ import { NavPeriodCloseLink as NavPeriodCloseLink_b876b3abd416c3d860c4802b5c1185
 import { NavECLConfigLink as NavECLConfigLink_3ff0f20809012ed106da89f9feaf716c } from '@/components/navigation/NavECLConfigLink'
 import { NavExportsLink as NavExportsLink_30210b8f1b8d6622c22618d359a47328 } from '@/components/navigation/NavExportsLink'
 import { NavInvestigationLink as NavInvestigationLink_25d4a0e46dfdaebb4b30fe5c09ac4503 } from '@/components/navigation/NavInvestigationLink'
+import { NavApplicationsLink as NavApplicationsLink_554f3cd5ec77593b1109c73a71b4e7f2 } from '@/components/navigation/NavApplicationsLink'
 import { default as default_2aef381f6a0e89088ab303e1162933ca } from '@/providers'
 import { DashboardViewWithTemplate as DashboardViewWithTemplate_aa38ffaef1440457ff25f89c94f88b6b } from '@/components/DashboardView/DashboardViewWithTemplate'
 import { ServicingViewWithTemplate as ServicingViewWithTemplate_04dbd51012de8c56c1deb3ec9516015c } from '@/components/ServicingView/ServicingViewWithTemplate'
@@ -21,6 +22,7 @@ import { PeriodCloseViewWithTemplate as PeriodCloseViewWithTemplate_5066c3164c49
 import { ECLConfigViewWithTemplate as ECLConfigViewWithTemplate_da54698be16fc6d457187852eba8f854 } from '@/components/ECLConfigView/ECLConfigViewWithTemplate'
 import { ExportCenterViewWithTemplate as ExportCenterViewWithTemplate_df012e52e067a6044c3439dd142ed735 } from '@/components/ExportCenterView/ExportCenterViewWithTemplate'
 import { InvestigationViewWithTemplate as InvestigationViewWithTemplate_da95a625101a2d97fc47681066b86998 } from '@/components/InvestigationView/InvestigationViewWithTemplate'
+import { ApplicationsViewWithTemplate as ApplicationsViewWithTemplate_d004262689768525c348b9fc1d1da517 } from '@/components/ApplicationsView/ApplicationsViewWithTemplate'
 
 export const importMap = {
   "@/components/LoanAccountServicing#LoanAccountServicing": LoanAccountServicing_ddd43f8b2788d92f39012f5e3f407ad6,
@@ -34,6 +36,7 @@ export const importMap = {
   "@/components/navigation/NavECLConfigLink#NavECLConfigLink": NavECLConfigLink_3ff0f20809012ed106da89f9feaf716c,
   "@/components/navigation/NavExportsLink#NavExportsLink": NavExportsLink_30210b8f1b8d6622c22618d359a47328,
   "@/components/navigation/NavInvestigationLink#NavInvestigationLink": NavInvestigationLink_25d4a0e46dfdaebb4b30fe5c09ac4503,
+  "@/components/navigation/NavApplicationsLink#NavApplicationsLink": NavApplicationsLink_554f3cd5ec77593b1109c73a71b4e7f2,
   "@/providers#default": default_2aef381f6a0e89088ab303e1162933ca,
   "@/components/DashboardView/DashboardViewWithTemplate#DashboardViewWithTemplate": DashboardViewWithTemplate_aa38ffaef1440457ff25f89c94f88b6b,
   "@/components/ServicingView/ServicingViewWithTemplate#ServicingViewWithTemplate": ServicingViewWithTemplate_04dbd51012de8c56c1deb3ec9516015c,
@@ -45,5 +48,6 @@ export const importMap = {
   "@/components/PeriodCloseView/PeriodCloseViewWithTemplate#PeriodCloseViewWithTemplate": PeriodCloseViewWithTemplate_5066c3164c49a10261fae829cb52078b,
   "@/components/ECLConfigView/ECLConfigViewWithTemplate#ECLConfigViewWithTemplate": ECLConfigViewWithTemplate_da54698be16fc6d457187852eba8f854,
   "@/components/ExportCenterView/ExportCenterViewWithTemplate#ExportCenterViewWithTemplate": ExportCenterViewWithTemplate_df012e52e067a6044c3439dd142ed735,
-  "@/components/InvestigationView/InvestigationViewWithTemplate#InvestigationViewWithTemplate": InvestigationViewWithTemplate_da95a625101a2d97fc47681066b86998
+  "@/components/InvestigationView/InvestigationViewWithTemplate#InvestigationViewWithTemplate": InvestigationViewWithTemplate_da95a625101a2d97fc47681066b86998,
+  "@/components/ApplicationsView/ApplicationsViewWithTemplate#ApplicationsViewWithTemplate": ApplicationsViewWithTemplate_d004262689768525c348b9fc1d1da517
 }

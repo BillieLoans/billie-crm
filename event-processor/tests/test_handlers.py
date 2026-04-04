@@ -829,7 +829,7 @@ class TestConversationHandlers:
     async def test_handle_assessment_serviceability(self, mock_db):
         """F4.3: Should store serviceability assessment."""
         event = {
-            "typ": "serviceability_assessment_results",
+            "typ": "credit_assessment_serviceability_result",
             "cid": "CONV-TEST-001",
             "payload": {
                 "result": "pass",
@@ -982,3 +982,61 @@ class TestEventProcessorIntegration:
         # Verify conversation updates
         assert mock_db.conversations.update_one.call_count >= 4
 
+
+
+class TestConversationSummaryChangedHandler:
+    """Tests for conversationSummary_changed event handler."""
+
+    @pytest.mark.asyncio
+    async def test_sets_application_number(self, mock_db):
+        """Should upsert conversation with applicationNumber from event."""
+        from billie_servicing.handlers.conversation import handle_conversation_summary_changed
+        event = {
+            "cid": "CONV-SC-001",
+            "application_number": "APP-12345",
+        }
+        await handle_conversation_summary_changed(mock_db, event)
+        call_args = mock_db.conversations.update_one.call_args
+        assert call_args[0][0] == {"conversationId": "CONV-SC-001"}
+        set_doc = call_args[0][1]["$set"]
+        assert set_doc["applicationNumber"] == "APP-12345"
+
+    @pytest.mark.asyncio
+    async def test_sets_application_number_from_payload(self, mock_db):
+        """Should read applicationNumber from nested payload field."""
+        from billie_servicing.handlers.conversation import handle_conversation_summary_changed
+        event = {
+            "conv": "CONV-SC-002",
+            "payload": {"application_number": "APP-99999"},
+        }
+        await handle_conversation_summary_changed(mock_db, event)
+        set_doc = mock_db.conversations.update_one.call_args[0][1]["$set"]
+        assert set_doc["applicationNumber"] == "APP-99999"
+
+    @pytest.mark.asyncio
+    async def test_upserts_with_active_status_on_insert(self, mock_db):
+        """Should set status=active in $setOnInsert so new docs get initialised."""
+        from billie_servicing.handlers.conversation import handle_conversation_summary_changed
+        event = {"cid": "CONV-SC-003", "application_number": "APP-11111"}
+        await handle_conversation_summary_changed(mock_db, event)
+        update = mock_db.conversations.update_one.call_args[0][1]
+        assert update["$setOnInsert"]["status"] == "active"
+        assert mock_db.conversations.update_one.call_args[1]["upsert"] is True
+
+    @pytest.mark.asyncio
+    async def test_sets_status_when_provided(self, mock_db):
+        """Should update status field when event carries a status."""
+        from billie_servicing.handlers.conversation import handle_conversation_summary_changed
+        event = {"cid": "CONV-SC-004", "status": "paused"}
+        await handle_conversation_summary_changed(mock_db, event)
+        set_doc = mock_db.conversations.update_one.call_args[0][1]["$set"]
+        assert set_doc["status"] == "paused"
+
+    @pytest.mark.asyncio
+    async def test_does_not_set_status_when_absent(self, mock_db):
+        """Should not overwrite status when event has no status field."""
+        from billie_servicing.handlers.conversation import handle_conversation_summary_changed
+        event = {"cid": "CONV-SC-005", "application_number": "APP-22222"}
+        await handle_conversation_summary_changed(mock_db, event)
+        set_doc = mock_db.conversations.update_one.call_args[0][1]["$set"]
+        assert "status" not in set_doc

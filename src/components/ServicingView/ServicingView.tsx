@@ -23,6 +23,7 @@ import { ApplyFeeDrawer, type FeeType } from './ApplyFeeDrawer'
 import { AccountPanel, type TabId } from './AccountPanel'
 import type { SelectedFee } from './FeeList'
 import { ContactNotesPanel } from './ContactNotes/ContactNotesPanel'
+import { ApplicationsPanel } from './ApplicationsPanel'
 import { usePendingWriteOff } from '@/hooks/queries/usePendingWriteOff'
 import { useTrackCustomerView } from '@/hooks/useTrackCustomerView'
 import { Breadcrumb } from '@/components/Breadcrumb'
@@ -438,6 +439,9 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
           accounts={accounts}
           onNavigateToAccount={handleSwitchAccount}
         />
+
+        {/* Applications Panel — loan origination conversations for this customer (Story 4.1) */}
+        <ApplicationsPanel customerIdString={customerId} />
       </div>
 
       {/* Waive Fee Drawer - overlay */}

@@ -98,7 +98,14 @@ def sanitize_envelope(data: dict[str, Any]) -> dict[str, Any]:
             result["dat"] = json.loads(result["dat"])
         except json.JSONDecodeError:
             pass  # Keep as string if not valid JSON
-    
+
+    # Fix payload: chat events store payload as a JSON string in Redis
+    if "payload" in result and isinstance(result["payload"], str):
+        try:
+            result["payload"] = json.loads(result["payload"])
+        except json.JSONDecodeError:
+            pass  # Keep as string if not valid JSON
+
     return result
 
 
@@ -600,8 +607,9 @@ class EventProcessor:
             )()
 
         else:
-            # Chat events - return raw dict
-            return sanitized
+            # Chat/conversation events — sanitize envelope so payload JSON string
+            # is parsed into a dict before handlers receive the event
+            return sanitize_envelope(sanitized)
 
     async def _move_to_dlq(
         self, message_id: bytes, fields: dict[bytes, bytes], error: str

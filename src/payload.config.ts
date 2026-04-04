@@ -42,6 +42,7 @@ export default buildConfig({
         '@/components/navigation/NavECLConfigLink#NavECLConfigLink',
         '@/components/navigation/NavExportsLink#NavExportsLink',
         '@/components/navigation/NavInvestigationLink#NavInvestigationLink',
+        '@/components/navigation/NavApplicationsLink#NavApplicationsLink',
       ],
       // Notification bell in header actions (next to user profile button)
       actions: ['@/components/Notifications/NotificationAction#NotificationAction'],
@@ -104,6 +105,11 @@ export default buildConfig({
         investigation: {
           Component: '@/components/InvestigationView/InvestigationViewWithTemplate#InvestigationViewWithTemplate',
           path: '/investigation',
+        },
+        // Applications view (billie-crm-applications) — catch-all for conversationId sub-routes
+        applications: {
+          Component: '@/components/ApplicationsView/ApplicationsViewWithTemplate#ApplicationsViewWithTemplate',
+          path: '/applications/:segments*',
         },
       },
     },
