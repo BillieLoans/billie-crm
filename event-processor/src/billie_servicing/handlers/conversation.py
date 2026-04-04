@@ -209,14 +209,14 @@ async def handle_application_detail_changed(
     if application_number:
         update_doc["applicationNumber"] = application_number
 
-    # Store payload fields directly in applicationData so API can read loanAmount, loanPurpose etc.
-    if isinstance(payload, dict) and payload:
-        update_doc["applicationData"] = strip_dollar_keys(payload)
-    else:
-        # Fallback: store event fields (strip control keys)
-        app_data = {k: v for k, v in event.items() if k not in ["typ", "agt", "timestamp", "customer", "payload"]}
-        if app_data:
-            update_doc["applicationData"] = strip_dollar_keys(app_data)
+    # Merge payload fields into applicationData using dot-notation $set so later
+    # events with smaller payloads don't wipe previously stored loan fields.
+    source = strip_dollar_keys(payload) if isinstance(payload, dict) and payload else {
+        k: v for k, v in event.items() if k not in ["typ", "agt", "timestamp", "customer", "payload"]
+    }
+    for key, value in source.items():
+        if value is not None:
+            update_doc[f"applicationData.{key}"] = value
 
     await db.conversations.update_one(
         {"conversationId": conversation_id},

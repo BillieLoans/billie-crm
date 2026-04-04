@@ -91,7 +91,7 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
   const identity = assessments?.identityRisk as Record<string, unknown> | undefined
   const identityDecision = identity?.decision as string | undefined
   const identitySummary = identityDecision
-    ? identityDecision.toUpperCase() === 'PASS'
+    ? ['PASS', 'APPROVED'].includes(identityDecision.toUpperCase())
       ? '✓ Verified'
       : '⚠ Refer'
     : 'No data'

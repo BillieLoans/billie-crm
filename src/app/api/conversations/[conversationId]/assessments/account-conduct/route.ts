@@ -102,6 +102,10 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     // 5. Fetch from S3 server-side via URI (never return pre-signed URL to client — NFR8)
     const object = await getObjectByUri(s3Uri)
     if (!object) {
+      console.error('[GET /api/conversations/:id/assessments/account-conduct] S3 object not found', {
+        conversationId,
+        s3Uri,
+      })
       return NextResponse.json(
         { error: { code: 'NOT_FOUND', message: 'Assessment data not found in storage.' } },
         { status: 404 },

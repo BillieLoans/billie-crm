@@ -117,7 +117,10 @@ export async function getObjectByUri(s3Uri: string): Promise<{
       contentType,
       contentLength: response.ContentLength ?? undefined,
     }
-  } catch {
+  } catch (err) {
+    const code = (err as { Code?: string; name?: string }).Code ?? (err as { name?: string }).name ?? 'Unknown'
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[s3-client] getObjectByUri failed', { bucket, key, code, msg })
     return null
   }
 }
