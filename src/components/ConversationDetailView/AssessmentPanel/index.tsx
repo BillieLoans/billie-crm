@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { formatRelativeTime, formatCurrency } from '@/lib/formatters'
 import type { ConversationDetail } from '@/lib/schemas/conversations'
+import { ContextDrawer } from '@/components/ui/ContextDrawer'
 import styles from './styles.module.css'
 
 interface AssessmentSectionProps {
@@ -41,6 +42,61 @@ function AssessmentSection({ title, summary, children, defaultOpen = false }: As
   )
 }
 
+type NoticeboardPost = {
+  agentName?: string | null
+  topic?: string | null
+  content?: string | null
+  timestamp?: string | Date | null
+}
+
+interface NoticeboardEntryProps {
+  entry: NoticeboardPost
+  onClick: (entry: NoticeboardPost) => void
+}
+
+function NoticeboardEntry({ entry, onClick }: NoticeboardEntryProps) {
+  const rawName = entry.agentName ?? entry.topic ?? 'Unknown agent'
+  const topic = rawName.startsWith('AGENT::') ? rawName.slice('AGENT::'.length) : rawName
+
+  return (
+    <div className={styles.noticeboardEntry}>
+      <button
+        type="button"
+        className={styles.noticeboardRow}
+        onClick={() => onClick(entry)}
+      >
+        <span className={styles.noticeboardTopic}>{topic}</span>
+        <span className={styles.noticeboardMeta}>
+          {entry.timestamp ? formatRelativeTime(entry.timestamp as string) : ''}
+          <span className={styles.noticeboardChevron} aria-hidden="true">›</span>
+        </span>
+      </button>
+    </div>
+  )
+}
+
+function NoticeboardDrawer({ post, onClose }: { post: NoticeboardPost | null; onClose: () => void }) {
+  if (!post) return null
+  const rawName = post.agentName ?? post.topic ?? 'Unknown agent'
+  const topic = rawName.startsWith('AGENT::') ? rawName.slice('AGENT::'.length) : rawName
+
+  return (
+    <ContextDrawer isOpen={true} onClose={onClose} title={topic}>
+      <div className={styles.drawerPost}>
+        {post.agentName && (
+          <p className={styles.drawerAgent}>{post.agentName}</p>
+        )}
+        {post.timestamp && (
+          <p className={styles.drawerTime}>{formatRelativeTime(post.timestamp as string)}</p>
+        )}
+        <div className={styles.drawerContent}>
+          {post.content || <span className={styles.noticeboardEmpty}>No content captured</span>}
+        </div>
+      </div>
+    </ContextDrawer>
+  )
+}
+
 interface AssessmentPanelProps {
   conversation: ConversationDetail
   conversationId: string
@@ -63,6 +119,7 @@ interface AssessmentPanelProps {
  */
 export function AssessmentPanel({ conversation, conversationId }: AssessmentPanelProps) {
   const { assessments, statementCapture, noticeboard, application } = conversation
+  const [selectedPost, setSelectedPost] = useState<NoticeboardPost | null>(null)
 
   // Global keyboard [ / ] shortcuts for collapse/expand
   useEffect(() => {
@@ -236,21 +293,15 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
         {noticeboard && noticeboard.length > 0 ? (
           <div>
             {[...noticeboard].reverse().map((entry, i) => (
-              <div key={i} className={styles.noticeboardEntry}>
-                <p className={styles.noticeboardAgent}>{entry.agentName ?? 'Unknown agent'}</p>
-                <p className={styles.noticeboardContent}>{entry.content}</p>
-                {entry.timestamp && (
-                  <p className={styles.noticeboardTime}>
-                    {formatRelativeTime(entry.timestamp as string)}
-                  </p>
-                )}
-              </div>
+              <NoticeboardEntry key={i} entry={entry} onClick={setSelectedPost} />
             ))}
           </div>
         ) : (
           <p>No noticeboard posts.</p>
         )}
       </AssessmentSection>
+
+      <NoticeboardDrawer post={selectedPost} onClose={() => setSelectedPost(null)} />
     </div>
   )
 }

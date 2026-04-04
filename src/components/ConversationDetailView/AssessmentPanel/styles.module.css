@@ -115,7 +115,6 @@
 
 /* Noticeboard */
 .noticeboardEntry {
-  padding: 8px 0;
   border-bottom: 1px solid var(--theme-elevation-100, #f3f4f6);
 }
 
@@ -123,24 +122,150 @@
   border-bottom: none;
 }
 
-.noticeboardAgent {
+.noticeboardRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+  color: var(--theme-elevation-800, #222);
+}
+
+.noticeboardRow:disabled {
+  cursor: default;
+}
+
+.noticeboardRow:not(:disabled):hover .noticeboardTopic {
+  text-decoration: underline;
+}
+
+.noticeboardTopic {
+  flex: 1;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.noticeboardMeta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--theme-elevation-400, #aaa);
+  white-space: nowrap;
+}
+
+.noticeboardChevron {
+  font-size: 16px;
+  color: var(--theme-elevation-400, #aaa);
+  line-height: 1;
+}
+
+/* Noticeboard drawer content */
+.drawerPost {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.drawerAgent {
   font-size: 11px;
   font-weight: 600;
   color: var(--theme-elevation-500, #888);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  margin-bottom: 4px;
 }
 
-.noticeboardContent {
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.noticeboardTime {
-  font-size: 11px;
+.drawerTime {
+  font-size: 12px;
   color: var(--theme-elevation-400, #aaa);
-  margin-top: 4px;
+}
+
+.drawerContent {
+  margin-top: 8px;
+  font-size: 14px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  color: var(--theme-elevation-800, #222);
+}
+
+.noticeboardEmpty {
+  font-style: italic;
+  color: var(--theme-elevation-400, #aaa);
+}
+
+/* Dark mode overrides */
+:global([data-theme="dark"]) .section {
+  border-color: #374151;
+  background: #111827;
+}
+
+:global([data-theme="dark"]) .sectionHeader {
+  background: #1f2937;
+  color: #f9fafb;
+}
+
+:global([data-theme="dark"]) .sectionHeader:hover {
+  background: #374151;
+}
+
+:global([data-theme="dark"]) .sectionSummary {
+  color: #9ca3af;
+}
+
+:global([data-theme="dark"]) .chevron {
+  color: #6b7280;
+}
+
+:global([data-theme="dark"]) .sectionContent {
+  background: #111827;
+  color: #f9fafb;
+  border-top-color: #374151;
+}
+
+:global([data-theme="dark"]) .noticeboardEntry {
+  border-bottom-color: #374151;
+}
+
+:global([data-theme="dark"]) .noticeboardRow {
+  color: #f9fafb;
+}
+
+:global([data-theme="dark"]) .noticeboardMeta {
+  color: #9ca3af;
+}
+
+:global([data-theme="dark"]) .noticeboardChevron {
+  color: #6b7280;
+}
+
+:global([data-theme="dark"]) .noticeboardAgent {
+  color: #9ca3af;
+}
+
+:global([data-theme="dark"]) .noticeboardContent {
+  color: #e5e7eb;
+}
+
+:global([data-theme="dark"]) .jsonPreview {
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+:global([data-theme="dark"]) .statementLabel {
+  color: #9ca3af;
+}
+
+:global([data-theme="dark"]) .statementValue {
+  color: #f9fafb;
 }
 
 /* Statement capture */

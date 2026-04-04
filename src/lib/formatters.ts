@@ -68,7 +68,15 @@ export function formatDateMedium(date: string | Date): string {
  * @returns Human-readable relative time string
  */
 export function formatRelativeTime(timestamp: string | Date, showAbsoluteAfterWeek = false): string {
-  const date = typeof timestamp === 'string' ? new Date(timestamp) : timestamp
+  // MongoDB stores naive UTC datetimes (no 'Z'). new Date() treats those as local time,
+  // shifting by UTC offset (e.g. UTC+11 in Sydney = "11h ago" for a just-now event).
+  // Append 'Z' if the string has no timezone indicator so it's always parsed as UTC.
+  const hasTimezone = typeof timestamp !== 'string' ||
+    /Z$/i.test(timestamp) ||
+    /[+-]\d{2}:?\d{2}$/.test(timestamp)
+  const date = typeof timestamp === 'string'
+    ? new Date(hasTimezone ? timestamp : timestamp + 'Z')
+    : timestamp
   const now = new Date()
   const diffMs = now.getTime() - date.getTime()
   const diffMins = Math.floor(diffMs / 60000)

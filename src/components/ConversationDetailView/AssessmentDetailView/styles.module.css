@@ -544,3 +544,142 @@
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
 }
+
+/* ── Dark mode overrides ── */
+:global([data-theme="dark"]) .title {
+  color: #f9fafb;
+}
+
+:global([data-theme="dark"]) .decisionPass  { background: #052e16; border-color: #166534; color: #86efac; }
+:global([data-theme="dark"]) .decisionFail  { background: #2d0a0a; border-color: #7f1d1d; color: #fca5a5; }
+:global([data-theme="dark"]) .decisionRefer { background: #1c1300; border-color: #92400e; color: #fcd34d; }
+
+:global([data-theme="dark"]) .statFail { background: #7f1d1d; color: #fecaca; }
+:global([data-theme="dark"]) .statWarn { background: #78350f; color: #fde68a; }
+:global([data-theme="dark"]) .statPass { background: #14532d; color: #bbf7d0; }
+
+:global([data-theme="dark"]) .warningsBox {
+  background: #1c1300;
+  border-color: #92400e;
+  border-left-color: #d97706;
+}
+:global([data-theme="dark"]) .warningsTitle { color: #fcd34d; }
+:global([data-theme="dark"]) .warningsList li { color: #fde68a; }
+
+:global([data-theme="dark"]) .section {
+  background: #111827;
+  border-color: #374151;
+}
+:global([data-theme="dark"]) .sectionTitle {
+  background: #1f2937;
+  color: #9ca3af;
+  border-bottom-color: #374151;
+}
+
+:global([data-theme="dark"]) .ruleCount { background: #374151; color: #d1d5db; }
+:global([data-theme="dark"]) .ruleCountFail { background: #7f1d1d; color: #fecaca; }
+:global([data-theme="dark"]) .ruleCountWarn { background: #78350f; color: #fde68a; }
+:global([data-theme="dark"]) .ruleCountPass { background: #14532d; color: #bbf7d0; }
+
+:global([data-theme="dark"]) .termChip {
+  background: #374151;
+  color: #9ca3af;
+}
+
+:global([data-theme="dark"]) .rulesTable th {
+  background: #1f2937;
+  color: #6b7280;
+  border-bottom-color: #374151;
+}
+:global([data-theme="dark"]) .rulesTable td {
+  border-bottom-color: #1f2937;
+  color: #e5e7eb;
+}
+
+:global([data-theme="dark"]) .rowFail td  { background: #1a0a0a; }
+:global([data-theme="dark"]) .rowWarn td  { background: #1a1200; }
+:global([data-theme="dark"]) .rowInfo td  { background: #1f2937; opacity: 0.85; }
+
+:global([data-theme="dark"]) .ruleName { color: #f3f4f6; }
+:global([data-theme="dark"]) .ruleValue { color: #f3f4f6; }
+:global([data-theme="dark"]) .ruleCondition { color: #6b7280; }
+
+:global([data-theme="dark"]) .metricId {
+  background: #374151;
+  color: #9ca3af;
+}
+:global([data-theme="dark"]) .infoTag { background: #1e3a5f; color: #93c5fd; }
+:global([data-theme="dark"]) .warnTag { background: #78350f; color: #fde68a; }
+
+:global([data-theme="dark"]) .badgePass  { background: #14532d; color: #86efac; }
+:global([data-theme="dark"]) .badgeFail  { background: #7f1d1d; color: #fca5a5; }
+:global([data-theme="dark"]) .badgeRefer { background: #78350f; color: #fde68a; }
+
+:global([data-theme="dark"]) .reasonRow td { background: transparent !important; }
+:global([data-theme="dark"]) .reasonCell {
+  color: #fca5a5 !important;
+  background: #1a0a0a !important;
+  border-left-color: #7f1d1d !important;
+}
+:global([data-theme="dark"]) .warnCell {
+  color: #fde68a !important;
+  background: #1a1200 !important;
+  border-left-color: #92400e !important;
+}
+
+:global([data-theme="dark"]) .subRow td { background: #1f2937 !important; }
+:global([data-theme="dark"]) .subCell { background: #1f2937 !important; }
+:global([data-theme="dark"]) .subTable th { color: #6b7280; border-bottom-color: #374151; }
+:global([data-theme="dark"]) .subTable td { border-bottom-color: #374151; color: #e5e7eb; }
+:global([data-theme="dark"]) .totalScore { color: #9ca3af; }
+
+:global([data-theme="dark"]) .cashFlowGrid { background: #374151; }
+:global([data-theme="dark"]) .cashCard { background: #111827; }
+:global([data-theme="dark"]) .cashLabel { color: #9ca3af; }
+:global([data-theme="dark"]) .cashValue { color: #f9fafb; }
+:global([data-theme="dark"]) .cashDaily { color: #6b7280; }
+:global([data-theme="dark"]) .cashSurplusPos { background: #052e16; }
+:global([data-theme="dark"]) .cashSurplusNeg { background: #2d0a0a; }
+
+:global([data-theme="dark"]) .fileItem { border-bottom-color: #374151; }
+:global([data-theme="dark"]) .fileName { color: #d1d5db; }
+
+:global([data-theme="dark"]) .reasonList li {
+  background: #1c0f00;
+  border-left-color: #c2410c;
+  color: #fdba74;
+}
+
+:global([data-theme="dark"]) .flagChip {
+  background: #78350f;
+  border-color: #92400e;
+  color: #fde68a;
+}
+
+:global([data-theme="dark"]) .detailLabel {
+  color: #9ca3af;
+  border-bottom-color: #374151;
+}
+:global([data-theme="dark"]) .detailValue {
+  color: #f3f4f6;
+  border-bottom-color: #374151;
+}
+
+:global([data-theme="dark"]) .inlineJson {
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+:global([data-theme="dark"]) .rawSection { border-color: #374151; }
+:global([data-theme="dark"]) .rawToggle {
+  background: #1f2937;
+  color: #9ca3af;
+}
+:global([data-theme="dark"]) .rawToggle:hover { background: #374151; }
+:global([data-theme="dark"]) .rawJson {
+  background: #0f172a;
+  color: #e2e8f0;
+  border-top-color: #374151;
+}
+
+:global([data-theme="dark"]) .skeleton { background: #1f2937; }

@@ -93,6 +93,25 @@
   50% { opacity: 0.5; }
 }
 
+/* Dark mode overrides */
+:global([data-theme="dark"]) .bubble.customer .bubbleContent {
+  background: #1f2937;
+  color: #f9fafb;
+}
+
+:global([data-theme="dark"]) .bubble.assistant .bubbleContent {
+  background: #1e3a5f;
+  color: #e2e8f0;
+}
+
+:global([data-theme="dark"]) .rationale {
+  color: #6b7280;
+}
+
+:global([data-theme="dark"]) .skeletonBubble {
+  background: #1f2937;
+}
+
 /* Mobile */
 @media (max-width: 768px) {
   .bubble {

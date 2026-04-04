@@ -865,12 +865,15 @@ class TestConversationHandlers:
 
     @pytest.mark.asyncio
     async def test_handle_noticeboard_updated(self, mock_db):
-        """F4.3: Should add noticeboard entry."""
+        """F4.3: Should add noticeboard entry from payload.post."""
         event = {
             "cid": "CONV-TEST-001",
-            "agentName": "serviceability_agent::Serviceability Assessment",
-            "content": "Customer income verified at $50,000 p.a.",
-            "timestamp": datetime.utcnow().isoformat(),
+            "payload": {
+                "conversation_id": "CONV-TEST-001",
+                "agent_name": "serviceability_agent::Serviceability Assessment",
+                "post": "Customer income verified at $50,000 p.a.",
+                "timestamp": datetime.utcnow().isoformat(),
+            },
         }
 
         await handle_noticeboard_updated(mock_db, event)

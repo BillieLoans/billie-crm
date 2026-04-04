@@ -8,7 +8,8 @@ Handles all chat/conversation events (ported from worker.ts):
 - identityRisk_assessment
 - credit_assessment_serviceability_result
 - credit_assessment_accountConduct_result
-- noticeboard_updated
+- noticeboard_post
+- noticeboard_updated (legacy alias)
 - final_credit_decision
 - conversation_summary
 - post_identity_risk_checks_complete
@@ -344,13 +345,9 @@ async def handle_noticeboard_updated(db: AsyncIOMotorDatabase, event: dict[str, 
     payload = event.get("payload", {})
     payload_dict = payload if isinstance(payload, dict) else {}
 
-    agent_name = (
-        event.get("agentName") or event.get("agent_name")
-        or payload_dict.get("agentName") or payload_dict.get("agent_name")
-        or "unknown"
-    )
-    content = event.get("content") or payload_dict.get("content") or ""
-    timestamp = event.get("timestamp") or payload_dict.get("timestamp") or datetime.utcnow()
+    agent_name = payload_dict.get("agent_name") or "unknown"
+    content = payload_dict.get("post") or ""
+    timestamp = payload_dict.get("timestamp") or datetime.utcnow()
 
     # Extract topic from agentName (e.g., "serviceability_agent::Serviceability Assessment")
     topic = agent_name.split("::")[-1] if "::" in agent_name else agent_name

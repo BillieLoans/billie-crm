@@ -111,7 +111,8 @@ def setup_handlers(processor: EventProcessor) -> None:
     processor.register_handler("identityRisk_assessment", handle_assessment)
     processor.register_handler("credit_assessment_serviceability_result", handle_assessment)
 
-    # Noticeboard
+    # Noticeboard (chat backend emits "noticeboard_post"; keep legacy alias too)
+    processor.register_handler("noticeboard_post", handle_noticeboard_updated)
     processor.register_handler("noticeboard_updated", handle_noticeboard_updated)
 
     # Final decision
