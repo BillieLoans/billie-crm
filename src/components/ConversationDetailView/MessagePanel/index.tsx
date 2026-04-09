@@ -12,6 +12,15 @@ interface MessagePanelProps {
   isLoading?: boolean
 }
 
+function parseUtcTimestamp(ts: string | Date): Date {
+  if (ts instanceof Date) return ts
+  // Naive strings (no Z / offset) come from the assistant service which emits UTC without a
+  // timezone indicator. Treat them as UTC by appending 'Z' so the browser doesn't shift them
+  // to local time.
+  const hasTimezone = /Z$|[+-]\d{2}:?\d{2}$/i.test(ts)
+  return new Date(hasTimezone ? ts : ts + 'Z')
+}
+
 function formatTimestamp(ts: string | Date | null | undefined): string {
   if (!ts) return ''
   try {
@@ -19,7 +28,7 @@ function formatTimestamp(ts: string | Date | null | undefined): string {
       hour: 'numeric',
       minute: '2-digit',
       hour12: true,
-    }).format(new Date(ts as string))
+    }).format(parseUtcTimestamp(ts as string | Date))
   } catch {
     return ''
   }
@@ -30,7 +39,7 @@ function groupByMinute(utterances: Utterance[]): Array<{ minuteKey: string; item
   for (const u of utterances) {
     const ts = u.createdAt
     const minuteKey = ts
-      ? new Date(ts as string).toISOString().slice(0, 16)
+      ? parseUtcTimestamp(ts as string).toISOString().slice(0, 16)
       : `msg-${Math.random()}`
     const last = groups[groups.length - 1]
     if (last && last.minuteKey === minuteKey) {

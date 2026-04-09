@@ -65,7 +65,7 @@ export function ConversationDetailView({ conversationId, referrer }: Conversatio
     )
   }
 
-  const customerFullName = conversation?.customer?.fullName ?? 'Loading…'
+  const customerFullName = conversation?.customer?.fullName ?? null
   const customerId = conversation?.customer?.customerId
   const appNumber = conversation?.applicationNumber
   const loanAmount = conversation?.application?.loanAmount
@@ -96,8 +96,12 @@ export function ConversationDetailView({ conversationId, referrer }: Conversatio
               Applications
             </Link>
           )}
-          <span className={styles.breadcrumbSep} aria-hidden="true">›</span>
-          <span>{customerFullName}</span>
+          {(isLoading || customerFullName) && (
+            <>
+              <span className={styles.breadcrumbSep} aria-hidden="true">›</span>
+              <span>{customerFullName ?? 'Loading…'}</span>
+            </>
+          )}
           {appNumber && (
             <>
               <span className={styles.breadcrumbSep} aria-hidden="true">›</span>

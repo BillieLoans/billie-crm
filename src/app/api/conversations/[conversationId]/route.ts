@@ -125,7 +125,11 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         createdAt:
           u.createdAt instanceof Date
             ? u.createdAt.toISOString()
-            : (u.createdAt as string) ?? null,
+            : typeof u.createdAt === 'string' && u.createdAt
+              ? /Z$|[+-]\d{2}:?\d{2}$/.test(u.createdAt)
+                ? u.createdAt
+                : u.createdAt + 'Z'
+              : null,
         answerInputType: (u.answerInputType as string) ?? null,
         endConversation: Boolean(u.endConversation),
         additionalData: u.additionalData ?? null,
