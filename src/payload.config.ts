@@ -15,6 +15,7 @@ import { Applications } from './collections/Applications'
 import { LoanAccounts } from './collections/LoanAccounts'
 import { WriteOffRequests } from './collections/WriteOffRequests'
 import { ContactNotes } from './collections/ContactNotes'
+import { Notifications } from './collections/Notifications'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -114,7 +115,7 @@ export default buildConfig({
       },
     },
   },
-  collections: [Users, Media, Customers, Conversations, Applications, LoanAccounts, WriteOffRequests, ContactNotes],
+  collections: [Users, Media, Customers, Conversations, Applications, LoanAccounts, WriteOffRequests, ContactNotes, Notifications],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || 'build-placeholder-not-for-production',
   typescript: {

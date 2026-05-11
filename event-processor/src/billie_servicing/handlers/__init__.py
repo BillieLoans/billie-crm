@@ -36,6 +36,12 @@ from .writeoff import (
     handle_writeoff_rejected,
     handle_writeoff_cancelled,
 )
+from .notification import (
+    handle_notification_sent,
+    handle_notification_delivery_failed,
+    handle_notification_suppression_changed,
+    handle_statement_generated,
+)
 
 __all__ = [
     # Account handlers
@@ -72,4 +78,9 @@ __all__ = [
     "handle_writeoff_approved",
     "handle_writeoff_rejected",
     "handle_writeoff_cancelled",
+    # Notification handlers (platform → CRM read-only projections)
+    "handle_notification_sent",
+    "handle_notification_delivery_failed",
+    "handle_notification_suppression_changed",
+    "handle_statement_generated",
 ]

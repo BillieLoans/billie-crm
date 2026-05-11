@@ -22,7 +22,7 @@ import { DisburseLoanDrawer } from './DisburseLoanDrawer'
 import { ApplyFeeDrawer, type FeeType } from './ApplyFeeDrawer'
 import { AccountPanel, type TabId } from './AccountPanel'
 import type { SelectedFee } from './FeeList'
-import { ContactNotesPanel } from './ContactNotes/ContactNotesPanel'
+import { CommunicationsPanel } from './Communications/CommunicationsPanel'
 import { ApplicationsPanel } from './ApplicationsPanel'
 import { usePendingWriteOff } from '@/hooks/queries/usePendingWriteOff'
 import { useTrackCustomerView } from '@/hooks/useTrackCustomerView'
@@ -429,11 +429,12 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
           <AccountSelectionPrompt />
         )}
 
-        {/* Contact Notes Panel (Story 7.3)
-            customer.id is the Payload document ID used for relationship queries/mutations.
-            The route-level customerId prop is the business key — NOT the Payload document ID. */}
-        <ContactNotesPanel
-          customerId={customer?.id ?? ''}
+        {/* Communications Panel — unified contact notes + notification history.
+            customer.id is the Payload document ID used for note relationship queries.
+            customerId (route param) is the business key used to query notifications. */}
+        <CommunicationsPanel
+          customerDocId={customer?.id ?? ''}
+          customerBusinessId={customerId}
           customerName={customer?.fullName ?? undefined}
           selectedAccountId={selectedAccountId}
           accounts={accounts}

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import type { CustomerData } from '@/hooks/queries/useCustomer'
 import { getAddressForMapLink, getGoogleMapsUrl } from '@/lib/utils'
 import { CopyButton } from '@/components/ui'
+import { NotificationStatusPill } from './NotificationControls/NotificationStatusPill'
 import styles from './CustomerHeader.module.css'
 
 export interface CustomerHeaderProps {
@@ -106,6 +107,12 @@ export const CustomerHeader: React.FC<CustomerHeaderProps> = ({ customer }) => {
         </div>
 
         <div className={styles.actions}>
+          {/* Per-customer notification kill switch */}
+          <NotificationStatusPill
+            customerId={customer.customerId}
+            customerName={customer.fullName ?? undefined}
+          />
+
           {/* Identity badges - show inline when not expanded */}
           {hasFlags && !isExpanded && (
             <div className={styles.badgesInline}>

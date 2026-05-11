@@ -32,6 +32,8 @@ primary_region = "syd"
   GITHUB_ORG = "BillieLoans"
   SDK_VERSION = "1.1.0"
   LEDGER_SERVICE_URL = "billie-platform-services-prod.internal:50051"
+  # TODO(platform): confirm dispatcher hostname for prod — placeholder pending platform team handover
+  NOTIFICATION_DISPATCHER_GRPC_URL = "billie-platform-services-prod.internal:50052"
 
 # =============================================================================
 # HTTP service configuration

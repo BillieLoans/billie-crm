@@ -93,6 +93,37 @@ export const WriteOffCancelCommandSchema = z.object({
 export type WriteOffCancelCommand = z.infer<typeof WriteOffCancelCommandSchema>
 
 // =============================================================================
+// Notification Suppression Schema
+// =============================================================================
+
+/**
+ * Suppression mode the CRM is allowed to set.
+ * (No `off` — clearing is a separate DELETE / clearSuppression call.)
+ */
+export const NotificationSuppressionModeSchema = z.enum([
+  'all',
+  'non_essential',
+  'marketing_only',
+])
+
+/**
+ * Schema for setting a per-customer notification kill switch.
+ * `setBy` and `setAt` are stamped server-side from the authenticated user.
+ */
+export const NotificationSuppressionCommandSchema = z.object({
+  customerId: z.string().min(1, 'Customer ID is required'),
+  mode: NotificationSuppressionModeSchema,
+  reason: z.string().min(1, 'Reason is required').max(500),
+  expiresAt: z
+    .string()
+    .datetime({ message: 'expiresAt must be an ISO 8601 timestamp' })
+    .nullish(),
+  correlationId: z.string().optional(),
+})
+
+export type NotificationSuppressionCommand = z.infer<typeof NotificationSuppressionCommandSchema>
+
+// =============================================================================
 // Response Schemas
 // =============================================================================
 

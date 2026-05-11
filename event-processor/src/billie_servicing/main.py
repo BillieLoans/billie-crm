@@ -43,6 +43,11 @@ from .handlers import (
     handle_writeoff_approved,
     handle_writeoff_rejected,
     handle_writeoff_cancelled,
+    # Notification handlers (platform → CRM read-only projections)
+    handle_notification_sent,
+    handle_notification_delivery_failed,
+    handle_notification_suppression_changed,
+    handle_statement_generated,
 )
 from .processor import EventProcessor
 
@@ -143,6 +148,18 @@ def setup_handlers(processor: EventProcessor) -> None:
     processor.register_handler("writeoff.approved.v1", handle_writeoff_approved)
     processor.register_handler("writeoff.rejected.v1", handle_writeoff_rejected)
     processor.register_handler("writeoff.cancelled.v1", handle_writeoff_cancelled)
+
+    # =========================================================================
+    # Notification events (platform → CRM, billie_notifications_events SDK)
+    # =========================================================================
+    processor.register_handler("notification.sent.v1", handle_notification_sent)
+    processor.register_handler(
+        "notification.delivery_failed.v1", handle_notification_delivery_failed
+    )
+    processor.register_handler(
+        "notification.suppression.changed.v1", handle_notification_suppression_changed
+    )
+    processor.register_handler("statement.generated.v1", handle_statement_generated)
 
 
 async def run() -> None:

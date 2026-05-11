@@ -1,0 +1,344 @@
+/* =========================================================
+   Notification status pill (in customer header)
+   ========================================================= */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid transparent;
+  cursor: pointer;
+  background: var(--theme-elevation-50, #f9fafb);
+  color: var(--theme-elevation-700, #374151);
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+
+.pillOn {
+  background: #d1fae5;
+  color: #065f46;
+  border-color: #6ee7b7;
+}
+
+.pillOn:hover {
+  background: #a7f3d0;
+}
+
+.pillAmber {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #fcd34d;
+}
+
+.pillAmber:hover {
+  background: #fde68a;
+}
+
+.pillRed {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fca5a5;
+}
+
+.pillRed:hover {
+  background: #fecaca;
+}
+
+.pillExpired {
+  background: var(--theme-elevation-50, #f9fafb);
+  color: var(--theme-elevation-600, #6b7280);
+  border-color: var(--theme-elevation-200, #d1d5db);
+}
+
+.pillExpired:hover {
+  background: var(--theme-elevation-100, #f3f4f6);
+}
+
+.pillLoading {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.pillCaret {
+  font-size: 10px;
+  opacity: 0.6;
+  margin-left: 2px;
+}
+
+/* =========================================================
+   Notification controls drawer
+   ========================================================= */
+
+.drawerForm {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 4px 2px 16px;
+}
+
+.currentStateCard {
+  border: 1px solid var(--theme-elevation-200, #d1d5db);
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: var(--theme-elevation-50, #f9fafb);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.currentStateCardActive {
+  border-color: #fcd34d;
+  background: #fffbeb;
+}
+
+.currentStateCardExpired {
+  border-color: var(--theme-elevation-200, #d1d5db);
+  background: var(--theme-elevation-50, #f9fafb);
+}
+
+.currentStateTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--theme-elevation-700, #374151);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.currentStateBody {
+  font-size: 12px;
+  color: var(--theme-elevation-700, #374151);
+  line-height: 1.5;
+}
+
+.currentStateMeta {
+  font-size: 11px;
+  color: var(--theme-elevation-600, #6b7280);
+}
+
+.expiredBadge {
+  display: inline-flex;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--theme-elevation-100, #f3f4f6);
+  color: var(--theme-elevation-700, #374151);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Field block */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fieldLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--theme-text, #1a1a1a);
+}
+
+.fieldHint {
+  font-size: 11px;
+  color: var(--theme-elevation-600, #6b7280);
+}
+
+/* Mode radio list */
+.modeList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.modeOption {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--theme-elevation-200, #d1d5db);
+  border-radius: 8px;
+  cursor: pointer;
+  background: var(--theme-elevation-0, #fff);
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+
+.modeOption:hover {
+  border-color: var(--theme-elevation-400, #9ca3af);
+}
+
+.modeOptionActive {
+  border-color: var(--theme-success-500, #2563eb);
+  background: var(--theme-elevation-50, #f9fafb);
+}
+
+.modeRadio {
+  margin-top: 2px;
+}
+
+.modeOptionBody {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.modeOptionTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--theme-text, #1a1a1a);
+}
+
+.modeOptionDescription {
+  font-size: 12px;
+  color: var(--theme-elevation-600, #6b7280);
+  line-height: 1.4;
+}
+
+/* Reason input */
+.reasonTextarea {
+  width: 100%;
+  min-height: 70px;
+  padding: 8px 10px;
+  border: 1px solid var(--theme-elevation-200, #d1d5db);
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 14px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.reasonTextarea:focus {
+  outline: 2px solid var(--theme-success-500, #2563eb);
+  outline-offset: -1px;
+}
+
+/* Expiry segmented control */
+.expiryRow {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.expiryChip {
+  padding: 6px 12px;
+  border: 1px solid var(--theme-elevation-200, #d1d5db);
+  border-radius: 6px;
+  background: var(--theme-elevation-0, #fff);
+  color: var(--theme-elevation-700, #374151);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.expiryChipActive {
+  background: var(--theme-success-500, #2563eb);
+  border-color: var(--theme-success-500, #2563eb);
+  color: white;
+}
+
+.expiryDate {
+  margin-top: 4px;
+  padding: 6px 10px;
+  border: 1px solid var(--theme-elevation-200, #d1d5db);
+  border-radius: 6px;
+  font-size: 14px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.expiryDate:focus {
+  outline: 2px solid var(--theme-success-500, #2563eb);
+  outline-offset: -1px;
+}
+
+/* Field error */
+.fieldError {
+  font-size: 12px;
+  color: #991b1b;
+  margin-top: 2px;
+}
+
+/* Footer */
+.drawerFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--theme-elevation-150, #e5e7eb);
+}
+
+.primaryActions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btnPrimary {
+  background: var(--theme-success-500, #2563eb);
+  color: white;
+}
+
+.btnPrimary:hover:not(:disabled) {
+  background: var(--theme-success-600, #1d4ed8);
+}
+
+.btnSecondary {
+  background: var(--theme-elevation-0, #fff);
+  color: var(--theme-text, #1a1a1a);
+  border-color: var(--theme-elevation-200, #d1d5db);
+}
+
+.btnSecondary:hover:not(:disabled) {
+  background: var(--theme-elevation-50, #f9fafb);
+}
+
+.btnDanger {
+  background: #fff;
+  color: #991b1b;
+  border-color: #fca5a5;
+}
+
+.btnDanger:hover:not(:disabled) {
+  background: #fef2f2;
+}
+
+/* Re-enable confirmation row */
+.reenableConfirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  margin-top: 8px;
+}
+
+.reenableConfirmText {
+  font-size: 12px;
+  color: #991b1b;
+  flex: 1;
+}

@@ -32,6 +32,8 @@ primary_region = "syd"
   GITHUB_ORG = "BillieLoans"
   SDK_VERSION = "1.1.0"
   LEDGER_SERVICE_URL = "billie-platform-services-demo.internal:50051"
+  # TODO(platform): confirm dispatcher hostname for demo — placeholder pending platform team handover
+  NOTIFICATION_DISPATCHER_GRPC_URL = "billie-platform-services-demo.internal:50052"
   S3_BUCKET_NAME="billie-applications-nonprod"
 
 # =============================================================================

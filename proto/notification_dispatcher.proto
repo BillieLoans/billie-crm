@@ -1,0 +1,141 @@
+syntax = "proto3";
+
+package billie.notification_dispatcher.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// =============================================================================
+// Service Definition
+// =============================================================================
+//
+// External read/write API for the NotificationDispatcherService.
+//
+// Write operations (Set/Clear suppression) follow the platform's event-sourcing
+// convention: the RPC validates input, publishes the corresponding event onto
+// the dispatcher inbox, then waits (briefly) for the projection writer to apply
+// it before returning the new state. Events remain the system of record.
+//
+// Read operations (GetNotification, GetSuppression, ListSuppressions) read
+// projections directly.
+// =============================================================================
+
+service NotificationDispatcherService {
+  // ----------------------------------------------------------------
+  // Notification body / metadata
+  // ----------------------------------------------------------------
+
+  // Fetch the rendered subject + body of a previously sent notification.
+  // Available for 90 days after send. Returns NOT_FOUND past that.
+  rpc GetNotification(GetNotificationRequest) returns (GetNotificationResponse);
+
+  // ----------------------------------------------------------------
+  // Per-customer notification suppression / kill switch
+  // ----------------------------------------------------------------
+
+  // Read current suppression state for a customer. Returns NOT_FOUND if no
+  // active suppression exists.
+  rpc GetSuppression(GetSuppressionRequest) returns (Suppression);
+
+  // Set or replace a suppression. Validates `mode`, publishes
+  // `notification.suppression.changed.v1`, waits for the projection write,
+  // and returns the new state.
+  rpc SetSuppression(SetSuppressionRequest) returns (Suppression);
+
+  // Clear an existing suppression. Equivalent to SetSuppression with mode="off".
+  // Idempotent — succeeds even if no suppression exists.
+  rpc ClearSuppression(ClearSuppressionRequest) returns (ClearSuppressionResponse);
+
+  // List all active suppressions. Reads from the dispatcher's
+  // `suppression:active` index SET — O(1) per entry.
+  rpc ListSuppressions(ListSuppressionsRequest) returns (ListSuppressionsResponse);
+}
+
+// =============================================================================
+// Notification body
+// =============================================================================
+
+message GetNotificationRequest {
+  string notification_id = 1;
+}
+
+message GetNotificationResponse {
+  string notification_id = 1;
+  string idempotency_key = 2;
+  string channel = 3;                       // "email" | "sms"
+  string template_name = 4;
+  string template_content_hash = 5;         // sha256 hex
+  string template_git_sha = 6;              // may be empty
+  string subject = 7;                       // empty for SMS
+  string body = 8;                          // HTML for email, plain text for SMS
+  bool is_html = 9;
+  string provider = 10;                     // "resend" | "clicksend" | "dryrun"
+  string provider_message_id = 11;
+  string recipient_hash = 12;               // SHA-256 of normalised recipient
+  string customer_id = 13;
+  string correlation_id = 14;
+  google.protobuf.Timestamp sent_at = 15;   // unset on failures
+  google.protobuf.Timestamp failed_at = 16; // unset on success
+  bool success = 17;
+  string error_type = 18;                   // populated when success=false
+  string error_message = 19;
+  map<string, string> tags = 20;            // category, reason, step, etc.
+}
+
+// =============================================================================
+// Suppression
+// =============================================================================
+
+// Suppression mode controls which notification categories are blocked.
+//   ALL            — blocks every send (auth + servicing + marketing)
+//   NON_ESSENTIAL  — blocks servicing + marketing; allows auth (password reset)
+//   MARKETING_ONLY — blocks marketing only
+enum SuppressionMode {
+  SUPPRESSION_MODE_UNSPECIFIED = 0;
+  SUPPRESSION_MODE_ALL = 1;
+  SUPPRESSION_MODE_NON_ESSENTIAL = 2;
+  SUPPRESSION_MODE_MARKETING_ONLY = 3;
+}
+
+message Suppression {
+  string customer_id = 1;
+  SuppressionMode mode = 2;
+  string reason = 3;                          // free-text audit
+  string set_by = 4;                          // operator identifier
+  google.protobuf.Timestamp set_at = 5;
+  google.protobuf.Timestamp expires_at = 6;   // unset = indefinite
+  string source_event_id = 7;                 // inbox event_id that produced this row
+  bool active_now = 8;                        // false if expires_at has passed
+}
+
+message GetSuppressionRequest {
+  string customer_id = 1;
+}
+
+message SetSuppressionRequest {
+  string customer_id = 1;
+  SuppressionMode mode = 2;                   // must not be UNSPECIFIED
+  string reason = 3;
+  string set_by = 4;
+  google.protobuf.Timestamp expires_at = 5;   // optional
+  string correlation_id = 6;                  // optional
+}
+
+message ClearSuppressionRequest {
+  string customer_id = 1;
+  string set_by = 2;                          // for audit on the published event
+  string correlation_id = 3;
+}
+
+message ClearSuppressionResponse {
+  string customer_id = 1;
+  bool cleared = 2;                           // true if a row existed and was removed
+}
+
+message ListSuppressionsRequest {
+  // Pagination is intentionally absent — the active set is bounded
+  // (operator-driven) and expected to stay small.
+}
+
+message ListSuppressionsResponse {
+  repeated Suppression suppressions = 1;
+}

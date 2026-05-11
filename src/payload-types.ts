@@ -75,6 +75,7 @@ export interface Config {
     'loan-accounts': LoanAccount;
     'write-off-requests': WriteOffRequest;
     'contact-notes': ContactNote;
+    notifications: Notification;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
@@ -89,6 +90,7 @@ export interface Config {
     'loan-accounts': LoanAccountsSelect<false> | LoanAccountsSelect<true>;
     'write-off-requests': WriteOffRequestsSelect<false> | WriteOffRequestsSelect<true>;
     'contact-notes': ContactNotesSelect<false> | ContactNotesSelect<true>;
+    notifications: NotificationsSelect<false> | NotificationsSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
@@ -1056,6 +1058,86 @@ export interface ContactNote {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "notifications".
+ */
+export interface Notification {
+  id: string;
+  notificationId: string;
+  idempotencyKey?: string | null;
+  requestId?: string | null;
+  /**
+   * Resolved customer link (may be null if customer not yet projected)
+   */
+  customerRef?: (string | null) | Customer;
+  /**
+   * Customer ID string from the event (PII-safe identifier)
+   */
+  customerId?: string | null;
+  status: 'sent' | 'failed' | 'blocked' | 'statement' | 'suppression_change';
+  channel?: ('email' | 'sms') | null;
+  templateName?: string | null;
+  /**
+   * sha256 of the .j2 template file used at send time
+   */
+  templateContentHash?: string | null;
+  templateGitSha?: string | null;
+  /**
+   * 'resend' | 'clicksend' | 'dryrun'
+   */
+  provider?: string | null;
+  providerMessageId?: string | null;
+  /**
+   * sha256 of recipient — PII safe
+   */
+  recipientHash?: string | null;
+  correlationId?: string | null;
+  /**
+   * sent_at / failed_at / dispatched_at — unified sort key for the timeline
+   */
+  eventAt: string;
+  sentAt?: string | null;
+  tags?: {
+    category?: string | null;
+    reason?: string | null;
+    step?: number | null;
+  };
+  /**
+   * Populated when status is "failed" or "blocked"
+   */
+  failure?: {
+    failedAt?: string | null;
+    errorType?: ('transient' | 'permanent' | 'auth' | 'template' | 'contact_missing' | 'opt_out' | 'suppressed') | null;
+    errorMessage?: string | null;
+    attempt?: number | null;
+    /**
+     * 'email' | 'sms' | null — set on contact_missing
+     */
+    fallbackSuggested?: string | null;
+  };
+  /**
+   * Populated when status is "statement"
+   */
+  statement?: {
+    accountId?: string | null;
+    periodStart?: string | null;
+    periodEnd?: string | null;
+    dispatchedAt?: string | null;
+  };
+  /**
+   * Populated when status is "suppression_change"
+   */
+  suppression?: {
+    mode?: ('all' | 'non_essential' | 'marketing_only' | 'off') | null;
+    reason?: string | null;
+    setBy?: string | null;
+    setAt?: string | null;
+    expiresAt?: string | null;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-locked-documents".
  */
 export interface PayloadLockedDocument {
@@ -1092,6 +1174,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'contact-notes';
         value: string | ContactNote;
+      } | null)
+    | ({
+        relationTo: 'notifications';
+        value: string | Notification;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -1536,6 +1622,63 @@ export interface ContactNotesSelect<T extends boolean = true> {
   createdBy?: T;
   amendsNote?: T;
   status?: T;
+  createdAt?: T;
+  updatedAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "notifications_select".
+ */
+export interface NotificationsSelect<T extends boolean = true> {
+  notificationId?: T;
+  idempotencyKey?: T;
+  requestId?: T;
+  customerRef?: T;
+  customerId?: T;
+  status?: T;
+  channel?: T;
+  templateName?: T;
+  templateContentHash?: T;
+  templateGitSha?: T;
+  provider?: T;
+  providerMessageId?: T;
+  recipientHash?: T;
+  correlationId?: T;
+  eventAt?: T;
+  sentAt?: T;
+  tags?:
+    | T
+    | {
+        category?: T;
+        reason?: T;
+        step?: T;
+      };
+  failure?:
+    | T
+    | {
+        failedAt?: T;
+        errorType?: T;
+        errorMessage?: T;
+        attempt?: T;
+        fallbackSuggested?: T;
+      };
+  statement?:
+    | T
+    | {
+        accountId?: T;
+        periodStart?: T;
+        periodEnd?: T;
+        dispatchedAt?: T;
+      };
+  suppression?:
+    | T
+    | {
+        mode?: T;
+        reason?: T;
+        setBy?: T;
+        setAt?: T;
+        expiresAt?: T;
+      };
   createdAt?: T;
   updatedAt?: T;
 }

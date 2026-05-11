@@ -49,6 +49,21 @@ export { useConversations, useCustomerConversations } from './queries/useConvers
 export { useConversation } from './queries/useConversation'
 export { useAccountConductAssessment, useServiceabilityAssessment } from './queries/useAssessments'
 
+// Notifications (E-notifications)
+export { useNotifications } from './queries/useNotifications'
+export type {
+  NotificationData,
+  NotificationStatus,
+  NotificationsFilters,
+} from './queries/useNotifications'
+export { useNotificationSuppression } from './queries/useNotificationSuppression'
+export type { SuppressionData } from './queries/useNotificationSuppression'
+export { useNotificationBody, NotificationBodyNotFoundError } from './queries/useNotificationBody'
+export type { NotificationBodyData } from './queries/useNotificationBody'
+export { useSetNotificationSuppression } from './mutations/useSetNotificationSuppression'
+export type { SetSuppressionParams } from './mutations/useSetNotificationSuppression'
+export { useClearNotificationSuppression } from './mutations/useClearNotificationSuppression'
+
 // Re-export types from canonical location
 export type {
   CustomerSearchResult,
