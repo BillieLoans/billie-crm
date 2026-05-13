@@ -34,6 +34,7 @@ export const SORT_KEYS = [
   'balances.totalOutstanding',
   'lastPayment.date',
   'loanTerms.openedDate',
+  'loanTerms.disbursedDate',
   'closure.closedDate',
   'aging.currentDPD',
   'aging.lastUpdated',
@@ -76,6 +77,8 @@ export const filtersSchema = z.object({
   maxBalance: z.number().nonnegative().optional(),
   openedFrom: isoDate.optional(),
   openedTo: isoDate.optional(),
+  disbursedFrom: isoDate.optional(),
+  disbursedTo: isoDate.optional(),
   closedFrom: isoDate.optional(),
   closedTo: isoDate.optional(),
   lastPmtBefore: isoDate.optional(),
@@ -146,6 +149,8 @@ export function queryStringToFilters(input: URLSearchParams | string): FiltersSt
     maxBalance: numberFromString(params.get('max_balance')),
     openedFrom: params.get('opened_from') || undefined,
     openedTo: params.get('opened_to') || undefined,
+    disbursedFrom: params.get('disbursed_from') || undefined,
+    disbursedTo: params.get('disbursed_to') || undefined,
     closedFrom: params.get('closed_from') || undefined,
     closedTo: params.get('closed_to') || undefined,
     lastPmtBefore: params.get('last_pmt_before') || undefined,
@@ -174,6 +179,8 @@ export function filtersToQueryString(filters: FiltersInput): string {
   if (filters.maxBalance != null) params.set('max_balance', String(filters.maxBalance))
   if (filters.openedFrom) params.set('opened_from', filters.openedFrom)
   if (filters.openedTo) params.set('opened_to', filters.openedTo)
+  if (filters.disbursedFrom) params.set('disbursed_from', filters.disbursedFrom)
+  if (filters.disbursedTo) params.set('disbursed_to', filters.disbursedTo)
   if (filters.closedFrom) params.set('closed_from', filters.closedFrom)
   if (filters.closedTo) params.set('closed_to', filters.closedTo)
   if (filters.lastPmtBefore) params.set('last_pmt_before', filters.lastPmtBefore)
@@ -243,6 +250,14 @@ export function buildPayloadWhere(
   }
   if (filters.openedTo) {
     and.push({ 'loanTerms.openedDate': { less_than: nextDayStart(filters.openedTo) } })
+  }
+  if (filters.disbursedFrom) {
+    and.push({
+      'loanTerms.disbursedDate': { greater_than_equal: dayStart(filters.disbursedFrom) },
+    })
+  }
+  if (filters.disbursedTo) {
+    and.push({ 'loanTerms.disbursedDate': { less_than: nextDayStart(filters.disbursedTo) } })
   }
   if (filters.closedFrom) {
     and.push({ 'closure.closedDate': { greater_than_equal: dayStart(filters.closedFrom) } })

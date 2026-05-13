@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   DEFAULT_SORT,
   filtersSchema,
@@ -15,6 +16,7 @@ import { useAccountsBrowser } from '@/hooks/queries/useAccountsBrowser'
 import { useListKeyboardNav } from '@/hooks/useListKeyboardNav'
 import { formatCurrency } from '@/lib/formatters'
 import type { LoanAccount } from '@/payload-types'
+import { DisburseLoanDrawer } from '@/components/ServicingView/DisburseLoanDrawer'
 import { SmartViewRail } from './SmartViewRail'
 import { FilterBar } from './FilterBar'
 import { AccountsTable } from './AccountsTable'
@@ -66,6 +68,11 @@ export const AccountsBrowserView: React.FC = () => {
   const [peekAccount, setPeekAccount] = useState<LoanAccount | null>(null)
   const [peekOpen, setPeekOpen] = useState(false)
   const [cheatsheetOpen, setCheatsheetOpen] = useState(false)
+
+  // === Disburse drawer state ===
+  const [disburseAccount, setDisburseAccount] = useState<LoanAccount | null>(null)
+  const [disburseOpen, setDisburseOpen] = useState(false)
+  const queryClient = useQueryClient()
 
   // === URL writers ===
   const writeFilters = useCallback(
@@ -161,6 +168,30 @@ export const AccountsBrowserView: React.FC = () => {
     },
     [setFocusedIndex],
   )
+
+  // Disburse row action — only invoked from the per-row 🏦 button on
+  // pending_disbursement rows. Mirrors the dashboard PendingDisbursements
+  // widget pattern; same DisburseLoanDrawer is reused.
+  const handleDisburseClick = useCallback((account: LoanAccount) => {
+    setDisburseAccount(account)
+    setDisburseOpen(true)
+  }, [])
+
+  const handleDisburseClose = useCallback(() => {
+    setDisburseOpen(false)
+    // Defer clearing the account until the drawer animation completes so
+    // the success state stays rendered.
+    setTimeout(() => setDisburseAccount(null), 250)
+  }, [])
+
+  const handleDisburseSuccess = useCallback(() => {
+    // The status transition arrives via the event processor, so refetch
+    // the browser query to pick up the updated accountStatus and
+    // disbursedDate. Also invalidate the dashboard so the widget stays in
+    // sync if the user navigates back.
+    void queryClient.invalidateQueries({ queryKey: ['accounts', 'browse'] })
+    void queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+  }, [queryClient])
 
   // When the keyboard cursor moves and the drawer is open, swap the previewed
   // account to match — the inbox/Superhuman feel where j/k flips through
@@ -282,6 +313,7 @@ export const AccountsBrowserView: React.FC = () => {
             onRowClick={handleRowClick}
             onRowDoubleClick={openServicing}
             onSortChange={handleSortChange}
+            onDisburse={handleDisburseClick}
           />
 
           {totalPages > 1 && (
@@ -318,12 +350,29 @@ export const AccountsBrowserView: React.FC = () => {
           setPeekOpen(false)
           openServicing(account)
         }}
+        onDisburse={(account) => {
+          // Close the peek so the disburse drawer (also right-side) takes over.
+          setPeekOpen(false)
+          handleDisburseClick(account)
+        }}
       />
 
       <ShortcutsCheatsheet
         isOpen={cheatsheetOpen}
         onClose={() => setCheatsheetOpen(false)}
       />
+
+      {disburseAccount && (
+        <DisburseLoanDrawer
+          isOpen={disburseOpen}
+          onClose={handleDisburseClose}
+          onSuccess={handleDisburseSuccess}
+          loanAccountId={disburseAccount.loanAccountId}
+          accountNumber={disburseAccount.accountNumber}
+          loanAmount={disburseAccount.loanTerms?.loanAmount ?? 0}
+          signedLoanAgreementUrl={disburseAccount.signedLoanAgreementUrl}
+        />
+      )}
     </div>
   )
 }

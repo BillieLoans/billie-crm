@@ -136,6 +136,16 @@ export const LoanAccounts: CollectionConfig = {
             description: 'Account opening date (from SDK: opened_date)',
           },
         },
+        {
+          name: 'disbursedDate',
+          type: 'date',
+          index: true,
+          admin: {
+            readOnly: true,
+            description:
+              'When the account transitioned from pending_disbursement → active. Set by the event processor on the first such transition; left untouched on replays.',
+          },
+        },
       ],
     },
 

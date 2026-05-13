@@ -63,12 +63,13 @@ export const SMART_VIEWS: SmartView[] = [
     id: 'disbursed-today',
     label: 'Disbursed today',
     icon: '📅',
-    description: 'Active accounts disbursed today — sanity-check the run',
+    description:
+      'Accounts disbursed today (pending_disbursement → active transition). ' +
+      'Sanity-check the day\'s disbursement run.',
     resolve: (now) => ({
-      status: ['active'],
-      openedFrom: isoDay(now),
-      openedTo: isoDay(now),
-      sort: '-loanTerms.openedDate',
+      disbursedFrom: isoDay(now),
+      disbursedTo: isoDay(now),
+      sort: '-loanTerms.disbursedDate',
     }),
   },
   {
@@ -138,6 +139,8 @@ export function applySmartViewDefaults(
     maxBalance: filters.maxBalance ?? d.maxBalance,
     openedFrom: filters.openedFrom ?? d.openedFrom,
     openedTo: filters.openedTo ?? d.openedTo,
+    disbursedFrom: filters.disbursedFrom ?? d.disbursedFrom,
+    disbursedTo: filters.disbursedTo ?? d.disbursedTo,
     closedFrom: filters.closedFrom ?? d.closedFrom,
     closedTo: filters.closedTo ?? d.closedTo,
     lastPmtBefore: filters.lastPmtBefore ?? d.lastPmtBefore,

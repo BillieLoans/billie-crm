@@ -70,11 +70,18 @@ describe('smart-views: applySmartViewDefaults', () => {
     expect(merged.sort).toBe('accountNumber')
   })
 
-  test('disbursed-today resolves @today to the given date', () => {
+  test('disbursed-today filters on the disbursed date, not opened date', () => {
     const filters = filtersSchema.parse({ view: 'disbursed-today' })
     const merged = applySmartViewDefaults(filters, FIXED_NOW)
-    expect(merged.openedFrom).toBe('2026-05-13')
-    expect(merged.openedTo).toBe('2026-05-13')
+    // Crucially uses disbursedFrom/disbursedTo — not openedFrom/openedTo.
+    // Account opening can predate disbursement by days; "disbursed today"
+    // is about the pending → active transition, which is when the loan
+    // actually started moving money.
+    expect(merged.disbursedFrom).toBe('2026-05-13')
+    expect(merged.disbursedTo).toBe('2026-05-13')
+    expect(merged.openedFrom).toBeUndefined()
+    expect(merged.openedTo).toBeUndefined()
+    expect(merged.sort).toBe('-loanTerms.disbursedDate')
   })
 
   test('written-off-30d resolves @30d_ago relative to now', () => {

@@ -120,6 +120,7 @@ async def handle_account_updated(db: AsyncIOMotorDatabase, parsed_event: Any) ->
     log.info("Processing account.updated.v1")
 
     update_doc: dict[str, Any] = {"updatedAt": datetime.utcnow()}
+    existing_account: dict[str, Any] | None = None
 
     current_balance_value = None
     if payload.current_balance is not None:
@@ -139,7 +140,7 @@ async def handle_account_updated(db: AsyncIOMotorDatabase, parsed_event: Any) ->
         # infer that it has transitioned to ACTIVE.
         existing_account = await db["loan-accounts"].find_one(
             {"loanAccountId": account_id},
-            {"accountStatus": 1},
+            {"accountStatus": 1, "loanTerms": 1, "balances": 1},
         )
         if existing_account and existing_account.get("accountStatus") == "pending_disbursement":
             if current_balance_value > 0:
@@ -150,11 +151,73 @@ async def handle_account_updated(db: AsyncIOMotorDatabase, parsed_event: Any) ->
                     current_balance=current_balance_value,
                 )
 
+    # Stamp disbursedDate when this event represents a pending_disbursement →
+    # active transition. The disbursement is what flips the account live; the
+    # existing `openedDate` records when the account was *opened* (potentially
+    # days earlier) and is not a substitute. Idempotent on replay — we don't
+    # overwrite an existing disbursedDate.
+    if update_doc.get("accountStatus") == "active":
+        if existing_account is None:
+            existing_account = await db["loan-accounts"].find_one(
+                {"loanAccountId": account_id},
+                {"accountStatus": 1, "loanTerms": 1, "balances": 1},
+            )
+        if (
+            existing_account
+            and existing_account.get("accountStatus") == "pending_disbursement"
+            and not (existing_account.get("loanTerms") or {}).get("disbursedDate")
+        ):
+            update_doc["loanTerms.disbursedDate"] = datetime.utcnow()
+            log.info("Stamped disbursedDate on pending_disbursement → active transition")
+
+    last_payment_date_set = False
     if hasattr(payload, "last_payment_date") and payload.last_payment_date:
         update_doc["lastPayment.date"] = payload.last_payment_date
+        last_payment_date_set = True
 
     if hasattr(payload, "last_payment_amount") and payload.last_payment_amount is not None:
         update_doc["lastPayment.amount"] = float(payload.last_payment_amount)
+
+    # Fallback: stamp lastPayment from a balance decrease.
+    #
+    # Off-schedule or partial repayments fire account.updated.v1 with a new
+    # balance but often don't carry `last_payment_date`. They also don't fire
+    # account.schedule.updated.v1 (since no scheduled row matches), so the
+    # client-side `deriveLastPayment` schedule scan can't recover the date
+    # either. Without this fallback, "Last payment" stays "Never" forever for
+    # accounts that received non-scheduled repayments.
+    #
+    # We only fire when:
+    #  - The event didn't already carry `last_payment_date`
+    #  - The new balance is strictly less than the existing balance
+    #  - The resulting status is `active` (closures/write-offs go via
+    #    handle_account_closed — they're not payments)
+    if (
+        not last_payment_date_set
+        and current_balance_value is not None
+        and update_doc.get("accountStatus", "active") == "active"
+    ):
+        if existing_account is None:
+            existing_account = await db["loan-accounts"].find_one(
+                {"loanAccountId": account_id},
+                {"accountStatus": 1, "loanTerms": 1, "balances": 1},
+            )
+        existing_balance = (
+            (existing_account or {}).get("balances", {}).get("totalOutstanding")
+        )
+        if (
+            isinstance(existing_balance, (int, float))
+            and current_balance_value < existing_balance
+        ):
+            delta = float(existing_balance) - current_balance_value
+            update_doc["lastPayment.date"] = datetime.utcnow()
+            update_doc["lastPayment.amount"] = delta
+            log.info(
+                "Inferred lastPayment from balance decrease",
+                previous_balance=existing_balance,
+                new_balance=current_balance_value,
+                delta=delta,
+            )
 
     # Optional: signed loan agreement URL (accounts-v2.7.0+)
     if hasattr(payload, "signed_loan_agreement_url"):
@@ -186,15 +249,31 @@ async def handle_account_status_changed(db: AsyncIOMotorDatabase, parsed_event: 
         sdk_status = sdk_status.split(".")[-1]
     account_status = SDK_STATUS_MAP.get(sdk_status, "active")
 
+    update_doc: dict[str, Any] = {
+        "sdkStatus": sdk_status,
+        "accountStatus": account_status,
+        "updatedAt": datetime.utcnow(),
+    }
+
+    # Stamp disbursedDate on the pending_disbursement → active transition.
+    # Mirrors the inference in handle_account_updated for the case where the
+    # platform emits an explicit status_changed.v1 event for the same flip.
+    if account_status == "active":
+        existing_account = await db["loan-accounts"].find_one(
+            {"loanAccountId": account_id},
+            {"accountStatus": 1, "loanTerms": 1},
+        )
+        if (
+            existing_account
+            and existing_account.get("accountStatus") == "pending_disbursement"
+            and not (existing_account.get("loanTerms") or {}).get("disbursedDate")
+        ):
+            update_doc["loanTerms.disbursedDate"] = datetime.utcnow()
+            log.info("Stamped disbursedDate on pending_disbursement → active transition")
+
     result = await db["loan-accounts"].update_one(
         {"loanAccountId": account_id},
-        {
-            "$set": {
-                "sdkStatus": sdk_status,
-                "accountStatus": account_status,
-                "updatedAt": datetime.utcnow(),
-            }
-        },
+        {"$set": update_doc},
     )
 
     log.info(

@@ -73,6 +73,13 @@ function buildChips(filters: FiltersState, onChange: FilterBarProps['onChange'])
       onClear: () => onChange({ ...filters, openedFrom: undefined, openedTo: undefined }),
     })
   }
+  if (filters.disbursedFrom || filters.disbursedTo) {
+    chips.push({
+      id: 'disbursed',
+      label: `Disbursed ${filters.disbursedFrom ?? '…'} → ${filters.disbursedTo ?? '…'}`,
+      onClear: () => onChange({ ...filters, disbursedFrom: undefined, disbursedTo: undefined }),
+    })
+  }
   if (filters.closedFrom || filters.closedTo) {
     chips.push({
       id: 'closed',
@@ -303,6 +310,8 @@ const FilterModal: React.FC<FilterModalProps> = ({ initial, onApply, onClose }) 
   )
   const [openedFrom, setOpenedFrom] = useState(initial.openedFrom ?? '')
   const [openedTo, setOpenedTo] = useState(initial.openedTo ?? '')
+  const [disbursedFrom, setDisbursedFrom] = useState(initial.disbursedFrom ?? '')
+  const [disbursedTo, setDisbursedTo] = useState(initial.disbursedTo ?? '')
   const [closedFrom, setClosedFrom] = useState(initial.closedFrom ?? '')
   const [closedTo, setClosedTo] = useState(initial.closedTo ?? '')
   const [lastPmtBefore, setLastPmtBefore] = useState(initial.lastPmtBefore ?? '')
@@ -353,6 +362,8 @@ const FilterModal: React.FC<FilterModalProps> = ({ initial, onApply, onClose }) 
       maxBalance: parseNum(maxBalance),
       openedFrom: openedFrom || undefined,
       openedTo: openedTo || undefined,
+      disbursedFrom: disbursedFrom || undefined,
+      disbursedTo: disbursedTo || undefined,
       closedFrom: closedFrom || undefined,
       closedTo: closedTo || undefined,
       lastPmtBefore: lastPmtBefore || undefined,
@@ -372,6 +383,8 @@ const FilterModal: React.FC<FilterModalProps> = ({ initial, onApply, onClose }) 
     setMaxBalance('')
     setOpenedFrom('')
     setOpenedTo('')
+    setDisbursedFrom('')
+    setDisbursedTo('')
     setClosedFrom('')
     setClosedTo('')
     setLastPmtBefore('')
@@ -509,6 +522,24 @@ const FilterModal: React.FC<FilterModalProps> = ({ initial, onApply, onClose }) 
               type="date"
               value={openedTo}
               onChange={(e) => setOpenedTo(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className={styles.modalGroup}>
+          <label className={styles.modalLabel}>Disbursed date range</label>
+          <div className={styles.modalInputs}>
+            <input
+              className={styles.modalInput}
+              type="date"
+              value={disbursedFrom}
+              onChange={(e) => setDisbursedFrom(e.target.value)}
+            />
+            <input
+              className={styles.modalInput}
+              type="date"
+              value={disbursedTo}
+              onChange={(e) => setDisbursedTo(e.target.value)}
             />
           </div>
         </div>

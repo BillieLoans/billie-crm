@@ -56,6 +56,8 @@ export interface AccountsTableProps {
   onRowClick: (account: LoanAccount, index: number) => void
   onRowDoubleClick: (account: LoanAccount, index: number) => void
   onSortChange: (sort: string) => void
+  /** Per-row action — shows a small Disburse button when the account is pending_disbursement. */
+  onDisburse?: (account: LoanAccount) => void
   columns?: AccountsTableColumn[]
 }
 
@@ -67,6 +69,7 @@ export const AccountsTable: React.FC<AccountsTableProps> = ({
   onRowClick,
   onRowDoubleClick,
   onSortChange,
+  onDisburse,
   columns = DEFAULT_COLUMNS,
 }) => {
   if (isLoading) {
@@ -125,6 +128,7 @@ export const AccountsTable: React.FC<AccountsTableProps> = ({
               </th>
             )
           })}
+          {onDisburse && <th aria-label="Actions" />}
         </tr>
       </thead>
       <tbody>
@@ -194,6 +198,25 @@ export const AccountsTable: React.FC<AccountsTableProps> = ({
                   <span className={styles.muted}>—</span>
                 )}
               </td>
+              {onDisburse && (
+                <td>
+                  {status === 'pending_disbursement' ? (
+                    <button
+                      type="button"
+                      className={styles.disburseIconButton}
+                      title="Disburse this loan"
+                      aria-label={`Disburse loan ${account.accountNumber}`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onDisburse(account)
+                      }}
+                      data-testid={`disburse-row-${idx}`}
+                    >
+                      🏦
+                    </button>
+                  ) : null}
+                </td>
+              )}
             </tr>
           )
         })}

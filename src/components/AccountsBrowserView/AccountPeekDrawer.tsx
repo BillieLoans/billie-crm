@@ -35,6 +35,8 @@ export interface AccountPeekDrawerProps {
   onClose: () => void
   /** Opens the full servicing view in the current tab. */
   onOpenServicing: (account: LoanAccount) => void
+  /** Open the Disburse drawer. Shown only for pending_disbursement accounts. */
+  onDisburse?: (account: LoanAccount) => void
 }
 
 /**
@@ -48,6 +50,7 @@ export const AccountPeekDrawer: React.FC<AccountPeekDrawerProps> = ({
   isOpen,
   onClose,
   onOpenServicing,
+  onDisburse,
 }) => {
   if (!account) return null
 
@@ -57,6 +60,7 @@ export const AccountPeekDrawer: React.FC<AccountPeekDrawerProps> = ({
   const loanAmount = account.loanTerms?.loanAmount ?? 0
   const totalPayable = account.loanTerms?.totalPayable ?? 0
   const openedDate = account.loanTerms?.openedDate
+  const disbursedDate = account.loanTerms?.disbursedDate
   const frequency = account.repaymentSchedule?.paymentFrequency
   const closure = account.closure
   const lastPmt = deriveLastPayment(account)
@@ -184,6 +188,12 @@ export const AccountPeekDrawer: React.FC<AccountPeekDrawerProps> = ({
             </span>
           </div>
           <div className={styles.peekField}>
+            <span className={styles.peekFieldLabel}>Disbursed</span>
+            <span className={styles.peekFieldValue}>
+              {disbursedDate ? formatDateMedium(disbursedDate) : '—'}
+            </span>
+          </div>
+          <div className={styles.peekField}>
             <span className={styles.peekFieldLabel}>Last payment</span>
             <span className={styles.peekFieldValue}>
               {lastPmt
@@ -225,9 +235,21 @@ export const AccountPeekDrawer: React.FC<AccountPeekDrawerProps> = ({
 
       {/* === Actions === */}
       <div className={styles.peekActions}>
+        {status === 'pending_disbursement' && onDisburse && (
+          <button
+            type="button"
+            className={`${styles.peekAction} ${styles.peekActionPrimary}`}
+            onClick={() => onDisburse(account)}
+            data-testid="peek-disburse"
+          >
+            🏦 Disburse loan →
+          </button>
+        )}
         <button
           type="button"
-          className={`${styles.peekAction} ${styles.peekActionPrimary}`}
+          className={`${styles.peekAction} ${
+            status === 'pending_disbursement' && onDisburse ? '' : styles.peekActionPrimary
+          }`}
           onClick={() => onOpenServicing(account)}
           disabled={!servicingHref}
           data-testid="peek-open-servicing"

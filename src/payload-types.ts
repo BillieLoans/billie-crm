@@ -735,6 +735,10 @@ export interface LoanAccount {
      * Account opening date (from SDK: opened_date)
      */
     openedDate?: string | null;
+    /**
+     * When the account transitioned from pending_disbursement → active. Set by the event processor on the first such transition; left untouched on replays.
+     */
+    disbursedDate?: string | null;
   };
   /**
    * Current account balances (updated from events)
@@ -1561,6 +1565,7 @@ export interface LoanAccountsSelect<T extends boolean = true> {
         loanFee?: T;
         totalPayable?: T;
         openedDate?: T;
+        disbursedDate?: T;
       };
   balances?:
     | T

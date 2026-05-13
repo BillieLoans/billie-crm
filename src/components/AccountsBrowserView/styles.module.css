@@ -430,6 +430,35 @@
   box-shadow: inset 0 0 0 1px rgba(220, 38, 38, 0.35);
 }
 
+/* === Inline disburse action button (pending-disbursement rows) === */
+
+.disburseIconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: var(--theme-elevation-50);
+  border: 1px solid var(--theme-elevation-200);
+  border-radius: 6px;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, transform 0.12s ease;
+}
+
+.disburseIconButton:hover {
+  background: var(--theme-success-50, #ecfdf5);
+  border-color: var(--theme-success-500, #10b981);
+  transform: translateY(-1px);
+}
+
+.disburseIconButton:focus {
+  outline: 2px solid var(--theme-success-500, #10b981);
+  outline-offset: 1px;
+}
+
 /* === Pagination === */
 
 .pagination {

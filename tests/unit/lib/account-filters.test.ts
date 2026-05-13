@@ -249,3 +249,36 @@ describe('account-filters: aging URL params', () => {
     expect(() => queryStringToFilters('sort=-aging.currentDPD')).not.toThrow()
   })
 })
+
+describe('account-filters: disbursedDate filters', () => {
+  test('parses disbursed_from and disbursed_to', () => {
+    const filters = queryStringToFilters('disbursed_from=2026-05-13&disbursed_to=2026-05-13')
+    expect(filters.disbursedFrom).toBe('2026-05-13')
+    expect(filters.disbursedTo).toBe('2026-05-13')
+  })
+
+  test('disbursedFrom/disbursedTo expand to a full UTC day in the where clause', () => {
+    const where = buildPayloadWhere(
+      filtersSchema.parse({ disbursedFrom: '2026-05-13', disbursedTo: '2026-05-13' }),
+      null,
+    ) as { and: Array<Record<string, unknown>> }
+    expect(where.and).toContainEqual({
+      'loanTerms.disbursedDate': { greater_than_equal: '2026-05-13T00:00:00.000Z' },
+    })
+    expect(where.and).toContainEqual({
+      'loanTerms.disbursedDate': { less_than: '2026-05-14T00:00:00.000Z' },
+    })
+  })
+
+  test('loanTerms.disbursedDate is an accepted sort key', () => {
+    expect(() => queryStringToFilters('sort=-loanTerms.disbursedDate')).not.toThrow()
+  })
+
+  test('disbursed params round-trip through queryString helpers', () => {
+    const state = queryStringToFilters('disbursed_from=2026-05-01&disbursed_to=2026-05-13')
+    const qs = filtersToQueryString(state)
+    const parsed = new URLSearchParams(qs)
+    expect(parsed.get('disbursed_from')).toBe('2026-05-01')
+    expect(parsed.get('disbursed_to')).toBe('2026-05-13')
+  })
+})
