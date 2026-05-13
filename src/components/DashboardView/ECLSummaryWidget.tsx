@@ -2,6 +2,7 @@
 
 import React from 'react'
 import { usePortfolioECL } from '@/hooks/queries/usePortfolioECL'
+import { SectionCard } from './primitives/SectionCard'
 import styles from './widgets.module.css'
 
 /**
@@ -41,26 +42,27 @@ export function ECLSummaryWidget() {
   const { totalEcl, totalCarryingAmount, totalAccounts, buckets, isFallback, isLoading } =
     usePortfolioECL()
 
+  const title = (
+    <>
+      <span className={styles.widgetIcon} aria-hidden="true">
+        📉
+      </span>{' '}
+      ECL Summary
+    </>
+  )
+
   if (isLoading) {
     return (
-      <div className={styles.widget}>
-        <div className={styles.widgetHeader}>
-          <span className={styles.widgetIcon}>📉</span>
-          <h3 className={styles.widgetTitle}>ECL Summary</h3>
-        </div>
+      <SectionCard density="compact" title={title} testId="ecl-summary-widget">
         <div className={styles.widgetSkeleton} />
-      </div>
+      </SectionCard>
     )
   }
 
   const eclPercent = calculateECLPercent(totalEcl, totalCarryingAmount)
 
   return (
-    <div className={styles.widget}>
-      <div className={styles.widgetHeader}>
-        <span className={styles.widgetIcon}>📉</span>
-        <h3 className={styles.widgetTitle}>ECL Summary</h3>
-      </div>
+    <SectionCard density="compact" title={title} testId="ecl-summary-widget">
       <div className={styles.widgetContent}>
         {isFallback ? (
           <div className={styles.widgetFallback}>
@@ -81,10 +83,8 @@ export function ECLSummaryWidget() {
             {/* Mini bucket distribution */}
             <div className={styles.bucketBar}>
               {buckets.map((bucket, index) => {
-                const width = totalAccounts > 0
-                  ? (bucket.accountCount / totalAccounts) * 100
-                  : 0
-                // Map bucket names to CSS classes
+                const width =
+                  totalAccounts > 0 ? (bucket.accountCount / totalAccounts) * 100 : 0
                 const getBucketClass = (bucketName: string): string => {
                   switch (bucketName) {
                     case 'current':
@@ -112,6 +112,6 @@ export function ECLSummaryWidget() {
           </>
         )}
       </div>
-    </div>
+    </SectionCard>
   )
 }

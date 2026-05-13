@@ -3,6 +3,7 @@
 import React from 'react'
 import Link from 'next/link'
 import { useOverdueAccounts } from '@/hooks/queries/useOverdueAccounts'
+import { SectionCard } from './primitives/SectionCard'
 import styles from './widgets.module.css'
 
 /**
@@ -17,24 +18,25 @@ import styles from './widgets.module.css'
 export function PortfolioHealthWidget() {
   const { totalCount, isFallback, isLoading } = useOverdueAccounts({ pageSize: 1 })
 
+  const title = (
+    <>
+      <span className={styles.widgetIcon} aria-hidden="true">
+        📊
+      </span>{' '}
+      Portfolio Health
+    </>
+  )
+
   if (isLoading) {
     return (
-      <div className={styles.widget}>
-        <div className={styles.widgetHeader}>
-          <span className={styles.widgetIcon}>📊</span>
-          <h3 className={styles.widgetTitle}>Portfolio Health</h3>
-        </div>
+      <SectionCard density="compact" title={title} testId="portfolio-health-widget">
         <div className={styles.widgetSkeleton} />
-      </div>
+      </SectionCard>
     )
   }
 
   return (
-    <div className={styles.widget}>
-      <div className={styles.widgetHeader}>
-        <span className={styles.widgetIcon}>📊</span>
-        <h3 className={styles.widgetTitle}>Portfolio Health</h3>
-      </div>
+    <SectionCard density="compact" title={title} testId="portfolio-health-widget">
       <div className={styles.widgetContent}>
         <div className={styles.metricRow}>
           <span className={styles.metricLabel}>Overdue Accounts</span>
@@ -60,6 +62,6 @@ export function PortfolioHealthWidget() {
           </div>
         )}
       </div>
-    </div>
+    </SectionCard>
   )
 }
