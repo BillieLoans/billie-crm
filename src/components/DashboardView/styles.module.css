@@ -19,42 +19,57 @@
   font-size: 28px;
   font-weight: 600;
   color: var(--theme-text, #fff);
+  line-height: 1.2;
 }
 
-/* Widget Row - 3 columns for portfolio widgets */
-.widgetRow {
+.greetingSummary {
+  color: var(--theme-elevation-600, #aaa);
+  font-weight: 500;
+  font-size: 22px;
+}
+
+/* Hero tile row */
+.heroRow {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 16px;
-  margin-bottom: 8px;
 }
 
 @media (max-width: 1000px) {
-  .widgetRow {
+  .heroRow {
     grid-template-columns: 1fr 1fr;
   }
 }
 
 @media (max-width: 700px) {
-  .widgetRow {
+  .heroRow {
     grid-template-columns: 1fr;
   }
 }
 
-/* Grid Layout - 2x2 on larger screens */
-.grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
+/* Failed actions banner */
+.failedBanner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 14px;
+  background: rgba(220, 38, 38, 0.12);
+  border: 1px solid rgba(220, 38, 38, 0.4);
+  border-radius: 8px;
+  color: #fca5a5;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease;
 }
 
-@media (max-width: 900px) {
-  .grid {
-    grid-template-columns: 1fr;
-  }
+.failedBanner:hover {
+  background: rgba(220, 38, 38, 0.2);
 }
 
-/* Cards */
+/* Card (used by Recent Customers — full-width per UX scope) */
 .card {
   background: var(--theme-elevation-100, #1a1a1a);
   border: 1px solid var(--theme-elevation-200, #333);
@@ -62,115 +77,11 @@
   padding: 20px;
 }
 
-.cardWide {
-  grid-column: 1 / -1;
-}
-
 .cardTitle {
   margin: 0 0 16px 0;
   font-size: 16px;
   font-weight: 600;
   color: var(--theme-text, #fff);
-}
-
-/* Action Items */
-.actionList {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.actionItem {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  background: var(--theme-elevation-50, #222);
-  border: 1px solid var(--theme-elevation-200, #333);
-  border-radius: 8px;
-  color: var(--theme-text, #fff);
-  text-decoration: none;
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
-  font-size: 14px;
-  width: 100%;
-  text-align: left;
-}
-
-.actionItem:hover {
-  background: var(--theme-elevation-150, #2a2a2a);
-  border-color: var(--theme-elevation-300, #444);
-}
-
-.actionItemEmpty {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  background: var(--theme-elevation-50, #222);
-  border: 1px solid var(--theme-elevation-200, #333);
-  border-radius: 8px;
-  color: var(--theme-elevation-500, #888);
-  font-size: 14px;
-}
-
-.actionIcon {
-  font-size: 18px;
-  flex-shrink: 0;
-}
-
-.actionText {
-  flex: 1;
-}
-
-.actionArrow {
-  color: var(--theme-elevation-500, #888);
-}
-
-/* System Status */
-.statusList {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.statusItem {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 14px;
-}
-
-.statusDot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.statusDot[data-status="online"] {
-  background: #22c55e;
-  box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
-}
-
-.statusDot[data-status="degraded"] {
-  background: #f59e0b;
-  box-shadow: 0 0 6px rgba(245, 158, 11, 0.5);
-}
-
-.statusDot[data-status="offline"] {
-  background: #ef4444;
-  box-shadow: 0 0 6px rgba(239, 68, 68, 0.5);
-}
-
-.statusLabel {
-  color: var(--theme-text, #fff);
-}
-
-.statusValue {
-  margin-left: auto;
-  color: var(--theme-elevation-500, #888);
-  text-transform: capitalize;
 }
 
 /* Recent Customers */
@@ -259,7 +170,7 @@
   font-size: 13px;
 }
 
-/* Keyboard Tip Footer */
+/* Keyboard Tip Footer (removed in Phase 3) */
 .tipFooter {
   display: flex;
   align-items: center;
@@ -329,26 +240,27 @@
 
 /* Skeleton Loading */
 .skeletonTitle {
-  width: 280px;
+  width: 320px;
   height: 32px;
-  background: linear-gradient(90deg, var(--theme-elevation-100) 0%, var(--theme-elevation-150) 50%, var(--theme-elevation-100) 100%);
+  background: linear-gradient(
+    90deg,
+    var(--theme-elevation-100) 0%,
+    var(--theme-elevation-150) 50%,
+    var(--theme-elevation-100) 100%
+  );
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
   border-radius: 6px;
 }
 
 .skeletonCard {
-  height: 160px;
-  background: linear-gradient(90deg, var(--theme-elevation-100) 0%, var(--theme-elevation-150) 50%, var(--theme-elevation-100) 100%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
-  border-radius: 12px;
-}
-
-.skeletonCardLarge {
-  height: 280px;
-  grid-column: 1 / -1;
-  background: linear-gradient(90deg, var(--theme-elevation-100) 0%, var(--theme-elevation-150) 50%, var(--theme-elevation-100) 100%);
+  height: 200px;
+  background: linear-gradient(
+    90deg,
+    var(--theme-elevation-100) 0%,
+    var(--theme-elevation-150) 50%,
+    var(--theme-elevation-100) 100%
+  );
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
   border-radius: 12px;
@@ -363,43 +275,6 @@
   }
 }
 
-/* Account Link Styles */
-.accountLink {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.accountNumber {
-  font-family: monospace;
-  font-size: 13px;
-  color: var(--theme-text, #fff);
-}
-
-/* Monospace for currency */
-.monospace {
-  font-family: monospace;
-}
-
-/* Due Date & Payment Status */
-.dueDate {
-  font-size: 13px;
-  padding: 4px 8px;
-  border-radius: 4px;
-}
-
-.statusOverdue {
-  color: #fff;
-  background-color: #dc2626;
-  font-weight: 600;
-}
-
-.statusDueToday {
-  color: #000;
-  background-color: #fbbf24;
-  font-weight: 600;
-}
-
 /* Responsive */
 @media (max-width: 768px) {
   .container {
@@ -408,6 +283,12 @@
 
   .greeting {
     font-size: 24px;
+  }
+
+  .greetingSummary {
+    font-size: 18px;
+    display: block;
+    margin-top: 4px;
   }
 
   .customerHeader {
@@ -426,17 +307,17 @@
   }
 
   .customerAccounts::before {
-    content: "Accounts: ";
+    content: 'Accounts: ';
     color: var(--theme-elevation-500);
   }
 
   .customerOutstanding::before {
-    content: "Outstanding: ";
+    content: 'Outstanding: ';
     color: var(--theme-elevation-500);
   }
 
   .customerLastViewed::before {
-    content: "Last viewed: ";
+    content: 'Last viewed: ';
     color: var(--theme-elevation-500);
   }
 }
