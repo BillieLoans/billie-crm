@@ -1,0 +1,51 @@
+.card {
+  background: var(--theme-elevation-100, #1a1a1a);
+  border: 1px solid var(--theme-elevation-200, #333);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.compact {
+  padding: 14px 16px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.compact .header {
+  margin-bottom: 10px;
+}
+
+.title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--theme-text, #fff);
+}
+
+.compact .title {
+  font-size: 14px;
+  color: var(--theme-elevation-600, #aaa);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+.action {
+  font-size: 13px;
+  color: var(--theme-elevation-500, #888);
+}
+
+.action a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.action a:hover {
+  color: var(--theme-text, #fff);
+}
