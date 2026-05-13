@@ -1,0 +1,26 @@
+.row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--theme-elevation-500, #888);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.hint {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--theme-elevation-500, #888);
+  font-style: italic;
+}
+
+@media (max-width: 900px) {
+  .row {
+    grid-template-columns: 1fr;
+  }
+}
