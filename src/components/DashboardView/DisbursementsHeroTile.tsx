@@ -9,19 +9,18 @@ export function DisbursementsHeroTile() {
   const { data, isLoading } = useDashboard()
 
   const count = data?.pendingDisbursementsCount ?? 0
-  const accounts = data?.pendingDisbursements ?? []
 
   const { totalAmount, oldestCreatedAt } = useMemo(() => {
     let total = 0
     let oldest: string | null = null
-    for (const acct of accounts) {
+    for (const acct of data?.pendingDisbursements ?? []) {
       total += acct.loanAmount || 0
       if (!oldest || acct.createdAt < oldest) {
         oldest = acct.createdAt
       }
     }
     return { totalAmount: total, oldestCreatedAt: oldest }
-  }, [accounts])
+  }, [data])
 
   let subline: string
   if (count === 0) {

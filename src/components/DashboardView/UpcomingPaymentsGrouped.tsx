@@ -41,14 +41,15 @@ interface PaymentGroup {
 
 export function UpcomingPaymentsGrouped() {
   const { data, isLoading } = useDashboard()
-  const payments = data?.upcomingPayments ?? []
 
-  const { groups, totalAmount, concentrationNote } = useMemo(() => {
+  const { groups, totalAmount, concentrationNote, paymentCount } = useMemo(() => {
     const map = new Map<string, PaymentGroup>()
     const customerSums = new Map<string, { name: string; count: number }>()
     let runningTotal = 0
+    let count = 0
 
-    for (const p of payments) {
+    for (const p of data?.upcomingPayments ?? []) {
+      count += 1
       const key = p.dueDate
       let g = map.get(key)
       if (!g) {
@@ -83,13 +84,18 @@ export function UpcomingPaymentsGrouped() {
       note = `${concentrated.count} payments belong to ${concentrated.name}`
     }
 
-    return { groups: sortedGroups, totalAmount: runningTotal, concentrationNote: note }
-  }, [payments])
+    return {
+      groups: sortedGroups,
+      totalAmount: runningTotal,
+      concentrationNote: note,
+      paymentCount: count,
+    }
+  }, [data])
 
   const summary =
-    payments.length === 0
+    paymentCount === 0
       ? 'No upcoming payments'
-      : `${formatCurrency(totalAmount)} across ${payments.length} payment${payments.length === 1 ? '' : 's'}`
+      : `${formatCurrency(totalAmount)} across ${paymentCount} payment${paymentCount === 1 ? '' : 's'}`
 
   return (
     <SectionCard
