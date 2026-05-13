@@ -12,3 +12,4 @@ git+https://${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@account
 git+https://${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@customers-v2.0.0#subdirectory=packages/customers
 git+https://${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@ledger-v1.1.0#subdirectory=packages/ledger
 git+https://${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@notifications-v1.1.1#subdirectory=packages/notifications
+git+https://${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@aging-v1.1.0#subdirectory=packages/aging

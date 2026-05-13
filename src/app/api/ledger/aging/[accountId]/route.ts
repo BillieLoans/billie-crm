@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getLedgerClient } from '@/server/grpc-client'
+import { getLedgerClient, type AccountAgingResponse } from '@/server/grpc-client'
 import { requireAuth } from '@/lib/auth'
 import { hasAnyRole } from '@/lib/access'
 
@@ -30,7 +30,17 @@ export async function GET(
         accountId,
       })
 
-      return NextResponse.json(response)
+      // Normalise the aging-v1.1.0 isInArrears field. proto-loader emits
+      // camelCase by default; be defensive about snake_case too.
+      const raw = response as AccountAgingResponse & { is_in_arrears?: boolean }
+      const isInArrears: boolean =
+        typeof raw.isInArrears === 'boolean'
+          ? raw.isInArrears
+          : typeof raw.is_in_arrears === 'boolean'
+            ? raw.is_in_arrears
+            : false
+
+      return NextResponse.json({ ...response, isInArrears })
     } catch (grpcError: unknown) {
       const error = grpcError as { code?: number; message?: string }
       // Handle NOT_FOUND - account has no aging state yet
@@ -42,6 +52,7 @@ export async function GET(
             bucket: 'CURRENT',
             bucketEntryDate: null,
             history: [],
+            isInArrears: false,
             _notFound: true,
           },
           { status: 200 },

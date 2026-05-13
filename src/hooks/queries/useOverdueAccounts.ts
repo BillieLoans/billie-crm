@@ -13,6 +13,11 @@ export interface OverdueAccount {
   daysUntilOverdue: number
   totalOverdueAmount: string
   lastUpdated: string
+  /**
+   * Authoritative arrears flag from the aging service (aging-v1.1.0+).
+   * Defaults to `false` when the ledger version doesn't supply it.
+   */
+  isInArrears?: boolean
 }
 
 /**

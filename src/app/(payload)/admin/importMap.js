@@ -3,6 +3,7 @@ import { NotificationAction as NotificationAction_ff7594e27eaf34e7ce9acae213b054
 import { GoogleLoginButton as GoogleLoginButton_f8eb56cd8fd98e23e8bcaf648a37c729 } from '@/components/Auth/GoogleLoginButton'
 import { NavSearchTrigger as NavSearchTrigger_aef8b4b7b9afc7097ff45e7590131c08 } from '@/components/navigation/NavSearchTrigger'
 import { NavDashboardLink as NavDashboardLink_8ed26f5dfcf4b8f60da98c3488976ae8 } from '@/components/navigation/NavDashboardLink'
+import { NavAccountsLink as NavAccountsLink_f9e90e2a5a25699ab203b1e93b9f79d6 } from '@/components/navigation/NavAccountsLink'
 import { NavCollectionsLink as NavCollectionsLink_cace573cc395aa45fa1be624b4874bcd } from '@/components/navigation/NavCollectionsLink'
 import { NavApprovalsLink as NavApprovalsLink_432895ce587e4825ef60ac4a4de8aa43 } from '@/components/navigation/NavApprovalsLink'
 import { NavPeriodCloseLink as NavPeriodCloseLink_b876b3abd416c3d860c4802b5c1185f1 } from '@/components/navigation/NavPeriodCloseLink'
@@ -15,6 +16,7 @@ import { DashboardViewWithTemplate as DashboardViewWithTemplate_aa38ffaef1440457
 import { ServicingViewWithTemplate as ServicingViewWithTemplate_04dbd51012de8c56c1deb3ec9516015c } from '@/components/ServicingView/ServicingViewWithTemplate'
 import { ApprovalsViewWithTemplate as ApprovalsViewWithTemplate_03ad776ce26465d586697fa5d953dd80 } from '@/components/ApprovalsView/ApprovalsViewWithTemplate'
 import { MyActivityViewWithTemplate as MyActivityViewWithTemplate_59e3ffb5a5d6849cbc82cab26e75164b } from '@/components/MyActivityView/MyActivityViewWithTemplate'
+import { AccountsBrowserViewWithTemplate as AccountsBrowserViewWithTemplate_0c0c5142811e265fd74ff03b69baec6b } from '@/components/AccountsBrowserView/AccountsBrowserViewWithTemplate'
 import { CollectionsViewWithTemplate as CollectionsViewWithTemplate_6ff107173ce80a76a0f8a31dcf506def } from '@/components/CollectionsView/CollectionsViewWithTemplate'
 import { PendingDisbursementsViewWithTemplate as PendingDisbursementsViewWithTemplate_693db25300e0ccd059d0f882c0694009 } from '@/components/PendingDisbursementsView/PendingDisbursementsViewWithTemplate'
 import { SystemStatusViewWithTemplate as SystemStatusViewWithTemplate_ec75aba93ca5497fc28565b2d315a0bb } from '@/components/SystemStatusView/SystemStatusViewWithTemplate'
@@ -30,6 +32,7 @@ export const importMap = {
   "@/components/Auth/GoogleLoginButton#GoogleLoginButton": GoogleLoginButton_f8eb56cd8fd98e23e8bcaf648a37c729,
   "@/components/navigation/NavSearchTrigger#NavSearchTrigger": NavSearchTrigger_aef8b4b7b9afc7097ff45e7590131c08,
   "@/components/navigation/NavDashboardLink#NavDashboardLink": NavDashboardLink_8ed26f5dfcf4b8f60da98c3488976ae8,
+  "@/components/navigation/NavAccountsLink#NavAccountsLink": NavAccountsLink_f9e90e2a5a25699ab203b1e93b9f79d6,
   "@/components/navigation/NavCollectionsLink#NavCollectionsLink": NavCollectionsLink_cace573cc395aa45fa1be624b4874bcd,
   "@/components/navigation/NavApprovalsLink#NavApprovalsLink": NavApprovalsLink_432895ce587e4825ef60ac4a4de8aa43,
   "@/components/navigation/NavPeriodCloseLink#NavPeriodCloseLink": NavPeriodCloseLink_b876b3abd416c3d860c4802b5c1185f1,
@@ -42,6 +45,7 @@ export const importMap = {
   "@/components/ServicingView/ServicingViewWithTemplate#ServicingViewWithTemplate": ServicingViewWithTemplate_04dbd51012de8c56c1deb3ec9516015c,
   "@/components/ApprovalsView/ApprovalsViewWithTemplate#ApprovalsViewWithTemplate": ApprovalsViewWithTemplate_03ad776ce26465d586697fa5d953dd80,
   "@/components/MyActivityView/MyActivityViewWithTemplate#MyActivityViewWithTemplate": MyActivityViewWithTemplate_59e3ffb5a5d6849cbc82cab26e75164b,
+  "@/components/AccountsBrowserView/AccountsBrowserViewWithTemplate#AccountsBrowserViewWithTemplate": AccountsBrowserViewWithTemplate_0c0c5142811e265fd74ff03b69baec6b,
   "@/components/CollectionsView/CollectionsViewWithTemplate#CollectionsViewWithTemplate": CollectionsViewWithTemplate_6ff107173ce80a76a0f8a31dcf506def,
   "@/components/PendingDisbursementsView/PendingDisbursementsViewWithTemplate#PendingDisbursementsViewWithTemplate": PendingDisbursementsViewWithTemplate_693db25300e0ccd059d0f882c0694009,
   "@/components/SystemStatusView/SystemStatusViewWithTemplate#SystemStatusViewWithTemplate": SystemStatusViewWithTemplate_ec75aba93ca5497fc28565b2d315a0bb,

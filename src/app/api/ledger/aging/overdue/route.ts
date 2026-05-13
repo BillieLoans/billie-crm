@@ -64,6 +64,13 @@ export async function GET(request: NextRequest) {
         const daysUntilOverdue = account.daysUntilOverdue ?? account.days_until_overdue ?? 0
         const totalOverdueAmount = account.totalOverdueAmount ?? account.total_overdue_amount ?? '0'
         const lastUpdated = account.lastUpdated ?? account.last_updated ?? new Date().toISOString()
+        // aging-v1.1.0+ field. Default false when the ledger version doesn't supply it.
+        const isInArrears: boolean =
+          typeof account.isInArrears === 'boolean'
+            ? account.isInArrears
+            : typeof account.is_in_arrears === 'boolean'
+              ? account.is_in_arrears
+              : false
 
         return {
           accountId,
@@ -72,6 +79,7 @@ export async function GET(request: NextRequest) {
           daysUntilOverdue,
           totalOverdueAmount,
           lastUpdated,
+          isInArrears,
         }
       })
 

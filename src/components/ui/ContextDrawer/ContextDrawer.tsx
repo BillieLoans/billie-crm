@@ -8,6 +8,11 @@ export interface ContextDrawerProps {
   onClose: () => void
   title: string
   children: React.ReactNode
+  /**
+   * Optional override for the drawer's max-width. Accepts any CSS length
+   * (e.g. `"560px"`, `"40rem"`). Defaults to the stylesheet's 480px.
+   */
+  maxWidth?: string
 }
 
 /**
@@ -24,6 +29,7 @@ export const ContextDrawer: React.FC<ContextDrawerProps> = ({
   onClose,
   title,
   children,
+  maxWidth,
 }) => {
   const drawerRef = useRef<HTMLDivElement>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
@@ -77,6 +83,7 @@ export const ContextDrawer: React.FC<ContextDrawerProps> = ({
       <div
         ref={drawerRef}
         className={styles.drawer}
+        style={maxWidth ? { maxWidth } : undefined}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"

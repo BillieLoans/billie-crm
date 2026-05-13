@@ -23,6 +23,7 @@ from redis.exceptions import (
 from billie_accounts_events.parser import parse_account_message
 from billie_customers_events.parser import parse_customer_message
 from billie_notifications_events.parser import parse_notification_event
+from billie_aging_events import parse_aging_event
 
 from .config import settings
 
@@ -610,6 +611,10 @@ class EventProcessor:
         elif event_type.startswith("notification.") or event_type == "statement.generated.v1":
             # Use notifications SDK (typed Pydantic payload + envelope)
             return parse_notification_event(sdk_data)
+
+        elif event_type.startswith("loan.aging."):
+            # Use aging SDK (aging-v1.1.0+ — typed Pydantic payload + envelope)
+            return parse_aging_event(sdk_data)
 
         else:
             # Chat/conversation events — sanitize envelope so payload JSON string

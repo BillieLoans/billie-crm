@@ -43,6 +43,9 @@ from .notification import (
     handle_notification_suppression_changed,
     handle_statement_generated,
 )
+from .aging import (
+    handle_loan_aging_updated,
+)
 
 __all__ = [
     # Account handlers
@@ -85,4 +88,6 @@ __all__ = [
     "handle_notification_delivery_failed",
     "handle_notification_suppression_changed",
     "handle_statement_generated",
+    # Aging handler (platform → CRM read-only projection of arrears state)
+    "handle_loan_aging_updated",
 ]

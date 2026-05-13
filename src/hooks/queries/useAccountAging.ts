@@ -15,6 +15,12 @@ export interface AccountAgingResponse {
   nextDueAmount?: string
   bucketHistory?: BucketTransition[]
   updatedAt: string
+  /**
+   * From aging-v1.1.0: `bucket not in {"current","closed"}` AND not terminal.
+   * The single source of truth for the "in arrears" badge — prefer this over
+   * recomputing from `bucket` + account status.
+   */
+  isInArrears?: boolean
   _fallback?: boolean
 }
 
@@ -117,6 +123,12 @@ export function useAccountAging(options: UseAccountAgingOptions) {
     bucketHistory: query.data?.bucketHistory ?? [],
     /** When the aging was last updated */
     updatedAt: query.data?.updatedAt,
+    /**
+     * True when the account is currently in arrears (per aging-v1.1.0).
+     * Equivalent to `bucket not in {"current","closed"}` and not terminal,
+     * but computed authoritatively by the aging service.
+     */
+    isInArrears: query.data?.isInArrears ?? false,
     /** Whether data is from fallback (service unavailable) */
     isFallback: query.data?._fallback ?? false,
     /** Whether the initial load is in progress */

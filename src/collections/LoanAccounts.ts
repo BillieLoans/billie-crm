@@ -205,6 +205,60 @@ export const LoanAccounts: CollectionConfig = {
       ],
     },
 
+    // === Aging (from loan.aging.updated.v1, aging-v1.1.0+) ===
+    {
+      name: 'aging',
+      type: 'group',
+      admin: {
+        description: 'Latest aging snapshot projected from loan.aging.updated.v1',
+      },
+      fields: [
+        {
+          name: 'isInArrears',
+          type: 'checkbox',
+          defaultValue: false,
+          index: true,
+          admin: {
+            readOnly: true,
+            description:
+              'Authoritative flag from the aging service: bucket not in {current,closed} AND not terminal',
+          },
+        },
+        {
+          name: 'bucket',
+          type: 'select',
+          options: [
+            { label: 'Current', value: 'current' },
+            { label: 'Early Arrears', value: 'early_arrears' },
+            { label: 'Late Arrears', value: 'late_arrears' },
+            { label: 'Default', value: 'default' },
+            { label: 'Closed', value: 'closed' },
+          ],
+          index: true,
+          admin: {
+            readOnly: true,
+            description: 'Aging bucket at last update',
+          },
+        },
+        {
+          name: 'currentDPD',
+          type: 'number',
+          admin: {
+            readOnly: true,
+            description: 'Days past due at last update',
+          },
+        },
+        {
+          name: 'lastUpdated',
+          type: 'date',
+          admin: {
+            readOnly: true,
+            description: 'When the aging snapshot was last refreshed',
+          },
+        },
+      ],
+    },
+
     // === Status ===
     {
       name: 'accountStatus',

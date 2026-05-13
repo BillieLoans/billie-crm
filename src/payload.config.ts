@@ -37,6 +37,7 @@ export default buildConfig({
       beforeNavLinks: [
         '@/components/navigation/NavSearchTrigger#NavSearchTrigger',
         '@/components/navigation/NavDashboardLink#NavDashboardLink',
+        '@/components/navigation/NavAccountsLink#NavAccountsLink',
         '@/components/navigation/NavCollectionsLink#NavCollectionsLink',
         '@/components/navigation/NavApprovalsLink#NavApprovalsLink',
         '@/components/navigation/NavPeriodCloseLink#NavPeriodCloseLink',
@@ -71,6 +72,12 @@ export default buildConfig({
         myActivity: {
           Component: '@/components/MyActivityView/MyActivityViewWithTemplate#MyActivityViewWithTemplate',
           path: '/my-activity',
+        },
+        // Browse Accounts view — faceted account browser with Smart Views
+        accounts: {
+          Component:
+            '@/components/AccountsBrowserView/AccountsBrowserViewWithTemplate#AccountsBrowserViewWithTemplate',
+          path: '/accounts',
         },
         // Collections Queue view (Story E1-S1)
         collections: {

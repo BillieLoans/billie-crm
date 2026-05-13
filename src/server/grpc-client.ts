@@ -296,6 +296,13 @@ export interface AccountAgingResponse {
   transitionReason?: string
   oldestOverdueInstalmentId?: string
   totalOverdueAmount: string
+  /**
+   * Derived flag from the aging service (aging-v1.1.0+):
+   * `bucket not in {"current","closed"}` AND the account is not terminal.
+   * Optional because older ledger versions don't populate it; treat absence
+   * as "unknown" and fall back to the bucket string.
+   */
+  isInArrears?: boolean
 }
 
 export interface GetOverdueAccountsRequest {
@@ -313,6 +320,8 @@ export interface OverdueAccount {
   daysUntilOverdue: number
   totalOverdueAmount: string
   lastUpdated: string
+  /** Derived flag from the aging service (aging-v1.1.0+). See AccountAgingResponse. */
+  isInArrears?: boolean
 }
 
 export interface OverdueAccountsResponse {

@@ -767,6 +767,27 @@ export interface LoanAccount {
     amount?: number | null;
   };
   /**
+   * Latest aging snapshot projected from loan.aging.updated.v1
+   */
+  aging?: {
+    /**
+     * Authoritative flag from the aging service: bucket not in {current,closed} AND not terminal
+     */
+    isInArrears?: boolean | null;
+    /**
+     * Aging bucket at last update
+     */
+    bucket?: ('current' | 'early_arrears' | 'late_arrears' | 'default' | 'closed') | null;
+    /**
+     * Days past due at last update
+     */
+    currentDPD?: number | null;
+    /**
+     * When the aging snapshot was last refreshed
+     */
+    lastUpdated?: string | null;
+  };
+  /**
    * Mapped from SDK AccountStatus enum
    */
   accountStatus: 'pending_disbursement' | 'active' | 'paid_off' | 'in_arrears' | 'written_off';
@@ -1553,6 +1574,14 @@ export interface LoanAccountsSelect<T extends boolean = true> {
     | {
         date?: T;
         amount?: T;
+      };
+  aging?:
+    | T
+    | {
+        isInArrears?: T;
+        bucket?: T;
+        currentDPD?: T;
+        lastUpdated?: T;
       };
   accountStatus?: T;
   sdkStatus?: T;

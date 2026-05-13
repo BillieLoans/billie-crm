@@ -21,6 +21,7 @@ import { useCommandPaletteHotkeys } from '@/hooks/useGlobalHotkeys'
 import { useReadOnlyMode } from '@/hooks/useReadOnlyMode'
 import { useCustomerSearch } from '@/hooks/queries/useCustomerSearch'
 import { useLoanAccountSearch } from '@/hooks/queries/useLoanAccountSearch'
+import { SMART_VIEWS } from '@/lib/smart-views'
 
 /**
  * Component that syncs ledger health with read-only mode.
@@ -75,6 +76,25 @@ const GlobalCommandPalette: React.FC = () => {
     }
   }, [setCommandPaletteOpen])
 
+  // Navigate to the Browse Accounts page with the chosen Smart View applied.
+  // Full page load so the Payload admin template wraps the view correctly.
+  const handleSelectBrowseView = useCallback((viewId: string) => {
+    setCommandPaletteOpen(false)
+    window.location.href = `/admin/accounts?view=${encodeURIComponent(viewId)}`
+  }, [setCommandPaletteOpen])
+
+  // Filter Browse entries by the palette query (cheap — 8 items).
+  // When the user hasn't typed anything, all Browse entries are shown.
+  const browseQuery = commandPaletteQuery.trim().toLowerCase()
+  const browseEntries = browseQuery.length === 0
+    ? SMART_VIEWS
+    : SMART_VIEWS.filter(
+        (v) =>
+          v.label.toLowerCase().includes(browseQuery) ||
+          v.id.toLowerCase().includes(browseQuery) ||
+          'browse'.includes(browseQuery),
+      )
+
   // Show error toast if search fails (in useEffect to avoid render-time side effects)
   const hasError = customerSearch.isError || accountSearch.isError
   useEffect(() => {
@@ -95,6 +115,26 @@ const GlobalCommandPalette: React.FC = () => {
       onQueryChange={setCommandPaletteQuery}
       isSearching={isSearching}
     >
+      {/* Browse — fixed Smart View entries; appear above search results.
+          Shown when there's no query, or when the query matches a view. */}
+      {browseEntries.length > 0 && (
+        <Command.Group heading="Browse">
+          {browseEntries.map((view) => (
+            <Command.Item
+              key={view.id}
+              value={`browse-${view.id}-${view.label}`}
+              onSelect={() => handleSelectBrowseView(view.id)}
+              data-testid={`palette-browse-${view.id}`}
+            >
+              <span style={{ marginRight: 10, fontSize: 16 }} aria-hidden="true">
+                {view.icon}
+              </span>
+              <span>Browse: {view.label}</span>
+            </Command.Item>
+          ))}
+        </Command.Group>
+      )}
+
       {/* Customer Results Group */}
       {hasCustomers && (
         <Command.Group heading="Customers">

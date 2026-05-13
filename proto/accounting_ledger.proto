@@ -605,6 +605,7 @@ message AccountAgingResponse {
   optional string transition_reason = 7;             // Reason for bucket transition
   optional string oldest_overdue_instalment_id = 8;  // ID of oldest overdue instalment
   string total_overdue_amount = 9;                   // Decimal as string for precision
+  bool is_in_arrears = 10;                           // Derived: bucket not in {current,closed} AND not terminal (aging-v1.1.0)
 }
 
 // Request to get list of overdue accounts
@@ -624,6 +625,7 @@ message OverdueAccount {
   int32 days_until_overdue = 4;           // Always 0 for overdue accounts
   string total_overdue_amount = 5;        // Decimal as string for precision
   string last_updated = 6;                // ISO 8601 UTC timestamp
+  bool is_in_arrears = 7;                 // Derived: bucket not in {current,closed} AND not terminal (aging-v1.1.0)
 }
 
 // Response with list of overdue accounts

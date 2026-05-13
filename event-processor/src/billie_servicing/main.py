@@ -49,6 +49,8 @@ from .handlers import (
     handle_notification_delivery_failed,
     handle_notification_suppression_changed,
     handle_statement_generated,
+    # Aging handler (platform → CRM read-only projection of arrears state)
+    handle_loan_aging_updated,
 )
 from .processor import EventProcessor
 
@@ -93,6 +95,7 @@ def setup_handlers(processor: EventProcessor) -> None:
     processor.register_handler("account.closed.v1", handle_account_closed)
     processor.register_handler("account.schedule.created.v1", handle_schedule_created)
     processor.register_handler("account.schedule.updated.v1", handle_schedule_updated)
+    processor.register_handler("loan.aging.updated.v1", handle_loan_aging_updated)
 
     # =========================================================================
     # Customer events (using billie_customers_events SDK)

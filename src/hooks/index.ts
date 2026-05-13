@@ -5,6 +5,11 @@ export { useCustomerSearch } from './queries/useCustomerSearch'
 export { useLoanAccountSearch } from './queries/useLoanAccountSearch'
 export { useCustomer } from './queries/useCustomer'
 export type { CustomerData } from './queries/useCustomer'
+export { useAccountsBrowser, accountsBrowserQueryKey } from './queries/useAccountsBrowser'
+export type {
+  AccountsBrowserResponse,
+  UseAccountsBrowserOptions,
+} from './queries/useAccountsBrowser'
 
 // Mutations
 export { useWaiveFee } from './mutations/useWaiveFee'
