@@ -2,31 +2,25 @@
 
 import Link from 'next/link'
 import { useEventProcessingStatus } from '@/hooks/queries/useEventProcessingStatus'
-import { useDashboard } from '@/hooks/queries/useDashboard'
 import styles from './SystemHealthStrip.module.css'
 
+/**
+ * Surfaces only event-processor degradation. Ledger health is intentionally
+ * NOT shown here: the /api/ledger/health probe occasionally exceeds its 5s
+ * timeout in normal operation and falls through to 'offline' even when the
+ * ledger itself is serving traffic. A dashboard-level red strip for that
+ * cries wolf. Staff who need nuanced ledger health can drill into
+ * /admin/system-status.
+ */
 export function SystemHealthStrip() {
   const { overallStatus, totalPending } = useEventProcessingStatus()
-  const { data } = useDashboard()
-  const ledgerStatus = data?.systemStatus?.ledger ?? 'online'
 
   const isProcessorBad = overallStatus !== 'healthy' && overallStatus !== 'unknown'
-  const isLedgerBad = ledgerStatus !== 'online'
-
-  if (!isProcessorBad && !isLedgerBad) {
+  if (!isProcessorBad) {
     return null
   }
 
-  const severity =
-    overallStatus === 'critical' || ledgerStatus === 'offline' ? 'critical' : 'degraded'
-
-  const issues: string[] = []
-  if (isProcessorBad) {
-    issues.push(`Event processor ${overallStatus} · ${totalPending} msgs pending`)
-  }
-  if (isLedgerBad) {
-    issues.push(`Ledger ${ledgerStatus}`)
-  }
+  const severity = overallStatus === 'critical' ? 'critical' : 'degraded'
 
   return (
     <div
@@ -38,7 +32,9 @@ export function SystemHealthStrip() {
       <span className={styles.dot} aria-hidden="true">
         ●
       </span>
-      <span className={styles.text}>{issues.join(' · ')}</span>
+      <span className={styles.text}>
+        Event processor {overallStatus} · {totalPending} msgs pending
+      </span>
       <Link href="/admin/system-status" className={styles.link}>
         View details →
       </Link>
