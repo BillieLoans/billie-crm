@@ -17,6 +17,7 @@ from decimal import Decimal
 # Import handlers
 from billie_servicing.handlers.customer import handle_customer_changed, handle_customer_verified
 from billie_servicing.handlers.account import (
+    handle_account_closed,
     handle_account_created,
     handle_account_updated,
     handle_account_status_changed,
@@ -230,6 +231,108 @@ class TestAccountHandlers:
         assert schedule["payments"][0]["paymentNumber"] == 1
         assert schedule["payments"][0]["amount"] == 145.00
         assert schedule["payments"][0]["status"] == "scheduled"
+
+
+class TestAccountClosedHandler:
+    """Tests for account.closed.v1 event handler (accounts SDK v2.8.0)."""
+
+    def _make_event(self, **overrides):
+        mock_event = MagicMock()
+        mock_event.payload = MagicMock()
+        defaults = {
+            "account_id": "ACC-CLOSE-001",
+            "customer_id": "CUS-CLOSE-001",
+            "closure_reason": "PAID_OFF",
+            "previous_status": "ACTIVE",
+            "closed_date": "2026-05-13T00:00:00Z",
+            "final_balance": Decimal("0.00"),
+            "total_paid": Decimal("580.00"),
+            "loan_total_payable": Decimal("580.00"),
+            "triggered_by_transaction_id": "TXN-12345",
+        }
+        defaults.update(overrides)
+        for attr, value in defaults.items():
+            setattr(mock_event.payload, attr, value)
+        return mock_event
+
+    @pytest.mark.asyncio
+    async def test_paid_off_sets_paid_off_status_and_zero_balance(self, mock_db):
+        mock_db["loan-accounts"].update_one = AsyncMock(
+            return_value=MagicMock(matched_count=1, modified_count=1)
+        )
+
+        await handle_account_closed(mock_db, self._make_event())
+
+        mock_db["loan-accounts"].update_one.assert_called_once()
+        args = mock_db["loan-accounts"].update_one.call_args
+        assert args[0][0] == {"loanAccountId": "ACC-CLOSE-001"}
+
+        update_doc = args[0][1]["$set"]
+        assert update_doc["accountStatus"] == "paid_off"
+        assert update_doc["sdkStatus"] == "CLOSED"
+        assert update_doc["balances.currentBalance"] == 0.0
+        assert update_doc["balances.totalOutstanding"] == 0.0
+        assert update_doc["balances.totalPaid"] == 580.0
+        assert update_doc["closure.reason"] == "PAID_OFF"
+        assert update_doc["closure.previousStatus"] == "ACTIVE"
+        assert update_doc["closure.finalBalance"] == 0.0
+        assert update_doc["closure.totalPaid"] == 580.0
+        assert update_doc["closure.loanTotalPayable"] == 580.0
+        assert update_doc["closure.triggeredByTransactionId"] == "TXN-12345"
+
+    @pytest.mark.asyncio
+    async def test_written_off_maps_to_written_off_status(self, mock_db):
+        mock_db["loan-accounts"].update_one = AsyncMock(
+            return_value=MagicMock(matched_count=1, modified_count=1)
+        )
+
+        await handle_account_closed(
+            mock_db,
+            self._make_event(
+                closure_reason="WRITTEN_OFF",
+                previous_status="SUSPENDED",
+                final_balance=Decimal("123.45"),
+                total_paid=Decimal("456.55"),
+                triggered_by_transaction_id=None,
+            ),
+        )
+
+        update_doc = mock_db["loan-accounts"].update_one.call_args[0][1]["$set"]
+        assert update_doc["accountStatus"] == "written_off"
+        assert update_doc["closure.reason"] == "WRITTEN_OFF"
+        assert update_doc["closure.previousStatus"] == "SUSPENDED"
+        assert update_doc["balances.currentBalance"] == 123.45
+        assert update_doc["closure.triggeredByTransactionId"] is None
+
+    @pytest.mark.asyncio
+    async def test_admin_closed_falls_back_to_paid_off_status(self, mock_db):
+        mock_db["loan-accounts"].update_one = AsyncMock(
+            return_value=MagicMock(matched_count=1, modified_count=1)
+        )
+
+        await handle_account_closed(
+            mock_db,
+            self._make_event(closure_reason="ADMIN_CLOSED"),
+        )
+
+        update_doc = mock_db["loan-accounts"].update_one.call_args[0][1]["$set"]
+        assert update_doc["accountStatus"] == "paid_off"
+        assert update_doc["closure.reason"] == "ADMIN_CLOSED"
+
+    @pytest.mark.asyncio
+    async def test_strips_enum_prefix_from_closure_reason(self, mock_db):
+        mock_db["loan-accounts"].update_one = AsyncMock(
+            return_value=MagicMock(matched_count=1, modified_count=1)
+        )
+
+        await handle_account_closed(
+            mock_db,
+            self._make_event(closure_reason="ClosureReason.WRITTEN_OFF"),
+        )
+
+        update_doc = mock_db["loan-accounts"].update_one.call_args[0][1]["$set"]
+        assert update_doc["accountStatus"] == "written_off"
+        assert update_doc["closure.reason"] == "WRITTEN_OFF"
 
 
 class TestScheduleUpdatedHandler:

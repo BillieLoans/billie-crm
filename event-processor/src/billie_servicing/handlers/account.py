@@ -4,6 +4,7 @@ Handles events:
 - account.created.v1
 - account.updated.v1
 - account.status_changed.v1
+- account.closed.v1
 - account.schedule.created.v1
 - account.schedule.updated.v1
 """
@@ -23,6 +24,13 @@ SDK_STATUS_MAP = {
     "ACTIVE": "active",
     "SUSPENDED": "in_arrears",
     "CLOSED": "paid_off",
+}
+
+# AccountClosedV1.closure_reason → Payload accountStatus
+CLOSURE_REASON_STATUS_MAP = {
+    "PAID_OFF": "paid_off",
+    "WRITTEN_OFF": "written_off",
+    "ADMIN_CLOSED": "paid_off",
 }
 
 
@@ -192,6 +200,64 @@ async def handle_account_status_changed(db: AsyncIOMotorDatabase, parsed_event: 
     log.info(
         "Account status changed",
         new_status=account_status,
+        matched=result.matched_count,
+        modified=result.modified_count,
+    )
+
+
+async def handle_account_closed(db: AsyncIOMotorDatabase, parsed_event: Any) -> None:
+    """
+    Handle account.closed.v1 event (accounts SDK v2.8.0+).
+
+    SDK Model: AccountClosedV1
+    Fields: account_id, customer_id, closure_reason, previous_status, closed_date,
+            final_balance, total_paid, loan_total_payable, triggered_by_transaction_id
+
+    Maps SDK closure_reason → Payload accountStatus and persists a closure snapshot
+    on the loan-accounts projection. Idempotent: safe to replay.
+    """
+    payload = parsed_event.payload
+    account_id = payload.account_id
+
+    closure_reason = str(getattr(payload, "closure_reason", "PAID_OFF") or "PAID_OFF")
+    if "." in closure_reason:
+        closure_reason = closure_reason.split(".")[-1]
+    account_status = CLOSURE_REASON_STATUS_MAP.get(closure_reason, "paid_off")
+
+    log = logger.bind(account_id=account_id, closure_reason=closure_reason)
+    log.info("Processing account.closed.v1")
+
+    final_balance = float(payload.final_balance) if payload.final_balance is not None else 0.0
+    total_paid = float(payload.total_paid) if payload.total_paid is not None else None
+
+    update_doc: dict[str, Any] = {
+        "accountStatus": account_status,
+        "sdkStatus": "CLOSED",
+        "balances.currentBalance": final_balance,
+        "balances.totalOutstanding": final_balance,
+        "closure.reason": closure_reason,
+        "closure.previousStatus": payload.previous_status,
+        "closure.closedDate": payload.closed_date,
+        "closure.finalBalance": final_balance,
+        "closure.loanTotalPayable": (
+            float(payload.loan_total_payable) if payload.loan_total_payable is not None else None
+        ),
+        "closure.triggeredByTransactionId": getattr(payload, "triggered_by_transaction_id", None),
+        "updatedAt": datetime.utcnow(),
+    }
+
+    if total_paid is not None:
+        update_doc["balances.totalPaid"] = total_paid
+        update_doc["closure.totalPaid"] = total_paid
+
+    result = await db["loan-accounts"].update_one(
+        {"loanAccountId": account_id}, {"$set": update_doc}
+    )
+
+    log.info(
+        "Loan account closed",
+        new_status=account_status,
+        final_balance=final_balance,
         matched=result.matched_count,
         modified=result.modified_count,
     )

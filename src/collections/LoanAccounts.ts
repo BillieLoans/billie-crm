@@ -241,6 +241,83 @@ export const LoanAccounts: CollectionConfig = {
       },
     },
 
+    // === Closure (from account.closed.v1, accounts-v2.8.0+) ===
+    {
+      name: 'closure',
+      type: 'group',
+      admin: {
+        description: 'Closure snapshot from account.closed.v1',
+        condition: (data) =>
+          data?.accountStatus === 'paid_off' || data?.accountStatus === 'written_off',
+      },
+      fields: [
+        {
+          name: 'reason',
+          type: 'select',
+          options: [
+            { label: 'Paid Off', value: 'PAID_OFF' },
+            { label: 'Written Off', value: 'WRITTEN_OFF' },
+            { label: 'Admin Closed', value: 'ADMIN_CLOSED' },
+          ],
+          admin: {
+            readOnly: true,
+            description: 'Why the account was closed (from SDK: closure_reason)',
+          },
+        },
+        {
+          name: 'previousStatus',
+          type: 'text',
+          admin: {
+            readOnly: true,
+            description: 'SDK status the account transitioned from (e.g. ACTIVE, SUSPENDED)',
+          },
+        },
+        {
+          name: 'closedDate',
+          type: 'date',
+          admin: {
+            readOnly: true,
+            description: 'When the account was closed (from SDK: closed_date)',
+          },
+        },
+        {
+          name: 'finalBalance',
+          type: 'number',
+          admin: {
+            readOnly: true,
+            step: 0.01,
+            description: 'Outstanding balance at closure (0 for PAID_OFF)',
+          },
+        },
+        {
+          name: 'totalPaid',
+          type: 'number',
+          admin: {
+            readOnly: true,
+            step: 0.01,
+            description: 'Cumulative amount paid by the customer at closure',
+          },
+        },
+        {
+          name: 'loanTotalPayable',
+          type: 'number',
+          admin: {
+            readOnly: true,
+            step: 0.01,
+            description: 'Original total payable amount',
+          },
+        },
+        {
+          name: 'triggeredByTransactionId',
+          type: 'text',
+          admin: {
+            readOnly: true,
+            description: 'Ledger transaction that pushed balance to zero (PAID_OFF only)',
+          },
+        },
+      ],
+    },
+
     // === Repayment Schedule (from account.schedule.created.v1) ===
     {
       name: 'repaymentSchedule',

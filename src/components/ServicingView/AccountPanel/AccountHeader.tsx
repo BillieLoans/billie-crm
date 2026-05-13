@@ -74,14 +74,19 @@ export const AccountHeader: React.FC<AccountHeaderProps> = ({
   const statusConfig = getStatusConfig(account.accountStatus)
   const hasLiveBalance = account.liveBalance !== null
 
+  const isTerminalStatus =
+    account.accountStatus === 'paid_off' || account.accountStatus === 'written_off'
+
   // Fetch aging status from ledger
   const { dpd, bucket, isFallback: agingFallback, isLoading: agingLoading } = useAccountAging({
     accountId: account.loanAccountId,
-    enabled: account.accountStatus !== 'paid_off' && account.accountStatus !== 'written_off',
+    enabled: !isTerminalStatus,
   })
 
   const bucketConfig = getBucketConfig(bucket, dpd)
-  const showAgingBadge = !agingLoading && bucket !== 'current' && !agingFallback
+  // Suppress badge for terminal accounts even if stale cache holds a non-current bucket —
+  // the query is disabled so React Query won't refresh the data, and aging is meaningless once closed.
+  const showAgingBadge = !isTerminalStatus && !agingLoading && bucket !== 'current' && !agingFallback
 
   const totalOutstanding = hasLiveBalance
     ? account.liveBalance!.totalOutstanding

@@ -779,6 +779,39 @@ export interface LoanAccount {
    */
   signedLoanAgreementUrl?: string | null;
   /**
+   * Closure snapshot from account.closed.v1
+   */
+  closure?: {
+    /**
+     * Why the account was closed (from SDK: closure_reason)
+     */
+    reason?: ('PAID_OFF' | 'WRITTEN_OFF' | 'ADMIN_CLOSED') | null;
+    /**
+     * SDK status the account transitioned from (e.g. ACTIVE, SUSPENDED)
+     */
+    previousStatus?: string | null;
+    /**
+     * When the account was closed (from SDK: closed_date)
+     */
+    closedDate?: string | null;
+    /**
+     * Outstanding balance at closure (0 for PAID_OFF)
+     */
+    finalBalance?: number | null;
+    /**
+     * Cumulative amount paid by the customer at closure
+     */
+    totalPaid?: number | null;
+    /**
+     * Original total payable amount
+     */
+    loanTotalPayable?: number | null;
+    /**
+     * Ledger transaction that pushed balance to zero (PAID_OFF only)
+     */
+    triggeredByTransactionId?: string | null;
+  };
+  /**
    * Repayment schedule from account.schedule.created.v1
    */
   repaymentSchedule?: {
@@ -1524,6 +1557,17 @@ export interface LoanAccountsSelect<T extends boolean = true> {
   accountStatus?: T;
   sdkStatus?: T;
   signedLoanAgreementUrl?: T;
+  closure?:
+    | T
+    | {
+        reason?: T;
+        previousStatus?: T;
+        closedDate?: T;
+        finalBalance?: T;
+        totalPaid?: T;
+        loanTotalPayable?: T;
+        triggeredByTransactionId?: T;
+      };
   repaymentSchedule?:
     | T
     | {
