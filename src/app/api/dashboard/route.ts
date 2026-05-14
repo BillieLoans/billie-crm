@@ -16,6 +16,8 @@ import {
   DashboardResponseSchema,
   DashboardQuerySchema,
   type DashboardResponse,
+  type MoneyFlowMetric,
+  type MoneyFlowsToday,
   type RecentAccount,
   type UpcomingPayment,
   type PendingDisbursement,
@@ -38,6 +40,155 @@ function formatCurrency(amount: number): string {
     style: 'currency',
     currency: 'AUD',
   }).format(amount)
+}
+
+/**
+ * Compute the UTC instants that bracket "today" in Australia/Sydney.
+ *
+ * The server runs in UTC on Fly.io; this helper keeps the "today" widgets
+ * aligned with the local working day for ops staff in Australia.
+ */
+function australianDayBoundaries(now: Date = new Date()): { start: Date; end: Date } {
+  const parts = new Intl.DateTimeFormat('en-AU', {
+    timeZone: 'Australia/Sydney',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+  }).formatToParts(now)
+  const pick = (type: string) => Number(parts.find((p) => p.type === type)!.value)
+  const y = pick('year')
+  const m = pick('month')
+  const d = pick('day')
+
+  const utcMidnight = Date.UTC(y, m - 1, d)
+  const offsetMinutes = sydneyOffsetMinutes(new Date(utcMidnight))
+  const start = new Date(utcMidnight - offsetMinutes * 60_000)
+  const end = new Date(start.getTime() + 24 * 60 * 60_000)
+  return { start, end }
+}
+
+function sydneyOffsetMinutes(instant: Date): number {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Australia/Sydney',
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+    second: 'numeric',
+  }).formatToParts(instant)
+  const pick = (type: string) => Number(parts.find((p) => p.type === type)!.value)
+  const sydneyAsUtc = Date.UTC(
+    pick('year'),
+    pick('month') - 1,
+    pick('day'),
+    pick('hour'),
+    pick('minute'),
+    pick('second'),
+  )
+  return Math.round((sydneyAsUtc - instant.getTime()) / 60_000)
+}
+
+const EMPTY_METRIC: MoneyFlowMetric = {
+  count: 0,
+  totalAmount: 0,
+  totalAmountFormatted: '$0.00',
+}
+
+function buildMetric(count: number, totalAmount: number): MoneyFlowMetric {
+  return {
+    count,
+    totalAmount,
+    totalAmountFormatted: formatCurrency(totalAmount),
+  }
+}
+
+/**
+ * Aggregate today's money flows (expected, received, disbursed) for the
+ * Australian working day. Uses raw MongoDB aggregation for accuracy across
+ * the full `loan-accounts` collection (not just the active-sample set).
+ */
+async function fetchMoneyFlowsToday(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  payload: any,
+): Promise<MoneyFlowsToday> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = (payload.db as any).connection?.db
+  if (!db) {
+    return {
+      paymentsExpected: EMPTY_METRIC,
+      paymentsReceived: EMPTY_METRIC,
+      disbursed: EMPTY_METRIC,
+    }
+  }
+
+  const { start, end } = australianDayBoundaries()
+  const collection = db.collection('loan-accounts')
+
+  type AggRow = { count: number; total: number }
+  const single = (rows: AggRow[]): AggRow => rows[0] ?? { count: 0, total: 0 }
+
+  const [expectedRows, receivedRows, disbursedRows] = await Promise.all([
+    collection
+      .aggregate([
+        { $unwind: '$repaymentSchedule.payments' },
+        {
+          $match: {
+            'repaymentSchedule.payments.dueDate': { $gte: start, $lt: end },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            count: { $sum: 1 },
+            total: { $sum: { $ifNull: ['$repaymentSchedule.payments.amount', 0] } },
+          },
+        },
+      ])
+      .toArray(),
+
+    collection
+      .aggregate([
+        { $unwind: '$repaymentSchedule.payments' },
+        {
+          $match: {
+            'repaymentSchedule.payments.paidDate': { $gte: start, $lt: end },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            count: { $sum: 1 },
+            total: { $sum: { $ifNull: ['$repaymentSchedule.payments.amountPaid', 0] } },
+          },
+        },
+      ])
+      .toArray(),
+
+    collection
+      .aggregate([
+        { $match: { 'loanTerms.disbursedDate': { $gte: start, $lt: end } } },
+        {
+          $group: {
+            _id: null,
+            count: { $sum: 1 },
+            total: { $sum: { $ifNull: ['$loanTerms.loanAmount', 0] } },
+          },
+        },
+      ])
+      .toArray(),
+  ])
+
+  const expected = single(expectedRows)
+  const received = single(receivedRows)
+  const disbursed = single(disbursedRows)
+
+  return {
+    paymentsExpected: buildMetric(expected.count, expected.total),
+    paymentsReceived: buildMetric(received.count, received.total),
+    disbursed: buildMetric(disbursed.count, disbursed.total),
+  }
 }
 
 /**
@@ -94,7 +245,15 @@ export async function GET(request: NextRequest) {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
 
     // 5. Parallel fetch all data
-    const [approvalsResult, ledgerHealth, customersResult, recentAccountsResult, allAccountsWithSchedule, pendingDisbursementResult] = await Promise.all([
+    const [
+      approvalsResult,
+      ledgerHealth,
+      customersResult,
+      recentAccountsResult,
+      allAccountsWithSchedule,
+      pendingDisbursementResult,
+      moneyFlowsToday,
+    ] = await Promise.all([
       // Only query approvals if user has permission
       canSeeApprovals
         ? payload.find({
@@ -141,6 +300,9 @@ export async function GET(request: NextRequest) {
         sort: '-createdAt',
         limit: 10,
       }),
+
+      // Today's money flows (expected / received / disbursed)
+      fetchMoneyFlowsToday(payload),
     ])
 
     // 6. Get loan account data for all customers in a single batch query
@@ -277,6 +439,7 @@ export async function GET(request: NextRequest) {
       upcomingPayments: topUpcomingPayments,
       pendingDisbursements,
       pendingDisbursementsCount: pendingDisbursementResult.totalDocs,
+      moneyFlowsToday,
       systemStatus: {
         ledger: ledgerHealth.status,
         latencyMs: ledgerHealth.latencyMs,

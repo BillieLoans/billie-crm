@@ -49,6 +49,28 @@ export const UpcomingPaymentSchema = z.object({
 export type UpcomingPayment = z.infer<typeof UpcomingPaymentSchema>
 
 /**
+ * Schema for a single "today" money-flow metric (count + total amount).
+ */
+export const MoneyFlowMetricSchema = z.object({
+  count: z.number().int().min(0),
+  totalAmount: z.number(),
+  totalAmountFormatted: z.string(),
+})
+
+export type MoneyFlowMetric = z.infer<typeof MoneyFlowMetricSchema>
+
+/**
+ * Money flows for the current Australian day.
+ */
+export const MoneyFlowsTodaySchema = z.object({
+  paymentsExpected: MoneyFlowMetricSchema,
+  paymentsReceived: MoneyFlowMetricSchema,
+  disbursed: MoneyFlowMetricSchema,
+})
+
+export type MoneyFlowsToday = z.infer<typeof MoneyFlowsTodaySchema>
+
+/**
  * Dashboard API response schema.
  *
  * Used by:
@@ -81,6 +103,8 @@ export const DashboardResponseSchema = z.object({
   // Loans pending disbursement
   pendingDisbursements: z.array(PendingDisbursementSchema),
   pendingDisbursementsCount: z.number().int().min(0),
+  // Aggregates for the current Australian day
+  moneyFlowsToday: MoneyFlowsTodaySchema,
   systemStatus: z.object({
     ledger: z.enum(['online', 'degraded', 'offline']),
     latencyMs: z.number().int().min(0),
