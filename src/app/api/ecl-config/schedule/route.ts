@@ -86,8 +86,8 @@ export async function POST(request: NextRequest) {
     // Look up username from user ID
     const userId = String(user.id)
     let createdByName = userId
-    if (userId.length === 24) {
-      // Looks like a MongoDB ObjectId (user GUID), try to look up the username
+    // UUID v4 shape — only attempt the lookup for values that look like an ID.
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) {
       try {
         const userResult = await payload.findByID({
           collection: 'users',

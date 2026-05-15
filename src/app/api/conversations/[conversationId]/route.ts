@@ -49,20 +49,17 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    // 2. Fetch conversation directly from MongoDB (event processor writes raw docs)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const db = (payload.db as any).connection?.db
-    if (!db) {
-      return NextResponse.json(
-        { error: { code: 'INTERNAL_ERROR', message: 'Database unavailable.' } },
-        { status: 500 },
-      )
-    }
+    // 2. Fetch conversation via Payload Local API.
+    // depth: 0 keeps relationship fields as IDs; we enrich the customer separately
+    // to preserve the response shape that existed pre-Postgres.
+    const convResult = await payload.find({
+      collection: 'conversations',
+      where: { conversationId: { equals: conversationId } },
+      limit: 1,
+      depth: 0,
+    })
 
-    const doc = await db
-      .collection('conversations')
-      .findOne({ conversationId })
-
+    const doc = convResult.docs[0] as unknown as Record<string, unknown> | undefined
     if (!doc) {
       return NextResponse.json(
         { error: { code: 'NOT_FOUND', message: 'Conversation not found.' } },
@@ -74,12 +71,18 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     let customerFullName: string | null = null
     let customerPayloadId: string | null = null
     if (doc.customerIdString) {
-      const customerDoc = await db
-        .collection('customers')
-        .findOne({ customerId: doc.customerIdString }, { projection: { fullName: 1, _id: 1 } })
+      const custResult = await payload.find({
+        collection: 'customers',
+        where: { customerId: { equals: doc.customerIdString as string } },
+        limit: 1,
+        select: { fullName: true },
+      })
+      const customerDoc = custResult.docs[0] as
+        | { id?: string; fullName?: string | null }
+        | undefined
       if (customerDoc) {
         customerFullName = customerDoc.fullName ?? null
-        customerPayloadId = customerDoc._id ? String(customerDoc._id) : null
+        customerPayloadId = customerDoc.id ?? null
       }
     }
 

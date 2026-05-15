@@ -55,19 +55,14 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     }
 
     // 3. Look up conversation to get S3 key
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const db = (payload.db as any).connection?.db
-    if (!db) {
-      return NextResponse.json(
-        { error: { code: 'INTERNAL_ERROR', message: 'Database unavailable.' } },
-        { status: 500 },
-      )
-    }
+    const result = await payload.find({
+      collection: 'conversations',
+      where: { conversationId: { equals: conversationId } },
+      limit: 1,
+      select: { assessments: true },
+    })
 
-    const doc = await db
-      .collection('conversations')
-      .findOne({ conversationId }, { projection: { assessments: 1 } })
-
+    const doc = result.docs[0]
     if (!doc) {
       return NextResponse.json(
         { error: { code: 'NOT_FOUND', message: 'Conversation not found.' } },
@@ -75,7 +70,11 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    const s3Uri = doc.assessments?.serviceability?.s3Key as string | undefined
+    const assessments = doc.assessments as
+      | { serviceability?: { s3Key?: string } | null }
+      | null
+      | undefined
+    const s3Uri = assessments?.serviceability?.s3Key
     if (!s3Uri) {
       return NextResponse.json(
         { error: { code: 'NOT_FOUND', message: 'Assessment not available.' } },
