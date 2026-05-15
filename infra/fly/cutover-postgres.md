@@ -172,6 +172,17 @@ Fly re-imports the secrets file. App machines pick up the new value on next star
 
 ## 5. Bring the app back
 
+The cutover is also when you deploy the new code (Postgres adapter + asyncpg-based event-processor). **The deploy MUST pass `GITHUB_TOKEN`** — the Dockerfile installs the Billie event SDKs from a private GitHub repo at build time, and skips them silently if the token isn't provided. Without the SDKs, the event-processor will crash at startup with `ModuleNotFoundError: No module named 'billie_accounts_events'`.
+
+```bash
+make -C infra/fly deploy ENV=<env> GITHUB_TOKEN="ghp_xxx"
+# prod: add CONFIRM=1
+```
+
+Verify the build output includes `Installing Billie Event SDKs...` (not `GITHUB_TOKEN not set, skipping SDK install`). If you see the latter, redeploy with the token set.
+
+Then scale machines back up:
+
 ```bash
 fly scale count 1 -a billie-crm-<env> --region syd
 # prod: 2 for HA
@@ -194,6 +205,11 @@ Expected sequence (within ~30s):
 6. `📥 [external] Received event: ...` for each event in the stream (8k+ on prod)
 
 The replay takes 1–10 minutes depending on stream depth.
+
+> **Sanity check before declaring success.** If you see any of these, the deploy is broken and you should rollback:
+> - `MongoDB configuration error (fatal — check DATABASE_URI)` → old image still running, redeploy.
+> - `ModuleNotFoundError: No module named 'billie_accounts_events'` → SDKs not installed, redeploy with `GITHUB_TOKEN`.
+> - `Event Processor failed to start (check if SDKs are installed)` → same; the start.sh fallback letting Next.js run alone is a tell-tale.
 
 ---
 
