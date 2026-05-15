@@ -1,38 +1,41 @@
 """Unit tests for notification event handlers.
 
-Tests cover the three platform → CRM read-only projections:
+Covers the four platform → CRM read-only projections:
 - notification.sent.v1
 - notification.delivery_failed.v1
+- notification.suppression.changed.v1
 - statement.generated.v1
 """
 
-import pytest
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
+import pytest
+
 from billie_servicing.handlers.notification import (
-    handle_notification_sent,
     handle_notification_delivery_failed,
+    handle_notification_sent,
     handle_notification_suppression_changed,
     handle_statement_generated,
 )
 
 
+def _dt(iso: str) -> datetime:
+    """Parse an ISO 8601 string the same way the handler's _coerce_dt does."""
+    return datetime.fromisoformat(iso.replace("Z", "+00:00"))
+
+
 def _build_parsed_event(payload: MagicMock, cause: str = "") -> MagicMock:
-    """Wrap a payload mock in a ParsedNotificationEvent-shaped wrapper."""
     parsed = MagicMock()
     parsed.payload = payload
-    # The notification handlers read `parsed_event.cause` / `.conv` for the
-    # inbox envelope id; default to empty so tests can opt in.
     parsed.cause = cause
     parsed.conv = ""
     return parsed
 
 
 class TestNotificationSentHandler:
-    """Tests for notification.sent.v1 projection."""
-
     @pytest.mark.asyncio
-    async def test_sent_event_upserts_document(self, mock_db):
+    async def test_sent_event_upserts_document(self, mock_pool):
         payload = MagicMock()
         payload.notification_id = "ntn_001"
         payload.idempotency_key = "predue:acc_123:1:0"
@@ -49,32 +52,35 @@ class TestNotificationSentHandler:
         payload.correlation_id = "corr_xyz"
         payload.tags = {"category": "servicing", "reason": "pre_due", "step": 0}
 
-        await handle_notification_sent(mock_db, _build_parsed_event(payload))
+        await handle_notification_sent(mock_pool, _build_parsed_event(payload))
 
-        mock_db["notifications"].update_one.assert_called_once()
-        call_args = mock_db["notifications"].update_one.call_args
-        filter_arg = call_args[0][0]
-        update_arg = call_args[0][1]
-        kwargs = call_args[1]
+        inserts = mock_pool.inserts_into("notifications")
+        assert len(inserts) == 1
+        doc = inserts[0]
 
-        assert filter_arg == {"notificationId": "ntn_001"}
-        assert kwargs.get("upsert") is True
+        # Upsert conflict target is notification_id (natural key).
+        call = mock_pool.calls_against("notifications")[0]
+        assert call.conflict_columns == ["notification_id"]
 
-        doc = update_arg["$set"]
+        assert doc["notification_id"] == "ntn_001"
         assert doc["status"] == "sent"
         assert doc["channel"] == "email"
-        assert doc["templateName"] == "pre_due_email_first"
-        assert doc["templateContentHash"] == "a4f3c21abcdef"
-        assert doc["sentAt"] == "2026-05-11T03:14:09Z"
-        assert doc["eventAt"] == "2026-05-11T03:14:09Z"
-        assert doc["tags"]["category"] == "servicing"
-        assert doc["tags"]["reason"] == "pre_due"
-        assert doc["tags"]["step"] == 0
-        assert "createdAt" in update_arg["$setOnInsert"]
+        assert doc["template_name"] == "pre_due_email_first"
+        assert doc["template_content_hash"] == "a4f3c21abcdef"
+        assert doc["sent_at"] == _dt("2026-05-11T03:14:09Z")
+        assert doc["event_at"] == _dt("2026-05-11T03:14:09Z")
+        assert doc["tags_category"] == "servicing"
+        assert doc["tags_reason"] == "pre_due"
+        assert doc["tags_step"] == 0
+        assert "created_at" in doc  # set on INSERT
+        # ``created_at`` is insert-only — must not be in the DO UPDATE SET clause.
+        assert "EXCLUDED.created_at" not in call.sql
 
     @pytest.mark.asyncio
-    async def test_sent_event_resolves_customer_link(self, mock_db):
-        mock_db.customers.find_one.return_value = {"_id": "mongo_customer_id"}
+    async def test_sent_event_resolves_customer_link(self, mock_pool):
+        # The handler calls SELECT id FROM customers WHERE customer_id = $1
+        # via _resolve_customer_link. Make that return a uuid.
+        mock_pool.set_fetchval("pg-customer-uuid")
 
         payload = MagicMock()
         payload.notification_id = "ntn_002"
@@ -92,57 +98,16 @@ class TestNotificationSentHandler:
         payload.correlation_id = None
         payload.tags = {}
 
-        await handle_notification_sent(mock_db, _build_parsed_event(payload))
+        await handle_notification_sent(mock_pool, _build_parsed_event(payload))
 
-        doc = mock_db["notifications"].update_one.call_args[0][1]["$set"]
-        assert doc["customerRef"] == "mongo_customer_id"
-        assert doc["customerId"] == "cust_abc"
+        doc = mock_pool.last_insert("notifications")
+        assert doc["customer_ref_id"] == "pg-customer-uuid"
+        assert doc["customer_id"] == "cust_abc"
 
 
 class TestNotificationDeliveryFailedHandler:
-    """Tests for notification.delivery_failed.v1 projection."""
-
-    @pytest.mark.asyncio
-    async def test_failed_event_maps_to_failed_status(self, mock_db):
-        payload = self._build_failed_payload(error_type="permanent")
-
-        await handle_notification_delivery_failed(mock_db, _build_parsed_event(payload))
-
-        doc = mock_db["notifications"].update_one.call_args[0][1]["$set"]
-        assert doc["status"] == "failed"
-        assert doc["failure"]["errorType"] == "permanent"
-        assert doc["failure"]["errorMessage"] == "Recipient invalid"
-        assert doc["failure"]["attempt"] == 3
-        assert doc["failure"]["fallbackSuggested"] is None
-
-    @pytest.mark.asyncio
-    async def test_suppressed_error_maps_to_blocked_status(self, mock_db):
-        """error_type='suppressed' must map to status='blocked' so the UI
-        renders it with kill-switch styling, not generic failure styling."""
-        payload = self._build_failed_payload(error_type="suppressed")
-
-        await handle_notification_delivery_failed(mock_db, _build_parsed_event(payload))
-
-        doc = mock_db["notifications"].update_one.call_args[0][1]["$set"]
-        assert doc["status"] == "blocked"
-        assert doc["failure"]["errorType"] == "suppressed"
-
-    @pytest.mark.asyncio
-    async def test_contact_missing_with_fallback(self, mock_db):
-        payload = self._build_failed_payload(
-            error_type="contact_missing", fallback_suggested="sms"
-        )
-
-        await handle_notification_delivery_failed(mock_db, _build_parsed_event(payload))
-
-        doc = mock_db["notifications"].update_one.call_args[0][1]["$set"]
-        assert doc["status"] == "failed"
-        assert doc["failure"]["fallbackSuggested"] == "sms"
-
     @staticmethod
-    def _build_failed_payload(
-        error_type: str, fallback_suggested: str | None = None
-    ) -> MagicMock:
+    def _build_failed_payload(error_type: str, fallback_suggested: str | None = None) -> MagicMock:
         payload = MagicMock()
         payload.notification_id = "ntn_fail_001"
         payload.idempotency_key = "key"
@@ -163,12 +128,40 @@ class TestNotificationDeliveryFailedHandler:
         payload.fallback_suggested = fallback_suggested
         return payload
 
+    @pytest.mark.asyncio
+    async def test_failed_event_maps_to_failed_status(self, mock_pool):
+        payload = self._build_failed_payload(error_type="permanent")
+        await handle_notification_delivery_failed(mock_pool, _build_parsed_event(payload))
 
-class TestNotificationSuppressionChangedHandler:
-    """Tests for notification.suppression.changed.v1 projection."""
+        doc = mock_pool.last_insert("notifications")
+        assert doc["status"] == "failed"
+        assert doc["failure_error_type"] == "permanent"
+        assert doc["failure_error_message"] == "Recipient invalid"
+        assert doc["failure_attempt"] == 3
+        assert doc["failure_fallback_suggested"] is None
 
     @pytest.mark.asyncio
-    async def test_paused_event_keyed_on_envelope_cause(self, mock_db):
+    async def test_suppressed_error_maps_to_blocked_status(self, mock_pool):
+        payload = self._build_failed_payload(error_type="suppressed")
+        await handle_notification_delivery_failed(mock_pool, _build_parsed_event(payload))
+
+        doc = mock_pool.last_insert("notifications")
+        assert doc["status"] == "blocked"
+        assert doc["failure_error_type"] == "suppressed"
+
+    @pytest.mark.asyncio
+    async def test_contact_missing_with_fallback(self, mock_pool):
+        payload = self._build_failed_payload(error_type="contact_missing", fallback_suggested="sms")
+        await handle_notification_delivery_failed(mock_pool, _build_parsed_event(payload))
+
+        doc = mock_pool.last_insert("notifications")
+        assert doc["status"] == "failed"
+        assert doc["failure_fallback_suggested"] == "sms"
+
+
+class TestNotificationSuppressionChangedHandler:
+    @pytest.mark.asyncio
+    async def test_paused_event_keyed_on_envelope_cause(self, mock_pool):
         payload = MagicMock()
         payload.customer_id = "cust_abc"
         payload.mode = "non_essential"
@@ -179,26 +172,21 @@ class TestNotificationSuppressionChangedHandler:
         payload.correlation_id = "corr-1"
 
         await handle_notification_suppression_changed(
-            mock_db, _build_parsed_event(payload, cause="1778500517032-0")
+            mock_pool, _build_parsed_event(payload, cause="1778500517032-0")
         )
 
-        mock_db["notifications"].update_one.assert_called_once()
-        call_args = mock_db["notifications"].update_one.call_args
-        filter_arg = call_args[0][0]
-        update_arg = call_args[0][1]
-
-        assert filter_arg == {"notificationId": "suppression:1778500517032-0"}
-        doc = update_arg["$set"]
+        doc = mock_pool.last_insert("notifications")
+        assert doc["notification_id"] == "suppression:1778500517032-0"
         assert doc["status"] == "suppression_change"
-        assert doc["customerId"] == "cust_abc"
-        assert doc["eventAt"] == "2026-05-11T11:55:17Z"
-        assert doc["suppression"]["mode"] == "non_essential"
-        assert doc["suppression"]["reason"] == "Hardship plan #4521"
-        assert doc["suppression"]["setBy"] == "agent:rohan@billie.loans"
-        assert doc["suppression"]["expiresAt"] == "2026-06-10T11:55:17Z"
+        assert doc["customer_id"] == "cust_abc"
+        assert doc["event_at"] == _dt("2026-05-11T11:55:17Z")
+        assert doc["suppression_mode"] == "non_essential"
+        assert doc["suppression_reason"] == "Hardship plan #4521"
+        assert doc["suppression_set_by"] == "agent:rohan@billie.loans"
+        assert doc["suppression_expires_at"] == _dt("2026-06-10T11:55:17Z")
 
     @pytest.mark.asyncio
-    async def test_clear_event_records_mode_off(self, mock_db):
+    async def test_clear_event_records_mode_off(self, mock_pool):
         payload = MagicMock()
         payload.customer_id = "cust_abc"
         payload.mode = "off"
@@ -209,17 +197,17 @@ class TestNotificationSuppressionChangedHandler:
         payload.correlation_id = None
 
         await handle_notification_suppression_changed(
-            mock_db, _build_parsed_event(payload, cause="evt-clear")
+            mock_pool, _build_parsed_event(payload, cause="evt-clear")
         )
 
-        doc = mock_db["notifications"].update_one.call_args[0][1]["$set"]
-        assert doc["suppression"]["mode"] == "off"
-        assert doc["suppression"]["expiresAt"] is None
+        doc = mock_pool.last_insert("notifications")
+        assert doc["suppression_mode"] == "off"
+        assert doc["suppression_expires_at"] is None
         # Empty reason normalises to None so the UI can branch on it cleanly.
-        assert doc["suppression"]["reason"] is None
+        assert doc["suppression_reason"] is None
 
     @pytest.mark.asyncio
-    async def test_falls_back_to_synthetic_id_when_cause_missing(self, mock_db):
+    async def test_falls_back_to_synthetic_id_when_cause_missing(self, mock_pool):
         payload = MagicMock()
         payload.customer_id = "cust_xyz"
         payload.mode = "all"
@@ -230,20 +218,19 @@ class TestNotificationSuppressionChangedHandler:
         payload.correlation_id = None
 
         await handle_notification_suppression_changed(
-            mock_db, _build_parsed_event(payload, cause="")
+            mock_pool, _build_parsed_event(payload, cause="")
         )
 
-        filter_arg = mock_db["notifications"].update_one.call_args[0][0]
-        assert filter_arg == {
-            "notificationId": "suppression:cust_xyz:2026-05-11T13:00:00Z",
-        }
+        doc = mock_pool.last_insert("notifications")
+        # The fallback uses the coerced datetime's ISO format, which keeps a
+        # +00:00 offset rather than a trailing 'Z'.
+        expected_iso = _dt("2026-05-11T13:00:00Z").isoformat()
+        assert doc["notification_id"] == f"suppression:cust_xyz:{expected_iso}"
 
 
 class TestStatementGeneratedHandler:
-    """Tests for statement.generated.v1 projection."""
-
     @pytest.mark.asyncio
-    async def test_statement_event_creates_statement_doc(self, mock_db):
+    async def test_statement_event_creates_statement_doc(self, mock_pool):
         payload = MagicMock()
         payload.notification_id = "ntn_stmt_001"
         payload.account_id = "acc_123"
@@ -253,14 +240,13 @@ class TestStatementGeneratedHandler:
         payload.dispatched_at = "2026-05-01T06:00:09Z"
         payload.correlation_id = "corr_stmt"
 
-        await handle_statement_generated(mock_db, _build_parsed_event(payload))
+        await handle_statement_generated(mock_pool, _build_parsed_event(payload))
 
-        mock_db["notifications"].update_one.assert_called_once()
-        doc = mock_db["notifications"].update_one.call_args[0][1]["$set"]
+        doc = mock_pool.last_insert("notifications")
         assert doc["status"] == "statement"
-        assert doc["notificationId"] == "ntn_stmt_001"
-        assert doc["statement"]["accountId"] == "acc_123"
-        assert doc["statement"]["periodStart"] == "2026-04-01"
-        assert doc["statement"]["periodEnd"] == "2026-04-30"
-        assert doc["statement"]["dispatchedAt"] == "2026-05-01T06:00:09Z"
-        assert doc["eventAt"] == "2026-05-01T06:00:09Z"
+        assert doc["notification_id"] == "ntn_stmt_001"
+        assert doc["statement_account_id"] == "acc_123"
+        assert doc["statement_period_start"] == _dt("2026-04-01")
+        assert doc["statement_period_end"] == _dt("2026-04-30")
+        assert doc["statement_dispatched_at"] == _dt("2026-05-01T06:00:09Z")
+        assert doc["event_at"] == _dt("2026-05-01T06:00:09Z")
