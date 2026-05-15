@@ -13,6 +13,9 @@ import { getLedgerClient } from '@/server/grpc-client'
 import { requireAuth } from '@/lib/auth'
 import { hasAnyRole } from '@/lib/access'
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const isUuid = (s: string): boolean => UUID_RE.test(s)
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ accountId: string }> },
@@ -53,7 +56,7 @@ export async function GET(
       events.forEach((event: any) => {
         const eventData = event.data ?? {}
         const triggeredBy = eventData.triggered_by ?? eventData.triggeredBy ?? event.triggered_by ?? event.triggeredBy
-        if (triggeredBy && typeof triggeredBy === 'string' && triggeredBy.length === 24) {
+        if (triggeredBy && typeof triggeredBy === 'string' && isUuid(triggeredBy)) {
           // MongoDB ObjectId format (24 hex characters)
           userIds.add(triggeredBy)
         }
@@ -90,7 +93,7 @@ export async function GET(
         const triggeredBy = eventData.triggered_by ?? eventData.triggeredBy ?? event.triggered_by ?? event.triggeredBy
         
         let triggeredByName: string | undefined
-        if (triggeredBy && typeof triggeredBy === 'string' && triggeredBy.length === 24) {
+        if (triggeredBy && typeof triggeredBy === 'string' && isUuid(triggeredBy)) {
           triggeredByName = userMap.get(triggeredBy)
         }
 

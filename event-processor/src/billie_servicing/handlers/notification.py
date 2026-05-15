@@ -3,62 +3,71 @@
 Handles events from the platform notification dispatcher:
 - notification.sent.v1
 - notification.delivery_failed.v1
+- notification.suppression.changed.v1
 - statement.generated.v1
 
-All three projections land in a single MongoDB collection ``notifications``,
-keyed by ``notificationId``, with ``status`` as the discriminator:
+All four projections land in the ``notifications`` table, keyed by
+``notification_id``, with ``status`` as the discriminator:
 - ``sent``      — successful delivery
 - ``failed``    — provider/recipient error
 - ``blocked``   — delivery_failed with error_type == "suppressed"
-                  (kill-switch active for the customer)
+- ``suppression_change`` — suppression mode flip (kill-switch on/off)
 - ``statement`` — statement.generated audit marker
 
-The unified Mongo shape lets the CRM render a single chronological timeline
-in the customer view's Communications panel.
+The unified shape lets the CRM render a single chronological timeline in the
+customer view's Communications panel.
 """
 
-from datetime import datetime
+from __future__ import annotations
+
+from datetime import datetime, timezone
 from typing import Any
 
+import asyncpg
 import structlog
-from motor.motor_asyncio import AsyncIOMotorDatabase
+
+from ..db import upsert
 
 logger = structlog.get_logger()
 
+# Must match the Payload `notification.suppression.mode` select options
+# (enum_notifications_suppression_mode in the database).
+_SUPPRESSION_MODES = frozenset(
+    {"all", "non_essential", "marketing_only", "panic_button", "off"}
+)
 
-async def _resolve_customer_link(
-    db: AsyncIOMotorDatabase, customer_id: str | None
-) -> Any | None:
-    """Look up the Mongo customer ``_id`` so Payload's relationship field hydrates.
+
+async def _resolve_customer_link(pool: asyncpg.Pool, customer_id: str | None) -> Any | None:
+    """Look up the customers.id (uuid) so Payload's relationship hydrates.
 
     Returns None silently if the customer isn't in the projection yet — the
-    ``customerId`` string is still stored for later joining via queries.
+    ``customer_id`` string is still stored for later joining via queries.
     """
     if not customer_id:
         return None
-    customer = await db.customers.find_one({"customerId": customer_id}, {"_id": 1})
-    return customer.get("_id") if customer else None
+    return await pool.fetchval(
+        "SELECT id FROM customers WHERE customer_id = $1", customer_id
+    )
 
 
-def _coerce_iso(value: Any) -> str | None:
-    """Coerce a Pydantic-parsed date/datetime field to an ISO 8601 string."""
+def _coerce_dt(value: Any) -> datetime | None:
+    """Coerce a Pydantic-parsed date/datetime field to a tz-aware datetime."""
     if value is None:
         return None
-    if isinstance(value, str):
-        return value
     if isinstance(value, datetime):
-        return value.isoformat()
-    return str(value)
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    return None
 
 
-async def handle_notification_sent(
-    db: AsyncIOMotorDatabase, parsed_event: Any
-) -> None:
-    """Project ``notification.sent.v1`` into the notifications collection.
-
-    Idempotent on ``notificationId`` — replays from at-least-once delivery or
-    DLQ recovery resolve to the same document.
-    """
+async def handle_notification_sent(pool: asyncpg.Pool, parsed_event: Any) -> None:
+    """Project notification.sent.v1 into the notifications table."""
     payload = parsed_event.payload
     notification_id = payload.notification_id
     customer_id = payload.customer_id
@@ -70,63 +79,55 @@ async def handle_notification_sent(
     )
     log.info("Processing notification.sent.v1")
 
-    customer_mongo_id = await _resolve_customer_link(db, customer_id)
-    now = datetime.utcnow()
+    customer_ref_id = await _resolve_customer_link(pool, customer_id)
+    now = datetime.now(timezone.utc)
+    tags = payload.tags or {}
 
-    document = {
-        "notificationId": notification_id,
-        "idempotencyKey": payload.idempotency_key,
-        "requestId": payload.request_id,
-        "status": "sent",
-        "channel": payload.channel,
-        "templateName": payload.template_name,
-        "templateContentHash": payload.template_content_hash or None,
-        "templateGitSha": payload.template_git_sha,
-        "provider": payload.provider,
-        "providerMessageId": payload.provider_message_id,
-        "recipientHash": payload.recipient_hash,
-        "customerId": customer_id,
-        "customerRef": customer_mongo_id,
-        "correlationId": payload.correlation_id,
-        "eventAt": _coerce_iso(payload.sent_at),
-        "sentAt": _coerce_iso(payload.sent_at),
-        "tags": {
-            "category": (payload.tags or {}).get("category"),
-            "reason": (payload.tags or {}).get("reason"),
-            "step": (payload.tags or {}).get("step"),
+    await upsert(
+        pool,
+        "notifications",
+        conflict_columns=["notification_id"],
+        values={
+            "notification_id": notification_id,
+            "idempotency_key": payload.idempotency_key,
+            "request_id": payload.request_id,
+            "status": "sent",
+            "channel": payload.channel,
+            "template_name": payload.template_name,
+            "template_content_hash": payload.template_content_hash or None,
+            "template_git_sha": payload.template_git_sha,
+            "provider": payload.provider,
+            "provider_message_id": payload.provider_message_id,
+            "recipient_hash": payload.recipient_hash,
+            "customer_id": customer_id,
+            "customer_ref_id": customer_ref_id,
+            "correlation_id": payload.correlation_id,
+            "event_at": _coerce_dt(payload.sent_at),
+            "sent_at": _coerce_dt(payload.sent_at),
+            "tags_category": tags.get("category"),
+            "tags_reason": tags.get("reason"),
+            "tags_step": tags.get("step"),
+            "updated_at": now,
+            "created_at": now,
         },
-        "updatedAt": now,
-    }
-
-    result = await db["notifications"].update_one(
-        {"notificationId": notification_id},
-        {"$set": document, "$setOnInsert": {"createdAt": now}},
-        upsert=True,
+        insert_only_columns=["created_at"],
     )
 
-    log.info(
-        "Notification sent projected",
-        matched=result.matched_count,
-        modified=result.modified_count,
-        upserted_id=str(result.upserted_id) if result.upserted_id else None,
-    )
+    log.info("Notification sent projected")
 
 
 async def handle_notification_delivery_failed(
-    db: AsyncIOMotorDatabase, parsed_event: Any
+    pool: asyncpg.Pool, parsed_event: Any
 ) -> None:
-    """Project ``notification.delivery_failed.v1`` into the notifications collection.
+    """Project notification.delivery_failed.v1 into the notifications table.
 
-    ``error_type == "suppressed"`` is mapped to ``status="blocked"`` so the
-    UI can show "Notification blocked — suppression active" with distinct
-    styling from generic failures (recipient invalid, template error, etc.).
+    error_type == "suppressed" is mapped to status="blocked" so the UI can
+    distinguish kill-switch blocks from generic failures.
     """
     payload = parsed_event.payload
     notification_id = payload.notification_id
     customer_id = payload.customer_id
     error_type = payload.error_type
-
-    # Kill-switch blocks render as a distinct timeline category.
     status = "blocked" if error_type == "suppressed" else "failed"
 
     log = logger.bind(
@@ -138,127 +139,107 @@ async def handle_notification_delivery_failed(
     )
     log.info("Processing notification.delivery_failed.v1")
 
-    customer_mongo_id = await _resolve_customer_link(db, customer_id)
-    now = datetime.utcnow()
+    customer_ref_id = await _resolve_customer_link(pool, customer_id)
+    now = datetime.now(timezone.utc)
+    tags = payload.tags or {}
 
-    document = {
-        "notificationId": notification_id,
-        "idempotencyKey": payload.idempotency_key,
-        "requestId": payload.request_id,
-        "status": status,
-        "channel": payload.channel,
-        "templateName": payload.template_name,
-        "templateContentHash": payload.template_content_hash or None,
-        "templateGitSha": payload.template_git_sha,
-        "provider": payload.provider,
-        "recipientHash": payload.recipient_hash,
-        "customerId": customer_id,
-        "customerRef": customer_mongo_id,
-        "correlationId": payload.correlation_id,
-        "eventAt": _coerce_iso(payload.failed_at),
-        "tags": {
-            "category": (payload.tags or {}).get("category"),
-            "reason": (payload.tags or {}).get("reason"),
-            "step": (payload.tags or {}).get("step"),
+    await upsert(
+        pool,
+        "notifications",
+        conflict_columns=["notification_id"],
+        values={
+            "notification_id": notification_id,
+            "idempotency_key": payload.idempotency_key,
+            "request_id": payload.request_id,
+            "status": status,
+            "channel": payload.channel,
+            "template_name": payload.template_name,
+            "template_content_hash": payload.template_content_hash or None,
+            "template_git_sha": payload.template_git_sha,
+            "provider": payload.provider,
+            "recipient_hash": payload.recipient_hash,
+            "customer_id": customer_id,
+            "customer_ref_id": customer_ref_id,
+            "correlation_id": payload.correlation_id,
+            "event_at": _coerce_dt(payload.failed_at),
+            "tags_category": tags.get("category"),
+            "tags_reason": tags.get("reason"),
+            "tags_step": tags.get("step"),
+            "failure_failed_at": _coerce_dt(payload.failed_at),
+            "failure_error_type": error_type,
+            "failure_error_message": payload.error_message,
+            "failure_attempt": payload.attempt,
+            "failure_fallback_suggested": payload.fallback_suggested,
+            "updated_at": now,
+            "created_at": now,
         },
-        "failure": {
-            "failedAt": _coerce_iso(payload.failed_at),
-            "errorType": error_type,
-            "errorMessage": payload.error_message,
-            "attempt": payload.attempt,
-            "fallbackSuggested": payload.fallback_suggested,
-        },
-        "updatedAt": now,
-    }
-
-    result = await db["notifications"].update_one(
-        {"notificationId": notification_id},
-        {"$set": document, "$setOnInsert": {"createdAt": now}},
-        upsert=True,
+        insert_only_columns=["created_at"],
     )
 
-    log.info(
-        "Notification failure projected",
-        matched=result.matched_count,
-        modified=result.modified_count,
-        upserted_id=str(result.upserted_id) if result.upserted_id else None,
-    )
+    log.info("Notification failure projected")
 
 
 async def handle_notification_suppression_changed(
-    db: AsyncIOMotorDatabase, parsed_event: Any
+    pool: asyncpg.Pool, parsed_event: Any
 ) -> None:
-    """Project ``notification.suppression.changed.v1`` into the notifications
-    collection so suppression flips are visible in the customer's Communications
-    timeline alongside sent / failed / blocked entries.
+    """Project notification.suppression.changed.v1 into the notifications table.
 
-    Idempotency: keyed on the inbox envelope id (``parsed_event.cause``), so
-    DLQ replays converge on the same document.
+    Uses a synthesized notification_id (``suppression:<event-id>``) so each
+    suppression change gets its own timeline row.
     """
     payload = parsed_event.payload
     customer_id = payload.customer_id
-    mode = (payload.mode or "").lower()
-    set_at = _coerce_iso(payload.set_at)
+    raw_mode = (payload.mode or "").lower()
+    set_at = _coerce_dt(payload.set_at)
     event_id = getattr(parsed_event, "cause", "") or getattr(parsed_event, "conv", "")
-    # Fallback to a deterministic composite when the envelope id is missing.
     timeline_id = (
         f"suppression:{event_id}"
         if event_id
-        else f"suppression:{customer_id}:{set_at or 'now'}"
+        else f"suppression:{customer_id}:{set_at.isoformat() if set_at else 'now'}"
     )
 
-    log = logger.bind(
-        timeline_id=timeline_id,
-        customer_id=customer_id,
-        mode=mode,
-    )
+    log = logger.bind(timeline_id=timeline_id, customer_id=customer_id, mode=raw_mode)
     log.info("Processing notification.suppression.changed.v1")
 
-    customer_mongo_id = await _resolve_customer_link(db, customer_id)
-    now = datetime.utcnow()
+    customer_ref_id = await _resolve_customer_link(pool, customer_id)
+    now = datetime.now(timezone.utc)
+    # event_at is NOT NULL on the table; the suppression set_at is the
+    # natural timeline anchor but some publishers omit it — fall back to
+    # the projection wall-clock when missing.
+    event_at = set_at or now
+    # The pg enum constraint rejects unknown modes; map to NULL with a
+    # warning rather than crashing the consumer. Status row still lands.
+    mode_value = raw_mode if raw_mode in _SUPPRESSION_MODES else None
+    if mode_value is None:
+        log.warning("Unknown suppression mode, storing NULL", raw_mode=raw_mode)
 
-    document = {
-        "notificationId": timeline_id,
-        "status": "suppression_change",
-        "customerId": customer_id,
-        "customerRef": customer_mongo_id,
-        "correlationId": payload.correlation_id,
-        # Use set_at as the timeline anchor so the entry appears at the time
-        # the change was applied (not the time the projection ran).
-        "eventAt": set_at,
-        "suppression": {
-            "mode": mode,
-            "reason": payload.reason or None,
-            "setBy": payload.set_by or None,
-            "setAt": set_at,
-            "expiresAt": _coerce_iso(payload.expires_at),
+    await upsert(
+        pool,
+        "notifications",
+        conflict_columns=["notification_id"],
+        values={
+            "notification_id": timeline_id,
+            "status": "suppression_change",
+            "customer_id": customer_id,
+            "customer_ref_id": customer_ref_id,
+            "correlation_id": payload.correlation_id,
+            "event_at": event_at,
+            "suppression_mode": mode_value,
+            "suppression_reason": payload.reason or None,
+            "suppression_set_by": payload.set_by or None,
+            "suppression_set_at": set_at,
+            "suppression_expires_at": _coerce_dt(payload.expires_at),
+            "updated_at": now,
+            "created_at": now,
         },
-        "updatedAt": now,
-    }
-
-    result = await db["notifications"].update_one(
-        {"notificationId": timeline_id},
-        {"$set": document, "$setOnInsert": {"createdAt": now}},
-        upsert=True,
+        insert_only_columns=["created_at"],
     )
 
-    log.info(
-        "Suppression change projected",
-        matched=result.matched_count,
-        modified=result.modified_count,
-        upserted_id=str(result.upserted_id) if result.upserted_id else None,
-    )
+    log.info("Suppression change projected")
 
 
-async def handle_statement_generated(
-    db: AsyncIOMotorDatabase, parsed_event: Any
-) -> None:
-    """Project ``statement.generated.v1`` into the notifications collection.
-
-    Statement notifications use ``status="statement"`` and store the account
-    + period in a dedicated ``statement`` sub-document. They link to the
-    matching ``notification.sent.v1`` via the shared ``notification_id``.
-    """
+async def handle_statement_generated(pool: asyncpg.Pool, parsed_event: Any) -> None:
+    """Project statement.generated.v1 into the notifications table."""
     payload = parsed_event.payload
     notification_id = payload.notification_id
     customer_id = payload.customer_id
@@ -271,34 +252,28 @@ async def handle_statement_generated(
     )
     log.info("Processing statement.generated.v1")
 
-    customer_mongo_id = await _resolve_customer_link(db, customer_id)
-    now = datetime.utcnow()
+    customer_ref_id = await _resolve_customer_link(pool, customer_id)
+    now = datetime.now(timezone.utc)
 
-    document = {
-        "notificationId": notification_id,
-        "status": "statement",
-        "customerId": customer_id,
-        "customerRef": customer_mongo_id,
-        "correlationId": payload.correlation_id,
-        "eventAt": _coerce_iso(payload.dispatched_at),
-        "statement": {
-            "accountId": account_id,
-            "periodStart": _coerce_iso(payload.period_start),
-            "periodEnd": _coerce_iso(payload.period_end),
-            "dispatchedAt": _coerce_iso(payload.dispatched_at),
+    await upsert(
+        pool,
+        "notifications",
+        conflict_columns=["notification_id"],
+        values={
+            "notification_id": notification_id,
+            "status": "statement",
+            "customer_id": customer_id,
+            "customer_ref_id": customer_ref_id,
+            "correlation_id": payload.correlation_id,
+            "event_at": _coerce_dt(payload.dispatched_at),
+            "statement_account_id": account_id,
+            "statement_period_start": _coerce_dt(payload.period_start),
+            "statement_period_end": _coerce_dt(payload.period_end),
+            "statement_dispatched_at": _coerce_dt(payload.dispatched_at),
+            "updated_at": now,
+            "created_at": now,
         },
-        "updatedAt": now,
-    }
-
-    result = await db["notifications"].update_one(
-        {"notificationId": notification_id},
-        {"$set": document, "$setOnInsert": {"createdAt": now}},
-        upsert=True,
+        insert_only_columns=["created_at"],
     )
 
-    log.info(
-        "Statement marker projected",
-        matched=result.matched_count,
-        modified=result.modified_count,
-        upserted_id=str(result.upserted_id) if result.upserted_id else None,
-    )
+    log.info("Statement marker projected")

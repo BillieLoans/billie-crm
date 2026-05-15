@@ -438,7 +438,9 @@ export const LoanAccounts: CollectionConfig = {
             {
               name: 'dueDate',
               type: 'date',
-              required: true,
+              // Nullable so the event processor can land an out-of-order
+              // schedule.updated event as a placeholder before
+              // schedule.created arrives with the real due date.
               admin: {
                 date: { pickerAppearance: 'dayOnly' },
               },
@@ -446,7 +448,8 @@ export const LoanAccounts: CollectionConfig = {
             {
               name: 'amount',
               type: 'number',
-              required: true,
+              // Nullable for the same reason as dueDate — backfilled when
+              // schedule.created arrives.
               admin: {
                 step: 0.01,
                 description: 'Scheduled payment amount',

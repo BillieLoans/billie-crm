@@ -106,16 +106,20 @@ function buildMetric(count: number, totalAmount: number): MoneyFlowMetric {
 
 /**
  * Aggregate today's money flows (expected, received, disbursed) for the
- * Australian working day. Uses raw MongoDB aggregation for accuracy across
- * the full `loan-accounts` collection (not just the active-sample set).
+ * Australian working day. Reads directly from the `loan_accounts` parent table
+ * and the `loan_accounts_repayment_schedule_payments` child table via the
+ * Postgres adapter's pool — bypasses the Local API because we only need scalar
+ * aggregates over the whole table.
  */
 async function fetchMoneyFlowsToday(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   payload: any,
 ): Promise<MoneyFlowsToday> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = (payload.db as any).connection?.db
-  if (!db) {
+  const pool = (payload.db as any).pool as
+    | { query: (text: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>> }> }
+    | undefined
+  if (!pool) {
     return {
       paymentsExpected: EMPTY_METRIC,
       paymentsReceived: EMPTY_METRIC,
@@ -124,70 +128,39 @@ async function fetchMoneyFlowsToday(
   }
 
   const { start, end } = australianDayBoundaries()
-  const collection = db.collection('loan-accounts')
 
-  type AggRow = { count: number; total: number }
-  const single = (rows: AggRow[]): AggRow => rows[0] ?? { count: 0, total: 0 }
+  const toMetric = (row: Record<string, unknown> | undefined) => {
+    // node-pg returns COUNT as bigint string and numeric SUM as string.
+    const count = row?.count != null ? Number(row.count) : 0
+    const total = row?.total != null ? Number(row.total) : 0
+    return buildMetric(Number.isFinite(count) ? count : 0, Number.isFinite(total) ? total : 0)
+  }
 
-  const [expectedRows, receivedRows, disbursedRows] = await Promise.all([
-    collection
-      .aggregate([
-        { $unwind: '$repaymentSchedule.payments' },
-        {
-          $match: {
-            'repaymentSchedule.payments.dueDate': { $gte: start, $lt: end },
-          },
-        },
-        {
-          $group: {
-            _id: null,
-            count: { $sum: 1 },
-            total: { $sum: { $ifNull: ['$repaymentSchedule.payments.amount', 0] } },
-          },
-        },
-      ])
-      .toArray(),
-
-    collection
-      .aggregate([
-        { $unwind: '$repaymentSchedule.payments' },
-        {
-          $match: {
-            'repaymentSchedule.payments.paidDate': { $gte: start, $lt: end },
-          },
-        },
-        {
-          $group: {
-            _id: null,
-            count: { $sum: 1 },
-            total: { $sum: { $ifNull: ['$repaymentSchedule.payments.amountPaid', 0] } },
-          },
-        },
-      ])
-      .toArray(),
-
-    collection
-      .aggregate([
-        { $match: { 'loanTerms.disbursedDate': { $gte: start, $lt: end } } },
-        {
-          $group: {
-            _id: null,
-            count: { $sum: 1 },
-            total: { $sum: { $ifNull: ['$loanTerms.loanAmount', 0] } },
-          },
-        },
-      ])
-      .toArray(),
+  const [expectedResult, receivedResult, disbursedResult] = await Promise.all([
+    pool.query(
+      `SELECT COUNT(*)::bigint AS count, COALESCE(SUM(amount), 0) AS total
+         FROM loan_accounts_repayment_schedule_payments
+        WHERE due_date >= $1 AND due_date < $2`,
+      [start, end],
+    ),
+    pool.query(
+      `SELECT COUNT(*)::bigint AS count, COALESCE(SUM(amount_paid), 0) AS total
+         FROM loan_accounts_repayment_schedule_payments
+        WHERE paid_date >= $1 AND paid_date < $2`,
+      [start, end],
+    ),
+    pool.query(
+      `SELECT COUNT(*)::bigint AS count, COALESCE(SUM(loan_terms_loan_amount), 0) AS total
+         FROM loan_accounts
+        WHERE loan_terms_disbursed_date >= $1 AND loan_terms_disbursed_date < $2`,
+      [start, end],
+    ),
   ])
 
-  const expected = single(expectedRows)
-  const received = single(receivedRows)
-  const disbursed = single(disbursedRows)
-
   return {
-    paymentsExpected: buildMetric(expected.count, expected.total),
-    paymentsReceived: buildMetric(received.count, received.total),
-    disbursed: buildMetric(disbursed.count, disbursed.total),
+    paymentsExpected: toMetric(expectedResult.rows[0]),
+    paymentsReceived: toMetric(receivedResult.rows[0]),
+    disbursed: toMetric(disbursedResult.rows[0]),
   }
 }
 

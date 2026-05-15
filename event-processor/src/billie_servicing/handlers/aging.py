@@ -1,37 +1,41 @@
 """
 Aging event handlers (aging-v1.1.0+).
 
-Projects `loan.aging.updated.v1` events onto the `loan-accounts` collection
-so the CRM can filter and sort accounts by arrears state without round-
-tripping to the gRPC ledger on every page render.
+Projects loan.aging.updated.v1 events onto the ``loan_accounts`` table so the
+CRM can filter and sort accounts by arrears state without round-tripping to
+the gRPC ledger on every page render.
 
-Each event sets the `aging` group on the LoanAccount document:
-    aging.isInArrears (bool)  — authoritative arrears flag from the aging
-                                 service. `bucket not in {current, closed}`
-                                 AND not terminal.
-    aging.bucket      (str)   — current aging bucket
-    aging.currentDPD  (int)   — days past due
-    aging.lastUpdated (datetime) — when the snapshot was taken
-
-The handler is idempotent: replaying the same event produces no state
-change. Missing fields (older SDK versions) fall through gracefully.
+The handler is idempotent: replaying the same event produces no state change.
+Missing fields (older SDK versions) fall through gracefully.
 """
 
-from datetime import datetime
+from __future__ import annotations
+
+from datetime import datetime, timezone
 from typing import Any
 
+import asyncpg
 import structlog
-from motor.motor_asyncio import AsyncIOMotorDatabase
+
+from ..db import update_by_key
 
 logger = structlog.get_logger(__name__)
 
+# The Payload `aging.bucket` field is a closed enum (5 values). Any value
+# outside the set would fail the enum constraint on insert, so we coerce
+# anything unrecognised to None and log a warning. This matches the original
+# Mongo behaviour for unknown buckets except that Mongo silently accepted them.
+_VALID_BUCKETS = frozenset({"current", "early_arrears", "late_arrears", "default", "closed"})
 
-async def handle_loan_aging_updated(db: AsyncIOMotorDatabase, parsed_event: Any) -> None:
-    """
-    Handle loan.aging.updated.v1 event.
 
-    SDK Model: LoanAgingUpdatedV1 (billie_aging_events>=1.1.0)
-    Fields: account_id, dpd, bucket, is_in_arrears, last_updated, ...
+async def handle_loan_aging_updated(pool: asyncpg.Pool, parsed_event: Any) -> None:
+    """Handle loan.aging.updated.v1 event.
+
+    Sets the ``aging_*`` columns on the loan_accounts row keyed by
+    ``loan_account_id``. No-op (with debug log) if the loan account hasn't
+    been projected yet — the row will be created by a later
+    ``account.created.v1`` and the aging stays at its default zero state
+    until the next aging event arrives.
     """
     payload = parsed_event.payload
     account_id = payload.account_id
@@ -39,39 +43,46 @@ async def handle_loan_aging_updated(db: AsyncIOMotorDatabase, parsed_event: Any)
     log = logger.bind(account_id=account_id)
     log.info("Processing loan.aging.updated.v1")
 
-    # is_in_arrears is mandatory on aging-v1.1.0+. Be defensive in case an
-    # older publisher slips through — derive from bucket as a last resort.
-    bucket = str(getattr(payload, "bucket", "current") or "current")
+    raw_bucket = str(getattr(payload, "bucket", "current") or "current")
+    bucket: str | None = raw_bucket if raw_bucket in _VALID_BUCKETS else None
+    if bucket is None:
+        log.warning(
+            "Unknown aging bucket; storing NULL for aging_bucket",
+            raw_bucket=raw_bucket,
+        )
+
     is_in_arrears = getattr(payload, "is_in_arrears", None)
     if is_in_arrears is None:
-        is_in_arrears = bucket not in {"current", "closed"}
+        # Derive defensively when older publishers omit the field.
+        is_in_arrears = raw_bucket not in {"current", "closed"}
 
-    update_doc: dict[str, Any] = {
-        "aging.isInArrears": bool(is_in_arrears),
-        "aging.bucket": bucket,
-        "aging.lastUpdated": datetime.utcnow(),
-        "updatedAt": datetime.utcnow(),
+    now = datetime.now(timezone.utc)
+    event_last_updated = getattr(payload, "last_updated", None)
+    last_updated_value = event_last_updated if event_last_updated else now
+
+    values: dict[str, Any] = {
+        "aging_is_in_arrears": bool(is_in_arrears),
+        "aging_bucket": bucket,
+        "aging_last_updated": last_updated_value,
+        "updated_at": now,
     }
 
     dpd = getattr(payload, "dpd", None)
     if dpd is not None:
-        update_doc["aging.currentDPD"] = int(dpd)
+        values["aging_current_d_p_d"] = int(dpd)
 
-    # Some publishers carry a `last_updated` timestamp on the event itself —
-    # prefer it over the wall-clock when present so replays stay deterministic.
-    event_last_updated = getattr(payload, "last_updated", None)
-    if event_last_updated:
-        update_doc["aging.lastUpdated"] = event_last_updated
-
-    result = await db["loan-accounts"].update_one(
-        {"loanAccountId": account_id}, {"$set": update_doc}
+    status = await update_by_key(
+        pool,
+        "loan_accounts",
+        key_column="loan_account_id",
+        key_value=account_id,
+        values=values,
     )
 
     log.info(
         "Loan account aging updated",
-        bucket=bucket,
+        bucket=raw_bucket,
         is_in_arrears=is_in_arrears,
         dpd=dpd,
-        matched=result.matched_count,
-        modified=result.modified_count,
+        asyncpg_status=status,
     )

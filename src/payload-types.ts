@@ -326,7 +326,7 @@ export interface Customer {
 export interface Application {
   id: string;
   applicationNumber: string;
-  customerId: string | Customer;
+  customerId?: (string | null) | Customer;
   loanPurpose?: string | null;
   loanAmount?: number | null;
   /**
@@ -861,11 +861,11 @@ export interface LoanAccount {
            * Payment sequence number (1, 2, 3...)
            */
           paymentNumber: number;
-          dueDate: string;
+          dueDate?: string | null;
           /**
            * Scheduled payment amount
            */
-          amount: number;
+          amount?: number | null;
           status?: ('scheduled' | 'paid' | 'missed' | 'partial') | null;
           /**
            * Amount actually paid (from schedule.updated)
@@ -917,7 +917,7 @@ export interface WriteOffRequest {
   /**
    * Event correlation ID (conv field). Groups related events in a workflow.
    */
-  requestId?: string | null;
+  requestId: string;
   /**
    * Event ID for polling lookup (cause field). Used by client to find projection after command.
    */

@@ -1,9 +1,24 @@
-"""Pytest configuration and fixtures for event processor tests."""
+"""Pytest configuration and fixtures for event processor tests.
 
-import pytest
+The Mongo → Postgres migration changed handler signatures from
+``handler(db: AsyncIOMotorDatabase, event)`` to
+``handler(pool: asyncpg.Pool, event)``.
+
+``mock_pool`` is the new fixture. ``mock_db`` is kept as a thin alias that
+points at the same object so legacy tests don't ``ImportError`` — but their
+assertions (which look at ``insert_one`` / ``update_one`` call shapes) need
+rewriting against the new ``execute`` call shapes. Those rewrites are a
+follow-up; see the task list.
+"""
+
+from __future__ import annotations
+
 import asyncio
 from datetime import datetime
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 
 @pytest.fixture(scope="session")
@@ -14,39 +29,115 @@ def event_loop():
     loop.close()
 
 
-class MockCollection:
-    """Mock MongoDB collection."""
-    def __init__(self):
-        self.find_one = AsyncMock(return_value=None)
-        self.update_one = AsyncMock(
-            return_value=MagicMock(matched_count=0, modified_count=0, upserted_id="test-id")
-        )
-        self.insert_one = AsyncMock(return_value=MagicMock(inserted_id="test-id"))
+class _MockTransaction:
+    """Async context manager standing in for asyncpg's transaction()."""
+
+    async def __aenter__(self) -> "_MockTransaction":
+        return self
+
+    async def __aexit__(self, *_exc: Any) -> bool | None:
+        return None
 
 
-class MockDatabase:
-    """Mock MongoDB database that supports both attribute and dict access."""
-    def __init__(self):
-        self._collections = {}
-        self.customers = MockCollection()
-        self.conversations = MockCollection()
-        self._collections["customers"] = self.customers
-        self._collections["conversations"] = self.conversations
-        self._collections["loan-accounts"] = MockCollection()
-    
-    def __getitem__(self, name):
-        if name not in self._collections:
-            self._collections[name] = MockCollection()
-        return self._collections[name]
-    
-    def __setitem__(self, name, value):
-        self._collections[name] = value
+class MockConnection:
+    """Mock asyncpg.Connection — records every SQL call for assertions."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, tuple[Any, ...]]] = []
+        # Default returns: callers override via .set_return / direct AsyncMock patching.
+        self.execute = AsyncMock(side_effect=self._record_execute)
+        self.fetchval = AsyncMock(side_effect=self._record_fetchval)
+        self.fetchrow = AsyncMock(side_effect=self._record_fetchrow)
+        self.fetch = AsyncMock(side_effect=self._record_fetch)
+        self._fetchval_returns: Any = None
+        self._fetchrow_returns: Any = None
+        self._fetch_returns: list[Any] = []
+
+    def set_fetchval(self, value: Any) -> None:
+        self._fetchval_returns = value
+
+    def set_fetchrow(self, value: Any) -> None:
+        self._fetchrow_returns = value
+
+    def set_fetch(self, value: list[Any]) -> None:
+        self._fetch_returns = value
+
+    async def _record_execute(self, sql: str, *args: Any) -> str:
+        self.calls.append((sql, args))
+        # asyncpg returns a status string like "INSERT 0 1" — fine for tests.
+        return "INSERT 0 1"
+
+    async def _record_fetchval(self, sql: str, *args: Any) -> Any:
+        self.calls.append((sql, args))
+        return self._fetchval_returns
+
+    async def _record_fetchrow(self, sql: str, *args: Any) -> Any:
+        self.calls.append((sql, args))
+        return self._fetchrow_returns
+
+    async def _record_fetch(self, sql: str, *args: Any) -> list[Any]:
+        self.calls.append((sql, args))
+        return list(self._fetch_returns)
+
+    def transaction(self) -> _MockTransaction:
+        return _MockTransaction()
+
+
+class _AcquireCtx:
+    def __init__(self, conn: MockConnection) -> None:
+        self._conn = conn
+
+    async def __aenter__(self) -> MockConnection:
+        return self._conn
+
+    async def __aexit__(self, *_exc: Any) -> bool | None:
+        return None
+
+
+class MockPool:
+    """Mock asyncpg.Pool — shares one MockConnection across acquire() calls.
+
+    Tests can inspect ``mock_pool.connection.calls`` to assert on the SQL that
+    handlers executed.
+    """
+
+    def __init__(self) -> None:
+        self.connection = MockConnection()
+        # Pool-level methods proxy through to the same connection so tests
+        # don't have to distinguish between ``pool.execute(...)`` and
+        # ``async with pool.acquire() as conn: await conn.execute(...)``.
+        self.execute = self.connection.execute
+        self.fetchval = self.connection.fetchval
+        self.fetchrow = self.connection.fetchrow
+        self.fetch = self.connection.fetch
+
+    def acquire(self) -> _AcquireCtx:
+        return _AcquireCtx(self.connection)
 
 
 @pytest.fixture
-def mock_db():
-    """Create a mock MongoDB database."""
-    return MockDatabase()
+def mock_pool() -> MockPool:
+    """asyncpg-shaped mock the new handlers consume."""
+    return MockPool()
+
+
+@pytest.fixture
+def mock_db(mock_pool: MockPool) -> MockPool:
+    """Alias for legacy tests still importing ``mock_db``.
+
+    Note: legacy tests asserting on ``mock_db["collection"].insert_one`` etc.
+    will fail — handler call shape changed from Mongo update_one/insert_one
+    to asyncpg.execute(sql, *args). Rewrite assertions to inspect
+    ``mock_pool.connection.calls`` instead.
+    """
+    return mock_pool
+
+
+# Stand-in objects for legacy MockDatabase / MockCollection imports so any
+# test that still imports them at module level can be collected. The objects
+# themselves are unused by the new handlers.
+MockDatabase = MockPool
+MockCollection = MagicMock
 
 
 @pytest.fixture

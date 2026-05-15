@@ -1,5 +1,7 @@
 // storage-adapter-import-placeholder
-import { mongooseAdapter } from '@payloadcms/db-mongodb'
+import { postgresAdapter } from '@payloadcms/db-postgres'
+import { desc } from 'drizzle-orm'
+import { index, uniqueIndex } from 'drizzle-orm/pg-core'
 import { payloadCloudPlugin } from '@payloadcms/payload-cloud'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import path from 'path'
@@ -128,8 +130,61 @@ export default buildConfig({
   typescript: {
     outputFile: path.resolve(dirname, 'payload-types.ts'),
   },
-  db: mongooseAdapter({
-    url: process.env.DATABASE_URI || 'mongodb://build-placeholder:27017/build',
+  db: postgresAdapter({
+    pool: {
+      connectionString:
+        process.env.DATABASE_URI || 'postgresql://billie_crm:billie_dev_password@localhost:5432/billie_crm',
+    },
+    idType: 'uuid',
+    push: process.env.NODE_ENV !== 'production',
+    afterSchemaInit: [
+      ({ schema, extendTable }) => {
+        // Enforce the natural key for the schedule-payments child table so the
+        // Python event-processor can upsert via `ON CONFLICT (_parent_id, payment_number)`.
+        // Payload's collection config can't express composite indexes that span the
+        // collection ⇄ nested-array boundary, so we patch the Drizzle table directly.
+        const schedulePayments = (schema.tables as Record<string, unknown>)
+          .loan_accounts_repayment_schedule_payments as
+          | Parameters<typeof extendTable>[0]['table']
+          | undefined
+        if (schedulePayments) {
+          extendTable({
+            table: schedulePayments,
+            extraConfig: (t) => ({
+              loanAccountsScheduleNaturalKey: uniqueIndex(
+                'loan_accts_repay_sched_payments_natural_key_idx',
+              ).on(t._parentID, t.paymentNumber),
+            }),
+          })
+        }
+
+        // Compound indexes for the conversation monitor grid. These can't be
+        // declared in the Payload collection because the config only supports
+        // single-field `index: true`. Replaces the runtime createIndex() calls
+        // that used to live in src/lib/db/ensureConversationIndexes.ts.
+        const conversations = (schema.tables as Record<string, unknown>).conversations as
+          | Parameters<typeof extendTable>[0]['table']
+          | undefined
+        if (conversations) {
+          extendTable({
+            table: conversations,
+            extraConfig: (t) => ({
+              conversationsMonitorGridIdx: index('conversations_monitor_grid_idx').on(
+                t.status,
+                t.decisionStatus,
+                desc(t.updatedAt),
+              ),
+              conversationsByCustomerIdx: index('conversations_by_customer_idx').on(
+                t.customerIdString,
+                desc(t.updatedAt),
+              ),
+            }),
+          })
+        }
+
+        return schema
+      },
+    ],
   }),
   sharp,
   plugins: [

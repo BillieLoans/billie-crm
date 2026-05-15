@@ -6,14 +6,9 @@ import os
 from datetime import datetime
 from typing import Any, Callable, Coroutine
 
+import asyncpg
 import redis.asyncio as redis
 import structlog
-from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
-from pymongo.errors import (
-    ConfigurationError as MongoConfigurationError,
-    ConnectionFailure as MongoConnectionFailure,
-    ServerSelectionTimeoutError as MongoServerSelectionTimeoutError,
-)
 from redis.exceptions import (
     ConnectionError as RedisConnectionError,
     TimeoutError as RedisTimeoutError,
@@ -34,7 +29,7 @@ def _check_tls_urls(redis_url: str, database_uri: str) -> None:
     """Warn if non-TLS connection URLs are used in production.
 
     In production (NODE_ENV=production), Redis should use rediss:// and
-    MongoDB should use mongodb+srv:// (which defaults to TLS) or include tls=true.
+    Postgres should include sslmode=require (Neon defaults to this).
     """
     if os.environ.get("NODE_ENV") != "production":
         return
@@ -45,11 +40,10 @@ def _check_tls_urls(redis_url: str, database_uri: str) -> None:
             f"got scheme: {redis_url.split('://')[0] if '://' in redis_url else 'unknown'}"
         )
 
-    if database_uri and not (
-        database_uri.startswith("mongodb+srv://") or "tls=true" in database_uri
-    ):
+    if database_uri and "sslmode=require" not in database_uri:
         logger.warning(
-            "MongoDB URI does not appear to use TLS in production",
+            "Postgres URI does not appear to require TLS in production "
+            "(expected sslmode=require in the connection string)",
             url_scheme=database_uri.split("://")[0] if "://" in database_uri else "unknown",
         )
 
@@ -135,8 +129,7 @@ class EventProcessor:
         _check_tls_urls(self.redis_url, self.database_uri)
 
         self.redis: redis.Redis | None = None
-        self.mongo: AsyncIOMotorClient | None = None
-        self.db: AsyncIOMotorDatabase | None = None
+        self.pool: asyncpg.Pool | None = None
 
         self.consumer_id = f"processor-{os.getpid()}-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
         self.handlers: dict[str, Callable[..., Coroutine[Any, Any, None]]] = {}
@@ -195,46 +188,49 @@ class EventProcessor:
                 await asyncio.sleep(startup_backoff)
                 startup_backoff = min(startup_backoff * 2, max_startup_backoff)
 
-        # Connect to MongoDB with retry
-        startup_backoff = 1  # reset for MongoDB phase
+        # Connect to Postgres with retry
+        startup_backoff = 1  # reset for Postgres phase
         while True:
             try:
-                print("Connecting to MongoDB...")
-                self.mongo = AsyncIOMotorClient(
-                    self.database_uri,
-                    serverSelectionTimeoutMS=10000,
+                print("Connecting to Postgres...")
+                self.pool = await asyncpg.create_pool(
+                    dsn=self.database_uri,
+                    min_size=2,
+                    max_size=10,
+                    command_timeout=30,
+                    timeout=10,
                 )
-                self.db = self.mongo[self.db_name]
-                await self.db.command("ping")
-                print("Connected to MongoDB ✓")
-                logger.info("MongoDB connection established")
+                # Verify connectivity
+                async with self.pool.acquire() as conn:
+                    await conn.fetchval("SELECT 1")
+                print("Connected to Postgres ✓")
+                logger.info("Postgres connection established")
                 break
-            except MongoConfigurationError as e:
-                # Bad URI or invalid options — will never self-heal, fail fast
+            except (asyncpg.InvalidPasswordError, asyncpg.InvalidAuthorizationSpecificationError) as e:
+                # Auth failures will never self-heal; fail fast like the old
+                # MongoConfigurationError handler.
                 logger.error(
-                    "MongoDB configuration error (fatal — check DATABASE_URI)",
+                    "Postgres auth error (fatal — check DATABASE_URI)",
                     error=str(e),
                 )
                 raise
             except (
-                MongoConnectionFailure,
-                MongoServerSelectionTimeoutError,
+                asyncpg.CannotConnectNowError,
+                asyncpg.ConnectionDoesNotExistError,
+                ConnectionError,
                 OSError,
+                asyncio.TimeoutError,
             ) as e:
                 # Transient connectivity errors — retry with backoff.
-                # ConnectionFailure covers network errors, broken pipes,
-                # DNS failures. ServerSelectionTimeoutError covers
-                # unreachable hosts. OSError covers low-level socket errors.
-                if self.mongo:
-                    self.mongo.close()
-                    self.mongo = None
-                    self.db = None
+                if self.pool:
+                    await self.pool.close()
+                    self.pool = None
                 print(
-                    f"MongoDB not available ({type(e).__name__}), "
+                    f"Postgres not available ({type(e).__name__}), "
                     f"retrying in {startup_backoff}s..."
                 )
                 logger.warning(
-                    "MongoDB not available at startup, retrying",
+                    "Postgres not available at startup, retrying",
                     error_type=type(e).__name__,
                     error=str(e),
                     retry_in=startup_backoff,
@@ -391,8 +387,8 @@ class EventProcessor:
         self._running = False
         if self.redis:
             await self.redis.close()
-        if self.mongo:
-            self.mongo.close()
+        if self.pool:
+            await self.pool.close()
         logger.info("Event processor stopped")
 
     async def _ensure_consumer_group(self, stream: str) -> None:
@@ -545,8 +541,8 @@ class EventProcessor:
                 await self.redis.xack(stream, settings.consumer_group, message_id)
                 return
 
-            # Execute handler (writes to MongoDB)
-            await handler(self.db, parsed_event)
+            # Execute handler (writes to Postgres via the asyncpg pool)
+            await handler(self.pool, parsed_event)
 
             # ACK after successful write
             await self.redis.xack(stream, settings.consumer_group, message_id)
