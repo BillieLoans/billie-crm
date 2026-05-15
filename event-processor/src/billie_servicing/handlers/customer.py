@@ -7,98 +7,22 @@ Handles events:
 - customer.verified.v1
 """
 
-from datetime import datetime
+from __future__ import annotations
+
+from datetime import datetime, timezone
 from typing import Any
 
+import asyncpg
 import structlog
-from motor.motor_asyncio import AsyncIOMotorDatabase
+
+from ..db import coerce_date, update_by_key, upsert
 
 logger = structlog.get_logger()
 
 
-async def handle_customer_changed(db: AsyncIOMotorDatabase, parsed_event: Any) -> None:
-    """
-    Handle customer.changed.v1, customer.created.v1, customer.updated.v1 events.
-
-    SDK Model: CustomerChangedV1
-    Fields: customer_id, first_name, last_name, email_address,
-            mobile_phone_number, date_of_birth, ekyc_status,
-            residential_address, changed_at
-    """
-    payload = parsed_event.payload
-    customer_id = payload.customer_id
-
-    log = logger.bind(customer_id=customer_id)
-    log.info("Processing customer event")
-
-    # Get existing customer for merge (events may be partial updates)
-    existing = await db.customers.find_one({"customerId": customer_id})
-
-    # Build full name
-    first = getattr(payload, "first_name", None) or (existing or {}).get("firstName", "")
-    last = getattr(payload, "last_name", None) or (existing or {}).get("lastName", "")
-    full_name = f"{first} {last}".strip()
-
-    update_doc: dict[str, Any] = {
-        "customerId": customer_id,
-        "fullName": full_name,
-        "updatedAt": datetime.utcnow(),
-    }
-
-    # Map SDK fields to Payload fields
-    field_mappings = {
-        "first_name": "firstName",
-        "last_name": "lastName",
-        "email_address": "emailAddress",
-        "mobile_phone_number": "mobilePhoneNumber",
-        "date_of_birth": "dateOfBirth",
-        "ekyc_status": "ekycStatus",
-    }
-
-    for sdk_field, payload_field in field_mappings.items():
-        value = getattr(payload, sdk_field, None)
-        if value is not None:
-            update_doc[payload_field] = value
-
-    # Handle residential address
-    if hasattr(payload, "residential_address") and payload.residential_address:
-        addr = payload.residential_address
-        update_doc["residentialAddress"] = {
-            "streetNumber": getattr(addr, "street_number", None),
-            "streetName": getattr(addr, "street_name", None),
-            "streetType": getattr(addr, "street_type", None),
-            "unitNumber": getattr(addr, "unit_number", None),
-            "suburb": getattr(addr, "suburb", None),
-            "state": getattr(addr, "state", None),
-            "postcode": getattr(addr, "postcode", None),
-            "country": getattr(addr, "country", "Australia"),
-            "fullAddress": getattr(addr, "full_address", None),
-            # Computed street field for backward compatibility
-            "street": _build_street_address(addr),
-            "city": getattr(addr, "suburb", None),  # Map suburb to city
-        }
-
-    result = await db.customers.update_one(
-        {"customerId": customer_id},
-        {
-            "$set": update_doc,
-            "$setOnInsert": {"createdAt": datetime.utcnow()},
-        },
-        upsert=True,
-    )
-
-    log.info(
-        "Customer upserted",
-        customer_id=customer_id,
-        matched=result.matched_count,
-        modified=result.modified_count,
-        upserted_id=str(result.upserted_id) if result.upserted_id else None,
-    )
-
-
 def _build_street_address(addr: Any) -> str:
     """Build a single-line street address from components."""
-    parts = []
+    parts: list[str] = []
 
     unit = getattr(addr, "unit_number", None)
     if unit:
@@ -109,7 +33,7 @@ def _build_street_address(addr: Any) -> str:
     street_type = getattr(addr, "street_type", None)
 
     if street_num:
-        street_line = street_num
+        street_line = str(street_num)
         if street_name:
             street_line += f" {street_name}"
         if street_type:
@@ -119,32 +43,113 @@ def _build_street_address(addr: Any) -> str:
     return ", ".join(parts) if parts else ""
 
 
-async def handle_customer_verified(db: AsyncIOMotorDatabase, parsed_event: Any) -> None:
-    """
-    Handle customer.verified.v1 event.
+async def handle_customer_changed(pool: asyncpg.Pool, parsed_event: Any) -> None:
+    """Handle customer.changed.v1, customer.created.v1, customer.updated.v1.
 
-    Sets identityVerified flag to true.
+    Upserts a row in ``customers`` keyed on the natural ``customer_id``.
+    Address fields are flattened into ``residential_address_*`` columns.
 
-    Fields: customer_id, verified_at
+    Events may be partial updates: missing fields are simply omitted from the
+    values dict so ON CONFLICT DO UPDATE only touches what's present. The
+    full_name column is recomputed from first/last name on every event.
     """
+    payload = parsed_event.payload
+    customer_id = payload.customer_id
+
+    log = logger.bind(customer_id=customer_id)
+    log.info("Processing customer event")
+
+    # Fetch existing for full_name computation. We only need first/last to
+    # rebuild the denormalised full_name when the incoming event is partial.
+    existing = await pool.fetchrow(
+        "SELECT first_name, last_name FROM customers WHERE customer_id = $1",
+        customer_id,
+    )
+
+    incoming_first = getattr(payload, "first_name", None)
+    incoming_last = getattr(payload, "last_name", None)
+    first = incoming_first if incoming_first is not None else (existing["first_name"] if existing else "")
+    last = incoming_last if incoming_last is not None else (existing["last_name"] if existing else "")
+    full_name = f"{(first or '').strip()} {(last or '').strip()}".strip()
+
+    now = datetime.now(timezone.utc)
+    values: dict[str, Any] = {
+        "customer_id": customer_id,
+        "full_name": full_name,
+        "updated_at": now,
+        "created_at": now,
+    }
+
+    field_mappings = {
+        "first_name": "first_name",
+        "last_name": "last_name",
+        "email_address": "email_address",
+        "mobile_phone_number": "mobile_phone_number",
+        "date_of_birth": "date_of_birth",
+        "ekyc_status": "ekyc_status",
+    }
+    for sdk_field, column in field_mappings.items():
+        v = getattr(payload, sdk_field, None)
+        if v is not None:
+            # date_of_birth lands in a timestamp column — asyncpg won't accept
+            # raw ISO strings, so coerce explicitly.
+            if column == "date_of_birth":
+                v = coerce_date(v)
+                if v is None:
+                    continue
+            values[column] = v
+
+    if hasattr(payload, "residential_address") and payload.residential_address:
+        addr = payload.residential_address
+        # Suburb maps to both *_suburb and *_city for backward compatibility
+        # (mirrors the original Mongo handler).
+        suburb = getattr(addr, "suburb", None)
+        values.update(
+            {
+                "residential_address_street_number": getattr(addr, "street_number", None),
+                "residential_address_street_name": getattr(addr, "street_name", None),
+                "residential_address_street_type": getattr(addr, "street_type", None),
+                "residential_address_unit_number": getattr(addr, "unit_number", None),
+                "residential_address_suburb": suburb,
+                "residential_address_state": getattr(addr, "state", None),
+                "residential_address_postcode": getattr(addr, "postcode", None),
+                "residential_address_country": getattr(addr, "country", "Australia"),
+                "residential_address_full_address": getattr(addr, "full_address", None),
+                "residential_address_street": _build_street_address(addr),
+                "residential_address_city": suburb,
+            }
+        )
+
+    await upsert(
+        pool,
+        "customers",
+        conflict_columns=["customer_id"],
+        values=values,
+        insert_only_columns=["created_at"],
+    )
+
+    log.info("Customer upserted", customer_id=customer_id)
+
+
+async def handle_customer_verified(pool: asyncpg.Pool, parsed_event: Any) -> None:
+    """Handle customer.verified.v1 — sets identityVerified flag."""
     payload = parsed_event.payload
     customer_id = payload.customer_id
 
     log = logger.bind(customer_id=customer_id)
     log.info("Processing customer.verified.v1")
 
-    result = await db.customers.update_one(
-        {"customerId": customer_id},
-        {
-            "$set": {
-                "identityVerified": True,
-                "ekycStatus": "successful",
-                "updatedAt": datetime.utcnow(),
-            }
+    now = datetime.now(timezone.utc)
+    status = await update_by_key(
+        pool,
+        "customers",
+        key_column="customer_id",
+        key_value=customer_id,
+        values={
+            "identity_verified": True,
+            "ekyc_status": "successful",
+            "updated_at": now,
         },
     )
 
-    log.info(
-        "Customer verified", matched=result.matched_count, modified=result.modified_count
-    )
-
+    log.info("Customer verified", asyncpg_status=status)
