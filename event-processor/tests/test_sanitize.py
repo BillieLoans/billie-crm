@@ -1,203 +1,178 @@
-"""
-Tests for sanitization utilities and their integration with event handlers.
+"""Tests for sanitization utilities and their integration with event handlers.
 
 Covers:
-- safe_str() input validation (H5: NoSQL injection prevention)
-- strip_dollar_keys() MongoDB operator stripping
-- Integration with conversation and writeoff handlers
+- safe_str() input validation (H5: NoSQL injection prevention — still relevant
+  even on Postgres because the SQL helpers interpolate the value into the
+  WHERE clause via parameterised placeholders only when the caller passes a
+  scalar string; a dict would otherwise slip through and break the query).
+- strip_dollar_keys() — historically stripped MongoDB $-prefixed operator
+  keys; still used to scrub event payloads before storing them as jsonb.
+- Integration with conversation and writeoff handlers.
+- Bounded-array behaviour for utterances/noticeboard (was $slice on Mongo,
+  now an OFFSET-based DELETE before INSERT on the child table).
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock
 
-from billie_servicing.handlers.sanitize import safe_str, strip_dollar_keys
 from billie_servicing.handlers.conversation import (
     handle_conversation_started,
-    handle_utterance,
     handle_final_decision,
+    handle_noticeboard_updated,
+    handle_utterance,
 )
+from billie_servicing.handlers.sanitize import safe_str, strip_dollar_keys
 from billie_servicing.handlers.writeoff import handle_writeoff_approved
 
 
 class TestSafeStr:
-    """Tests for safe_str() utility function."""
-
     def test_returns_string_for_valid_string_input(self):
-        """H5: Should return the same string for valid string input."""
         assert safe_str("hello", "field") == "hello"
 
     def test_returns_empty_string_for_none(self):
-        """H5: Should return empty string for None input."""
         assert safe_str(None, "field") == ""
 
     def test_converts_integer_to_string(self):
-        """H5: Should convert integer values to their string representation."""
         assert safe_str(42, "field") == "42"
 
     def test_raises_for_dict_input(self):
-        """H5: Should reject dict values (NoSQL injection attempt like {"$ne": null})."""
         with pytest.raises(ValueError, match="field_name"):
             safe_str({"$ne": None}, "field_name")
 
     def test_raises_for_list_input(self):
-        """H5: Should reject list values."""
         with pytest.raises(ValueError, match="tags"):
             safe_str(["a", "b"], "tags")
 
     def test_raises_for_nested_dict_input(self):
-        """H5: Should reject nested dict values (e.g., {"$gt": ""})."""
         with pytest.raises(ValueError, match="query_field"):
             safe_str({"$gt": ""}, "query_field")
 
     def test_includes_field_name_in_error_message(self):
-        """H5: Error message should include the field name for debugging."""
         with pytest.raises(ValueError, match="conversation_id"):
             safe_str({"$ne": None}, "conversation_id")
 
 
 class TestStripDollarKeys:
-    """Tests for strip_dollar_keys() utility function."""
-
     def test_returns_dict_unchanged_when_no_dollar_keys(self):
-        """H5: Should return dict as-is when no dollar-prefixed keys exist."""
-        data = {"name": "John", "age": 30}
-        result = strip_dollar_keys(data)
-        assert result == {"name": "John", "age": 30}
+        assert strip_dollar_keys({"name": "John", "age": 30}) == {"name": "John", "age": 30}
 
     def test_strips_keys_starting_with_dollar(self):
-        """H5: Should remove keys starting with '$' (e.g., $set, $ne)."""
         data = {"name": "John", "$set": {"role": "admin"}, "$ne": None}
-        result = strip_dollar_keys(data)
-        assert result == {"name": "John"}
+        assert strip_dollar_keys(data) == {"name": "John"}
 
     def test_preserves_non_dollar_keys(self):
-        """H5: Should keep all keys that do not start with '$'."""
-        data = {"status": "active", "$unset": True, "count": 5}
-        result = strip_dollar_keys(data)
-        assert result == {"status": "active", "count": 5}
+        assert strip_dollar_keys({"status": "active", "$unset": True, "count": 5}) == {
+            "status": "active",
+            "count": 5,
+        }
 
     def test_handles_empty_dict(self):
-        """H5: Should return empty dict for empty input."""
         assert strip_dollar_keys({}) == {}
 
     def test_handles_dict_with_only_dollar_keys(self):
-        """H5: Should return empty dict when all keys are dollar-prefixed."""
-        data = {"$set": 1, "$ne": None, "$gt": ""}
-        result = strip_dollar_keys(data)
-        assert result == {}
+        assert strip_dollar_keys({"$set": 1, "$ne": None, "$gt": ""}) == {}
 
 
 class TestConversationHandlerSanitization:
-    """Integration tests: conversation handlers reject NoSQL injection payloads."""
-
     @pytest.mark.asyncio
-    async def test_conversation_started_rejects_nosql_injection(self, mock_db):
-        """H5: Should reject events with dict values in query fields."""
+    async def test_conversation_started_rejects_nosql_injection(self, mock_pool):
         malicious_event = {
             "typ": "conversation_started",
-            "cid": {"$ne": None},  # NoSQL injection attempt
+            "cid": {"$ne": None},
             "usr": "CUS-001",
         }
         with pytest.raises(ValueError, match="conversation_id"):
-            await handle_conversation_started(mock_db, malicious_event)
+            await handle_conversation_started(mock_pool, malicious_event)
 
     @pytest.mark.asyncio
-    async def test_utterance_rejects_nosql_injection(self, mock_db):
-        """H5: Should reject events with dict values in query fields."""
+    async def test_utterance_rejects_nosql_injection(self, mock_pool):
         malicious_event = {
             "typ": "user_input",
-            "cid": {"$ne": None},  # NoSQL injection attempt
+            "cid": {"$ne": None},
             "payload": {"utterance": "hello"},
         }
         with pytest.raises(ValueError, match="conversation_id"):
-            await handle_utterance(mock_db, malicious_event)
+            await handle_utterance(mock_pool, malicious_event)
 
     @pytest.mark.asyncio
-    async def test_final_decision_rejects_nosql_injection(self, mock_db):
-        """H5: Should reject events with dict values in query fields."""
+    async def test_final_decision_rejects_nosql_injection(self, mock_pool):
         malicious_event = {
             "typ": "final_decision",
-            "cid": {"$ne": None},  # NoSQL injection attempt
+            "cid": {"$ne": None},
             "decision": "APPROVED",
         }
         with pytest.raises(ValueError, match="conversation_id"):
-            await handle_final_decision(mock_db, malicious_event)
+            await handle_final_decision(mock_pool, malicious_event)
 
     @pytest.mark.asyncio
-    async def test_conversation_started_accepts_valid_string_cid(self, mock_db):
-        """H5: Should accept events with valid string cid values."""
+    async def test_conversation_started_accepts_valid_string_cid(self, mock_pool):
         valid_event = {
             "typ": "conversation_started",
             "cid": "CONV-001",
             "usr": "CUS-001",
         }
-        # Should not raise - handler completes successfully
-        await handle_conversation_started(mock_db, valid_event)
+        await handle_conversation_started(mock_pool, valid_event)
 
-        # Verify conversation was upserted
-        mock_db.conversations.update_one.assert_called_once()
+        # The handler always upserts a row via upsert_conversation —
+        # check the INSERT against conversations was emitted.
+        inserts = mock_pool.inserts_into("conversations")
+        assert inserts
+        assert inserts[-1]["conversation_id"] == "CONV-001"
 
 
 class TestWriteoffHandlerSanitization:
-    """Integration tests: writeoff handlers reject NoSQL injection payloads."""
-
     @pytest.mark.asyncio
-    async def test_writeoff_approved_rejects_nosql_injection(self, mock_db):
-        """H5: Should reject events with dict values in query fields."""
+    async def test_writeoff_approved_rejects_nosql_injection(self, mock_pool):
         malicious_event = {
             "typ": "writeoff.approved.v1",
-            "conv": {"$ne": None},  # NoSQL injection attempt
+            "conv": {"$ne": None},
             "cause": "evt-123",
             "payload": "{}",
         }
         with pytest.raises(ValueError, match="request_id"):
-            await handle_writeoff_approved(mock_db, malicious_event)
+            await handle_writeoff_approved(mock_pool, malicious_event)
 
 
-class TestUtteranceSlice:
-    """M9: Verify utterances $push uses $slice to cap array size."""
+class TestUtteranceCapBehaviour:
+    """Bounded-array semantics for utterances/noticeboard.
+
+    On Mongo the handler used $push with $slice to cap. On Postgres the
+    equivalent is: DELETE rows beyond OFFSET (max - 1), then INSERT the new
+    row. These tests assert the DELETE-before-INSERT pattern landed.
+    """
 
     @pytest.mark.asyncio
-    async def test_utterance_push_uses_slice(self, mock_db):
-        """M9: $push for utterances should include $slice to prevent unbounded growth."""
+    async def test_utterance_push_caps_array(self, mock_pool):
+        # Need parent lookup to return a uuid so the handler proceeds.
+        mock_pool.set_fetchval("11111111-2222-3333-4444-555555555555")
         event = {
             "typ": "user_input",
             "cid": "CONV-001",
             "usr": "CUS-001",
             "payload": {"utterance": "hello"},
         }
-        # Ensure conversation exists so it doesn't try to insert first
-        mock_db.conversations.find_one = AsyncMock(return_value={"conversationId": "CONV-001"})
+        await handle_utterance(mock_pool, event)
 
-        await handle_utterance(mock_db, event)
+        # An eviction DELETE happened (it might be a no-op at zero rows but
+        # the SQL was emitted) AND an INSERT followed it.
+        deletes = [c for c in mock_pool.calls if c.op == "DELETE"]
+        assert any(c.table == "conversations_utterances" for c in deletes)
 
-        call_args = mock_db.conversations.update_one.call_args
-        push_op = call_args[0][1]["$push"]
-        # Should use $each + $slice, not a bare value
-        assert "utterances" in push_op
-        utterances_push = push_op["utterances"]
-        assert "$each" in utterances_push
-        assert "$slice" in utterances_push
-        assert utterances_push["$slice"] < 0  # Negative = keep most recent
+        inserts = [c for c in mock_pool.calls if c.op == "INSERT"]
+        assert any(c.table == "conversations_utterances" for c in inserts)
 
     @pytest.mark.asyncio
-    async def test_noticeboard_push_uses_slice(self, mock_db):
-        """M9: $push for noticeboard should include $slice to prevent unbounded growth."""
-        from billie_servicing.handlers.conversation import handle_noticeboard_updated
-
+    async def test_noticeboard_push_caps_array(self, mock_pool):
+        mock_pool.set_fetchval("11111111-2222-3333-4444-555555555555")
         event = {
             "typ": "noticeboard_updated",
             "cid": "CONV-001",
             "agentName": "test_agent",
             "content": "some note",
         }
+        await handle_noticeboard_updated(mock_pool, event)
 
-        await handle_noticeboard_updated(mock_db, event)
+        deletes = [c for c in mock_pool.calls if c.op == "DELETE"]
+        assert any(c.table == "conversations_noticeboard" for c in deletes)
 
-        call_args = mock_db.conversations.update_one.call_args
-        push_op = call_args[0][1]["$push"]
-        assert "noticeboard" in push_op
-        noticeboard_push = push_op["noticeboard"]
-        assert "$each" in noticeboard_push
-        assert "$slice" in noticeboard_push
-        assert noticeboard_push["$slice"] < 0
+        inserts = [c for c in mock_pool.calls if c.op == "INSERT"]
+        assert any(c.table == "conversations_noticeboard" for c in inserts)

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Billie CRM is an internal staff servicing application for managing customer loan accounts at Billie (Australian small amount lender). Built on **Payload CMS v3.45.0** (Next.js 15) with a **Python event processor** that consumes domain events via Redis. Deployed on Fly.io.
+Billie CRM is an internal staff servicing application for managing customer loan accounts at Billie (Australian small amount lender). Built on **Payload CMS v3.45.0** (Next.js 15) with a **Python event processor** that consumes domain events via Redis. The data layer is **Postgres** (`@payloadcms/db-postgres` adapter on the Node side, `asyncpg` on the Python side). Deployed on Fly.io.
 
 ## Commands
 
@@ -50,14 +50,19 @@ ruff check .                        # Lint Python
 ## Architecture
 
 ### Two-process system
-1. **Payload CMS (Next.js)** — Staff UI + API routes + gRPC client for the accounting ledger
-2. **Python Event Processor** — Consumes events from Redis (`inbox:billie-servicing`), writes to MongoDB using Billie Event SDKs (installed from `github.com/BillieLoans/billie-event-sdks`)
+1. **Payload CMS (Next.js)** — Staff UI + API routes + gRPC client for the accounting ledger. Talks to Postgres via the `@payloadcms/db-postgres` adapter (`pg.Pool` under the hood).
+2. **Python Event Processor** — Consumes events from Redis (`inbox:billie-servicing`), writes to Postgres via `asyncpg` using the Billie Event SDKs (installed from `github.com/BillieLoans/billie-event-sdks`) as Pydantic parsers.
 
 ### Data flow — read/write split
-- **Reads**: Payload reads from MongoDB (collections) and gRPC (ledger service for transactions/balances)
-- **Writes to MongoDB**: Only the Python event processor writes domain data (accounts, customers, conversations) — Payload treats these collections as **read-only projections**. Do not add Payload hooks or API routes that mutate these collections directly.
-- **Writes to Ledger**: Payload API routes (`src/app/api/ledger/`) call gRPC to post transactions (repayments, fees, write-offs, adjustments)
+- **Reads**: Payload reads from Postgres (collections) and gRPC (ledger service for transactions/balances).
+- **Writes to Postgres**: Only the Python event processor writes domain data (accounts, customers, conversations) — Payload treats these collections as **read-only projections** via `create/update/delete: () => false` access. Do not add Payload hooks or API routes that mutate these collections directly.
+- **Writes to Ledger**: Payload API routes (`src/app/api/ledger/`) call gRPC to post transactions (repayments, fees, write-offs, adjustments).
 - **CRM-originated events**: Payload publishes events to Redis stream `inbox:billie-servicing:internal` via `src/server/event-publisher.ts`. The Python processor consumes these alongside external events.
+
+### Schema and the `afterSchemaInit` hook
+Payload's pg adapter generates child tables for `type: 'array'` fields and flattens `type: 'group'` into columns. A few constraints can't be expressed in the collection config and live in `payload.config.ts`'s `afterSchemaInit` hook:
+- Composite unique on `loan_accounts_repayment_schedule_payments (_parent_id, payment_number)` — natural key for the Python upserts.
+- Compound btree indexes on `conversations(status, decision_status, updated_at DESC)` and `(customer_id_string, updated_at DESC)` for the monitoring grid.
 
 ### Key architectural patterns
 
@@ -94,9 +99,11 @@ Ledger operations live under `api/ledger/` (repayment, waive-fee, write-off, lat
 - **Rich text**: Tiptap editor for contact notes / conversation display
 - **Next.js config**: Uses `withPayload()` wrapper in `next.config.mjs`, standalone output for Docker
 - **Test files**: Unit tests in `tests/unit/**/*.test.ts(x)`, integration tests in `tests/int/**/*.int.spec.ts`, e2e in `tests/e2e/`. Test helpers in `tests/utils/`.
-- **Vitest config**: Tests run sequentially (no file parallelism) to avoid MongoDB race conditions. Uses jsdom environment.
+- **Vitest config**: `tests/utils/globalSetup.ts` spins up a real Postgres container via `@testcontainers/postgresql` and runs Payload's `push:true` schema sync before any test executes. Tests run sequentially (no file parallelism) since the pg pool is shared. Uses jsdom environment.
 - **Generated files**: `src/payload-types.ts` and `src/app/(payload)/admin/importMap.js` are auto-generated — run `pnpm generate:types` and `pnpm generate:importmap` after changing collections or registered components
 
 ## Environment
 
-Requires MongoDB, Redis, and optionally the gRPC ledger service running locally. See `.env` for connection strings. When running in Docker, use `host.docker.internal` instead of `localhost`. The `NEXT_PUBLIC_APP_URL` env var must match the server URL for Payload cookie/auth to work correctly.
+Requires Postgres (Neon in prod, local Docker container in dev), Redis, and optionally the gRPC ledger service running locally. `DATABASE_URI` uses the standard libpq URL format (`postgresql://user:pass@host:port/db?sslmode=require`) — same string works for both the Payload pg adapter and the Python `asyncpg.create_pool`. When running in Docker, use `host.docker.internal` instead of `localhost`. The `NEXT_PUBLIC_APP_URL` env var must match the server URL for Payload cookie/auth to work correctly.
+
+The event-processor's `db.py` exposes shared helpers (`upsert`, `update_by_key`, `upsert_conversation`, `merge_jsonb`, `coerce_date`) used by every handler — when writing new handlers, prefer these over raw SQL to keep upsert semantics, version-increment, and date coercion consistent.

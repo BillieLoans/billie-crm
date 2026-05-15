@@ -1185,7 +1185,7 @@ export interface Notification {
    * Populated when status is "suppression_change"
    */
   suppression?: {
-    mode?: ('all' | 'non_essential' | 'marketing_only' | 'off') | null;
+    mode?: ('all' | 'non_essential' | 'marketing_only' | 'panic_button' | 'off') | null;
     reason?: string | null;
     setBy?: string | null;
     setAt?: string | null;

@@ -2,81 +2,90 @@
 
 from unittest.mock import AsyncMock, MagicMock
 
+import asyncpg
 import pytest
-from pymongo.errors import OperationFailure, ServerSelectionTimeoutError
 
 from billie_servicing.processor import EventProcessor
 
 
 def _mock_redis_client() -> MagicMock:
-    """Create a mock Redis client with a healthy ping."""
     client = MagicMock()
     client.ping = AsyncMock(return_value=True)
     client.close = AsyncMock()
     return client
 
 
-def _mock_mongo_client(command_side_effect: Exception | None = None) -> tuple[MagicMock, MagicMock]:
-    """Create a mock Mongo client and db with configurable ping behavior."""
-    mongo_client = MagicMock()
-    db = MagicMock()
-    if command_side_effect is None:
-        db.command = AsyncMock(return_value={"ok": 1})
+def _mock_pool(fetchval_side_effect: Exception | None = None) -> MagicMock:
+    """Mock an asyncpg.Pool. The acquire() context manager returns a mock
+    connection whose fetchval optionally raises ``fetchval_side_effect``."""
+    conn = MagicMock()
+    if fetchval_side_effect is None:
+        conn.fetchval = AsyncMock(return_value=1)
     else:
-        db.command = AsyncMock(side_effect=command_side_effect)
-    mongo_client.__getitem__.return_value = db
-    mongo_client.close = MagicMock()
-    return mongo_client, db
+        conn.fetchval = AsyncMock(side_effect=fetchval_side_effect)
+
+    acquire_ctx = MagicMock()
+    acquire_ctx.__aenter__ = AsyncMock(return_value=conn)
+    acquire_ctx.__aexit__ = AsyncMock(return_value=None)
+
+    pool = MagicMock()
+    pool.acquire = MagicMock(return_value=acquire_ctx)
+    pool.close = AsyncMock()
+    return pool
 
 
 @pytest.mark.asyncio
-async def test_connect_fails_fast_on_mongo_auth_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Auth/permission errors are non-transient and should not retry forever."""
+async def test_connect_fails_fast_on_pg_auth_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Auth errors should fail fast — no retry sleep."""
     processor = EventProcessor()
-
     redis_client = _mock_redis_client()
-    mongo_client, _ = _mock_mongo_client(
-        OperationFailure("Authentication failed.", code=18),
-    )
 
-    mongo_factory = MagicMock(return_value=mongo_client)
+    # create_pool raises an auth error → processor should re-raise immediately.
+    create_pool_mock = AsyncMock(
+        side_effect=asyncpg.InvalidPasswordError("password authentication failed")
+    )
     sleep_mock = AsyncMock()
 
-    monkeypatch.setattr("billie_servicing.processor.redis.from_url", lambda *args, **kwargs: redis_client)
-    monkeypatch.setattr("billie_servicing.processor.AsyncIOMotorClient", mongo_factory)
+    monkeypatch.setattr(
+        "billie_servicing.processor.redis.from_url",
+        lambda *args, **kwargs: redis_client,
+    )
+    monkeypatch.setattr("billie_servicing.processor.asyncpg.create_pool", create_pool_mock)
     monkeypatch.setattr("billie_servicing.processor.asyncio.sleep", sleep_mock)
 
-    with pytest.raises(OperationFailure):
+    with pytest.raises(asyncpg.InvalidPasswordError):
         await processor._connect()
 
-    assert mongo_factory.call_count == 1
+    assert create_pool_mock.call_count == 1
     sleep_mock.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_connect_retries_transient_mongo_error_then_succeeds(
+async def test_connect_retries_transient_pg_error_then_succeeds(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Transient Mongo connectivity errors should back off and retry."""
+    """Transient connectivity errors back off and retry until success."""
     processor = EventProcessor()
-
     redis_client = _mock_redis_client()
-    mongo_client_1, _ = _mock_mongo_client(
-        ServerSelectionTimeoutError("Server selection timeout"),
-    )
-    mongo_client_2, mongo_db_2 = _mock_mongo_client()
 
-    mongo_factory = MagicMock(side_effect=[mongo_client_1, mongo_client_2])
+    healthy_pool = _mock_pool()
+    create_pool_mock = AsyncMock(
+        side_effect=[
+            asyncpg.CannotConnectNowError("server is starting up"),
+            healthy_pool,
+        ]
+    )
     sleep_mock = AsyncMock()
 
-    monkeypatch.setattr("billie_servicing.processor.redis.from_url", lambda *args, **kwargs: redis_client)
-    monkeypatch.setattr("billie_servicing.processor.AsyncIOMotorClient", mongo_factory)
+    monkeypatch.setattr(
+        "billie_servicing.processor.redis.from_url",
+        lambda *args, **kwargs: redis_client,
+    )
+    monkeypatch.setattr("billie_servicing.processor.asyncpg.create_pool", create_pool_mock)
     monkeypatch.setattr("billie_servicing.processor.asyncio.sleep", sleep_mock)
 
     await processor._connect()
 
-    assert mongo_factory.call_count == 2
+    assert create_pool_mock.call_count == 2
     sleep_mock.assert_awaited_once_with(1)
-    mongo_client_1.close.assert_called_once()
-    assert processor.mongo is mongo_client_2
-    assert processor.db is mongo_db_2
+    assert processor.pool is healthy_pool

@@ -26,25 +26,39 @@ logger = structlog.get_logger()
 
 
 def _check_tls_urls(redis_url: str, database_uri: str) -> None:
-    """Warn if non-TLS connection URLs are used in production.
+    """Fail fast in production if connection URLs are misconfigured.
 
-    In production (NODE_ENV=production), Redis should use rediss:// and
-    Postgres should include sslmode=require (Neon defaults to this).
+    In production (``NODE_ENV=production``) we enforce three rules:
+    - Redis MUST use ``rediss://``
+    - Postgres URI MUST contain ``sslmode=require`` (or ``sslmode=verify-full``)
+    - Postgres URI MUST NOT reference ``localhost`` — guards against a
+      misconfigured deployment falling through to a co-located dev DB.
+
+    All three raise ``ValueError`` and abort startup so the process exits
+    rather than silently running against unencrypted or local credentials.
     """
     if os.environ.get("NODE_ENV") != "production":
         return
 
     if redis_url and not redis_url.startswith("rediss://"):
         raise ValueError(
-            f"Redis URL must use TLS (rediss://) in production, "
-            f"got scheme: {redis_url.split('://')[0] if '://' in redis_url else 'unknown'}"
+            "Redis URL must use TLS (rediss://) in production, got scheme: "
+            f"{redis_url.split('://')[0] if '://' in redis_url else 'unknown'}"
         )
 
-    if database_uri and "sslmode=require" not in database_uri:
-        logger.warning(
-            "Postgres URI does not appear to require TLS in production "
-            "(expected sslmode=require in the connection string)",
-            url_scheme=database_uri.split("://")[0] if "://" in database_uri else "unknown",
+    if not database_uri:
+        raise ValueError("DATABASE_URI is required in production")
+
+    if "sslmode=require" not in database_uri and "sslmode=verify-full" not in database_uri:
+        raise ValueError(
+            "DATABASE_URI must include sslmode=require (or verify-full) in production"
+        )
+
+    lowered = database_uri.lower()
+    if "@localhost" in lowered or "@127.0.0.1" in lowered or "@host.docker.internal" in lowered:
+        raise ValueError(
+            "DATABASE_URI must not reference localhost / 127.0.0.1 / host.docker.internal "
+            "in production"
         )
 
 
