@@ -36,7 +36,11 @@ export async function setup({ provide }: GlobalSetupContext) {
 
   // Provide the URI to test files via vitest's inject() API.
   provide('pgUri', uri)
-  console.log(`[globalSetup] Postgres ready at ${uri}`)
+  // Redact credentials from the log line — these are ephemeral test creds,
+  // but the pattern protects against the same log being copied into a
+  // setup that uses a real DSN. Mirror the helper in event-processor/main.py.
+  const redacted = uri.replace(/:\/\/[^@]*@/, '://***@')
+  console.log(`[globalSetup] Postgres ready at ${redacted}`)
 }
 
 export async function teardown() {
