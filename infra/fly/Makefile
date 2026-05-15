@@ -48,7 +48,8 @@ define PROD_CHECK
 endef
 
 .PHONY: help info validate check-config check-secrets preflight init create-app allocate-ip ips secrets \
-        secrets-list deploy deploy-local scale-count restart logs status scale ssh clean destroy
+        secrets-list deploy deploy-local scale-count restart logs status scale ssh clean destroy \
+        pg-migrate-create pg-migrate pg-replay-reset verify-cutover
 
 help:
 	@echo ""
@@ -73,9 +74,17 @@ help:
 	@echo "  scale        Show scale configuration"
 	@echo "  ssh          Open SSH console"
 	@echo ""
+	@echo "Postgres cutover (see cutover-postgres.md for the full runbook):"
+	@echo "  pg-migrate-create  Generate a new migration from the current schema"
+	@echo "  pg-migrate         Apply migrations on the deployed app"
+	@echo "  pg-replay-reset    Destroy Redis consumer group + flush dedup keys for replay"
+	@echo "  verify-cutover     Print pg row counts across every collection table"
+	@echo ""
 	@echo "Examples:"
 	@echo "  make -C infra/fly deploy ENV=demo GITHUB_TOKEN=\"ghp_xxx\""
 	@echo "  make -C infra/fly deploy ENV=prod CONFIRM=1 GITHUB_TOKEN=\"ghp_xxx\""
+	@echo "  make -C infra/fly pg-migrate ENV=demo"
+	@echo "  make -C infra/fly pg-replay-reset ENV=prod CONFIRM=1"
 	@echo ""
 
 info:
@@ -212,3 +221,72 @@ destroy:
 		echo "Confirmation failed. Aborting."; \
 		exit 1; \
 	fi
+
+# =============================================================================
+# Postgres cutover targets — see cutover-postgres.md for the full runbook.
+# Each target is idempotent and either:
+#   - runs locally (pg-migrate-create), or
+#   - opens a single `fly ssh` session that executes a single SQL/redis-cli
+#     command, so the operator sees output and can abort cleanly.
+# =============================================================================
+
+# Generate a Drizzle/Payload migration capturing schema drift from the
+# committed migrations. Run AGAINST LOCAL POSTGRES — the migration files
+# go into src/migrations/ and are committed to git, then applied to
+# deployed environments via `pg-migrate`.
+#
+# Requires DATABASE_URI pointed at a local pg matching the deployed shape.
+pg-migrate-create:
+	@if [ -z "$$DATABASE_URI" ]; then \
+		echo "Set DATABASE_URI to a local Postgres before running pg-migrate-create."; \
+		exit 1; \
+	fi
+	@cd "$(WORKTREE_ROOT)" && pnpm payload migrate:create --name "$(or $(NAME),change)"
+
+# Apply pending Payload migrations on the deployed app. Uses `fly ssh
+# console` so the migration runs inside the live container (same network,
+# same env, same secrets). Production requires CONFIRM=1.
+pg-migrate:
+	$(call PROD_CHECK,pg-migrate)
+	@echo "Applying Payload migrations on $(APP_NAME)..."
+	@fly ssh console -a "$(APP_NAME)" -C "pnpm payload migrate"
+
+# Destroy the Redis consumer group and flush dedup keys so the next
+# event-processor start replays the stream from id=0. Run AFTER ETL is
+# complete and BEFORE flipping the DATABASE_URI secret.
+pg-replay-reset:
+	$(call PROD_CHECK,pg-replay-reset)
+	@echo "Destroying consumer groups + flushing dedup keys on $(APP_NAME)..."
+	@fly ssh console -a "$(APP_NAME)" -C "sh -lc '\
+		set -e; \
+		echo \"[reset] XGROUP DESTROY (external)\"; \
+		redis-cli -u \"$$REDIS_URL\" XGROUP DESTROY inbox:billie-servicing billie-servicing-processor || true; \
+		echo \"[reset] XGROUP DESTROY (internal)\"; \
+		redis-cli -u \"$$REDIS_URL\" XGROUP DESTROY inbox:billie-servicing:internal billie-servicing-processor || true; \
+		echo \"[reset] Counting dedup keys\"; \
+		DK=$$(redis-cli -u \"$$REDIS_URL\" --scan --pattern \"dedup:inbox:billie-servicing*\" | wc -l); \
+		echo \"[reset] Deleting $$DK dedup keys\"; \
+		redis-cli -u \"$$REDIS_URL\" --scan --pattern \"dedup:inbox:billie-servicing*\" | xargs -L 100 redis-cli -u \"$$REDIS_URL\" DEL >/dev/null 2>&1 || true; \
+		echo \"[reset] Done.\"\
+	'"
+
+# Print pg row counts across every projection + CRM-owned table on the
+# deployed Postgres. Run after cutover replay to validate parity with
+# the pre-cutover Mongo snapshot.
+verify-cutover:
+	@echo "Counting rows on $(APP_NAME)'s Postgres..."
+	@fly ssh console -a "$(APP_NAME)" -C "sh -lc '\
+		set -e; \
+		psql \"$$DATABASE_URI\" -c \"\
+		SELECT '\''users'\'' AS tbl, COUNT(*) FROM users UNION ALL \
+		SELECT '\''customers'\'', COUNT(*) FROM customers UNION ALL \
+		SELECT '\''loan_accounts'\'', COUNT(*) FROM loan_accounts UNION ALL \
+		SELECT '\''schedule_payments'\'', COUNT(*) FROM loan_accounts_repayment_schedule_payments UNION ALL \
+		SELECT '\''conversations'\'', COUNT(*) FROM conversations UNION ALL \
+		SELECT '\''applications'\'', COUNT(*) FROM applications UNION ALL \
+		SELECT '\''notifications'\'', COUNT(*) FROM notifications UNION ALL \
+		SELECT '\''write_off_requests'\'', COUNT(*) FROM write_off_requests UNION ALL \
+		SELECT '\''contact_notes'\'', COUNT(*) FROM contact_notes UNION ALL \
+		SELECT '\''media'\'', COUNT(*) FROM media ORDER BY tbl;\
+		\"\
+	'"
