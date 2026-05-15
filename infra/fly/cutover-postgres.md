@@ -1,8 +1,12 @@
 # Postgres Cutover Runbook
 
-This is the playbook for moving a deployed billie-crm environment from MongoDB to Postgres (Neon). It assumes the code on `main` is already on the Postgres branch — Phases 1–4 + 6 in `~/.claude/plans/ok-plan-out-this-lovely-flute.md`.
+Playbook for moving a deployed billie-crm environment from MongoDB to Postgres (Neon). The code on `main` is already on the Postgres branch.
 
-Run this in order. Each step has a single `make` target and a single visible side-effect; if anything looks wrong, **stop** and fall back to "Rollback" at the bottom.
+**Everything in this runbook runs from your laptop.** Neon DSNs are publicly reachable over TLS, so `psql` + `pnpm payload migrate` work from anywhere. The only step that touches the deployed Fly container is `pg-replay-reset` (Redis is on Fly's private network) — and even that can be done via `fly proxy` from the laptop.
+
+The deployed image is **not** required to have `pnpm`, `psql`, or `redis-cli` baked in. Older images work fine; new ones are nice-to-have for ad-hoc debugging.
+
+---
 
 ## What gets cut over
 
@@ -12,66 +16,113 @@ Total downtime: **~5–10 minutes** for demo, **~10–20 minutes** for prod (mos
 
 ---
 
-## 0. Pre-flight (do this the day before)
-
-Done once per environment. Idempotent — safe to re-run.
+## Laptop prerequisites (one-time setup)
 
 ```bash
-# Provision the Neon database. We don't script this — use the Neon UI:
-#   1. Create a project (or branch off an existing project)
-#   2. Create role `billie_crm` with a password
-#   3. Create database `billie_crm` owned by that role
-#   4. Note the pooled connection string (host has `-pooler` in it).
-#      It MUST include sslmode=require — the processor refuses to start
-#      otherwise in production.
+# Postgres client
+brew install postgresql       # macOS; or `apt install postgresql-client`
 
-# Update the Fly secrets template with the new DSN
-$EDITOR infra/fly/env/.env.<env>
-#   → DATABASE_URI=postgresql://billie_crm:<pwd>@ep-xxx-pooler.<region>.aws.neon.tech/billie_crm?sslmode=require
+# Redis client (only needed for pg-replay-reset via fly proxy)
+brew install redis            # or `apt install redis-tools`
 
-# Apply the schema before cutover (push:false in prod — uses migration files).
-make -C infra/fly pg-migrate ENV=<env>   # for prod add CONFIRM=1
-#   → fly ssh into the app, runs `pnpm payload migrate`
-#   → creates all 28 tables + indexes + afterSchemaInit composite uniques
-#   → takes ~10 seconds on an empty Neon DB
+# Already required for this repo
+pnpm install                  # runs from the repo root
+fly auth login                # flyctl auth
 
-# Sanity check
-make -C infra/fly verify-cutover ENV=<env>
-#   → prints pg row counts. All zeros at this stage — that's expected.
+# Verify
+psql --version
+redis-cli --version
+pnpm --version
+fly version
 ```
 
-If the `pg-migrate` step fails on a partial schema (e.g. you ran `push:true` against the same DB by accident), wipe and retry: `DROP SCHEMA public CASCADE; CREATE SCHEMA public;` via psql, then re-run.
+You also need the local `billie-platform-crm` Docker container running — that's where the Python ETL executes (it has `motor` + `asyncpg` installed; your host doesn't need them).
+
+```bash
+docker compose up -d          # from the repo root
+```
+
+---
+
+## 0. Pre-flight (do this the day before)
+
+Idempotent. Safe to re-run.
+
+### 0a. Provision Neon (browser)
+
+Use the Neon UI:
+
+1. Create a project (or branch off an existing project for non-prod envs).
+2. Create role `billie_crm` with a password.
+3. Create database `billie_crm` owned by that role.
+4. Copy the **pooled** connection string (host has `-pooler` in it).
+5. Append `?sslmode=require` if not already present. The processor refuses to start in production without TLS.
+
+### 0b. Write the new DSN into the Fly secrets template
+
+```bash
+$EDITOR infra/fly/env/.env.<env>
+#   DATABASE_URI=postgresql://billie_crm:<pwd>@ep-xxx-pooler.<region>.aws.neon.tech/billie_crm?sslmode=require
+```
+
+`make pg-migrate` and `make verify-cutover` read `DATABASE_URI` directly from this file — you don't need to export it in your shell.
+
+### 0c. Apply the schema
+
+```bash
+make -C infra/fly pg-migrate ENV=<env>          # CONFIRM=1 for prod
+```
+
+This runs `pnpm payload migrate` from your laptop with `DATABASE_URI` pointed at the new Neon DB. Creates all 28 tables + every index + the three `afterSchemaInit` composite/compound indexes. Takes ~10 seconds on an empty DB.
+
+> **If pg-migrate fails on a partial / out-of-sync schema** (e.g. someone ran `push:true` against the same DB by accident), wipe and retry:
+> ```bash
+> make -C infra/fly pg-wipe ENV=<env>      # DROP SCHEMA public CASCADE + recreate
+> make -C infra/fly pg-migrate ENV=<env>
+> ```
+
+### 0d. Verify the schema is materialised
+
+```bash
+make -C infra/fly verify-cutover ENV=<env>
+```
+
+Should print ten rows, all counts `0`. If it errors with `relation "users" does not exist`, the migration in step 0c didn't run — fix that before proceeding.
 
 ---
 
 ## 1. Freeze writes
 
 ```bash
-# Demo or prod, scale the app to 0 so nothing new writes to Mongo.
 fly scale count 0 -a billie-crm-<env> --region syd
 ```
 
-Watch `fly status` until both machines show `stopped`. Mongo is now the source of truth as of the moment you stopped traffic.
+Watch `fly status -a billie-crm-<env>` until machines show `stopped`. Mongo is now the source of truth as of the moment you stopped traffic.
 
 ---
 
 ## 2. ETL the three CRM-owned collections
 
-This pulls from Mongo and lands in Neon. Re-runnable.
+Runs the Python ETL inside the local `billie-platform-crm` Docker container (which has `motor` + `asyncpg`). Re-runnable.
 
 ```bash
-# Run from a machine that can reach both Mongo and Neon. Easiest is the
-# stopped Fly app machine — `fly machine start` one of them in maintenance
-# mode (no public traffic) and `fly ssh console`.
+# MONGO_URI must be exported — it's not in the Fly secrets template since
+# Mongo is going away. Use whichever URL reaches your deployed Mongo
+# from your laptop (typically `mongodb+srv://...` for Atlas, or a tunnel).
+export MONGO_URI="mongodb://host.docker.internal:27017/billie-servicing"
+# DATABASE_URI is read from .env.<env> automatically.
 
-# Inside the machine:
-python3 /app/scripts/etl-mongo-to-pg.py \
-    --mongo "$MONGO_URI" \
-    --pg    "$DATABASE_URI" \
-    --collection all
+make -C infra/fly pg-etl ENV=<env>              # CONFIRM=1 for prod
+# To migrate one collection at a time:
+make -C infra/fly pg-etl ENV=<env> COLLECTION=users
+make -C infra/fly pg-etl ENV=<env> COLLECTION=media
+make -C infra/fly pg-etl ENV=<env> COLLECTION=contact_notes
 ```
 
-Expected output: a per-collection migrated/skipped count. Investigate any non-zero `skipped` count on `contact_notes` (usually means a `createdBy` FK couldn't resolve — typically because the matching user wasn't in Mongo either).
+Watch for two failure modes:
+
+- **`UndefinedTableError: relation "users" does not exist`** → step 0c didn't run. Re-run `make pg-migrate ENV=<env>`.
+- **Non-zero `skipped` count on `contact_notes`** → A `createdBy` FK couldn't resolve, usually because the referenced user wasn't in Mongo either. The script prints each skipped note's Mongo ObjectId; spot-check before continuing.
 
 Estimated time: **30s–2min** depending on contact-notes volume.
 
@@ -79,33 +130,43 @@ Estimated time: **30s–2min** depending on contact-notes volume.
 
 ## 3. Reset the Redis consumer group
 
-This is what triggers projection rebuild — destroying the consumer group makes the next processor start from `id=0` of each stream.
+Destroys the consumer group and dedup keys so the next event-processor start replays the stream from `id=0`.
+
+Redis lives on Fly's private network — this is the **one** step that needs either `fly proxy` from your laptop or `fly ssh` into a deployed machine.
+
+### Option A: via the deployed container (post-9ed38e1 images have `redis-cli`)
 
 ```bash
-make -C infra/fly pg-replay-reset ENV=<env>   # CONFIRM=1 for prod
+make -C infra/fly pg-replay-reset ENV=<env>     # CONFIRM=1 for prod
 ```
 
-What it runs (inside `fly ssh`):
+This `fly ssh`'s into the app and runs `redis-cli` there. Only works if the deployed image was built from `Dockerfile.demo` at or after commit `9ed38e1` (when `redis` was added to the base image).
 
-```
-XGROUP DESTROY inbox:billie-servicing billie-servicing-processor
-XGROUP DESTROY inbox:billie-servicing:internal billie-servicing-processor
-# plus delete all dedup:inbox:billie-servicing:* keys
+### Option B: laptop with `fly proxy` (works for any image)
+
+```bash
+# In one terminal — forward the env's Redis to localhost:
+fly proxy 6379:6379 -a <your-redis-app>
+
+# In another terminal — run the reset against localhost:6379:
+redis-cli -h localhost -p 6379 XGROUP DESTROY inbox:billie-servicing billie-servicing-processor
+redis-cli -h localhost -p 6379 XGROUP DESTROY inbox:billie-servicing:internal billie-servicing-processor
+redis-cli -h localhost -p 6379 --scan --pattern 'dedup:inbox:billie-servicing*' | xargs -L 100 redis-cli -h localhost -p 6379 DEL
 ```
 
-After this, both consumer groups are gone and dedup is clear. The processor on next start will recreate the groups at `id=0` and replay everything in the stream.
+After either path: both consumer groups are gone and dedup is clear. The processor on next start will recreate the groups at `id=0` and replay everything in the stream.
 
 ---
 
 ## 4. Flip the DATABASE_URI secret
 
-The `.env.<env>` file already has the new Neon URL (from step 0). Push it.
+The `.env.<env>` file already has the new Neon URL (from step 0b). Push it.
 
 ```bash
-make -C infra/fly secrets ENV=<env>   # CONFIRM=1 for prod
+make -C infra/fly secrets ENV=<env>             # CONFIRM=1 for prod
 ```
 
-Fly re-imports the secrets. App machines pick it up on next start.
+Fly re-imports the secrets file. App machines pick up the new value on next start.
 
 ---
 
@@ -132,22 +193,20 @@ Expected sequence (within ~30s):
 5. `Event processor started`
 6. `📥 [external] Received event: ...` for each event in the stream (8k+ on prod)
 
-The replay takes 1–10 minutes depending on stream depth. Watch the row counts climb in step 6 below.
+The replay takes 1–10 minutes depending on stream depth.
 
 ---
 
 ## 6. Verify
 
 ```bash
-# Print pg row counts side-by-side with whatever you captured from Mongo
-# pre-cutover (e.g. `mongoexport --quiet --collection X | wc -l`).
 make -C infra/fly verify-cutover ENV=<env>
 ```
 
 The verifier prints counts for every projection table plus the three ETL'd ones. Acceptable ranges:
 
-- **users / contact_notes / media** — should match Mongo exactly (we ETL'd them)
-- **write_off_requests** — should match Mongo (event-sourced, but every event was in stream)
+- **users / contact_notes / media** — should match Mongo exactly (we ETL'd them).
+- **write_off_requests** — should match Mongo (event-sourced; every event was in stream).
 - **customers / loan_accounts / conversations / applications / notifications** — likely within ~5% of Mongo. Drift is expected when the Redis stream retention is shorter than the oldest Mongo doc.
 
 A drift of 10%+ is suspicious. Compare a sample of records by natural key to look for missing IDs.
@@ -156,11 +215,11 @@ A drift of 10%+ is suspicious. Compare a sample of records by natural key to loo
 
 ## 7. Smoke test in the admin UI
 
-- `https://crm-<env>.billie.loans/admin/login` — sign in with existing creds
-- Dashboard renders, money-flow widgets have today's numbers
-- Customers list loads, open a customer with known history
-- Conversations monitor loads, paginate forward 2 pages
-- Open a known contact note, hit Amend — confirms `payload.db.updateOne` works
+- `https://crm-<env>.billie.loans/admin/login` — sign in with existing creds.
+- Dashboard renders; money-flow widgets show today's numbers.
+- Customers list loads; open a customer with known history.
+- Conversations monitor loads; paginate forward 2 pages.
+- Open a known contact note; hit Amend — confirms `payload.db.updateOne` works.
 
 ---
 
@@ -185,6 +244,6 @@ Both DBs persist independently — the cutover is non-destructive on the Mongo s
 
 ## After 1 week of green
 
-- Decommission the Mongo cluster (`fly apps destroy billie-mongo-<env>` or equivalent, depending on how it was hosted).
-- Remove the `MONGO_URI` env var entry from `infra/fly/env/.env.<env>`.
+- Decommission the Mongo cluster (`fly apps destroy billie-mongo-<env>` or equivalent).
+- Remove any `MONGO_URI` references from local docs.
 - Update the deploy README / wiki to point at Neon.
