@@ -14,12 +14,14 @@ class Settings(BaseSettings):
     consumer_group: str = "billie-servicing-processor"
     dlq_stream: str = "dlq:billie-servicing"
 
-    # MongoDB configuration
+    # Postgres configuration (asyncpg pool)
     database_uri: str = Field(
-        default="mongodb://localhost:27017/billie-servicing",
+        default="postgresql://billie_crm:billie_dev_password@localhost:5432/billie_crm",
         validation_alias="DATABASE_URI",
     )
-    db_name: str = "billie-servicing"
+    # Kept for the startup banner only — the Postgres URI carries its own
+    # database name so this is informational. Defaults to the Postgres DB.
+    db_name: str = "billie_crm"
 
     # Processing configuration
     max_retries: int = 3

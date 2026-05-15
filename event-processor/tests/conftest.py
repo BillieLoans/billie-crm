@@ -1,13 +1,9 @@
 """Pytest configuration and fixtures for event processor tests.
 
-The Mongo → Postgres migration changed handler signatures from
-``handler(db: AsyncIOMotorDatabase, event)`` to
-``handler(pool: asyncpg.Pool, event)``.
-
-``mock_pool`` is the new fixture. ``mock_db`` is preserved as an alias for
-legacy test imports. The ``MockPool`` records every SQL call and exposes
-table-aware helpers so tests can assert on the projected document shape
-without parsing SQL by hand.
+Handlers take an ``asyncpg.Pool``. The ``MockPool`` fixture records every
+SQL call into structured ``ParsedCall`` objects (op + table + values +
+WHERE + ON CONFLICT) so tests can assert on table-level shapes without
+parsing SQL by hand.
 """
 
 from __future__ import annotations
@@ -15,9 +11,8 @@ from __future__ import annotations
 import asyncio
 import re
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -316,14 +311,3 @@ class MockPool:
 @pytest.fixture
 def mock_pool() -> MockPool:
     return MockPool()
-
-
-@pytest.fixture
-def mock_db(mock_pool: MockPool) -> MockPool:
-    """Legacy alias preserved so tests using ``mock_db`` keep collecting."""
-    return mock_pool
-
-
-# Stand-in objects for legacy MockDatabase / MockCollection imports.
-MockDatabase = MockPool
-MockCollection = MagicMock
