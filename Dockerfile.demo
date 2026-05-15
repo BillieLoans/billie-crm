@@ -8,13 +8,18 @@
 
 FROM node:22-alpine AS base
 
-# Install Python and dependencies in base image
+# Install Python and dependencies in base image. redis + postgresql-client
+# come along so the cutover Make targets (pg-migrate, pg-replay-reset,
+# verify-cutover — see infra/fly/cutover-postgres.md) can run via
+# `fly ssh console -C` against the deployed container.
 RUN apk add --no-cache \
     python3 \
     py3-pip \
     git \
     bash \
-    libc6-compat
+    libc6-compat \
+    redis \
+    postgresql-client
 
 # =============================================================================
 # Dependencies stage - install Node.js packages
