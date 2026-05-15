@@ -132,8 +132,11 @@ export default buildConfig({
   },
   db: postgresAdapter({
     pool: {
-      connectionString:
-        process.env.DATABASE_URI || 'postgresql://billie_crm:billie_dev_password@localhost:5432/billie_crm',
+      // The fallback is intentionally credential-less so missing
+      // DATABASE_URI in any deployed environment fails at connect time
+      // rather than silently using a baked-in dev password. Set
+      // DATABASE_URI explicitly via the runtime env (see .env.example).
+      connectionString: process.env.DATABASE_URI || 'postgresql://localhost:5432/billie_crm',
     },
     idType: 'uuid',
     push: process.env.NODE_ENV !== 'production',

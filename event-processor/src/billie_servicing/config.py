@@ -14,13 +14,17 @@ class Settings(BaseSettings):
     consumer_group: str = "billie-servicing-processor"
     dlq_stream: str = "dlq:billie-servicing"
 
-    # Postgres configuration (asyncpg pool)
+    # Postgres configuration (asyncpg pool). The default is a credential-less
+    # localhost URI so a misconfigured deployment fails at connect time
+    # rather than silently using a baked-in dev password. Set DATABASE_URI
+    # explicitly in every environment (see .env.example). Production
+    # additionally enforces sslmode=require in processor._check_tls_urls.
     database_uri: str = Field(
-        default="postgresql://billie_crm:billie_dev_password@localhost:5432/billie_crm",
+        default="postgresql://localhost:5432/billie_crm",
         validation_alias="DATABASE_URI",
     )
     # Kept for the startup banner only — the Postgres URI carries its own
-    # database name so this is informational. Defaults to the Postgres DB.
+    # database name so this is informational.
     db_name: str = "billie_crm"
 
     # Processing configuration
