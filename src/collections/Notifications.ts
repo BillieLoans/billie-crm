@@ -222,6 +222,7 @@ export const Notifications: CollectionConfig = {
             { label: 'All notifications paused', value: 'all' },
             { label: 'Non-essential paused', value: 'non_essential' },
             { label: 'Marketing only paused', value: 'marketing_only' },
+            { label: 'Panic button (emergency stop)', value: 'panic_button' },
             { label: 'Cleared / re-enabled', value: 'off' },
           ],
           admin: { readOnly: true },

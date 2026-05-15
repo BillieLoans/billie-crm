@@ -73,6 +73,8 @@ export const WriteOffRequests: CollectionConfig = {
     {
       name: 'requestId',
       type: 'text',
+      required: true,
+      unique: true,
       index: true,
       admin: {
         description: 'Event correlation ID (conv field). Groups related events in a workflow.',

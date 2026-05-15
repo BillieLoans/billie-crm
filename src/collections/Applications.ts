@@ -34,7 +34,9 @@ export const Applications: CollectionConfig = {
       name: 'customerId',
       type: 'relationship',
       relationTo: 'customers',
-      required: true,
+      // Nullable so the event processor can land an application before the
+      // matching customer.created.v1 event has been projected. Backfilled
+      // when the customer arrives or via a later applicationDetail_changed.
       admin: {
         readOnly: true,
       },
@@ -154,6 +156,7 @@ export const Applications: CollectionConfig = {
         {
           name: 'applicationProcessState',
           type: 'array',
+          dbName: 'app_proc_state',
           label: 'Process Stages',
           fields: [
             {
