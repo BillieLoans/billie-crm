@@ -9,16 +9,16 @@ export default defineConfig({
     globalSetup: ['./tests/utils/globalSetup.ts'],
     setupFiles: ['./vitest.setup.ts'],
     include: ['tests/int/**/*.int.spec.ts', 'tests/unit/**/*.test.ts', 'tests/unit/**/*.test.tsx'],
-    // Run test files sequentially to avoid MongoDB race conditions
+    // Run test files sequentially — Payload's pg pool is shared and the
+    // schema push happens once in globalSetup.
     fileParallelism: false,
-    // Also run tests within files sequentially
     sequence: {
       concurrent: false,
     },
-    // Handle CSS imports from node_modules
     css: true,
-    // Integration tests need more time to initialize Payload + MongoMemoryServer
-    hookTimeout: 30000,
+    // Integration tests need extra time to pull the postgres image, start
+    // the testcontainer, and run Payload's push:true schema sync against it.
+    hookTimeout: 120000,
     // Single-threaded so globalSetup env vars are inherited by tests
     pool: 'forks',
     poolOptions: {
