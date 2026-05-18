@@ -1,6 +1,9 @@
-# Postgres Cutover Runbook
+# Postgres Setup & Cutover Runbook
 
-Playbook for moving a deployed billie-crm environment from MongoDB to Postgres (Neon). The code on `main` is already on the Postgres branch.
+Two flows in here:
+
+- **Greenfield environment setup** — standing up a brand-new env that has never had Mongo (fresh prod, fresh dev for a new business unit, etc.). Jump to [Greenfield environment setup](#greenfield-environment-setup) below.
+- **Cutover from an existing Mongo-backed env to Postgres (Neon)** — the original migration playbook. Start at [Laptop prerequisites](#laptop-prerequisites-one-time-setup) and walk through steps 0–7.
 
 **Everything in this runbook runs from your laptop.** Neon DSNs are publicly reachable over TLS, so `psql` + `pnpm payload migrate` work from anywhere. The only step that touches the deployed Fly container is `pg-replay-reset` (Redis is on Fly's private network) — and even that can be done via `fly proxy` from the laptop.
 
@@ -15,6 +18,122 @@ Every domain projection (`customers`, `loan_accounts`, `conversations`, `applica
 Total downtime: **~5–10 minutes** for demo, **~10–20 minutes** for prod (most of which is the Redis stream replay).
 
 ---
+
+## Greenfield environment setup
+
+For a brand-new environment with no Mongo to migrate from. No ETL, no Redis replay, no downtime windows — just provision, configure, deploy, create the first admin user.
+
+### G0. Laptop prerequisites
+
+Same as the cutover flow — see [Laptop prerequisites](#laptop-prerequisites-one-time-setup) below.
+
+### G1. Provision Neon (browser)
+
+1. Create a project (or branch off an existing project for non-prod).
+2. Create role `billie_crm` with a strong password.
+3. Create database `billie_crm` owned by that role.
+4. Copy the **pooled** connection string (host has `-pooler` in it).
+5. Append `?sslmode=require` if not present. Production refuses to start without TLS.
+
+### G2. Provision Redis
+
+Fresh envs need a Redis instance too (event-processor reads/writes there). Use whichever managed Redis your other envs use — e.g. a new Redis Cloud database, or a Fly Upstash Redis app. Note the `rediss://` URL.
+
+### G3. Write secrets into the Fly template
+
+```bash
+$EDITOR infra/fly/env/.env.<env>
+```
+
+Required keys:
+
+```
+DATABASE_URI=postgresql://billie_crm:<pwd>@ep-xxx-pooler.<region>.aws.neon.tech/billie_crm?sslmode=require
+REDIS_URL=rediss://<user>:<pwd>@<host>:<port>
+PAYLOAD_SECRET=<32-byte hex; openssl rand -hex 32>
+# plus the env-specific values your other .env.<env> files have
+# (NEXT_PUBLIC_APP_URL, AWS_*, LEDGER_SERVICE_URL, etc.)
+```
+
+### G4. Create the Fly app + push secrets
+
+```bash
+make -C infra/fly create-app   ENV=<env>   # one-shot
+make -C infra/fly allocate-ip  ENV=<env>   # one-shot
+make -C infra/fly secrets      ENV=<env>   # CONFIRM=1 for prod
+```
+
+### G5. Apply the schema BEFORE the first deploy
+
+The deployed app boots with `push: false` in production and expects every table to exist. If you skip this, the first request fails with `relation "users" does not exist`.
+
+```bash
+make -C infra/fly pg-migrate    ENV=<env>   # CONFIRM=1 for prod
+make -C infra/fly verify-cutover ENV=<env>   # should print all-zero counts
+```
+
+### G6. Deploy (with the SDK build secret!)
+
+The Python event-processor depends on private GitHub-hosted SDKs. The Dockerfile only installs them when `GITHUB_TOKEN` is passed as a build secret — and **silently skips** the install if it's missing. That's the cause of the `ModuleNotFoundError: No module named 'billie_accounts_events'` you'll otherwise see at runtime.
+
+```bash
+make -C infra/fly deploy ENV=<env> CONFIRM=1 GITHUB_TOKEN="$GITHUB_TOKEN" NO_CACHE=1
+```
+
+`NO_CACHE=1` busts any stale BuildKit layer from a previous tokenless build attempt. Watch the build output for `Installing Billie SDKs from requirements.txt (with GITHUB_TOKEN)...` — that's the good path. `⚠️ GITHUB_TOKEN not set, skipping SDK install` means the deploy is still broken; rerun with the token set in your shell.
+
+After the deploy, double-check via SSH:
+
+```bash
+fly ssh console -a billie-crm-<env> -C "ls /pip-packages | grep billie"
+# expect: billie_accounts_events, billie_customers_events,
+#         billie_notifications_events, billie_aging_events,
+#         billie_ledger_events
+```
+
+### G7. Create the first admin user
+
+```
+https://crm-<env>.billie.loans/admin/create-first-user
+```
+
+Payload's UI guides you through it. From there the admin can invite further users via `/admin/collections/users`.
+
+### G8. (Optional) Seed users from another environment
+
+Two paths depending on the source:
+
+**From an existing Mongo prod** (you're standing up the *new* prod alongside an old Mongo prod, before retiring the latter):
+
+```bash
+export MONGO_URI="mongodb+srv://<source>/billie-servicing"
+make -C infra/fly pg-etl ENV=<env> CONFIRM=1 COLLECTION=users
+```
+
+The ETL preserves `salt` + `hash` verbatim, so existing passwords keep working.
+
+**From another Postgres** (e.g. copying admin users from staging to prod):
+
+```bash
+pg_dump "<source Neon DSN>" --data-only --table users --column-inserts \
+  | psql "<target Neon DSN>"
+```
+
+Either is idempotent on the `email` natural key.
+
+### G9. Smoke test
+
+- `/admin/login` — sign in with the admin you just created.
+- `/admin/dashboard` — dashboard widgets render (money-flow widgets read from `loan_accounts` which will be empty on a new env, so values will be zero — that's correct).
+- `/admin/collections/contact-notes/create` — create a contact note linked to no customer; should save (with whatever access controls you have, may need a customer first).
+
+That's it — a fresh env is live on Postgres with no Mongo dependency.
+
+---
+
+## Cutover-from-Mongo flow
+
+The rest of this document assumes you're migrating an *existing* Mongo-backed environment. Greenfield envs (above) don't need any of this.
 
 ## Laptop prerequisites (one-time setup)
 
