@@ -161,6 +161,11 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
   const serviceability = assessments?.serviceability as Record<string, unknown> | undefined
   const svcDecision = serviceability?.decision as string | undefined
 
+  // Post-Identity Risk
+  const postIdentityRisk = assessments?.postIdentityRisk as Record<string, unknown> | undefined
+  const pirDecision = postIdentityRisk?.decision as string | undefined
+  const pirHasS3 = Boolean(postIdentityRisk?.s3Key || postIdentityRisk?.file_location)
+
   // Statements summary
   const sc = statementCapture as Record<string, unknown> | undefined
   const consentStatus = sc?.consentStatus as string | undefined
@@ -260,6 +265,37 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
             <pre className={styles.jsonPreview}>{JSON.stringify(serviceability, null, 2)}</pre>
           ) : (
             <p>No serviceability data.</p>
+          )}
+        </div>
+      </AssessmentSection>
+
+      {/* Post-Identity Risk */}
+      <AssessmentSection
+        title="Post-IDV Check"
+        summary={pirDecision ? pirDecision.toUpperCase() : 'No data'}
+      >
+        <div>
+          {pirDecision && (
+            <p
+              className={
+                ['PASS', 'APPROVED'].includes(pirDecision.toUpperCase()) ? styles.pass : styles.fail
+              }
+            >
+              {pirDecision.toUpperCase()}
+            </p>
+          )}
+          {pirHasS3 && (
+            <Link
+              href={`/admin/applications/${conversationId}/assessment/post-identity-risk`}
+              className={styles.detailLink}
+            >
+              View full details →
+            </Link>
+          )}
+          {postIdentityRisk ? (
+            <pre className={styles.jsonPreview}>{JSON.stringify(postIdentityRisk, null, 2)}</pre>
+          ) : (
+            <p>No post-IDV check data.</p>
           )}
         </div>
       </AssessmentSection>

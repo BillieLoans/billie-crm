@@ -86,12 +86,29 @@ export async function GET(request: NextRequest) {
 
     if (q && q.trim()) {
       const term = q.trim()
-      filters.push({
-        or: [
-          { customerIdString: { like: term } },
-          { applicationNumber: { like: term } },
-        ],
+
+      // Search by customer name requires resolving fullName → customerId(s) first,
+      // since conversations only store customerIdString. Cap the lookup to avoid
+      // huge IN clauses on broad terms.
+      const customerMatches = await payload.find({
+        collection: 'customers',
+        where: { fullName: { like: term } },
+        limit: 200,
+        select: { customerId: true },
+        depth: 0,
       })
+      const matchedCustomerIds = customerMatches.docs
+        .map((c) => (c as { customerId?: string }).customerId)
+        .filter((v): v is string => Boolean(v))
+
+      const orClauses: Where[] = [
+        { customerIdString: { like: term } },
+        { applicationNumber: { like: term } },
+      ]
+      if (matchedCustomerIds.length > 0) {
+        orClauses.push({ customerIdString: { in: matchedCustomerIds } })
+      }
+      filters.push({ or: orClauses })
     }
 
     // Cursor: keyset pagination over (updatedAt DESC, id DESC).

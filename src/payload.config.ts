@@ -39,6 +39,7 @@ export default buildConfig({
       beforeNavLinks: [
         '@/components/navigation/NavSearchTrigger#NavSearchTrigger',
         '@/components/navigation/NavDashboardLink#NavDashboardLink',
+        '@/components/navigation/NavApplicationsLink#NavApplicationsLink',
         '@/components/navigation/NavAccountsLink#NavAccountsLink',
         '@/components/navigation/NavCollectionsLink#NavCollectionsLink',
         '@/components/navigation/NavApprovalsLink#NavApprovalsLink',
@@ -46,7 +47,6 @@ export default buildConfig({
         '@/components/navigation/NavECLConfigLink#NavECLConfigLink',
         '@/components/navigation/NavExportsLink#NavExportsLink',
         '@/components/navigation/NavInvestigationLink#NavInvestigationLink',
-        '@/components/navigation/NavApplicationsLink#NavApplicationsLink',
       ],
       // Notification bell in header actions (next to user profile button)
       actions: ['@/components/Notifications/NotificationAction#NotificationAction'],

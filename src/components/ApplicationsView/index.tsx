@@ -36,14 +36,11 @@ export function ApplicationsView() {
       to: filters.to || undefined,
       q: filters.q || undefined,
     },
-  }) as ReturnType<typeof useConversations> & {
-    fetchNextPage?: () => void
-    isFetchingNextPage?: boolean
-  }
+  })
 
-  const conversations = data?.conversations ?? []
-  const hasMore = data?.hasMore ?? false
-  const total = data?.total ?? 0
+  const conversations = data.conversations
+  const hasMore = data.hasMore
+  const total = data.total
 
   // Restore scroll position when returning to this view
   useEffect(() => {
@@ -130,7 +127,7 @@ export function ApplicationsView() {
                 <button
                   type="button"
                   className={styles.loadMoreBtn}
-                  onClick={() => fetchNextPage?.()}
+                  onClick={() => void fetchNextPage()}
                   disabled={isFetchingNextPage}
                   aria-label="Load more conversations"
                 >

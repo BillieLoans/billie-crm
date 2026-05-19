@@ -42,8 +42,12 @@ export function ApplicationsRouter() {
   }
 
   if (segments.length === 3 && segments[1] === 'assessment') {
-    const type = segments[2] as 'account-conduct' | 'serviceability'
-    if (type === 'account-conduct' || type === 'serviceability') {
+    const type = segments[2] as 'account-conduct' | 'serviceability' | 'post-identity-risk'
+    if (
+      type === 'account-conduct' ||
+      type === 'serviceability' ||
+      type === 'post-identity-risk'
+    ) {
       return <AssessmentDetailView conversationId={segments[0]} type={type} />
     }
   }

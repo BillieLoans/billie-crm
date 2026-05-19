@@ -23,6 +23,7 @@ vi.mock('next/link', () => ({
 vi.mock('@/hooks/queries/useAssessments', () => ({
   useAccountConductAssessment: vi.fn(),
   useServiceabilityAssessment: vi.fn(),
+  usePostIdentityRiskAssessment: vi.fn(() => ({ data: undefined, isLoading: false, error: null })),
 }))
 
 import { useAccountConductAssessment, useServiceabilityAssessment } from '@/hooks/queries/useAssessments'

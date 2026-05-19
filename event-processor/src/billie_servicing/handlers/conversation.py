@@ -425,9 +425,10 @@ async def _upsert_application(
 async def _sync_customer(target: Any, customer_id: str, customer_data: dict[str, Any]) -> None:
     """Sync customer data to customers table from a chat event payload.
 
-    Mirrors the original behaviour of stamping basic customer fields when a
-    chat event drops customer info — even partial data is enough to render
-    a name in the CRM until the proper customer.changed.v1 event arrives.
+    Stamps whatever name fields the chat event includes. If the event has no
+    name data at all, full_name is left untouched so a later customer.changed.v1
+    can populate it — we never overwrite with a placeholder like
+    ``Customer <id>``, which used to leak into the CRM list views.
     """
     log = logger.bind(customer_id=customer_id)
 
@@ -435,19 +436,16 @@ async def _sync_customer(target: Any, customer_id: str, customer_data: dict[str,
     last_name = customer_data.get("last_name") or customer_data.get("lastName", "")
     full_name = f"{first_name} {last_name}".strip()
     if not full_name:
-        full_name = (
-            customer_data.get("full_name")
-            or customer_data.get("name")
-            or f"Customer {customer_id}"
-        )
+        full_name = customer_data.get("full_name") or customer_data.get("name") or ""
 
     now = _now()
     values: dict[str, Any] = {
         "customer_id": customer_id,
-        "full_name": full_name,
         "updated_at": now,
         "created_at": now,
     }
+    if full_name:
+        values["full_name"] = full_name
     if first_name:
         values["first_name"] = first_name
     if last_name:

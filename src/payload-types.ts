@@ -711,9 +711,6 @@ export interface LoanAccount {
    * Customer ID string for queries
    */
   customerIdString?: string | null;
-  /**
-   * Denormalized for list view performance
-   */
   customerName?: string | null;
   /**
    * Original loan terms at disbursement

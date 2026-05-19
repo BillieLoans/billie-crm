@@ -84,11 +84,13 @@ export const LoanAccounts: CollectionConfig = {
       },
     },
     {
+      // Resolved from customers.fullName at read time so the list view
+      // can't drift from the source-of-truth on the customer record.
       name: 'customerName',
       type: 'text',
+      virtual: 'customerId.fullName',
       admin: {
         readOnly: true,
-        description: 'Denormalized for list view performance',
       },
     },
 

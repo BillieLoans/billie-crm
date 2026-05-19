@@ -24,7 +24,7 @@ primary_region = "syd"
 
 [env]
   NODE_ENV = "production"
-  LOG_LEVEL = "warn"
+  LOG_LEVEL = "info"
   PORT = "3000"
   ENABLE_EVENT_PROCESSING = "true"
   WORKER_ID = "1"
