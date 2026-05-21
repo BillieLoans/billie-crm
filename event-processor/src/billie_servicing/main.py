@@ -34,7 +34,7 @@ from .handlers import (
     handle_statement_consent_cancelled,
     handle_basiq_job_created,
     handle_statement_retrieval_complete,
-    handle_affordability_report_complete,
+    handle_affordability_report_downloaded,
     handle_statement_checks_complete,
     # Credit assessment & post-identity handlers
     handle_post_identity_risk_check,
@@ -138,7 +138,7 @@ def setup_handlers(processor: EventProcessor) -> None:
     processor.register_handler("statement_consent_cancelled", handle_statement_consent_cancelled)
     processor.register_handler("basiq_job_created", handle_basiq_job_created)
     processor.register_handler("statement_retrieval_complete", handle_statement_retrieval_complete)
-    processor.register_handler("affordability_report_complete", handle_affordability_report_complete)
+    processor.register_handler("affordability_report_downloaded", handle_affordability_report_downloaded)
     processor.register_handler("statement_checks_complete", handle_statement_checks_complete)
 
     # Credit assessments & post-identity

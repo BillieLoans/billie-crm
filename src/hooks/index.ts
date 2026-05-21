@@ -57,6 +57,12 @@ export {
   useServiceabilityAssessment,
   usePostIdentityRiskAssessment,
 } from './queries/useAssessments'
+export { useStatementFile, rawStatementFileUrl } from './queries/useStatementFile'
+export type {
+  StatementSlot,
+  StatementFileContent,
+  CsvData,
+} from './queries/useStatementFile'
 
 // Notifications (E-notifications)
 export { useNotifications } from './queries/useNotifications'

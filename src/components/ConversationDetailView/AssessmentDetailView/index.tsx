@@ -205,12 +205,14 @@ function RawJsonSection({ assessment }: { assessment: Record<string, unknown> })
 
 // ─── Top-level dispatcher ─────────────────────────────────────────────────────
 
-interface AssessmentContentProps {
+export type { AssessmentType }
+
+export interface AssessmentContentProps {
   assessment: Record<string, unknown>
   type: AssessmentType
 }
 
-function AssessmentContent({ assessment, type }: AssessmentContentProps) {
+export function AssessmentContent({ assessment, type }: AssessmentContentProps) {
   const decision = (assessment.decision ?? assessment.outcome ?? assessment.result) as string | undefined
 
   if (type === 'account-conduct' && isAccConductFormat(assessment)) {
