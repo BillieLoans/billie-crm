@@ -49,7 +49,7 @@ endef
 
 .PHONY: help info validate check-config check-secrets preflight init create-app allocate-ip ips secrets \
         secrets-list deploy deploy-local scale-count restart logs status scale ssh clean destroy \
-        pg-migrate-create pg-migrate pg-replay-reset verify-cutover
+        pg-migrate-create pg-migrate pg-migrate-status pg-replay-reset verify-cutover
 
 help:
 	@echo ""
@@ -76,7 +76,8 @@ help:
 	@echo ""
 	@echo "Postgres cutover (see cutover-postgres.md for the full runbook):"
 	@echo "  pg-migrate-create  Generate a new migration from the current schema"
-	@echo "  pg-migrate         Apply migrations on the deployed app"
+	@echo "  pg-migrate         Apply migrations to the deployed DB (runs locally)"
+	@echo "  pg-migrate-status  Show recorded/pending migrations on the deployed DB"
 	@echo "  pg-replay-reset    Destroy Redis consumer group + flush dedup keys for replay"
 	@echo "  verify-cutover     Print pg row counts across every collection table"
 	@echo ""
@@ -225,7 +226,8 @@ destroy:
 # =============================================================================
 # Postgres cutover targets — see cutover-postgres.md for the full runbook.
 # Each target is idempotent and either:
-#   - runs locally (pg-migrate-create), or
+#   - runs locally (pg-migrate-create, and pg-migrate/pg-migrate-status which
+#     fetch DATABASE_URI over a single `fly ssh` session then run locally), or
 #   - opens a single `fly ssh` session that executes a single SQL/redis-cli
 #     command, so the operator sees output and can abort cleanly.
 # =============================================================================
@@ -243,13 +245,33 @@ pg-migrate-create:
 	fi
 	@cd "$(WORKTREE_ROOT)" && pnpm payload migrate:create --name "$(or $(NAME),change)"
 
-# Apply pending Payload migrations on the deployed app. Uses `fly ssh
-# console` so the migration runs inside the live container (same network,
-# same env, same secrets). Production requires CONFIRM=1.
+# Apply pending Payload migrations to the deployed environment's database.
+# The runtime image is a Next.js standalone build — no pnpm, no payload CLI,
+# no src/migrations/ — so migrations cannot run inside the container. Instead
+# this fetches DATABASE_URI from the machine env (single `fly ssh` session,
+# value never printed) and runs `payload migrate` LOCALLY against it.
+# Production requires CONFIRM=1.
 pg-migrate:
 	$(call PROD_CHECK,pg-migrate)
-	@echo "Applying Payload migrations on $(APP_NAME)..."
-	@fly ssh console -a "$(APP_NAME)" -C "pnpm payload migrate"
+	@echo "Fetching DATABASE_URI from $(APP_NAME)..."
+	@URI="$$(fly ssh console -a "$(APP_NAME)" -C 'printenv DATABASE_URI' | tr -d '\r\n')"; \
+	if [ -z "$$URI" ]; then \
+		echo "Could not read DATABASE_URI from $(APP_NAME) (is a machine running?)"; \
+		exit 1; \
+	fi; \
+	echo "Applying Payload migrations to the $(ENV) database (running locally)..."; \
+	cd "$(WORKTREE_ROOT)" && DATABASE_URI="$$URI" pnpm payload migrate
+
+# Show recorded/pending migrations on the deployed environment's database
+# without applying anything. Safe read-only check before pg-migrate.
+pg-migrate-status:
+	@echo "Fetching DATABASE_URI from $(APP_NAME)..."
+	@URI="$$(fly ssh console -a "$(APP_NAME)" -C 'printenv DATABASE_URI' | tr -d '\r\n')"; \
+	if [ -z "$$URI" ]; then \
+		echo "Could not read DATABASE_URI from $(APP_NAME) (is a machine running?)"; \
+		exit 1; \
+	fi; \
+	cd "$(WORKTREE_ROOT)" && DATABASE_URI="$$URI" pnpm payload migrate:status
 
 # Destroy the Redis consumer group and flush dedup keys so the next
 # event-processor start replays the stream from id=0. Run AFTER ETL is
