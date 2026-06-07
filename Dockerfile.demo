@@ -52,17 +52,27 @@ RUN grep -v "git+https" event-processor/requirements.txt > /tmp/base-requirement
 # Install Billie SDKs from event-processor/requirements.txt (requires GITHUB_TOKEN at build time)
 # Versions are defined in requirements.txt. A Python script substitutes the token to avoid shell escaping.
 # Use: fly deploy --build-secret GITHUB_TOKEN=<token>
+#
+# HARD-FAILS if the token is missing: BuildKit does NOT key the layer cache on
+# secret presence, so a tokenless "skip" layer would be silently reused by
+# later builds that DO pass the token, shipping an image without the SDKs and
+# a dead event processor. Failing the build makes a poisoned cache impossible.
 RUN --mount=type=secret,id=GITHUB_TOKEN \
-    if [ -f /run/secrets/GITHUB_TOKEN ]; then \
-    echo "Installing Billie SDKs from requirements.txt (with GITHUB_TOKEN)..." && \
+    if [ ! -f /run/secrets/GITHUB_TOKEN ]; then \
+    echo "ERROR: GITHUB_TOKEN build secret is required (Billie SDK install)."; \
+    echo "       Use: make -C infra/fly deploy ENV=<env> GITHUB_TOKEN=<token>"; \
+    exit 1; \
+    fi && \
+    echo "Installing Billie SDKs from requirements.txt..." && \
     python3 event-processor/scripts/subst-sdk-requirements.py /run/secrets/GITHUB_TOKEN event-processor/requirements.txt /tmp/sdk-requirements.txt && \
     pip3 install --no-cache-dir -r /tmp/sdk-requirements.txt && \
     rm -f /tmp/sdk-requirements.txt && \
-    echo "✓ Billie SDKs installed successfully"; \
-    else echo "⚠️ GITHUB_TOKEN not set, skipping SDK install"; fi
+    echo "✓ Billie SDKs installed successfully"
 
-# Verify packages are installed
-RUN ls -la /pip-packages/ || echo "No packages in /pip-packages"
+# Verify the SDK modules the event processor imports actually resolve —
+# catches a bad install at build time instead of a crash loop at runtime.
+RUN PYTHONPATH=/pip-packages python3 -c "import billie_accounts_events, billie_customers_events, billie_notifications_events, billie_aging_events" && \
+    echo "✓ Billie SDK imports verified"
 
 # =============================================================================
 # Builder stage - build Next.js
