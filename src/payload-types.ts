@@ -185,6 +185,10 @@ export interface Customer {
   id: string;
   customerId: string;
   /**
+   * If set, this customer record was merged into the canonical customerId shown here (returning-customer de-duplication).
+   */
+  mergedInto?: string | null;
+  /**
    * Mr, Mrs, Ms, Dr, etc.
    */
   title?: string | null;
@@ -1332,6 +1336,7 @@ export interface MediaSelect<T extends boolean = true> {
  */
 export interface CustomersSelect<T extends boolean = true> {
   customerId?: T;
+  mergedInto?: T;
   title?: T;
   preferredName?: T;
   firstName?: T;

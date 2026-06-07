@@ -12,6 +12,10 @@ from .customer import (
     handle_customer_changed,
     handle_customer_verified,
 )
+from .identity import (
+    handle_customer_identity_linked,
+    handle_customer_identity_merged,
+)
 from .conversation import (
     handle_conversation_started,
     handle_utterance,
@@ -58,6 +62,8 @@ __all__ = [
     # Customer handlers
     "handle_customer_changed",
     "handle_customer_verified",
+    "handle_customer_identity_linked",
+    "handle_customer_identity_merged",
     # Conversation handlers
     "handle_conversation_started",
     "handle_utterance",
