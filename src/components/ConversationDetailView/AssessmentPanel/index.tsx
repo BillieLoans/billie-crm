@@ -1,10 +1,13 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import Link from 'next/link'
 import { formatRelativeTime, formatCurrency } from '@/lib/formatters'
 import type { ConversationDetail } from '@/lib/schemas/conversations'
 import { ContextDrawer } from '@/components/ui/ContextDrawer'
+import { StatementFileViewer } from '../StatementFileViewer'
+import { AssessmentDrawer } from '../AssessmentDrawer'
+import type { AssessmentType } from '../AssessmentDetailView'
+import type { StatementSlot } from '@/hooks'
 import styles from './styles.module.css'
 
 interface AssessmentSectionProps {
@@ -120,6 +123,8 @@ interface AssessmentPanelProps {
 export function AssessmentPanel({ conversation, conversationId }: AssessmentPanelProps) {
   const { assessments, statementCapture, noticeboard, application } = conversation
   const [selectedPost, setSelectedPost] = useState<NoticeboardPost | null>(null)
+  const [openStatementSlot, setOpenStatementSlot] = useState<StatementSlot | null>(null)
+  const [openAssessment, setOpenAssessment] = useState<AssessmentType | null>(null)
 
   // Global keyboard [ / ] shortcuts for collapse/expand
   useEffect(() => {
@@ -161,6 +166,11 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
   const serviceability = assessments?.serviceability as Record<string, unknown> | undefined
   const svcDecision = serviceability?.decision as string | undefined
 
+  // Post-Identity Risk
+  const postIdentityRisk = assessments?.postIdentityRisk as Record<string, unknown> | undefined
+  const pirDecision = postIdentityRisk?.decision as string | undefined
+  const pirHasS3 = Boolean(postIdentityRisk?.s3Key || postIdentityRisk?.file_location)
+
   // Statements summary
   const sc = statementCapture as Record<string, unknown> | undefined
   const consentStatus = sc?.consentStatus as string | undefined
@@ -168,6 +178,15 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
   const statementSummary = consentStatus
     ? `Consent: ${consentStatus}${retrievalComplete ? ' · Retrieved' : ''}`
     : 'No data'
+
+  const statementFiles = sc?.fileLocations as Partial<Record<StatementSlot, string>> | undefined
+  const fileSlots: ReadonlyArray<{ slot: StatementSlot; label: string }> = [
+    { slot: 'statementData', label: 'Bank statement data' },
+    { slot: 'categorizedTransactions', label: 'Categorised transactions (CSV)' },
+    { slot: 'affordabilityReport', label: 'Affordability report' },
+    { slot: 'accounts', label: 'Accounts summary' },
+  ]
+  const availableFiles = fileSlots.filter((f) => statementFiles?.[f.slot])
 
   // Noticeboard: most recent post
   const latestPost = noticeboard?.[noticeboard.length - 1]
@@ -225,14 +244,14 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
               {acDecision.toUpperCase()}
             </p>
           )}
-          <Link
-            href={`/admin/applications/${conversationId}/assessment/account-conduct`}
-            className={styles.detailLink}
-          >
-            View full details →
-          </Link>
           {accountConduct ? (
-            <pre className={styles.jsonPreview}>{JSON.stringify(accountConduct, null, 2)}</pre>
+            <button
+              type="button"
+              onClick={() => setOpenAssessment('account-conduct')}
+              className={styles.detailLinkButton}
+            >
+              View full details →
+            </button>
           ) : (
             <p>No account conduct data.</p>
           )}
@@ -250,17 +269,46 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
               {svcDecision.toUpperCase()}
             </p>
           )}
-          <Link
-            href={`/admin/applications/${conversationId}/assessment/serviceability`}
-            className={styles.detailLink}
-          >
-            View full details →
-          </Link>
           {serviceability ? (
-            <pre className={styles.jsonPreview}>{JSON.stringify(serviceability, null, 2)}</pre>
+            <button
+              type="button"
+              onClick={() => setOpenAssessment('serviceability')}
+              className={styles.detailLinkButton}
+            >
+              View full details →
+            </button>
           ) : (
             <p>No serviceability data.</p>
           )}
+        </div>
+      </AssessmentSection>
+
+      {/* Post-Identity Risk */}
+      <AssessmentSection
+        title="Post-IDV Check"
+        summary={pirDecision ? pirDecision.toUpperCase() : 'No data'}
+      >
+        <div>
+          {pirDecision && (
+            <p
+              className={
+                ['PASS', 'APPROVED'].includes(pirDecision.toUpperCase()) ? styles.pass : styles.fail
+              }
+            >
+              {pirDecision.toUpperCase()}
+            </p>
+          )}
+          {pirHasS3 ? (
+            <button
+              type="button"
+              onClick={() => setOpenAssessment('post-identity-risk')}
+              className={styles.detailLinkButton}
+            >
+              View full details →
+            </button>
+          ) : !postIdentityRisk ? (
+            <p>No post-IDV check data.</p>
+          ) : null}
         </div>
       </AssessmentSection>
 
@@ -282,6 +330,21 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
                 {(sc.checksComplete as boolean) ? 'Complete' : 'Pending'}
               </span>
             </div>
+            {availableFiles.length > 0 && (
+              <div className={styles.statementFiles}>
+                <div className={styles.statementFilesHeader}>Files</div>
+                {availableFiles.map(({ slot, label }) => (
+                  <button
+                    key={slot}
+                    type="button"
+                    onClick={() => setOpenStatementSlot(slot)}
+                    className={styles.statementFileButton}
+                  >
+                    {label} →
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         ) : (
           <p>No statement capture data.</p>
@@ -302,6 +365,16 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
       </AssessmentSection>
 
       <NoticeboardDrawer post={selectedPost} onClose={() => setSelectedPost(null)} />
+      <StatementFileViewer
+        conversationId={conversationId}
+        slot={openStatementSlot}
+        onClose={() => setOpenStatementSlot(null)}
+      />
+      <AssessmentDrawer
+        conversationId={conversationId}
+        type={openAssessment}
+        onClose={() => setOpenAssessment(null)}
+      />
     </div>
   )
 }

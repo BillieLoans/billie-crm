@@ -10,7 +10,7 @@ Handles all chat/conversation events (ported from worker.ts):
 - conversation_summary / conversationSummary_changed
 - post_identity_risk_checks_complete
 - credit_assessment_complete
-- statement_consent_* / basiq_job_created / statement_retrieval_complete / affordability_report_complete / statement_checks_complete
+- statement_consent_* / basiq_job_created / statement_retrieval_complete / affordability_report_downloaded / statement_checks_complete
 """
 
 from __future__ import annotations
@@ -425,9 +425,10 @@ async def _upsert_application(
 async def _sync_customer(target: Any, customer_id: str, customer_data: dict[str, Any]) -> None:
     """Sync customer data to customers table from a chat event payload.
 
-    Mirrors the original behaviour of stamping basic customer fields when a
-    chat event drops customer info — even partial data is enough to render
-    a name in the CRM until the proper customer.changed.v1 event arrives.
+    Stamps whatever name fields the chat event includes. If the event has no
+    name data at all, full_name is left untouched so a later customer.changed.v1
+    can populate it — we never overwrite with a placeholder like
+    ``Customer <id>``, which used to leak into the CRM list views.
     """
     log = logger.bind(customer_id=customer_id)
 
@@ -435,19 +436,16 @@ async def _sync_customer(target: Any, customer_id: str, customer_data: dict[str,
     last_name = customer_data.get("last_name") or customer_data.get("lastName", "")
     full_name = f"{first_name} {last_name}".strip()
     if not full_name:
-        full_name = (
-            customer_data.get("full_name")
-            or customer_data.get("name")
-            or f"Customer {customer_id}"
-        )
+        full_name = customer_data.get("full_name") or customer_data.get("name") or ""
 
     now = _now()
     values: dict[str, Any] = {
         "customer_id": customer_id,
-        "full_name": full_name,
         "updated_at": now,
         "created_at": now,
     }
+    if full_name:
+        values["full_name"] = full_name
     if first_name:
         values["first_name"] = first_name
     if last_name:
@@ -814,23 +812,52 @@ async def handle_basiq_job_created(pool: asyncpg.Pool, event: dict[str, Any]) ->
     await _set_statement_capture(pool, conversation_id, {"basiqJobId": basiq_job_id})
 
 
+_STATEMENT_FILE_STEPS = {
+    "statement-data": "statementData",
+    "categorized-transactions": "categorizedTransactions",
+    "affordability-report": "affordabilityReport",
+    "retrieve-accounts": "accounts",
+}
+
+
 async def handle_statement_retrieval_complete(pool: asyncpg.Pool, event: dict[str, Any]) -> None:
     conversation_id = safe_str(
         event.get("cid") or event.get("conv") or event.get("conversation_id"),
         "conversation_id",
     )
-    logger.bind(conversation_id=conversation_id).info("Processing statement_retrieval_complete")
-    await _set_statement_capture(pool, conversation_id, {"retrievalComplete": True})
+    payload = event.get("payload", {})
+    if not isinstance(payload, dict):
+        payload = {}
+
+    file_locations: dict[str, str] = {}
+    steps = payload.get("steps")
+    if isinstance(steps, dict):
+        for src_key, dst_key in _STATEMENT_FILE_STEPS.items():
+            step = steps.get(src_key)
+            if not isinstance(step, dict):
+                continue
+            locs = step.get("file_locations")
+            if isinstance(locs, list) and locs and isinstance(locs[0], str):
+                file_locations[dst_key] = locs[0]
+
+    patch: dict[str, Any] = {"retrievalComplete": True}
+    if file_locations:
+        patch["fileLocations"] = file_locations
+
+    logger.bind(conversation_id=conversation_id, file_count=len(file_locations)).info(
+        "Processing statement_retrieval_complete"
+    )
+    await _set_statement_capture(pool, conversation_id, patch)
 
 
-async def handle_affordability_report_complete(pool: asyncpg.Pool, event: dict[str, Any]) -> None:
+async def handle_affordability_report_downloaded(pool: asyncpg.Pool, event: dict[str, Any]) -> None:
     conversation_id = safe_str(
         event.get("cid") or event.get("conv") or event.get("conversation_id"),
         "conversation_id",
     )
     payload = event.get("payload", {})
     report = strip_dollar_keys(payload if isinstance(payload, dict) else event)
-    logger.bind(conversation_id=conversation_id).info("Processing affordability_report_complete")
+    logger.bind(conversation_id=conversation_id).info("Processing affordability_report_downloaded")
     await _set_statement_capture(pool, conversation_id, {"affordabilityReport": report})
 
 

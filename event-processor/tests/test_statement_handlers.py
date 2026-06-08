@@ -3,7 +3,7 @@
 import pytest
 
 from billie_servicing.handlers.conversation import (
-    handle_affordability_report_complete,
+    handle_affordability_report_downloaded,
     handle_basiq_job_created,
     handle_statement_checks_complete,
     handle_statement_consent_cancelled,
@@ -147,23 +147,97 @@ class TestHandleStatementRetrievalComplete:
         _ensures_conversation_row(mock_pool, "brand-new-conv")
         assert _patch_for(mock_pool) == {"retrievalComplete": True}
 
+    @pytest.mark.asyncio
+    async def test_extracts_file_locations_from_steps(self, mock_pool):
+        await handle_statement_retrieval_complete(
+            mock_pool,
+            {
+                "cid": "conv-files",
+                "payload": {
+                    "steps": {
+                        "statement-data": {
+                            "file_locations": ["s3://bucket/A/statements/data.json"]
+                        },
+                        "categorized-transactions": {
+                            "file_locations": ["s3://bucket/A/AffordabilityReports/cat.csv"]
+                        },
+                        "affordability-report": {
+                            "file_locations": ["s3://bucket/A/AffordabilityReports/aff.json"]
+                        },
+                        "retrieve-accounts": {
+                            "file_locations": ["s3://bucket/A/AffordabilityReports/accs.json"]
+                        },
+                    }
+                },
+            },
+        )
+        patch = _patch_for(mock_pool)
+        assert patch["retrievalComplete"] is True
+        assert patch["fileLocations"] == {
+            "statementData": "s3://bucket/A/statements/data.json",
+            "categorizedTransactions": "s3://bucket/A/AffordabilityReports/cat.csv",
+            "affordabilityReport": "s3://bucket/A/AffordabilityReports/aff.json",
+            "accounts": "s3://bucket/A/AffordabilityReports/accs.json",
+        }
 
-class TestHandleAffordabilityReportComplete:
+    @pytest.mark.asyncio
+    async def test_omits_file_locations_when_steps_missing(self, mock_pool):
+        await handle_statement_retrieval_complete(
+            mock_pool, {"cid": "conv-no-files", "payload": {"application_number": "A"}}
+        )
+        patch = _patch_for(mock_pool)
+        assert patch == {"retrievalComplete": True}
+
+    @pytest.mark.asyncio
+    async def test_skips_step_with_empty_file_locations(self, mock_pool):
+        await handle_statement_retrieval_complete(
+            mock_pool,
+            {
+                "cid": "conv-partial",
+                "payload": {
+                    "steps": {
+                        "statement-data": {"file_locations": []},
+                        "affordability-report": {
+                            "file_locations": ["s3://bucket/x/aff.json"]
+                        },
+                    }
+                },
+            },
+        )
+        patch = _patch_for(mock_pool)
+        assert patch["fileLocations"] == {
+            "affordabilityReport": "s3://bucket/x/aff.json",
+        }
+
+
+class TestHandleAffordabilityReportDownloaded:
     @pytest.mark.asyncio
     async def test_stores_payload_as_affordability_report(self, mock_pool):
-        await handle_affordability_report_complete(
+        # Real shape from the chatLedger affordability_report_downloaded event.
+        await handle_affordability_report_downloaded(
             mock_pool,
-            {"cid": "conv-002", "payload": {"income": 5000, "expenses": 2000, "surplus": 3000}},
+            {
+                "cid": "conv-002",
+                "payload": {
+                    "application_number": "A7A73A13-659",
+                    "statement_provider": "BSDC",
+                    "affordability_report": {
+                        "file_location": "s3://bucket/x/aff.json"
+                    },
+                    "summary": {"data": {"metrics": [{"id": "ME012", "result": {"value": 788.19}}]}},
+                },
+            },
         )
         patch = _patch_for(mock_pool)
         assert patch is not None
         report = patch["affordabilityReport"]
-        assert report["income"] == 5000
-        assert report["expenses"] == 2000
+        assert report["application_number"] == "A7A73A13-659"
+        assert report["affordability_report"]["file_location"] == "s3://bucket/x/aff.json"
+        assert report["summary"]["data"]["metrics"][0]["id"] == "ME012"
 
     @pytest.mark.asyncio
     async def test_strips_dollar_keys_from_report(self, mock_pool):
-        await handle_affordability_report_complete(
+        await handle_affordability_report_downloaded(
             mock_pool,
             {
                 "cid": "conv-002",
@@ -176,7 +250,7 @@ class TestHandleAffordabilityReportComplete:
 
     @pytest.mark.asyncio
     async def test_ensures_parent_row(self, mock_pool):
-        await handle_affordability_report_complete(
+        await handle_affordability_report_downloaded(
             mock_pool, {"cid": "conv-002", "payload": {"income": 5000}}
         )
         _ensures_conversation_row(mock_pool, "conv-002")
@@ -224,7 +298,7 @@ class TestExistingHandlersUnaffected:
             handle_statement_consent_cancelled,
             handle_basiq_job_created,
             handle_statement_retrieval_complete,
-            handle_affordability_report_complete,
+            handle_affordability_report_downloaded,
             handle_statement_checks_complete,
         ):
             assert callable(fn)

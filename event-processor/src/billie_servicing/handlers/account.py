@@ -63,15 +63,7 @@ async def handle_account_created(pool: asyncpg.Pool, parsed_event: Any) -> None:
     log = logger.bind(account_id=account_id, customer_id=customer_id)
     log.info("Processing account.created.v1")
 
-    customer_ref_id = None
-    customer_name = ""
-    if customer_id:
-        row = await pool.fetchrow(
-            "SELECT id, full_name FROM customers WHERE customer_id = $1", customer_id
-        )
-        if row:
-            customer_ref_id = row["id"]
-            customer_name = row["full_name"] or ""
+    customer_ref_id = await _resolve_customer_link(pool, customer_id)
 
     sdk_status = _normalise_status(payload.status, default="PENDING")
     account_status = SDK_STATUS_MAP.get(sdk_status, "active")
@@ -82,7 +74,6 @@ async def handle_account_created(pool: asyncpg.Pool, parsed_event: Any) -> None:
         "account_number": payload.account_number,
         "customer_id_id": customer_ref_id,
         "customer_id_string": customer_id,
-        "customer_name": customer_name,
         "loan_terms_loan_amount": float(payload.loan_amount) if payload.loan_amount else None,
         "loan_terms_loan_fee": float(payload.loan_fee) if payload.loan_fee else None,
         "loan_terms_total_payable": (

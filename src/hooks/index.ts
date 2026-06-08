@@ -52,7 +52,17 @@ export type { RandomSampleRequest, RandomSampleResponse } from './mutations/useR
 // Conversations queries (billie-crm-applications)
 export { useConversations, useCustomerConversations } from './queries/useConversations'
 export { useConversation } from './queries/useConversation'
-export { useAccountConductAssessment, useServiceabilityAssessment } from './queries/useAssessments'
+export {
+  useAccountConductAssessment,
+  useServiceabilityAssessment,
+  usePostIdentityRiskAssessment,
+} from './queries/useAssessments'
+export { useStatementFile, rawStatementFileUrl } from './queries/useStatementFile'
+export type {
+  StatementSlot,
+  StatementFileContent,
+  CsvData,
+} from './queries/useStatementFile'
 
 // Notifications (E-notifications)
 export { useNotifications } from './queries/useNotifications'

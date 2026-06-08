@@ -3,11 +3,15 @@
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useAccountConductAssessment, useServiceabilityAssessment } from '@/hooks/queries/useAssessments'
+import {
+  useAccountConductAssessment,
+  useServiceabilityAssessment,
+  usePostIdentityRiskAssessment,
+} from '@/hooks/queries/useAssessments'
 import { formatCurrency } from '@/lib/formatters'
 import styles from './styles.module.css'
 
-type AssessmentType = 'account-conduct' | 'serviceability'
+type AssessmentType = 'account-conduct' | 'serviceability' | 'post-identity-risk'
 
 interface AssessmentDetailViewProps {
   conversationId: string
@@ -19,6 +23,7 @@ interface AssessmentDetailViewProps {
 const TITLE_MAP: Record<AssessmentType, string> = {
   'account-conduct': 'Account Conduct Assessment',
   'serviceability': 'Serviceability Assessment',
+  'post-identity-risk': 'Post-Identity Risk Check',
 }
 
 export function AssessmentDetailView({
@@ -44,7 +49,15 @@ export function AssessmentDetailView({
   const serviceabilityQuery = useServiceabilityAssessment(
     type === 'serviceability' ? conversationId : undefined,
   )
-  const query = type === 'account-conduct' ? conductQuery : serviceabilityQuery
+  const pirQuery = usePostIdentityRiskAssessment(
+    type === 'post-identity-risk' ? conversationId : undefined,
+  )
+  const query =
+    type === 'account-conduct'
+      ? conductQuery
+      : type === 'serviceability'
+        ? serviceabilityQuery
+        : pirQuery
   const { data: assessment, isLoading, error } = query
 
   return (
@@ -192,12 +205,14 @@ function RawJsonSection({ assessment }: { assessment: Record<string, unknown> })
 
 // ─── Top-level dispatcher ─────────────────────────────────────────────────────
 
-interface AssessmentContentProps {
+export type { AssessmentType }
+
+export interface AssessmentContentProps {
   assessment: Record<string, unknown>
   type: AssessmentType
 }
 
-function AssessmentContent({ assessment, type }: AssessmentContentProps) {
+export function AssessmentContent({ assessment, type }: AssessmentContentProps) {
   const decision = (assessment.decision ?? assessment.outcome ?? assessment.result) as string | undefined
 
   if (type === 'account-conduct' && isAccConductFormat(assessment)) {
@@ -206,8 +221,118 @@ function AssessmentContent({ assessment, type }: AssessmentContentProps) {
   if (type === 'serviceability' && isSvcFormat(assessment)) {
     return <ServiceabilityContent assessment={assessment} />
   }
+  if (type === 'post-identity-risk' && Array.isArray(assessment.rule_results)) {
+    return <PostIdentityRiskContent assessment={assessment} />
+  }
   // Generic fallback
   return <GenericContent assessment={assessment} type={type} decision={decision} />
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Post-Identity Risk renderer
+// ══════════════════════════════════════════════════════════════════════════════
+
+interface PirRule {
+  rule_id?: string
+  description?: string
+  result: string
+  reason?: string
+  hard_rule?: boolean
+  data_value?: number | string
+  condition?: string
+}
+
+interface PirData {
+  application_number?: string
+  decision: string
+  rule_results: PirRule[]
+}
+
+function PostIdentityRiskContent({ assessment }: { assessment: Record<string, unknown> }) {
+  const data = assessment as unknown as PirData
+  const rules = data.rule_results ?? []
+  const fails = rules.filter((r) => r.result?.toLowerCase() === 'fail')
+  const passes = rules.filter((r) => r.result?.toLowerCase() === 'pass')
+
+  return (
+    <div className={styles.content}>
+      <DecisionBanner
+        decision={data.decision}
+        meta={
+          <div className={styles.summaryStats}>
+            {fails.length > 0 && (
+              <span className={styles.statFail}>
+                {fails.length} fail{fails.length !== 1 ? 's' : ''}
+              </span>
+            )}
+            <span className={styles.statPass}>{passes.length} passed</span>
+          </div>
+        }
+      />
+
+      {fails.length > 0 && (
+        <div className={styles.section}>
+          <h2 className={styles.sectionTitle}>
+            Failed Checks
+            <span className={`${styles.ruleCount} ${styles.ruleCountFail}`}>{fails.length}</span>
+          </h2>
+          <PirRulesTable rules={fails} />
+        </div>
+      )}
+
+      {passes.length > 0 && (
+        <div className={styles.section}>
+          <h2 className={styles.sectionTitle}>
+            Passed Checks
+            <span className={`${styles.ruleCount} ${styles.ruleCountPass}`}>{passes.length}</span>
+          </h2>
+          <PirRulesTable rules={passes} />
+        </div>
+      )}
+
+      <RawJsonSection assessment={assessment} />
+    </div>
+  )
+}
+
+function PirRulesTable({ rules }: { rules: PirRule[] }) {
+  return (
+    <table className={styles.rulesTable}>
+      <thead>
+        <tr>
+          <th>Check</th>
+          <th>Result</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rules.map((rule, i) => {
+          const isPass = rule.result?.toLowerCase() === 'pass'
+          return (
+            <React.Fragment key={rule.rule_id ?? i}>
+              <tr className={isPass ? styles.rowPass : rule.hard_rule ? styles.rowFail : styles.rowWarn}>
+                <td className={styles.ruleName}>
+                  {rule.description ?? rule.rule_id ?? `Rule ${i + 1}`}
+                  {rule.rule_id && rule.description && (
+                    <span className={styles.metricId}>{rule.rule_id}</span>
+                  )}
+                </td>
+                <td>
+                  <span className={`${styles.resultBadge} ${ruleResultClass(rule.result)}`}>
+                    {rule.result.toUpperCase()}
+                  </span>
+                </td>
+              </tr>
+              {rule.reason && (
+                <tr className={styles.reasonRow}>
+                  <td colSpan={2} className={styles.reasonCell}>{rule.reason}</td>
+                </tr>
+              )}
+            </React.Fragment>
+          )
+        })}
+      </tbody>
+    </table>
+  )
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

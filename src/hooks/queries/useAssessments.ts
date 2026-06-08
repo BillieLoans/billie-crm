@@ -2,7 +2,10 @@
 
 import { useQuery } from '@tanstack/react-query'
 
-async function fetchAssessment(conversationId: string, type: 'account-conduct' | 'serviceability') {
+async function fetchAssessment(
+  conversationId: string,
+  type: 'account-conduct' | 'serviceability' | 'post-identity-risk',
+) {
   const res = await fetch(
     `/api/conversations/${encodeURIComponent(conversationId)}/assessments/${type}`,
     { cache: 'no-store' },
@@ -42,6 +45,20 @@ export function useServiceabilityAssessment(conversationId: string | undefined) 
   return useQuery({
     queryKey: ['assessment', 'serviceability', conversationId],
     queryFn: () => fetchAssessment(conversationId!, 'serviceability'),
+    enabled: !!conversationId,
+    staleTime: Infinity,
+    retry: false,
+  })
+}
+
+/**
+ * Hook for post-identity risk check detail.
+ * staleTime: Infinity — assessment data is immutable once stored.
+ */
+export function usePostIdentityRiskAssessment(conversationId: string | undefined) {
+  return useQuery({
+    queryKey: ['assessment', 'post-identity-risk', conversationId],
+    queryFn: () => fetchAssessment(conversationId!, 'post-identity-risk'),
     enabled: !!conversationId,
     staleTime: Infinity,
     retry: false,

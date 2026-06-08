@@ -30,7 +30,7 @@ from .conversation import (
     handle_statement_consent_cancelled,
     handle_basiq_job_created,
     handle_statement_retrieval_complete,
-    handle_affordability_report_complete,
+    handle_affordability_report_downloaded,
     handle_statement_checks_complete,
     handle_post_identity_risk_check,
     handle_credit_assessment_complete,
@@ -79,7 +79,7 @@ __all__ = [
     "handle_statement_consent_cancelled",
     "handle_basiq_job_created",
     "handle_statement_retrieval_complete",
-    "handle_affordability_report_complete",
+    "handle_affordability_report_downloaded",
     "handle_statement_checks_complete",
     # Credit assessment & post-identity handlers
     "handle_post_identity_risk_check",

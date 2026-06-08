@@ -69,26 +69,28 @@ export function FilterBar() {
         value={filters.status}
         onChange={(e) => setFilter('status', e.target.value)}
         aria-label="Filter by conversation status"
+        title="Conversation status — where the chat sits in its lifecycle (still talking, paused, ended)"
       >
-        <option value="">All statuses</option>
-        <option value="active">Active</option>
-        <option value="paused">Paused</option>
-        <option value="soft_end">Soft End</option>
-        <option value="hard_end">Hard End</option>
-        <option value="ended">Ended</option>
+        <option value="">Conversation: any</option>
+        <option value="active">Conversation: Active</option>
+        <option value="paused">Conversation: Paused</option>
+        <option value="soft_end">Conversation: Soft End</option>
+        <option value="hard_end">Conversation: Hard End</option>
+        <option value="ended">Conversation: Ended</option>
       </select>
 
       <select
         className={styles.select}
         value={filters.decision}
         onChange={(e) => setFilter('decision', e.target.value)}
-        aria-label="Filter by decision"
+        aria-label="Filter by loan decision"
+        title="Loan decision — the underwriting outcome of the application (approved, declined, referred)"
       >
-        <option value="">All decisions</option>
-        <option value="approved">Approved</option>
-        <option value="declined">Declined</option>
-        <option value="referred">Referred</option>
-        <option value="no_decision">No Decision</option>
+        <option value="">Decision: any</option>
+        <option value="approved">Decision: Approved</option>
+        <option value="declined">Decision: Declined</option>
+        <option value="referred">Decision: Referred</option>
+        <option value="no_decision">Decision: Pending</option>
       </select>
 
       <input

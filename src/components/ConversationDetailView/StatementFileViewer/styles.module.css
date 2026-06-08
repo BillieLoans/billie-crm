@@ -1,0 +1,406 @@
+.viewer {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--theme-elevation-100, #f3f4f6);
+}
+
+.filename {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--theme-elevation-600, #6b7280);
+  word-break: break-all;
+}
+
+.downloadButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border: 1px solid var(--theme-elevation-200, #e5e7eb);
+  border-radius: 6px;
+  background: var(--theme-elevation-50, #fafafa);
+  font-size: 13px;
+  color: var(--theme-elevation-900, #111);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.downloadButton:hover {
+  background: var(--theme-elevation-100, #f3f4f6);
+  text-decoration: none;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--theme-elevation-900, #111);
+  margin: 0;
+}
+
+.count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--theme-elevation-100, #f3f4f6);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--theme-elevation-700, #4b5563);
+}
+
+.metaGrid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: 16px;
+  row-gap: 6px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.metaGrid dt {
+  font-weight: 500;
+  color: var(--theme-elevation-600, #6b7280);
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.metaGrid dd {
+  margin: 0;
+  color: var(--theme-elevation-900, #111);
+  word-break: break-word;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.table th,
+.table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--theme-elevation-100, #f3f4f6);
+  vertical-align: top;
+}
+
+.table th {
+  font-weight: 600;
+  color: var(--theme-elevation-700, #4b5563);
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  background: var(--theme-elevation-50, #fafafa);
+  position: sticky;
+  top: 0;
+}
+
+.table tbody tr:hover {
+  background: var(--theme-elevation-50, #fafafa);
+}
+
+.tableScroll {
+  overflow-x: auto;
+  max-height: 60vh;
+  overflow-y: auto;
+  border: 1px solid var(--theme-elevation-100, #f3f4f6);
+  border-radius: 6px;
+}
+
+.numberCol {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.metricId {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--theme-elevation-700, #4b5563);
+}
+
+.list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+}
+
+.list li {
+  margin-bottom: 4px;
+}
+
+.textBlock {
+  background: var(--theme-elevation-50, #fafafa);
+  border: 1px solid var(--theme-elevation-100, #f3f4f6);
+  border-radius: 6px;
+  padding: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  max-height: 60vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.inlineCode {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  background: var(--theme-elevation-50, #fafafa);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.emptyHint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--theme-elevation-500, #6b7280);
+  font-style: italic;
+}
+
+.truncationNotice {
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: var(--theme-elevation-600, #6b7280);
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.notAvailable {
+  padding: 24px;
+  text-align: center;
+  color: var(--theme-elevation-600, #6b7280);
+  background: var(--theme-elevation-50, #fafafa);
+  border-radius: 8px;
+}
+
+.skeletonWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.skeleton {
+  height: 18px;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    var(--theme-elevation-50, #fafafa) 0%,
+    var(--theme-elevation-100, #f3f4f6) 50%,
+    var(--theme-elevation-50, #fafafa) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite linear;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.rawSection {
+  margin-top: 8px;
+  border-top: 1px solid var(--theme-elevation-100, #f3f4f6);
+  padding-top: 12px;
+}
+
+.rawToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--theme-elevation-700, #4b5563);
+  cursor: pointer;
+}
+
+.rawToggle:hover { color: var(--theme-elevation-900, #111); }
+
+.rawChevron {
+  display: inline-block;
+  font-size: 8px;
+  transition: transform 0.15s ease;
+}
+
+.rawChevronOpen { transform: rotate(90deg); }
+
+.rawJson {
+  margin-top: 8px;
+  background: var(--theme-elevation-50, #fafafa);
+  border: 1px solid var(--theme-elevation-100, #f3f4f6);
+  border-radius: 6px;
+  padding: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  max-height: 50vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── Affordability metric rows ── */
+.metricLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.metricLabel .metricId {
+  font-size: 10px;
+  color: var(--theme-elevation-500, #6b7280);
+}
+
+/* ── Collapsible section header ── */
+.collapsibleHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.collapsibleHeader:hover .sectionTitle {
+  color: var(--theme-elevation-900, #111);
+}
+
+/* ── Account card (bank statement data) ── */
+.accountCard {
+  border: 1px solid var(--theme-elevation-100, #f3f4f6);
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: var(--theme-elevation-50, #fafafa);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.accountHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.accountName {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--theme-elevation-900, #111);
+}
+
+.accountHolder {
+  font-size: 12px;
+  color: var(--theme-elevation-600, #6b7280);
+  margin-top: 2px;
+}
+
+.accountBalance {
+  text-align: right;
+}
+
+.metaLabel {
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--theme-elevation-600, #6b7280);
+}
+
+.balanceValue {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--theme-elevation-900, #111);
+  font-variant-numeric: tabular-nums;
+}
+
+.availableValue {
+  font-size: 11px;
+  color: var(--theme-elevation-600, #6b7280);
+  margin-top: 2px;
+}
+
+.accountMeta {
+  display: grid;
+  grid-template-columns: max-content 1fr max-content 1fr;
+  column-gap: 12px;
+  row-gap: 4px;
+  margin: 0;
+  font-size: 12px;
+  border-top: 1px solid var(--theme-elevation-100, #f3f4f6);
+  padding-top: 10px;
+}
+
+.accountMeta dt {
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--theme-elevation-600, #6b7280);
+}
+
+.accountMeta dd {
+  margin: 0;
+  color: var(--theme-elevation-900, #111);
+}
+
+.subSectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--theme-elevation-800, #1f2937);
+  margin: 4px 0;
+}
+
+/* ── Transaction rows ── */
+.dateCell {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--theme-elevation-700, #4b5563);
+}
+
+.txnText {
+  max-width: 280px;
+  font-size: 11px;
+  color: var(--theme-elevation-900, #111);
+}
+
+.positive { color: #15803d; }
+.negative { color: #b91c1c; }

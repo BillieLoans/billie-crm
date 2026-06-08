@@ -1,0 +1,37 @@
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.notAvailable {
+  padding: 24px;
+  text-align: center;
+  color: var(--theme-elevation-600, #6b7280);
+  background: var(--theme-elevation-50, #fafafa);
+  border-radius: 8px;
+}
+
+.skeletonWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.skeleton {
+  height: 18px;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    var(--theme-elevation-50, #fafafa) 0%,
+    var(--theme-elevation-100, #f3f4f6) 50%,
+    var(--theme-elevation-50, #fafafa) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite linear;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
