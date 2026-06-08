@@ -19,6 +19,9 @@ from .handlers import (
     # Customer handlers
     handle_customer_changed,
     handle_customer_verified,
+    # Identity link/merge handlers (BTB-120)
+    handle_customer_identity_linked,
+    handle_customer_identity_merged,
     # Conversation handlers
     handle_conversation_started,
     handle_utterance,
@@ -104,6 +107,15 @@ def setup_handlers(processor: EventProcessor) -> None:
     processor.register_handler("customer.created.v1", handle_customer_changed)
     processor.register_handler("customer.updated.v1", handle_customer_changed)
     processor.register_handler("customer.verified.v1", handle_customer_verified)
+
+    # Identity link/merge — re-attribute returning customers to the canonical
+    # id and tombstone the orphan alias row (BTB-120).
+    processor.register_handler(
+        "customer.identity.linked.v1", handle_customer_identity_linked
+    )
+    processor.register_handler(
+        "customer.identity.merged.v1", handle_customer_identity_merged
+    )
 
     # =========================================================================
     # Conversation/Chat events (manual parsing - from worker.ts)

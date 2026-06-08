@@ -49,7 +49,7 @@ endef
 
 .PHONY: help info validate check-config check-secrets preflight init create-app allocate-ip ips secrets \
         secrets-list deploy deploy-local scale-count restart logs status scale ssh clean destroy \
-        pg-migrate-create pg-migrate pg-wipe pg-etl pg-replay-reset verify-cutover
+        pg-migrate-create pg-migrate pg-migrate-status pg-wipe pg-etl pg-replay-reset verify-cutover
 
 help:
 	@echo ""
@@ -77,6 +77,7 @@ help:
 	@echo "Postgres cutover (see cutover-postgres.md for the full runbook):"
 	@echo "  pg-migrate-create  Generate a new migration from the current schema (local pg)"
 	@echo "  pg-migrate         Apply migrations to the <env> Neon DB (from your laptop)"
+	@echo "  pg-migrate-status  Show recorded/pending migrations on the <env> Neon DB"
 	@echo "  pg-wipe            DROP SCHEMA public on the <env> Neon DB (when migrations are out of sync)"
 	@echo "  pg-etl             Run mongo → pg ETL via the local dev container (needs MONGO_URI in env)"
 	@echo "  pg-replay-reset    Destroy Redis consumer group + flush dedup keys for replay"
@@ -274,6 +275,18 @@ pg-migrate: check-secrets
 	echo "Applying Payload migrations to $(ENV) Postgres…"; \
 	cd "$(WORKTREE_ROOT)" && \
 	DATABASE_URI="$$DSN" PAYLOAD_SECRET="cutover-migrate" pnpm payload migrate
+
+# Show recorded/pending migrations on the <env> Neon DB without applying
+# anything. Safe read-only check before pg-migrate. DATABASE_URI sourced
+# from .env.<env>, same as pg-migrate.
+pg-migrate-status: check-secrets
+	@DSN='$(DSN_FROM_ENV)'; \
+	if [ -z "$$DSN" ]; then \
+		echo "DATABASE_URI not found in $(SECRETS_FILE)"; \
+		exit 1; \
+	fi; \
+	cd "$(WORKTREE_ROOT)" && \
+	DATABASE_URI="$$DSN" PAYLOAD_SECRET="cutover-migrate" pnpm payload migrate:status
 
 # Print row counts for every projection + CRM-owned table. Reads
 # DATABASE_URI from .env.<env> and runs psql locally.

@@ -17,7 +17,7 @@ structlog = "^24.0"
 # Billie Event SDKs - installed from GitHub
 # Note: Requires GITHUB_TOKEN environment variable
 billie-accounts-events = {git = "https://github.com/BillieLoans/billie-event-sdks.git", subdirectory = "packages/accounts", tag = "accounts-v2.2.0"}
-billie-customers-events = {git = "https://github.com/BillieLoans/billie-event-sdks.git", subdirectory = "packages/customers", tag = "customers-v2.0.0"}
+billie-customers-events = {git = "https://github.com/BillieLoans/billie-event-sdks.git", subdirectory = "packages/customers", tag = "customers-v2.1.0"}
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0"

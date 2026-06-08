@@ -603,6 +603,13 @@ class EventProcessor:
             # Use accounts SDK
             return parse_account_message(sdk_data)
 
+        elif event_type.startswith("customer.identity."):
+            # BTB-120 link/merge events carry a small fixed payload
+            # (journey_id/canonical_id or merged_canonical_id/canonical_id).
+            # Parse the envelope directly so this path stays independent of the
+            # installed customers SDK version; the handler reads the payload dict.
+            return sanitize_envelope(sanitized)
+
         elif event_type.startswith("customer.") or event_type.startswith("application."):
             # Use customers SDK
             payload = parse_customer_message(sdk_data)

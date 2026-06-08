@@ -31,6 +31,20 @@ export const Customers: CollectionConfig = {
       },
     },
     {
+      // BTB-120: when a returning customer is recognised, the thin customers row
+      // created under the pre-link (alias) id is tombstoned/redirected here to
+      // the surviving canonical customerId. Set by the Python event processor on
+      // customer.identity.linked.v1 / .merged.v1.
+      name: 'mergedInto',
+      type: 'text',
+      index: true,
+      admin: {
+        description:
+          'If set, this customer record was merged into the canonical customerId shown here (returning-customer de-duplication).',
+        readOnly: true,
+      },
+    },
+    {
       name: 'title',
       type: 'text',
       admin: {
