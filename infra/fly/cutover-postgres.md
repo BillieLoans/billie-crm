@@ -5,9 +5,65 @@ Two flows in here:
 - **Greenfield environment setup** — standing up a brand-new env that has never had Mongo (fresh prod, fresh dev for a new business unit, etc.). Jump to [Greenfield environment setup](#greenfield-environment-setup) below.
 - **Cutover from an existing Mongo-backed env to Postgres (Neon)** — the original migration playbook. Start at [Laptop prerequisites](#laptop-prerequisites-one-time-setup) and walk through steps 0–7.
 
+**Already on Postgres and just shipping a schema change?** Neither flow above applies — read [Schema migrations on a live environment](#schema-migrations-on-a-live-environment) first. The order is **deploy before migrate**, and getting it backwards can break production.
+
 **Everything in this runbook runs from your laptop.** Neon DSNs are publicly reachable over TLS, so `psql` + `pnpm payload migrate` work from anywhere. The only step that touches the deployed Fly container is `pg-replay-reset` (Redis is on Fly's private network) — and even that can be done via `fly proxy` from the laptop.
 
 The deployed image is **not** required to have `pnpm`, `psql`, or `redis-cli` baked in. Older images work fine; new ones are nice-to-have for ad-hoc debugging.
+
+---
+
+## Schema migrations on a live environment
+
+This is the recurring case once an env is on Postgres: you've added a Payload migration (a column drop, rename, type change, new `NOT NULL`, etc.) and need to apply it to demo/prod. It is **not** the Mongo cutover — there's no ETL or stream replay — but it has its own ordering trap.
+
+### The rule: deploy before migrate
+
+> **Deploy the new image first, then run the migration.** Never migrate a live env ahead of the image that tolerates the new schema.
+
+The running image and the schema must always be compatible. A well-written change is **forward-compatible**: the new code ignores the column it's about to drop (e.g. a Payload `virtual` field that resolves from a relationship, and an event handler that no longer writes the column), so the new image runs happily *whether or not the column still exists*. That makes deploy-first always safe — there's a window where the new image runs against the old schema, and it doesn't care.
+
+Migrate-first is the dangerous order: the moment a destructive migration lands, the **old** image that's still live breaks — its `INSERT … <dropped_column>` fails and its reads of that column 500. (This is exactly what hit prod on 2026-06-08: `make pg-migrate` was run from a branch carrying a `DROP COLUMN` before that branch's image was deployed. Recovery was to deploy forward immediately; the new image doesn't need the column, so it converged straight to the healthy end state.)
+
+### ⚠️ `make pg-migrate` applies *all* pending migrations from your checkout
+
+`make pg-migrate ENV=<env>` runs `payload migrate`, which applies **every** not-yet-recorded migration present in the **currently checked-out branch** — not just the one you have in mind. So if your feature branch carries a destructive migration, running `pg-migrate` from that branch **before deploying** applies it early. Two consequences:
+
+- To apply only a safe **additive** migration ahead of a deploy (e.g. a new column other already-deployed code needs), run `pg-migrate` from a checkout where the destructive migration **doesn't exist** — typically `main` before your feature branch merges. Additive migrations (`ADD COLUMN` nullable, new index) are compatible with both old and new images, so they're safe to apply any time.
+- Always run `make pg-migrate-status ENV=<env>` first and read the pending list. It also confirms `.env.<env>`'s `DATABASE_URI` points at the database you think it does.
+
+### Safe procedure (per environment, demo → staging → prod)
+
+```bash
+# 1. See what's pending and confirm the DSN target (read-only)
+make -C infra/fly pg-migrate-status ENV=<env>
+
+# 2. Deploy the new image — the code that tolerates the schema change.
+#    Column still present here; the new image doesn't care.
+make -C infra/fly deploy ENV=<env> GITHUB_TOKEN="ghp_xxx"     # prod: add CONFIRM=1
+
+# 3. Verify the new image is healthy BEFORE migrating (esp. for a destructive change):
+#    fly logs -a billie-crm-<env> — processor up, no crash loop, events processing.
+#    For a contracting change this is the gate; the next step is hard to undo.
+
+# 4. Apply the migration
+make -C infra/fly pg-migrate ENV=<env>                        # prod: add CONFIRM=1
+
+# 5. Confirm
+make -C infra/fly pg-migrate-status ENV=<env>                 # target migration now "Yes"
+make -C infra/fly verify-cutover ENV=<env>
+```
+
+If you operate the change across a branch and merge it to `main`, **merge last** — after every env is deployed-and-migrated. While a destructive migration lives only on the unmerged branch, no stray `pg-migrate` from a `main` checkout can apply it to an env that's still on the old image.
+
+### Rollback
+
+- **Before** the migration is applied: trivial — redeploy the previous image; the schema is unchanged.
+- **After** a contracting migration (drop/rename): the old image expects the old schema, so you must reverse the migration *before* redeploying it:
+  ```bash
+  DATABASE_URI="<env-dsn>" PAYLOAD_SECRET="cutover-migrate" pnpm payload migrate:down
+  ```
+  `migrate:down` reverts the **whole last batch** — if several migrations were applied together, they all roll back, so check the batch in `pg-migrate-status` before relying on it. Treat applying a destructive migration as the point of no easy return, and don't run it until step 3 is solid.
 
 ---
 
