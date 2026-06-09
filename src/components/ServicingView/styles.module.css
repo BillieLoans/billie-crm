@@ -2333,3 +2333,33 @@
     position: static;
   }
 }
+
+/* Context-pane toggle button — hidden by default (≥1441 context is always visible) */
+.contextToggle {
+  display: none;
+}
+
+/* 1101–1440: show the toggle; .contextOpen becomes a fixed slide-over */
+@media (max-width: 1440px) and (min-width: 1101px) {
+  .contextToggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+    border: 1px solid var(--theme-elevation-150, #d6dae1);
+    border-radius: 6px;
+    padding: 6px 10px;
+    background: #fff;
+    cursor: pointer;
+  }
+  .contextOpen {
+    display: block !important;
+    position: fixed;
+    right: 16px;
+    top: 80px;
+    bottom: 16px;
+    width: 340px;
+    z-index: 50;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
+  }
+}

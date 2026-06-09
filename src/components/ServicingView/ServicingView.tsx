@@ -80,6 +80,9 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<TabId>('overview')
 
+  // Context pane toggle for mid-width screens (1101–1440px)
+  const [contextOpen, setContextOpen] = useState(false)
+
   // Action drawer states
   const [waiveFeeOpen, setWaiveFeeOpen] = useState(false)
   const [recordRepaymentOpen, setRecordRepaymentOpen] = useState(false)
@@ -339,6 +342,14 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
         </div>
 
         <div className={styles.detailCol}>
+          <button
+            type="button"
+            className={styles.contextToggle}
+            onClick={() => setContextOpen((v) => !v)}
+            data-testid="context-toggle"
+          >
+            {contextOpen ? 'Hide context' : 'Show context'}
+          </button>
           {selectedAccount ? (
             <AccountPanel
               account={selectedAccount}
@@ -364,7 +375,7 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
           )}
         </div>
 
-        <div className={styles.contextCol}>
+        <div className={`${styles.contextCol}${contextOpen ? ` ${styles.contextOpen}` : ''}`}>
           {/* Tabbed context: Communications (contact notes + notification history) and
               Applications (loan origination conversations). customer.id is the Payload
               document ID for note queries; customerId (route param) is the business key. */}
