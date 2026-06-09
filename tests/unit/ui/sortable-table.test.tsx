@@ -331,7 +331,10 @@ describe('SortableTable', () => {
         />,
       )
 
-      expect(screen.getByTestId('header-name')).toHaveAttribute('aria-sort', 'ascending')
+      expect(screen.getByTestId('header-name').closest('[role="columnheader"]')).toHaveAttribute(
+        'aria-sort',
+        'ascending',
+      )
     })
 
     it('should update aria-sort when direction changes', () => {
@@ -348,7 +351,10 @@ describe('SortableTable', () => {
       // Click to toggle to descending
       fireEvent.click(screen.getByTestId('header-name'))
 
-      expect(screen.getByTestId('header-name')).toHaveAttribute('aria-sort', 'descending')
+      expect(screen.getByTestId('header-name').closest('[role="columnheader"]')).toHaveAttribute(
+        'aria-sort',
+        'descending',
+      )
     })
 
     it('should have role attributes for table structure', () => {
