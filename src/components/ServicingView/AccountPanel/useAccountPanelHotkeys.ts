@@ -3,7 +3,7 @@
 import { useEffect, useCallback } from 'react'
 import type { TabId } from './AccountTabs'
 
-const TAB_ORDER: TabId[] = ['overview', 'transactions', 'fees', 'actions']
+const TAB_ORDER: TabId[] = ['overview', 'transactions', 'fees', 'accruals', 'ecl', 'actions']
 
 interface UseAccountPanelHotkeysOptions {
   /** Currently active tab */
@@ -26,7 +26,7 @@ interface UseAccountPanelHotkeysOptions {
  * Hook to handle keyboard shortcuts for the AccountPanel.
  *
  * Shortcuts:
- * - 1-4: Switch to tab (Overview, Transactions, Fees, Actions)
+ * - 1–6: Switch to tab (Overview, Transactions, Fees, Accruals, ECL, Actions)
  * - ↑/↓: Navigate between accounts (when multiple exist)
  * - Escape: Close the panel
  */
@@ -60,8 +60,8 @@ export function useAccountPanelHotkeys({
         return
       }
 
-      // Tab switching with number keys 1-4
-      if (event.key >= '1' && event.key <= '4') {
+      // Tab switching with number keys 1–6
+      if (event.key >= '1' && event.key <= '6') {
         const tabIndex = parseInt(event.key, 10) - 1
         if (tabIndex >= 0 && tabIndex < TAB_ORDER.length) {
           event.preventDefault()

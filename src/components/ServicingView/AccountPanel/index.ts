@@ -7,9 +7,6 @@ export type { AccountHeaderProps } from './AccountHeader'
 export { AccountTabs } from './AccountTabs'
 export type { AccountTabsProps, TabId, TabConfig } from './AccountTabs'
 
-export { AccountSwitcher } from './AccountSwitcher'
-export type { AccountSwitcherProps } from './AccountSwitcher'
-
 export { OverviewTab } from './OverviewTab'
 export type { OverviewTabProps } from './OverviewTab'
 
