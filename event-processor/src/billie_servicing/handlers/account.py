@@ -11,6 +11,7 @@ Handles events:
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -36,6 +37,18 @@ CLOSURE_REASON_STATUS_MAP = {
     "PAID_OFF": "paid_off",
     "WRITTEN_OFF": "written_off",
     "ADMIN_CLOSED": "paid_off",
+}
+
+# SDK PaymentStatus → Payload repayment-schedule enum
+# (enum_loan_accounts_repayment_schedule_payments_status: scheduled/paid/partial/missed).
+# Keyed by the upper-cased status member; already-Payload values map to themselves.
+SCHEDULE_PAYMENT_STATUS_MAP = {
+    "PENDING": "scheduled",
+    "SCHEDULED": "scheduled",
+    "PARTIAL": "partial",
+    "PAID": "paid",
+    "OVERDUE": "missed",
+    "MISSED": "missed",
 }
 
 
@@ -460,10 +473,12 @@ async def handle_schedule_updated(pool: asyncpg.Pool, parsed_event: Any) -> None
 
             for payment in payment_updates:
                 payment_number = int(payment.payment_number)
-                new_status = (str(payment.status).lower() if payment.status else "scheduled")
-                # Map the SDK string status onto the Payload select enum.
-                if "." in new_status:
-                    new_status = new_status.split(".")[-1]
+                # Map the SDK PaymentStatus (PENDING/PARTIAL/PAID/OVERDUE) onto the
+                # Payload repayment-schedule enum (scheduled/partial/paid/missed).
+                # Unknown values fall back to 'scheduled' so the upsert never fails
+                # the enum check.
+                raw_status = _normalise_status(payment.status, "PENDING").upper()
+                new_status = SCHEDULE_PAYMENT_STATUS_MAP.get(raw_status, "scheduled")
 
                 paid_date = coerce_date(getattr(payment, "paid_date", None))
                 amount_paid = (
@@ -476,8 +491,11 @@ async def handle_schedule_updated(pool: asyncpg.Pool, parsed_event: Any) -> None
                     if getattr(payment, "amount_remaining", None) is not None
                     else None
                 )
+                # linked_transaction_ids is a jsonb column. asyncpg needs a JSON
+                # *string* for jsonb (no list/dict codec is registered) — passing a
+                # raw Python list raises DataError. Serialise it like db.merge_jsonb.
                 linked_ids = (
-                    list(payment.linked_transaction_ids)
+                    json.dumps(list(payment.linked_transaction_ids))
                     if getattr(payment, "linked_transaction_ids", None)
                     else None
                 )
