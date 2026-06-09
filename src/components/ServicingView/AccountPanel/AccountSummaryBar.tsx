@@ -100,7 +100,7 @@ export const AccountSummaryBar: React.FC<AccountSummaryBarProps> = (props) => {
           {signal.nextDueDate && (
             <div>
               <div className={styles.figLabel}>Next payment</div>
-              <div className={`${styles.figValue} ${signal.isOverdue ? styles.figOverdue : ''}`}>{currency.format(account.lastPayment?.amount ?? 0)}</div>
+              <div className={`${styles.figValue} ${signal.isOverdue ? styles.figOverdue : ''}`}>{currency.format(signal.nextDueAmount ?? 0)}</div>
             </div>
           )}
         </div>

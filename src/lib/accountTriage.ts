@@ -8,6 +8,7 @@ export interface AccountSignal {
   isOverdue: boolean
   daysOverdue: number
   nextDueDate: string | null
+  nextDueAmount: number | null
 }
 
 export interface AttentionItem {
@@ -32,10 +33,10 @@ const outstanding = (a: LoanAccountData): number =>
 export function getAccountSignal(account: LoanAccountData, today: Date = new Date()): AccountSignal {
   const status = account.accountStatus
   if (status === 'paid_off' || status === 'written_off') {
-    return { tier: 'closed', isOverdue: false, daysOverdue: 0, nextDueDate: null }
+    return { tier: 'closed', isOverdue: false, daysOverdue: 0, nextDueDate: null, nextDueAmount: null }
   }
   if (status === 'pending_disbursement') {
-    return { tier: 'pending', isOverdue: false, daysOverdue: 0, nextDueDate: null }
+    return { tier: 'pending', isOverdue: false, daysOverdue: 0, nextDueDate: null, nextDueAmount: null }
   }
 
   const unpaid = (account.repaymentSchedule?.payments ?? [])
@@ -43,6 +44,7 @@ export function getAccountSignal(account: LoanAccountData, today: Date = new Dat
     .sort((a, b) => +new Date(a.dueDate as string) - +new Date(b.dueDate as string))
 
   const nextDueDate = unpaid[0]?.dueDate ?? null
+  const nextDueAmount = unpaid[0]?.amount ?? null
   const todayMs = startOfDay(today)
   const pastDue = unpaid.filter((p) => startOfDay(new Date(p.dueDate as string)) < todayMs)
   const isOverdue = status === 'in_arrears' || pastDue.length > 0
@@ -51,7 +53,7 @@ export function getAccountSignal(account: LoanAccountData, today: Date = new Dat
       ? Math.floor((todayMs - startOfDay(new Date(pastDue[0].dueDate as string))) / MS_PER_DAY)
       : 0
 
-  return { tier: isOverdue ? 'overdue' : 'active', isOverdue, daysOverdue, nextDueDate }
+  return { tier: isOverdue ? 'overdue' : 'active', isOverdue, daysOverdue, nextDueDate, nextDueAmount }
 }
 
 export function sortAccountsForRail(

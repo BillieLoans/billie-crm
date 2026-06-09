@@ -54,4 +54,19 @@ describe('AccountSummaryBar', () => {
     render(<AccountSummaryBar account={account({ accountStatus: 'pending_disbursement' })} hasPendingWriteOff={false} {...handlers()} />)
     expect(screen.getByRole('button', { name: /disburse loan/i })).toBeInTheDocument()
   })
+
+  test('next payment shows the scheduled instalment amount, not the last payment amount', () => {
+    const a = account({
+      accountStatus: 'active',
+      lastPayment: { date: '2026-05-01', amount: 999 }, // red-herring: should NOT render
+      repaymentSchedule: {
+        scheduleId: 's', numberOfPayments: 1, paymentFrequency: 'fortnightly', createdDate: null,
+        payments: [{ paymentNumber: 1, dueDate: '2026-07-01', amount: 95, status: 'scheduled' }],
+      },
+    })
+    render(<AccountSummaryBar account={a} hasPendingWriteOff={false} {...handlers()} />)
+    // $95.00 is the next scheduled instalment; $999.00 must not appear
+    expect(screen.getByText('$95.00')).toBeInTheDocument()
+    expect(screen.queryByText('$999.00')).not.toBeInTheDocument()
+  })
 })

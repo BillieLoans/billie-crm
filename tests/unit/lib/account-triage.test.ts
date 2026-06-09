@@ -50,6 +50,7 @@ describe('getAccountSignal', () => {
     expect(s.isOverdue).toBe(true)
     expect(s.daysOverdue).toBe(3)
     expect(s.nextDueDate).toBe('2026-06-06')
+    expect(s.nextDueAmount).toBe(80)
   })
 
   it('active fully up-to-date is active with the next future due date', () => {
@@ -64,6 +65,7 @@ describe('getAccountSignal', () => {
     expect(s.tier).toBe('active')
     expect(s.daysOverdue).toBe(0)
     expect(s.nextDueDate).toBe('2026-06-20')
+    expect(s.nextDueAmount).toBe(80)
   })
 
   it('in_arrears status is overdue even without schedule rows', () => {
