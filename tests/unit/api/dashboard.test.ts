@@ -61,6 +61,11 @@ describe('Dashboard Schema', () => {
         },
       ],
       pendingDisbursementsCount: 1,
+      moneyFlowsToday: {
+        paymentsExpected: { count: 3, totalAmount: 750, totalAmountFormatted: '$750.00' },
+        paymentsReceived: { count: 2, totalAmount: 500, totalAmountFormatted: '$500.00' },
+        disbursed: { count: 1, totalAmount: 7000, totalAmountFormatted: '$7,000.00' },
+      },
       systemStatus: {
         ledger: 'online',
         latencyMs: 45,
