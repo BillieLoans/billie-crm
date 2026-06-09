@@ -354,6 +354,31 @@ class TestScheduleUpdatedHandler:
         # guard for the schedule-allocation linkage bug.
         assert isinstance(row["linked_transaction_ids"], str)
         assert json.loads(row["linked_transaction_ids"]) == ["TXN-001"]
+
+    @pytest.mark.asyncio
+    async def test_sdk_status_values_map_to_payload_enum(self, mock_pool):
+        # SDK PaymentStatus (PENDING/OVERDUE/PAID/PARTIAL) must map onto the
+        # Payload enum (scheduled/missed/paid/partial). Regression for the
+        # enum-mismatch crash: invalid input value ... status: "pending".
+        mock_pool.set_fetchval("parent-uuid")
+        event = MagicMock()
+        event.payload = MagicMock()
+        event.payload.account_id = "ACC-TEST-001"
+        event.payload.schedule_id = "SCHED-001"
+        event.payload.payments = [
+            self._make_payment(1, "PENDING"),
+            self._make_payment(2, "OVERDUE"),
+            self._make_payment(3, "PAID", amount_paid=Decimal("50.00")),
+            self._make_payment(4, "PARTIAL", amount_paid=Decimal("25.00"), amount_remaining=Decimal("25.00")),
+        ]
+
+        await handle_schedule_updated(mock_pool, event)
+
+        rows = {
+            r["payment_number"]: r["status"]
+            for r in mock_pool.inserts_into("loan_accounts_repayment_schedule_payments")
+        }
+        assert rows == {1: "scheduled", 2: "missed", 3: "paid", 4: "partial"}
         # Conflict target is the composite natural key.
         call = [c for c in mock_pool.calls_against("loan_accounts_repayment_schedule_payments")
                 if c.op == "INSERT"][0]

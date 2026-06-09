@@ -39,6 +39,18 @@ CLOSURE_REASON_STATUS_MAP = {
     "ADMIN_CLOSED": "paid_off",
 }
 
+# SDK PaymentStatus → Payload repayment-schedule enum
+# (enum_loan_accounts_repayment_schedule_payments_status: scheduled/paid/partial/missed).
+# Keyed by the upper-cased status member; already-Payload values map to themselves.
+SCHEDULE_PAYMENT_STATUS_MAP = {
+    "PENDING": "scheduled",
+    "SCHEDULED": "scheduled",
+    "PARTIAL": "partial",
+    "PAID": "paid",
+    "OVERDUE": "missed",
+    "MISSED": "missed",
+}
+
 
 def _normalise_status(value: Any, default: str = "PENDING") -> str:
     """Strip the ``EnumName.MEMBER`` prefix that some Pydantic enums stringify with."""
@@ -461,10 +473,12 @@ async def handle_schedule_updated(pool: asyncpg.Pool, parsed_event: Any) -> None
 
             for payment in payment_updates:
                 payment_number = int(payment.payment_number)
-                new_status = (str(payment.status).lower() if payment.status else "scheduled")
-                # Map the SDK string status onto the Payload select enum.
-                if "." in new_status:
-                    new_status = new_status.split(".")[-1]
+                # Map the SDK PaymentStatus (PENDING/PARTIAL/PAID/OVERDUE) onto the
+                # Payload repayment-schedule enum (scheduled/partial/paid/missed).
+                # Unknown values fall back to 'scheduled' so the upsert never fails
+                # the enum check.
+                raw_status = _normalise_status(payment.status, "PENDING").upper()
+                new_status = SCHEDULE_PAYMENT_STATUS_MAP.get(raw_status, "scheduled")
 
                 paid_date = coerce_date(getattr(payment, "paid_date", None))
                 amount_paid = (
