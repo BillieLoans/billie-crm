@@ -59,15 +59,27 @@ describe('useAccountPanelHotkeys', () => {
       expect(mockOnTabChange).toHaveBeenCalledWith('fees')
     })
 
-    test('pressing 4 switches to actions tab', () => {
+    test('pressing 4 switches to accruals tab', () => {
       renderHook(() => useAccountPanelHotkeys(getDefaultOptions()))
       document.dispatchEvent(createKeyboardEvent('4'))
+      expect(mockOnTabChange).toHaveBeenCalledWith('accruals')
+    })
+
+    test('pressing 5 switches to ecl tab', () => {
+      renderHook(() => useAccountPanelHotkeys(getDefaultOptions()))
+      document.dispatchEvent(createKeyboardEvent('5'))
+      expect(mockOnTabChange).toHaveBeenCalledWith('ecl')
+    })
+
+    test('pressing 6 switches to actions tab', () => {
+      renderHook(() => useAccountPanelHotkeys(getDefaultOptions()))
+      document.dispatchEvent(createKeyboardEvent('6'))
       expect(mockOnTabChange).toHaveBeenCalledWith('actions')
     })
 
-    test('pressing 5 does not switch tabs (out of range)', () => {
+    test('pressing 7 does not switch tabs (out of range)', () => {
       renderHook(() => useAccountPanelHotkeys(getDefaultOptions()))
-      document.dispatchEvent(createKeyboardEvent('5'))
+      document.dispatchEvent(createKeyboardEvent('7'))
       expect(mockOnTabChange).not.toHaveBeenCalled()
     })
 
