@@ -1,0 +1,35 @@
+/* src/components/ServicingView/ContextPane.module.css */
+.pane {
+  background: var(--theme-elevation-0, #fff);
+  border: 1px solid var(--theme-elevation-150, #e3e6eb);
+  border-radius: 8px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--theme-elevation-100, #eceef1);
+}
+.tab {
+  flex: 1;
+  padding: 9px;
+  font-size: 12.5px;
+  color: var(--theme-elevation-600, #6b7280);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+.tabActive {
+  color: var(--theme-text, #2563eb);
+  font-weight: 600;
+  border-bottom-color: var(--theme-elevation-800, #2563eb);
+}
+.body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+}

@@ -2,7 +2,7 @@
 
 import type { LoanAccountData } from '@/hooks/queries/useCustomer'
 import { useCarryingAmountBreakdown } from '@/hooks/queries/useCarryingAmountBreakdown'
-import { CopyButton } from '@/components/ui'
+import { getAccountSignal } from '@/lib/accountTriage'
 import { RepaymentScheduleList } from './RepaymentScheduleList'
 import styles from './styles.module.css'
 
@@ -31,6 +31,12 @@ function formatDate(dateString: string | null): string {
   } catch {
     return '—'
   }
+}
+
+function formatFrequency(freq: string | null | undefined): string {
+  if (!freq) return ''
+  const map: Record<string, string> = { weekly: 'Weekly', fortnightly: 'Fortnightly', monthly: 'Monthly' }
+  return map[freq] ?? freq
 }
 
 /**
@@ -71,6 +77,15 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ account, onNavigateToT
     account.balances?.totalPaid != null ||
     totalPaidFromSchedule > 0
 
+  // Repayment progress (mockup parity): paid count, progress bar, next instalment, last payment
+  const payments = account.repaymentSchedule?.payments ?? []
+  const totalPayments = account.repaymentSchedule?.numberOfPayments ?? payments.length
+  const paidCount = payments.filter((p) => p.status === 'paid').length
+  const progressPct = totalPayments > 0 ? Math.round((paidCount / totalPayments) * 100) : 0
+  const signal = getAccountSignal(account)
+  const hasLastPayment = !!(account.lastPayment && (account.lastPayment.date || account.lastPayment.amount))
+  const showProgress = payments.length > 0 || hasLastPayment
+
   return (
     <div
       className={styles.overviewTab}
@@ -79,104 +94,97 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ account, onNavigateToT
       aria-labelledby="tab-overview"
       data-testid="overview-tab"
     >
-      {/* Balance Section */}
-      <div className={styles.overviewSection}>
-        <h4 className={styles.overviewSectionTitle}>
-          Current Balance
-          {hasLiveBalance ? (
-            <span className={styles.overviewLiveTag}>Live</span>
-          ) : (
-            <span className={styles.overviewCachedTag}>Cached</span>
-          )}
-        </h4>
-        <div className={styles.overviewGrid}>
-          <div className={styles.overviewItem}>
-            <span className={styles.overviewLabel}>Principal</span>
-            <span className={styles.overviewValue}>{currencyFormatter.format(principal)}</span>
-          </div>
-          {hasLiveBalance && (
+      {/* Row 1: Balance + Last Payment side-by-side */}
+      <div className={styles.overviewGridTwo}>
+        {/* Balance Section */}
+        <div className={styles.overviewSection}>
+          <h4 className={styles.overviewSectionTitle}>
+            Current Balance
+            {hasLiveBalance ? (
+              <span className={styles.overviewLiveTag}>Live</span>
+            ) : (
+              <span className={styles.overviewCachedTag}>Cached</span>
+            )}
+          </h4>
+          <div className={styles.overviewGrid}>
             <div className={styles.overviewItem}>
-              <span className={styles.overviewLabel}>Fees</span>
-              <span className={styles.overviewValue}>{currencyFormatter.format(fees)}</span>
+              <span className={styles.overviewLabel}>Principal</span>
+              <span className={styles.overviewValue}>{currencyFormatter.format(principal)}</span>
             </div>
-          )}
-          <div className={styles.overviewItem}>
-            <span className={styles.overviewLabel}>Total Outstanding</span>
-            <span className={`${styles.overviewValue} ${styles.overviewValueHighlight}`}>
-              {currencyFormatter.format(totalOutstanding)}
-            </span>
-          </div>
-          {showTotalPaid && (
+            {hasLiveBalance && (
+              <div className={styles.overviewItem}>
+                <span className={styles.overviewLabel}>Fees</span>
+                <span className={styles.overviewValue}>{currencyFormatter.format(fees)}</span>
+              </div>
+            )}
             <div className={styles.overviewItem}>
-              <span className={styles.overviewLabel}>Total Paid</span>
-              <span className={styles.overviewValue}>
-                {currencyFormatter.format(totalPaid)}
+              <span className={styles.overviewLabel}>Total Outstanding</span>
+              <span className={`${styles.overviewValue} ${styles.overviewValueHighlight}`}>
+                {currencyFormatter.format(totalOutstanding)}
               </span>
             </div>
+            {showTotalPaid && (
+              <div className={styles.overviewItem}>
+                <span className={styles.overviewLabel}>Total Paid</span>
+                <span className={styles.overviewValue}>
+                  {currencyFormatter.format(totalPaid)}
+                </span>
+              </div>
+            )}
+          </div>
+          {hasLiveBalance && account.liveBalance?.asOf && (
+            <p className={styles.overviewTimestamp}>
+              Balance as of {formatDate(account.liveBalance.asOf)}
+            </p>
           )}
         </div>
-        {hasLiveBalance && account.liveBalance?.asOf && (
-          <p className={styles.overviewTimestamp}>
-            Balance as of {formatDate(account.liveBalance.asOf)}
-          </p>
+
+        {/* Repayment progress */}
+        {showProgress && (
+          <div className={styles.overviewSection}>
+            <h4 className={styles.overviewSectionTitle}>Repayment progress</h4>
+            {totalPayments > 0 && (
+              <>
+                <div className={styles.progressTop}>
+                  <span>
+                    <strong>
+                      {paidCount} of {totalPayments}
+                    </strong>{' '}
+                    paid
+                  </span>
+                  {account.repaymentSchedule?.paymentFrequency && (
+                    <span className={styles.progressFreq}>
+                      {formatFrequency(account.repaymentSchedule.paymentFrequency)}
+                    </span>
+                  )}
+                </div>
+                <div className={styles.progressBar}>
+                  <div className={styles.progressFill} style={{ width: `${progressPct}%` }} />
+                </div>
+              </>
+            )}
+            {signal.nextDueDate && (
+              <div className={signal.isOverdue ? styles.progressNextOverdue : styles.progressNext}>
+                Next: {currencyFormatter.format(signal.nextDueAmount ?? 0)}
+                {signal.isOverdue
+                  ? ` — overdue ${signal.daysOverdue}d`
+                  : ` · ${formatDate(signal.nextDueDate)}`}
+              </div>
+            )}
+            {hasLastPayment && (
+              <div className={styles.progressLast}>
+                Last payment{' '}
+                {account.lastPayment!.amount
+                  ? currencyFormatter.format(account.lastPayment!.amount)
+                  : '—'}
+                {account.lastPayment!.date ? ` · ${formatDate(account.lastPayment!.date)}` : ''}
+              </div>
+            )}
+          </div>
         )}
       </div>
 
-      {/* Loan agreement link - when available */}
-      {account.signedLoanAgreementUrl && (
-        <div className={styles.overviewSection}>
-          <h4 className={styles.overviewSectionTitle}>Loan agreement</h4>
-          <a
-            href={`/api/loan-agreement?accountId=${encodeURIComponent(account.loanAccountId)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={styles.overviewLink}
-            data-testid="view-loan-agreement"
-          >
-            <span aria-hidden>📄</span>
-            View signed loan agreement
-          </a>
-        </div>
-      )}
-
-      {/* Loan Terms */}
-      {account.loanTerms && (
-        <div className={styles.overviewSection}>
-          <h4 className={styles.overviewSectionTitle}>Loan Terms</h4>
-          <div className={styles.overviewGrid}>
-            <div className={styles.overviewItem}>
-              <span className={styles.overviewLabel}>Loan Amount</span>
-              <span className={styles.overviewValue}>
-                {account.loanTerms.loanAmount
-                  ? currencyFormatter.format(account.loanTerms.loanAmount)
-                  : '—'}
-              </span>
-            </div>
-            <div className={styles.overviewItem}>
-              <span className={styles.overviewLabel}>Loan Fee</span>
-              <span className={styles.overviewValue}>
-                {account.loanTerms.loanFee
-                  ? currencyFormatter.format(account.loanTerms.loanFee)
-                  : '—'}
-              </span>
-            </div>
-            <div className={styles.overviewItem}>
-              <span className={styles.overviewLabel}>Total Payable</span>
-              <span className={styles.overviewValue}>
-                {account.loanTerms.totalPayable
-                  ? currencyFormatter.format(account.loanTerms.totalPayable)
-                  : '—'}
-              </span>
-            </div>
-            <div className={styles.overviewItem}>
-              <span className={styles.overviewLabel}>Opened</span>
-              <span className={styles.overviewValue}>{formatDate(account.loanTerms.openedDate)}</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Repayment Schedule */}
+      {/* Repayment Schedule — full width */}
       {account.repaymentSchedule && (
         <div className={styles.overviewSection}>
           <h4 className={styles.overviewSectionTitle}>Repayment Schedule</h4>
@@ -189,36 +197,61 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ account, onNavigateToT
         </div>
       )}
 
-      {/* Last Payment */}
-      {account.lastPayment && (account.lastPayment.date || account.lastPayment.amount) && (
-        <div className={styles.overviewSection}>
-          <h4 className={styles.overviewSectionTitle}>Last Payment</h4>
-          <div className={styles.overviewGrid}>
-            <div className={styles.overviewItem}>
-              <span className={styles.overviewLabel}>Date</span>
-              <span className={styles.overviewValue}>{formatDate(account.lastPayment.date)}</span>
-            </div>
-            <div className={styles.overviewItem}>
-              <span className={styles.overviewLabel}>Amount</span>
-              <span className={styles.overviewValue}>
-                {account.lastPayment.amount
-                  ? currencyFormatter.format(account.lastPayment.amount)
-                  : '—'}
-              </span>
+      {/* Row 2: Loan Terms + Loan agreement side-by-side */}
+      <div className={styles.overviewGridTwo}>
+        {/* Loan Terms */}
+        {account.loanTerms && (
+          <div className={styles.overviewSection}>
+            <h4 className={styles.overviewSectionTitle}>Loan Terms</h4>
+            <div className={styles.overviewGrid}>
+              <div className={styles.overviewItem}>
+                <span className={styles.overviewLabel}>Loan Amount</span>
+                <span className={styles.overviewValue}>
+                  {account.loanTerms.loanAmount
+                    ? currencyFormatter.format(account.loanTerms.loanAmount)
+                    : '—'}
+                </span>
+              </div>
+              <div className={styles.overviewItem}>
+                <span className={styles.overviewLabel}>Loan Fee</span>
+                <span className={styles.overviewValue}>
+                  {account.loanTerms.loanFee
+                    ? currencyFormatter.format(account.loanTerms.loanFee)
+                    : '—'}
+                </span>
+              </div>
+              <div className={styles.overviewItem}>
+                <span className={styles.overviewLabel}>Total Payable</span>
+                <span className={styles.overviewValue}>
+                  {account.loanTerms.totalPayable
+                    ? currencyFormatter.format(account.loanTerms.totalPayable)
+                    : '—'}
+                </span>
+              </div>
+              <div className={styles.overviewItem}>
+                <span className={styles.overviewLabel}>Opened</span>
+                <span className={styles.overviewValue}>{formatDate(account.loanTerms.openedDate)}</span>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Loan ID */}
-      <div className={styles.overviewSection}>
-        <div className={styles.overviewItem}>
-          <span className={styles.overviewLabel}>Loan Account ID</span>
-          <span className={styles.copyable}>
-            <span className={styles.overviewValueMono}>{account.loanAccountId}</span>
-            <CopyButton value={account.loanAccountId} label="Copy loan account ID" />
-          </span>
-        </div>
+        {/* Loan agreement link - when available */}
+        {account.signedLoanAgreementUrl && (
+          <div className={styles.overviewSection}>
+            <h4 className={styles.overviewSectionTitle}>Loan agreement</h4>
+            <a
+              href={`/api/loan-agreement?accountId=${encodeURIComponent(account.loanAccountId)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={styles.overviewLink}
+              data-testid="view-loan-agreement"
+            >
+              <span aria-hidden>📄</span>
+              View signed loan agreement
+            </a>
+          </div>
+        )}
       </div>
     </div>
   )

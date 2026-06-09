@@ -1,0 +1,9 @@
+/* src/components/ServicingView/AttentionStrip.module.css */
+.strip { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 8px 2px 12px; }
+.label { color: var(--theme-elevation-500, #8a93a0); font-size: 11px; font-weight: 700; letter-spacing: 0.04em; }
+.chip { border-radius: 13px; padding: 4px 11px; font-size: 12px; font-weight: 600; border: 1px solid transparent; }
+.clickable { cursor: pointer; }
+.vulnerable { background: var(--theme-error-100, #fdecea); color: var(--theme-error-500, #b4231a); border-color: var(--theme-error-300, #f0b8b1); font-weight: 700; }
+.overdue { background: var(--theme-error-100, #fbeceb); color: var(--theme-error-500, #c0362c); border-color: var(--theme-error-300, #f1c4bf); }
+.pending_disbursement { background: var(--theme-warning-100, #fdf3e0); color: var(--theme-warning-700, #b7791f); border-color: var(--theme-warning-200, #f0dcae); }
+.writeoff_pending { background: var(--theme-elevation-50, #eef2fb); color: var(--theme-elevation-650, #2f5bb0); border-color: var(--theme-elevation-150, #cdd9f0); }

@@ -12,8 +12,6 @@ import { CustomerHeader } from './CustomerHeader'
 import { CustomerHeaderSkeleton } from './CustomerHeaderSkeleton'
 import { LoanAccountsSkeleton } from './LoanAccountsSkeleton'
 import { TransactionsSkeleton } from './TransactionsSkeleton'
-import { VulnerableCustomerBanner } from './VulnerableCustomerBanner'
-import { LoanAccountCard } from './LoanAccountCard'
 import { WaiveFeeDrawer } from './WaiveFeeDrawer'
 import { RecordRepaymentDrawer } from './RecordRepaymentDrawer'
 import { BulkWaiveFeeDrawer } from './BulkWaiveFeeDrawer'
@@ -22,8 +20,10 @@ import { DisburseLoanDrawer } from './DisburseLoanDrawer'
 import { ApplyFeeDrawer, type FeeType } from './ApplyFeeDrawer'
 import { AccountPanel, type TabId } from './AccountPanel'
 import type { SelectedFee } from './FeeList'
-import { CommunicationsPanel } from './Communications/CommunicationsPanel'
-import { ApplicationsPanel } from './ApplicationsPanel'
+import { AccountRail } from './AccountRail'
+import { AttentionStrip } from './AttentionStrip'
+import { ContextPane } from './ContextPane'
+import { getAttentionItems, sortAccountsForRail } from '@/lib/accountTriage'
 import { usePendingWriteOff } from '@/hooks/queries/usePendingWriteOff'
 import { useTrackCustomerView } from '@/hooks/useTrackCustomerView'
 import { Breadcrumb } from '@/components/Breadcrumb'
@@ -62,87 +62,6 @@ const CustomerNotFound: React.FC = () => {
 }
 
 /**
- * Loan Accounts list with live balance display.
- */
-interface LoanAccountsListProps {
-  accounts: LoanAccountData[]
-  selectedAccountId: string | null
-  onSelectAccount: (account: LoanAccountData) => void
-}
-
-// Hoisted currency formatter
-const currencyFormatter = new Intl.NumberFormat('en-AU', {
-  style: 'currency',
-  currency: 'AUD',
-})
-
-const LoanAccountsList: React.FC<LoanAccountsListProps> = ({
-  accounts,
-  selectedAccountId,
-  onSelectAccount,
-}) => {
-  // Calculate total across all accounts
-  const total = useMemo(() => {
-    return accounts.reduce((sum, account) => {
-      const outstanding = account.liveBalance
-        ? account.liveBalance.totalOutstanding
-        : account.balances?.totalOutstanding ?? 0
-      return sum + outstanding
-    }, 0)
-  }, [accounts])
-
-  if (accounts.length === 0) {
-    return (
-      <div className={styles.accountsSection}>
-        <h3 className={styles.sectionTitle}>Loan Accounts</h3>
-        <p className={styles.placeholderText}>No loan accounts found</p>
-      </div>
-    )
-  }
-
-  return (
-    <div className={styles.accountsSection}>
-      <div className={styles.accountsSectionHeader}>
-        <h3 className={styles.sectionTitle}>Loan Accounts ({accounts.length})</h3>
-        {accounts.length > 1 && (
-          <span className={styles.accountsTotal}>
-            Total: {currencyFormatter.format(total)}
-          </span>
-        )}
-      </div>
-      <div className={styles.accountsList}>
-        {accounts.map((account) => (
-          <LoanAccountCard
-            key={account.id}
-            account={account}
-            isSelected={account.loanAccountId === selectedAccountId}
-            onSelect={onSelectAccount}
-          />
-        ))}
-      </div>
-    </div>
-  )
-}
-
-/**
- * Placeholder shown when no account is selected.
- */
-const AccountSelectionPrompt: React.FC = () => {
-  return (
-    <div className={styles.selectionPrompt}>
-      <div className={styles.selectionPromptIcon}>👆</div>
-      <h3 className={styles.selectionPromptTitle}>Select an Account</h3>
-      <p className={styles.selectionPromptText}>
-        Click on a loan account above to view details, transactions, and take actions.
-      </p>
-      <p className={styles.selectionPromptHint}>
-        Use <kbd>1</kbd>-<kbd>4</kbd> to switch tabs, <kbd>↑</kbd><kbd>↓</kbd> to navigate accounts
-      </p>
-    </div>
-  )
-}
-
-/**
  * ServicingView - Main customer servicing dashboard.
  *
  * Displays customer profile, loan accounts with tabbed detail panel.
@@ -160,6 +79,9 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
   // Account selection and tab state
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<TabId>('overview')
+
+  // Context pane toggle for mid-width screens (1101–1440px)
+  const [contextOpen, setContextOpen] = useState(false)
 
   // Action drawer states
   const [waiveFeeOpen, setWaiveFeeOpen] = useState(false)
@@ -186,7 +108,21 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
   // Only block if we have confirmed pending data; allow if error/loading (fail open for UX)
   const hasPendingWriteOff = !pendingWriteOffError && !!pendingWriteOff
 
-  // Auto-select single account or account from URL query parameter
+  // Customer-level attention chips (vulnerable, overdue, pending disbursement, write-off pending)
+  const attentionItems = useMemo(
+    () =>
+      getAttentionItems({
+        vulnerable: customer?.vulnerableFlag ?? false,
+        accounts,
+        // NOTE: pending-write-off detection is intentionally scoped to the SELECTED account because
+        // `usePendingWriteOff` is a per-account query and the design avoids firing extra fetches for
+        // every account on the rail. A customer-level pending-write-off query would be a follow-up.
+        pendingWriteOffAccountIds: selectedAccountId && hasPendingWriteOff ? [selectedAccountId] : [],
+      }),
+    [customer?.vulnerableFlag, accounts, selectedAccountId, hasPendingWriteOff]
+  )
+
+  // Auto-select top-triaged account or account from URL query parameter
   useEffect(() => {
     if (accounts.length === 0) return
 
@@ -208,9 +144,13 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
       }
     }
 
-    // Auto-select if only one account
-    if (accounts.length === 1 && !selectedAccountId) {
-      setSelectedAccountId(accounts[0].loanAccountId)
+    // Auto-select the top-triaged account (in-arrears first, then pending,
+    // then active; falling back to the most recently closed) when nothing
+    // is selected and no ?accountId= param applied above.
+    if (!selectedAccountId && accounts.length > 0) {
+      const { active, closed } = sortAccountsForRail(accounts)
+      const top = active[0] ?? closed[0]
+      if (top) setSelectedAccountId(top.loanAccountId)
     }
   }, [accounts, selectedAccountId])
 
@@ -374,7 +314,6 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
   }
 
   // Data loaded
-  const isVulnerable = customer?.vulnerableFlag ?? false
 
   return (
     <div className={styles.container}>
@@ -392,57 +331,66 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
       {/* Compact horizontal customer header */}
       {customer && <CustomerHeader customer={customer} />}
 
-      {/* Vulnerable customer warning banner */}
-      {isVulnerable && <VulnerableCustomerBanner />}
+      {/* Customer-level attention chips (replaces the vulnerable banner) */}
+      <AttentionStrip items={attentionItems} onSelectAccount={handleSwitchAccount} />
 
-      {/* Full-width content - no sidebar */}
-      <div className={styles.content}>
-        {/* Account cards - always visible */}
-        <LoanAccountsList
-          accounts={accounts}
-          selectedAccountId={selectedAccountId}
-          onSelectAccount={handleSelectAccount}
-        />
-
-        {/* Account panel - shown when account selected */}
-        {selectedAccount ? (
-          <AccountPanel
-            account={selectedAccount}
-            allAccounts={accounts}
-            activeTab={activeTab}
-            onTabChange={handleTabChange}
-            onClose={handleClosePanel}
-            onSwitchAccount={handleSwitchAccount}
-            onWaiveFee={handleOpenWaiveFee}
-            onRecordRepayment={handleOpenRecordRepayment}
-            onApplyLateFee={handleOpenApplyLateFee}
-            onApplyDishonourFee={handleOpenApplyDishonourFee}
-            onBulkWaive={handleBulkWaive}
-            feesCount={feesCount}
-            onRefresh={handleRefresh}
-            isRefreshing={isFetchingData}
-            onRequestWriteOff={handleOpenWriteOff}
-            hasPendingWriteOff={hasPendingWriteOff}
-            onDisburseLoan={handleOpenDisburseLoan}
+      {/* Three-pane cockpit: triaged rail · account work-surface · customer context */}
+      <div className={styles.cockpit}>
+        <div className={styles.railCol}>
+          <AccountRail
+            accounts={accounts}
+            selectedAccountId={selectedAccountId}
+            onSelectAccount={handleSelectAccount}
           />
-        ) : (
-          <AccountSelectionPrompt />
-        )}
+        </div>
 
-        {/* Communications Panel — unified contact notes + notification history.
-            customer.id is the Payload document ID used for note relationship queries.
-            customerId (route param) is the business key used to query notifications. */}
-        <CommunicationsPanel
-          customerDocId={customer?.id ?? ''}
-          customerBusinessId={customerId}
-          customerName={customer?.fullName ?? undefined}
-          selectedAccountId={selectedAccountId}
-          accounts={accounts}
-          onNavigateToAccount={handleSwitchAccount}
-        />
+        <div className={styles.detailCol}>
+          <button
+            type="button"
+            className={styles.contextToggle}
+            onClick={() => setContextOpen((v) => !v)}
+            data-testid="context-toggle"
+          >
+            {contextOpen ? 'Hide context' : 'Show context'}
+          </button>
+          {selectedAccount ? (
+            <AccountPanel
+              account={selectedAccount}
+              allAccounts={accounts}
+              activeTab={activeTab}
+              onTabChange={handleTabChange}
+              onClose={handleClosePanel}
+              onSwitchAccount={handleSwitchAccount}
+              onWaiveFee={handleOpenWaiveFee}
+              onRecordRepayment={handleOpenRecordRepayment}
+              onApplyLateFee={handleOpenApplyLateFee}
+              onApplyDishonourFee={handleOpenApplyDishonourFee}
+              onBulkWaive={handleBulkWaive}
+              feesCount={feesCount}
+              onRefresh={handleRefresh}
+              isRefreshing={isFetchingData}
+              onRequestWriteOff={handleOpenWriteOff}
+              hasPendingWriteOff={hasPendingWriteOff}
+              onDisburseLoan={handleOpenDisburseLoan}
+            />
+          ) : (
+            <div className={styles.detailEmpty}>Select an account from the list.</div>
+          )}
+        </div>
 
-        {/* Applications Panel — loan origination conversations for this customer (Story 4.1) */}
-        <ApplicationsPanel customerIdString={customerId} />
+        <div className={`${styles.contextCol}${contextOpen ? ` ${styles.contextOpen}` : ''}`}>
+          {/* Tabbed context: Communications (contact notes + notification history) and
+              Applications (loan origination conversations). customer.id is the Payload
+              document ID for note queries; customerId (route param) is the business key. */}
+          <ContextPane
+            customerDocId={customer?.id ?? ''}
+            customerBusinessId={customerId}
+            customerName={customer?.fullName ?? undefined}
+            selectedAccountId={selectedAccountId}
+            accounts={accounts}
+            onNavigateToAccount={handleSwitchAccount}
+          />
+        </div>
       </div>
 
       {/* Waive Fee Drawer - overlay */}

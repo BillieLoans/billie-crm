@@ -844,51 +844,51 @@
 
 /* Payment status styles */
 .paymentStatusPaid {
-  background: #dcfce7;
+  background: var(--theme-success-100, #dcfce7);
 }
 
 .paymentStatusPaid .paymentIcon {
-  color: #166534;
+  color: var(--theme-success-700, #166534);
 }
 
 .paymentStatusPaid .paymentStatus {
-  color: #166534;
+  color: var(--theme-success-700, #166534);
 }
 
 .paymentStatusMissed {
-  background: #fee2e2;
+  background: var(--theme-error-100, #fee2e2);
 }
 
 .paymentStatusMissed .paymentIcon {
-  color: #b91c1c;
+  color: var(--theme-error-500, #b91c1c);
 }
 
 .paymentStatusMissed .paymentStatus {
-  color: #b91c1c;
+  color: var(--theme-error-500, #b91c1c);
 }
 
 .paymentStatusPartial {
-  background: #fef3c7;
+  background: var(--theme-warning-100, #fef3c7);
 }
 
 .paymentStatusPartial .paymentIcon {
-  color: #b45309;
+  color: var(--theme-warning-700, #b45309);
 }
 
 .paymentStatusPartial .paymentStatus {
-  color: #b45309;
+  color: var(--theme-warning-700, #b45309);
 }
 
 .paymentStatusNext {
-  background: #dbeafe;
+  background: var(--theme-elevation-100, #dbeafe);
 }
 
 .paymentStatusNext .paymentIcon {
-  color: #1d4ed8;
+  color: var(--theme-elevation-700, #1d4ed8);
 }
 
 .paymentStatusNext .paymentStatus {
-  color: #1d4ed8;
+  color: var(--theme-elevation-700, #1d4ed8);
 }
 
 .paymentStatusScheduled {
@@ -901,21 +901,21 @@
 
 /* Overdue status - more urgent than missed */
 .paymentStatusOverdue {
-  background: #fee2e2;
+  background: var(--theme-error-100, #fee2e2);
 }
 
 .paymentStatusOverdue .paymentIcon {
-  color: #dc2626;
+  color: var(--theme-error-400, #dc2626);
   font-weight: bold;
 }
 
 .paymentStatusOverdue .paymentStatus {
-  color: #dc2626;
+  color: var(--theme-error-400, #dc2626);
   font-weight: 600;
 }
 
 .paymentStatusOverdue .paymentDate {
-  color: #dc2626;
+  color: var(--theme-error-400, #dc2626);
 }
 
 /* Payment summary badges */
@@ -1487,3 +1487,16 @@
   font-size: 12px;
   opacity: 0.9;
 }
+
+/* AccountPanel/styles.module.css — append */
+.overviewGridTwo { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.overviewGridTwo > * { flex: 1 1 260px; }
+
+/* Repayment progress card (Overview top-right) */
+.progressTop { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; color: var(--theme-text, #1f2733); margin-bottom: 8px; }
+.progressFreq { color: var(--theme-elevation-500, #8a93a0); font-size: 12px; }
+.progressBar { height: 7px; background: var(--theme-elevation-100, #eceef1); border-radius: 4px; overflow: hidden; margin-bottom: 10px; }
+.progressFill { height: 100%; background: #2563eb; }
+.progressNext { font-size: 12.5px; color: var(--theme-elevation-650, #475160); margin-bottom: 6px; }
+.progressNextOverdue { font-size: 12.5px; color: var(--theme-error-500, #c0362c); font-weight: 600; margin-bottom: 6px; }
+.progressLast { font-size: 12.5px; color: var(--theme-elevation-500, #8a93a0); }

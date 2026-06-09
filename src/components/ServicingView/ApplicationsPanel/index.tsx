@@ -113,7 +113,7 @@ export function ApplicationsPanel({ customerIdString }: ApplicationsPanelProps) 
                   <span className={styles.appDate}>{formatRelativeTime(conv.updatedAt)}</span>
                 )}
               </Link>
-              {isApproved && customerIdForLink && (
+              {isApproved && customerIdForLink && customerIdForLink !== customerIdString && (
                 <Link
                   href={`/admin/servicing/${customerIdForLink}`}
                   className={styles.accountLink}

@@ -1,7 +1,7 @@
 /* ServicingView Styles */
 
 .container {
-  max-width: 1200px;
+  max-width: 1920px;
   margin: 0 auto;
   padding: 24px;
 }
@@ -203,54 +203,6 @@
 .badgeVulnerable {
   background: #fee2e2;
   color: #b91c1c;
-}
-
-/* Vulnerable Customer Banner */
-.vulnerableBanner {
-  display: flex;
-  gap: 16px;
-  padding: 16px;
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  border-radius: 12px;
-  margin-bottom: 24px;
-}
-
-.vulnerableBannerIcon {
-  flex-shrink: 0;
-  width: 24px;
-  height: 24px;
-  color: #dc2626;
-}
-
-.vulnerableBannerContent {
-  flex: 1;
-}
-
-.vulnerableBannerTitle {
-  font-size: 14px;
-  font-weight: 600;
-  color: #991b1b;
-  margin: 0 0 8px 0;
-}
-
-.vulnerableBannerText {
-  font-size: 13px;
-  color: #b91c1c;
-  margin: 0 0 8px 0;
-  line-height: 1.5;
-}
-
-.vulnerableBannerList {
-  margin: 0;
-  padding: 0 0 0 20px;
-  font-size: 13px;
-  color: #b91c1c;
-  line-height: 1.6;
-}
-
-.vulnerableBannerList li {
-  margin-bottom: 2px;
 }
 
 /* Account Cards */
@@ -1875,61 +1827,6 @@
   margin: 0;
 }
 
-/* Account Selection Prompt */
-.selectionPrompt {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 48px 24px;
-  background: var(--theme-elevation-0, #fff);
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  text-align: center;
-}
-
-.selectionPromptIcon {
-  font-size: 48px;
-  margin-bottom: 16px;
-}
-
-.selectionPromptTitle {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--theme-text, #1a1a1a);
-  margin: 0 0 8px;
-}
-
-.selectionPromptText {
-  font-size: 14px;
-  color: var(--theme-elevation-600, #666);
-  margin: 0;
-  max-width: 320px;
-}
-
-.selectionPromptHint {
-  font-size: 12px;
-  color: var(--theme-elevation-500, #888);
-  margin: 16px 0 0;
-}
-
-.selectionPromptHint kbd {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 6px;
-  margin: 0 2px;
-  font-size: 11px;
-  font-weight: 600;
-  font-family: inherit;
-  background: var(--theme-elevation-100, #f0f0f0);
-  border: 1px solid var(--theme-elevation-200, #ddd);
-  border-radius: 4px;
-  box-shadow: 0 1px 0 var(--theme-elevation-200, #ddd);
-}
-
 /* Fee List */
 .feeListSection {
   background: var(--theme-bg, #fff);
@@ -2284,5 +2181,83 @@
   .feeToolbarWaiveBtn {
     width: 100%;
     text-align: center;
+  }
+}
+
+/* Three-pane cockpit layout */
+.cockpit {
+  display: grid;
+  grid-template-columns: 232px minmax(380px, 1fr) 308px;
+  gap: 12px;
+  align-items: start;
+}
+.railCol {
+  position: sticky;
+  top: 12px;
+}
+.detailCol {
+  min-width: 0;
+}
+.detailEmpty {
+  background: var(--theme-elevation-0, #fff);
+  border: 1px solid var(--theme-elevation-150, #e3e6eb);
+  border-radius: 8px;
+  padding: 40px;
+  text-align: center;
+  color: var(--theme-elevation-500, #8a93a0);
+}
+.contextCol {
+  position: sticky;
+  top: 12px;
+  max-height: calc(100vh - 120px);
+}
+
+/* 1100–1440: drop the context column (revealed via a toggle/overlay) */
+@media (max-width: 1440px) {
+  .cockpit {
+    grid-template-columns: 220px minmax(360px, 1fr);
+  }
+  .contextCol {
+    display: none;
+  }
+}
+/* <1100: stack rail above detail */
+@media (max-width: 1100px) {
+  .cockpit {
+    grid-template-columns: 1fr;
+  }
+  .railCol {
+    position: static;
+  }
+}
+
+/* Context-pane toggle button — hidden by default (≥1441 context is always visible) */
+.contextToggle {
+  display: none;
+}
+
+/* 1101–1440: show the toggle; .contextOpen becomes a fixed slide-over */
+@media (max-width: 1440px) and (min-width: 1101px) {
+  .contextToggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+    border: 1px solid var(--theme-elevation-150, #d6dae1);
+    border-radius: 6px;
+    padding: 6px 10px;
+    background: var(--theme-elevation-0, #fff);
+    color: var(--theme-text, #1a1a1a);
+    cursor: pointer;
+  }
+  .contextOpen {
+    display: block !important;
+    position: fixed;
+    right: 16px;
+    top: 80px;
+    bottom: 16px;
+    width: 340px;
+    z-index: 50;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
   }
 }

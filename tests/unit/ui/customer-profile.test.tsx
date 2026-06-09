@@ -1,7 +1,6 @@
 import { describe, test, expect, afterEach } from 'vitest'
 import { render, screen, cleanup } from '@testing-library/react'
 import { CustomerProfile } from '@/components/ServicingView/CustomerProfile'
-import { VulnerableCustomerBanner } from '@/components/ServicingView/VulnerableCustomerBanner'
 import type { CustomerData } from '@/hooks/queries/useCustomer'
 
 const createMockCustomer = (overrides: Partial<CustomerData> = {}): CustomerData => ({
@@ -177,40 +176,5 @@ describe('CustomerProfile identity badges', () => {
     expect(screen.getByText('✓ Verified')).toBeInTheDocument()
     expect(screen.getByText('Staff')).toBeInTheDocument()
     expect(screen.getByText('⚠ Vulnerable')).toBeInTheDocument()
-  })
-})
-
-describe('VulnerableCustomerBanner component', () => {
-  afterEach(() => {
-    cleanup()
-  })
-
-  test('renders banner', () => {
-    render(<VulnerableCustomerBanner />)
-    expect(screen.getByTestId('vulnerable-banner')).toBeInTheDocument()
-  })
-
-  test('has role="alert" for accessibility', () => {
-    render(<VulnerableCustomerBanner />)
-    expect(screen.getByRole('alert')).toBeInTheDocument()
-  })
-
-  test('displays title', () => {
-    render(<VulnerableCustomerBanner />)
-    expect(screen.getByText('Vulnerable Customer')).toBeInTheDocument()
-  })
-
-  test('displays handling guidelines', () => {
-    render(<VulnerableCustomerBanner />)
-    expect(screen.getByText('Clear and jargon-free')).toBeInTheDocument()
-    expect(screen.getByText('Patient and understanding')).toBeInTheDocument()
-    expect(screen.getByText('Properly documented')).toBeInTheDocument()
-  })
-
-  test('displays description text', () => {
-    render(<VulnerableCustomerBanner />)
-    expect(
-      screen.getByText(/This customer has been flagged as requiring additional care/)
-    ).toBeInTheDocument()
   })
 })
