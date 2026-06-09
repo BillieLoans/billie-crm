@@ -1,0 +1,9 @@
+/* src/components/ServicingView/AccountRail.module.css */
+.rail { background: var(--theme-elevation-0, #fff); border: 1px solid var(--theme-elevation-150, #e3e6eb); border-radius: 8px; padding: 10px; height: 100%; box-sizing: border-box; }
+.title { font-size: 13px; font-weight: 700; color: var(--theme-text, #1f2733); margin: 0 0 2px; }
+.total { color: #8a93a0; font-size: 11px; margin: 0 0 10px; }
+.total strong { color: var(--theme-text, #1f2733); }
+.empty { color: #8a93a0; font-size: 12px; }
+.divider { display: flex; align-items: center; gap: 6px; margin: 12px 0 7px; }
+.divider::before, .divider::after { content: ''; height: 1px; background: var(--theme-elevation-100, #eceef1); flex: 1; }
+.dividerLabel { color: #aab2bd; font-size: 10px; font-weight: 600; letter-spacing: 0.04em; }
