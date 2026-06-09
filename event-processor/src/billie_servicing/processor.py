@@ -535,12 +535,16 @@ class EventProcessor:
             stream_label = "internal" if stream == settings.internal_stream else "external"
             print(f"📥 [{stream_label}] Received event: {event_type} (id: {logical_event_id})")
 
-            # Atomic dedup: SET NX returns True if key was set (not a duplicate)
+            # Dedup marks SUCCESSFUL processing, so we only CHECK here and SET it
+            # after the handler succeeds (below). Setting it up front would suppress
+            # the retry of a message whose handler failed — the failed message stays
+            # pending, but on redelivery the dedup key would make it look like a
+            # duplicate and get ACK'd without ever being processed. Handlers are
+            # idempotent (ON CONFLICT upserts), so reprocessing is safe.
             dedup_key = f"dedup:{stream}:{message_id_str}"
-            is_new = await self.redis.set(dedup_key, "1", nx=True, ex=settings.dedup_ttl_seconds)
-            if not is_new:
+            if await self.redis.exists(dedup_key):
                 print(f"   ⏭️  Skipping duplicate event")
-                log.debug("Duplicate event, skipping")
+                log.debug("Duplicate event, skipping (already processed)")
                 await self.redis.xack(stream, settings.consumer_group, message_id)
                 return
 
@@ -558,7 +562,10 @@ class EventProcessor:
             # Execute handler (writes to Postgres via the asyncpg pool)
             await handler(self.pool, parsed_event)
 
-            # ACK after successful write
+            # Mark as processed (dedup) only AFTER the write succeeds, then ACK.
+            # On failure the handler raises before this line, so no dedup key is
+            # written and the pending message can be retried cleanly.
+            await self.redis.set(dedup_key, "1", ex=settings.dedup_ttl_seconds)
             await self.redis.xack(stream, settings.consumer_group, message_id)
 
             print(f"   ✅ Processed successfully")
