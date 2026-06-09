@@ -10,6 +10,7 @@ import { StatusBadge, STATUS_CONFIG } from '@/components/ApplicationsView/Status
 import { ConversationCard } from '@/components/ApplicationsView/ConversationCard'
 import { SanitizedHTML } from '@/components/ConversationDetailView/SanitizedHTML'
 import type { ConversationSummary } from '@/lib/schemas/conversations'
+import { formatDateOnly } from '@/lib/formatters'
 
 // Mock next/link to avoid router issues in unit tests
 vi.mock('next/link', () => ({
@@ -91,9 +92,9 @@ describe('ConversationCard', () => {
     expect(screen.getByText('John Smith')).toBeTruthy()
   })
 
-  it('renders application number in monospace style (FR1)', () => {
+  it('renders the labelled application number (FR1)', () => {
     const { unmount } = render(<ConversationCard conversation={baseConversation} />)
-    expect(screen.getAllByText('APP-12345').length).toBeGreaterThan(0)
+    expect(screen.getByText('Application APP-12345')).toBeTruthy()
     unmount()
   })
 
@@ -157,6 +158,30 @@ describe('ConversationCard', () => {
     const conv = { ...baseConversation, customer: undefined }
     render(<ConversationCard conversation={conv} />)
     expect(screen.getByText(/Unknown customer/)).toBeTruthy()
+  })
+
+  it('keeps "Unknown customer" as the heading but still shows the customer ID in its fixed spot when no name', () => {
+    const conv = { ...baseConversation, customer: { fullName: null, customerId: 'CUS-999' } }
+    render(<ConversationCard conversation={conv} />)
+    expect(screen.getByText('Unknown customer')).toBeTruthy()
+    expect(screen.getByText('Customer CUS-999')).toBeTruthy()
+  })
+
+  it('shows the customer ID as a subline in the same spot when a name is present', () => {
+    render(<ConversationCard conversation={baseConversation} />)
+    expect(screen.getByText('John Smith')).toBeTruthy()
+    expect(screen.getByText('Customer CUS-001')).toBeTruthy()
+  })
+
+  it('renders the application start date when present', () => {
+    const startedAt = '2026-06-09T13:06:00.000Z'
+    render(<ConversationCard conversation={{ ...baseConversation, startedAt }} />)
+    expect(screen.getByText(`Started ${formatDateOnly(startedAt)}`)).toBeTruthy()
+  })
+
+  it('omits the start date line when startedAt is absent', () => {
+    render(<ConversationCard conversation={baseConversation} />)
+    expect(screen.queryByText(/^Started /)).toBeNull()
   })
 })
 

@@ -54,6 +54,20 @@
   margin: 0;
 }
 
+.customerId {
+  font-family: 'SF Mono', 'Fira Code', 'Fira Mono', monospace;
+  font-size: 12px;
+  color: var(--theme-elevation-500, #888);
+  margin: 0;
+}
+
+.started {
+  font-size: 12px;
+  color: var(--theme-elevation-500, #888);
+  margin-left: auto;
+  white-space: nowrap;
+}
+
 .meta {
   display: flex;
   align-items: center;
