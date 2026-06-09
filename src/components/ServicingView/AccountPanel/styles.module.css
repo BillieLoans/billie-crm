@@ -1487,3 +1487,7 @@
   font-size: 12px;
   opacity: 0.9;
 }
+
+/* AccountPanel/styles.module.css — append */
+.overviewGridTwo { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.overviewGridTwo > * { flex: 1 1 260px; }
