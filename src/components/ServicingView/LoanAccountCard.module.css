@@ -1,0 +1,28 @@
+.row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--theme-elevation-150, #e3e6eb);
+  border-radius: 7px;
+  background: var(--theme-elevation-0, #fff);
+  padding: 8px;
+  margin-bottom: 7px;
+  cursor: pointer;
+}
+.rowSelected { border: 2px solid #2f6fb0; background: #f1f7fc; padding: 7px; }
+.rowClosed { opacity: 0.72; }
+.rowTop { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+.rowBottom { display: flex; align-items: center; justify-content: space-between; }
+.dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+.dotOverdue { background: #e5484d; }
+.dotPending { background: #e5a000; }
+.dotActive { background: #30a46c; }
+.dotClosed { background: #aab2bd; }
+.accountNumber { font-family: ui-monospace, monospace; font-size: 12px; font-weight: 600; color: var(--theme-text, #1f2733); }
+.statusLine { font-size: 11px; font-weight: 600; }
+.status_overdue { color: #c0362c; }
+.status_pending { color: #b7791f; }
+.status_active { color: #14854f; }
+.status_closed { color: #8a93a0; font-weight: 400; }
+.balance { font-size: 13px; font-weight: 700; color: var(--theme-text, #1f2733); }
+.rowClosed .balance { color: #8a93a0; font-weight: 600; }

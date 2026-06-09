@@ -3,124 +3,62 @@ import { render, screen, cleanup, fireEvent } from '@testing-library/react'
 import { LoanAccountCard } from '@/components/ServicingView/LoanAccountCard'
 import type { LoanAccountData } from '@/hooks/queries/useCustomer'
 
-const createMockAccount = (overrides: Partial<LoanAccountData> = {}): LoanAccountData => ({
-  id: 'acc-1',
-  loanAccountId: 'LOAN-001',
-  accountNumber: 'ACC-12345',
-  accountStatus: 'active',
-  loanTerms: {
-    loanAmount: 5000,
-    loanFee: 500,
-    totalPayable: 5500,
-    openedDate: '2024-01-15',
-  },
-  balances: {
-    currentBalance: 3500,
-    totalOutstanding: 3750,
-    totalPaid: 1750,
-  },
-  liveBalance: null,
-  lastPayment: {
-    date: '2024-06-01',
-    amount: 250,
-  },
-  repaymentSchedule: {
-    scheduleId: 'sched-1',
-    numberOfPayments: 12,
-    paymentFrequency: 'monthly',
-    payments: [],
-    createdDate: null,
-  },
-  createdAt: '2024-01-15T00:00:00Z',
-  updatedAt: '2024-01-15T00:00:00Z',
-  ...overrides,
-})
+const TODAY = new Date('2026-06-09T12:00:00Z')
 
-describe('LoanAccountCard component', () => {
-  afterEach(() => {
-    cleanup()
-  })
+const createMockAccount = (overrides: Partial<LoanAccountData> = {}): LoanAccountData =>
+  ({
+    id: 'acc-1',
+    loanAccountId: 'LOAN-001',
+    accountNumber: 'ACC-12345',
+    accountStatus: 'active',
+    loanTerms: { loanAmount: 5000, loanFee: 500, totalPayable: 5500, openedDate: '2024-01-15' },
+    balances: { currentBalance: 3500, totalOutstanding: 3750, totalPaid: 1750 },
+    liveBalance: null,
+    lastPayment: { date: '2024-06-01', amount: 250 },
+    repaymentSchedule: { scheduleId: 'sched-1', numberOfPayments: 12, paymentFrequency: 'monthly', payments: [], createdDate: null },
+    createdAt: '2024-01-15T00:00:00Z',
+    updatedAt: '2024-01-15T00:00:00Z',
+    ...overrides,
+  }) as LoanAccountData
 
-  test('renders account number', () => {
-    render(<LoanAccountCard account={createMockAccount()} onSelect={vi.fn()} />)
+describe('LoanAccountCard (compact rail row)', () => {
+  afterEach(() => cleanup())
+
+  test('renders account number and outstanding balance', () => {
+    render(<LoanAccountCard account={createMockAccount()} onSelect={vi.fn()} today={TODAY} />)
     expect(screen.getByText('ACC-12345')).toBeInTheDocument()
+    expect(screen.getByText('$3,750.00')).toBeInTheDocument()
   })
 
-  test('renders status badge for active account', () => {
-    render(<LoanAccountCard account={createMockAccount({ accountStatus: 'active' })} onSelect={vi.fn()} />)
-    expect(screen.getByText('Active')).toBeInTheDocument()
+  test('shows "Pending disbursement" status line for pending accounts', () => {
+    render(<LoanAccountCard account={createMockAccount({ accountStatus: 'pending_disbursement' })} onSelect={vi.fn()} today={TODAY} />)
+    expect(screen.getByText(/Pending disbursement/i)).toBeInTheDocument()
   })
 
-  test('renders status badge for in_arrears account', () => {
-    render(<LoanAccountCard account={createMockAccount({ accountStatus: 'in_arrears' })} onSelect={vi.fn()} />)
-    expect(screen.getByText('In Arrears')).toBeInTheDocument()
-  })
-
-  test('renders status badge for paid_off account', () => {
-    render(<LoanAccountCard account={createMockAccount({ accountStatus: 'paid_off' })} onSelect={vi.fn()} />)
-    expect(screen.getByText('Paid Off')).toBeInTheDocument()
-  })
-
-  test('renders status badge for written_off account', () => {
-    render(<LoanAccountCard account={createMockAccount({ accountStatus: 'written_off' })} onSelect={vi.fn()} />)
-    expect(screen.getByText('Written Off')).toBeInTheDocument()
-  })
-
-  test('displays cached indicator when no live balance', () => {
-    render(<LoanAccountCard account={createMockAccount({ liveBalance: null })} onSelect={vi.fn()} />)
-    expect(screen.getByText('Cached')).toBeInTheDocument()
-  })
-
-  test('displays live indicator when live balance available', () => {
+  test('shows days-overdue line for an overdue account', () => {
     const account = createMockAccount({
-      liveBalance: {
-        principalBalance: 3200,
-        feeBalance: 150,
-        totalOutstanding: 3350,
-        asOf: '2024-06-15T10:00:00Z',
-      },
+      repaymentSchedule: { scheduleId: 's', numberOfPayments: 1, paymentFrequency: 'fortnightly', createdDate: null,
+        payments: [{ paymentNumber: 1, dueDate: '2026-05-28', amount: 80, status: 'scheduled' } as never] },
     })
-    render(<LoanAccountCard account={account} onSelect={vi.fn()} />)
-    expect(screen.getByText('Live')).toBeInTheDocument()
+    render(<LoanAccountCard account={account} onSelect={vi.fn()} today={TODAY} />)
+    expect(screen.getByText(/12 days overdue/i)).toBeInTheDocument()
   })
 
-  test('displays cached balance when no live balance', () => {
-    render(<LoanAccountCard account={createMockAccount()} onSelect={vi.fn()} />)
-    expect(screen.getByText('$3,500.00')).toBeInTheDocument() // Principal from cached
-    expect(screen.getByText('$3,750.00')).toBeInTheDocument() // Total Outstanding from cached
+  test('shows "Paid off" for closed accounts', () => {
+    render(<LoanAccountCard account={createMockAccount({ accountStatus: 'paid_off' })} onSelect={vi.fn()} today={TODAY} />)
+    expect(screen.getByText(/Paid off/i)).toBeInTheDocument()
   })
 
-  test('displays live balance when available', () => {
-    const account = createMockAccount({
-      liveBalance: {
-        principalBalance: 3200,
-        feeBalance: 150,
-        totalOutstanding: 3350,
-        asOf: '2024-06-15T10:00:00Z',
-      },
-    })
-    render(<LoanAccountCard account={account} onSelect={vi.fn()} />)
-    expect(screen.getByText('$3,200.00')).toBeInTheDocument() // Live principal
-    expect(screen.getByText('$150.00')).toBeInTheDocument() // Live fees
-    expect(screen.getByText('$3,350.00')).toBeInTheDocument() // Live total
+  test('marks the selected row via aria-pressed', () => {
+    render(<LoanAccountCard account={createMockAccount()} onSelect={vi.fn()} isSelected today={TODAY} />)
+    expect(screen.getByTestId('loan-account-card-LOAN-001')).toHaveAttribute('aria-pressed', 'true')
   })
 
   test('calls onSelect when clicked', () => {
     const onSelect = vi.fn()
     const account = createMockAccount()
-    render(<LoanAccountCard account={account} onSelect={onSelect} />)
-    
+    render(<LoanAccountCard account={account} onSelect={onSelect} today={TODAY} />)
     fireEvent.click(screen.getByTestId('loan-account-card-LOAN-001'))
     expect(onSelect).toHaveBeenCalledWith(account)
-  })
-
-  test('has correct test id', () => {
-    render(<LoanAccountCard account={createMockAccount()} onSelect={vi.fn()} />)
-    expect(screen.getByTestId('loan-account-card-LOAN-001')).toBeInTheDocument()
-  })
-
-  test('renders "Click for details" hint', () => {
-    render(<LoanAccountCard account={createMockAccount()} onSelect={vi.fn()} />)
-    expect(screen.getByText('Click for details →')).toBeInTheDocument()
   })
 })

@@ -1,97 +1,65 @@
 'use client'
 
 import type { LoanAccountData } from '@/hooks/queries/useCustomer'
-import { getStatusConfig } from './account-status'
-import styles from './styles.module.css'
+import { getAccountSignal, type AccountSignal } from '@/lib/accountTriage'
+import styles from './LoanAccountCard.module.css'
 
 export interface LoanAccountCardProps {
   account: LoanAccountData
   isSelected?: boolean
   onSelect: (account: LoanAccountData) => void
+  /** Injectable for deterministic tests; defaults to now. */
+  today?: Date
 }
 
-// Hoisted for performance - reused across all renders
-const currencyFormatter = new Intl.NumberFormat('en-AU', {
-  style: 'currency',
-  currency: 'AUD',
-})
+const currencyFormatter = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' })
+const dateFormatter = new Intl.DateTimeFormat('en-AU', { day: 'numeric', month: 'short' })
+
+const DOT_CLASS: Record<AccountSignal['tier'], string> = {
+  overdue: styles.dotOverdue,
+  pending: styles.dotPending,
+  active: styles.dotActive,
+  closed: styles.dotClosed,
+}
+
+function statusLine(account: LoanAccountData, signal: AccountSignal): string {
+  switch (signal.tier) {
+    case 'overdue':
+      return signal.daysOverdue > 0 ? `${signal.daysOverdue} days overdue` : 'In arrears'
+    case 'pending':
+      return 'Pending disbursement'
+    case 'closed':
+      return account.accountStatus === 'written_off' ? 'Written off' : 'Paid off'
+    case 'active':
+    default:
+      return signal.nextDueDate ? `On track · next ${dateFormatter.format(new Date(signal.nextDueDate))}` : 'On track'
+  }
+}
 
 /**
- * LoanAccountCard - Displays a loan account summary with balance info.
- * Clickable to open details panel. Shows selected state.
+ * Compact account row for the triaged rail. One line of status, one balance.
  */
-export const LoanAccountCard: React.FC<LoanAccountCardProps> = ({
-  account,
-  isSelected = false,
-  onSelect,
-}) => {
-  const statusConfig = getStatusConfig(account.accountStatus)
-  const hasLiveBalance = account.liveBalance !== null
-
-  // Use live balance if available, otherwise fall back to cached
-  const principal = hasLiveBalance
-    ? account.liveBalance!.principalBalance
-    : account.balances?.currentBalance ?? 0
-
-  const fees = hasLiveBalance
-    ? account.liveBalance!.feeBalance
-    : 0 // Cached doesn't have separate fee balance
-
-  const totalOutstanding = hasLiveBalance
-    ? account.liveBalance!.totalOutstanding
-    : account.balances?.totalOutstanding ?? 0
+export const LoanAccountCard: React.FC<LoanAccountCardProps> = ({ account, isSelected = false, onSelect, today }) => {
+  const signal = getAccountSignal(account, today)
+  const outstanding = account.liveBalance?.totalOutstanding ?? account.balances?.totalOutstanding ?? 0
 
   return (
     <button
       type="button"
-      className={`${styles.accountCard} ${isSelected ? styles.accountCardSelected : ''}`}
+      className={`${styles.row} ${isSelected ? styles.rowSelected : ''} ${signal.tier === 'closed' ? styles.rowClosed : ''}`}
       onClick={() => onSelect(account)}
       aria-pressed={isSelected}
       data-testid={`loan-account-card-${account.loanAccountId}`}
     >
-      <div className={styles.accountCardHeader}>
-        <div className={styles.accountCardTitle}>
-          <span className={styles.accountNumber}>{account.accountNumber}</span>
-          <span className={`${styles.accountStatus} ${styles[statusConfig.colorClass]}`}>
-            {statusConfig.label}
-          </span>
-        </div>
-        <div className={styles.accountCardIndicator}>
-          {hasLiveBalance ? (
-            <span className={styles.liveIndicator} title="Live balance from ledger">
-              <span className={styles.liveIndicatorDot} />
-              Live
-            </span>
-          ) : (
-            <span className={styles.cachedIndicator} title="Cached balance - ledger offline">
-              <span className={styles.cachedIndicatorDot} />
-              Cached
-            </span>
-          )}
-        </div>
+      <div className={styles.rowTop}>
+        <span className={`${styles.dot} ${DOT_CLASS[signal.tier]}`} aria-hidden />
+        <span className={styles.accountNumber}>{account.accountNumber}</span>
       </div>
-
-      <div className={styles.accountCardBalances}>
-        <div className={styles.balanceRow}>
-          <span className={styles.balanceLabel}>Principal</span>
-          <span className={styles.balanceValue}>{currencyFormatter.format(principal)}</span>
-        </div>
-        {hasLiveBalance && fees > 0 && (
-          <div className={styles.balanceRow}>
-            <span className={styles.balanceLabel}>Fees</span>
-            <span className={styles.balanceValue}>{currencyFormatter.format(fees)}</span>
-          </div>
-        )}
-        <div className={`${styles.balanceRow} ${styles.balanceRowTotal}`}>
-          <span className={styles.balanceLabel}>Total Outstanding</span>
-          <span className={styles.balanceValueTotal}>{currencyFormatter.format(totalOutstanding)}</span>
-        </div>
-      </div>
-
-      <div className={styles.accountCardFooter}>
-        <span className={styles.accountCardHint}>
-          {isSelected ? '✓ Selected' : 'Click for details →'}
+      <div className={styles.rowBottom}>
+        <span className={`${styles.statusLine} ${styles[`status_${signal.tier}`] ?? ''}`}>
+          {statusLine(account, signal)}
         </span>
+        <span className={styles.balance}>{currencyFormatter.format(outstanding)}</span>
       </div>
     </button>
   )
