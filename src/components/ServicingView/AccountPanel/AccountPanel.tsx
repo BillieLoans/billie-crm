@@ -3,9 +3,8 @@
 import { useMemo, useCallback, useEffect } from 'react'
 import type { LoanAccountData } from '@/hooks/queries/useCustomer'
 import type { SelectedFee } from '../FeeList'
-import { AccountHeader } from './AccountHeader'
+import { AccountSummaryBar } from './AccountSummaryBar'
 import { AccountTabs, type TabId } from './AccountTabs'
-import { AccountSwitcher } from './AccountSwitcher'
 import { OverviewTab } from './OverviewTab'
 import { TransactionsTab } from './TransactionsTab'
 import { FeesTab } from './FeesTab'
@@ -70,12 +69,6 @@ export const AccountPanel: React.FC<AccountPanelProps> = ({
   hasPendingWriteOff,
   onDisburseLoan,
 }) => {
-  // Other accounts for switcher (exclude current)
-  const otherAccounts = useMemo(
-    () => allAccounts.filter((a) => a.loanAccountId !== account.loanAccountId),
-    [allAccounts, account.loanAccountId]
-  )
-
   // Account IDs for keyboard navigation
   const accountIds = useMemo(
     () => allAccounts.map((a) => a.loanAccountId),
@@ -165,13 +158,19 @@ export const AccountPanel: React.FC<AccountPanelProps> = ({
 
   return (
     <div className={styles.accountPanel} data-testid="account-panel">
-      <AccountHeader
+      <AccountSummaryBar
         account={account}
-        onClose={onClose}
-        showClose={showClose}
+        hasPendingWriteOff={hasPendingWriteOff ?? false}
+        onRecordRepayment={onRecordRepayment}
+        onWaiveFee={onWaiveFee}
+        onApplyLateFee={onApplyLateFee}
+        onApplyDishonourFee={onApplyDishonourFee}
+        onRequestWriteOff={onRequestWriteOff ?? (() => {})}
+        onDisburseLoan={onDisburseLoan ?? (() => {})}
         onRefresh={onRefresh}
         isRefreshing={isRefreshing}
-        hasPendingWriteOff={hasPendingWriteOff}
+        onClose={onClose}
+        showClose={showClose}
       />
       <AccountTabs
         activeTab={activeTab}
@@ -180,9 +179,6 @@ export const AccountPanel: React.FC<AccountPanelProps> = ({
         showKeyboardHints={allAccounts.length > 0}
       />
       <div className={styles.accountPanelContent}>{renderTabContent()}</div>
-      {otherAccounts.length > 0 && (
-        <AccountSwitcher accounts={otherAccounts} onSelect={onSwitchAccount} />
-      )}
     </div>
   )
 }
