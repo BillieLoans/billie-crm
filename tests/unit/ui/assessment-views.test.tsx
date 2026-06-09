@@ -8,11 +8,22 @@
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, fireEvent, cleanup } from '@testing-library/react'
+import { render as rtlRender, screen, fireEvent, cleanup } from '@testing-library/react'
 import React from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AssessmentPanel } from '@/components/ConversationDetailView/AssessmentPanel'
 import { AssessmentDetailView } from '@/components/ConversationDetailView/AssessmentDetailView'
 import type { ConversationDetail } from '@/lib/schemas/conversations'
+
+// AssessmentPanel renders StatementFileViewer, which uses React Query. The app
+// shell provides a QueryClient in production; wrap every render here so the
+// hooks have one. (The statement query is disabled when no slot is selected.)
+const render = (ui: React.ReactElement) =>
+  rtlRender(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      {ui}
+    </QueryClientProvider>,
+  )
 
 vi.mock('next/link', () => ({
   default: ({ children, href, ...props }: React.PropsWithChildren<{ href: string; [k: string]: unknown }>) => (
