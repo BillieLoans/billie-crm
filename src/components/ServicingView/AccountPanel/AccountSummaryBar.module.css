@@ -3,25 +3,25 @@
 .left { flex: 1; min-width: 0; }
 .idRow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 2px; }
 .accountNumber { font-family: ui-monospace, monospace; font-weight: 700; font-size: 15px; color: var(--theme-text, #1f2733); }
-.subId { font-family: ui-monospace, monospace; font-size: 11px; color: #aab2bd; display: flex; align-items: center; gap: 4px; margin-bottom: 8px; }
+.subId { font-family: ui-monospace, monospace; font-size: 11px; color: var(--theme-elevation-400, #aab2bd); display: flex; align-items: center; gap: 4px; margin-bottom: 8px; }
 .status { border-radius: 11px; padding: 1px 9px; font-size: 11px; font-weight: 600; }
-.aging { background: #fbeceb; color: #c0362c; border: 1px solid #f1c4bf; border-radius: 11px; padding: 1px 9px; font-size: 11px; font-weight: 600; }
-.live { color: #14854f; font-size: 11px; font-weight: 600; }
-.cached { color: #b7791f; font-size: 11px; font-weight: 600; }
+.aging { background: var(--theme-error-100, #fbeceb); color: var(--theme-error-500, #c0362c); border: 1px solid var(--theme-error-300, #f1c4bf); border-radius: 11px; padding: 1px 9px; font-size: 11px; font-weight: 600; }
+.live { color: var(--theme-success-600, #14854f); font-size: 11px; font-weight: 600; }
+.cached { color: var(--theme-warning-700, #b7791f); font-size: 11px; font-weight: 600; }
 .figures { display: flex; gap: 22px; }
-.figLabel { color: #8a93a0; font-size: 11px; }
+.figLabel { color: var(--theme-elevation-500, #8a93a0); font-size: 11px; }
 .figValue { font-weight: 700; font-size: 20px; color: var(--theme-text, #1f2733); }
-.figOverdue { color: #c0362c; }
+.figOverdue { color: var(--theme-error-500, #c0362c); }
 .right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 .actions { display: flex; gap: 6px; align-items: center; }
 .btn { border-radius: 6px; padding: 7px 13px; font-size: 12.5px; font-weight: 600; cursor: pointer; border: 1px solid transparent; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btnPrimary { background: #2563eb; color: #fff; }
-.btnSecondary { background: #fff; color: #374151; border-color: var(--theme-elevation-150, #d6dae1); }
-.btnDanger { color: #c0362c; }
+.btnSecondary { background: var(--theme-elevation-0, #fff); color: var(--theme-text, #374151); border-color: var(--theme-elevation-150, #d6dae1); }
+.btnDanger { color: var(--theme-error-500, #c0362c); }
 .menuWrap { position: relative; }
-.menu { position: absolute; right: 0; top: calc(100% + 4px); background: #fff; border: 1px solid var(--theme-elevation-150, #d6dae1); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,.12); padding: 4px; z-index: 20; min-width: 180px; }
-.menuItem { display: block; width: 100%; text-align: left; padding: 8px 10px; font-size: 12.5px; border: none; background: none; border-radius: 5px; cursor: pointer; }
+.menu { position: absolute; right: 0; top: calc(100% + 4px); background: var(--theme-elevation-0, #fff); border: 1px solid var(--theme-elevation-150, #d6dae1); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,.12); padding: 4px; z-index: 20; min-width: 180px; }
+.menuItem { display: block; width: 100%; text-align: left; padding: 8px 10px; font-size: 12.5px; border: none; background: none; border-radius: 5px; cursor: pointer; color: var(--theme-text, #374151); }
 .menuItem:hover:not(:disabled) { background: var(--theme-elevation-50, #f4f5f7); }
 .menuItem:disabled { opacity: 0.5; cursor: not-allowed; }
-.refresh, .close { background: none; border: none; cursor: pointer; font-size: 14px; color: #6b7280; }
+.refresh, .close { background: none; border: none; cursor: pointer; font-size: 14px; color: var(--theme-elevation-600, #6b7280); }

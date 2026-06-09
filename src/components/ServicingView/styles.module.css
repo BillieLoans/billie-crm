@@ -2204,7 +2204,7 @@
   border-radius: 8px;
   padding: 40px;
   text-align: center;
-  color: #8a93a0;
+  color: var(--theme-elevation-500, #8a93a0);
 }
 .contextCol {
   position: sticky;
@@ -2246,7 +2246,8 @@
     border: 1px solid var(--theme-elevation-150, #d6dae1);
     border-radius: 6px;
     padding: 6px 10px;
-    background: #fff;
+    background: var(--theme-elevation-0, #fff);
+    color: var(--theme-text, #1a1a1a);
     cursor: pointer;
   }
   .contextOpen {
