@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { formatRelativeTime, formatCurrency } from '@/lib/formatters'
+import { formatRelativeTime, formatCurrency, formatDateMedium } from '@/lib/formatters'
 import type { ConversationDetail } from '@/lib/schemas/conversations'
 import { ContextDrawer } from '@/components/ui/ContextDrawer'
 import { StatementFileViewer } from '../StatementFileViewer'
@@ -121,7 +121,7 @@ interface AssessmentPanelProps {
  * Story 3.3: Assessment Panel & Noticeboard (FR12-FR14)
  */
 export function AssessmentPanel({ conversation, conversationId }: AssessmentPanelProps) {
-  const { assessments, statementCapture, noticeboard, application } = conversation
+  const { assessments, statementCapture, noticeboard, application, startedAt } = conversation
   const [selectedPost, setSelectedPost] = useState<NoticeboardPost | null>(null)
   const [openStatementSlot, setOpenStatementSlot] = useState<StatementSlot | null>(null)
   const [openAssessment, setOpenAssessment] = useState<AssessmentType | null>(null)
@@ -198,24 +198,30 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
     <div className={styles.panel}>
       {/* Application Details */}
       <AssessmentSection title="Application" summary={appSummary || 'No data'}>
-        {application ? (
+        {application || startedAt ? (
           <div>
-            {application.loanAmount != null && (
+            {application?.loanAmount != null && (
               <div className={styles.statementRow}>
                 <span className={styles.statementLabel}>Loan amount</span>
                 <span className={styles.statementValue}>{formatCurrency(application.loanAmount)}</span>
               </div>
             )}
-            {application.purpose && (
+            {application?.purpose && (
               <div className={styles.statementRow}>
                 <span className={styles.statementLabel}>Purpose</span>
                 <span className={styles.statementValue}>{application.purpose}</span>
               </div>
             )}
-            {application.term != null && (
+            {application?.term != null && (
               <div className={styles.statementRow}>
                 <span className={styles.statementLabel}>Term</span>
                 <span className={styles.statementValue}>{application.term} days</span>
+              </div>
+            )}
+            {startedAt && (
+              <div className={styles.statementRow}>
+                <span className={styles.statementLabel}>Started</span>
+                <span className={styles.statementValue}>{formatDateMedium(startedAt)}</span>
               </div>
             )}
           </div>

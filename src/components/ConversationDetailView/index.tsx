@@ -115,6 +115,11 @@ export function ConversationDetailView({ conversationId, referrer }: Conversatio
             {appNumber && <span className={styles.appNumber}>{appNumber}</span>}
             <StatusBadge status={conversation?.status} />
             {loanMeta && <span className={styles.loanMeta}>{loanMeta}</span>}
+            {customerId && (
+              <span className={styles.customerId}>
+                Customer <span className={styles.customerIdValue}>{customerId}</span>
+              </span>
+            )}
           </div>
           {customerId && (
             <Link

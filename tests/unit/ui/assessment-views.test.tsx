@@ -14,6 +14,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AssessmentPanel } from '@/components/ConversationDetailView/AssessmentPanel'
 import { AssessmentDetailView } from '@/components/ConversationDetailView/AssessmentDetailView'
 import type { ConversationDetail } from '@/lib/schemas/conversations'
+import { formatDateMedium } from '@/lib/formatters'
 
 // AssessmentPanel renders StatementFileViewer, which uses React Query. The app
 // shell provides a QueryClient in production; wrap every render here so the
@@ -137,6 +138,38 @@ describe('AssessmentPanel — application term label', () => {
     expect(appBtn).toBeTruthy()
     fireEvent.click(appBtn!)
     expect(screen.getAllByText(/10 days/).length).toBeGreaterThan(0)
+  })
+})
+
+describe('AssessmentPanel — application start date', () => {
+  afterEach(() => cleanup())
+
+  it('expanded Application section shows the formatted start date', () => {
+    const startedAt = '2026-06-09T13:06:00.000Z'
+    const conversation = baseConversation({ startedAt })
+    render(<AssessmentPanel conversation={conversation} conversationId="conv-001" />)
+    const appBtn = screen.getAllByRole('button').find((b) => b.textContent?.includes('Application'))
+    fireEvent.click(appBtn!)
+    expect(screen.getByText('Started')).toBeTruthy()
+    expect(screen.getByText(formatDateMedium(startedAt))).toBeTruthy()
+  })
+
+  it('omits the Started row when startedAt is absent', () => {
+    const conversation = baseConversation()
+    render(<AssessmentPanel conversation={conversation} conversationId="conv-001" />)
+    const appBtn = screen.getAllByRole('button').find((b) => b.textContent?.includes('Application'))
+    fireEvent.click(appBtn!)
+    expect(screen.queryByText('Started')).toBeNull()
+  })
+
+  it('still shows the start date when no application data is present', () => {
+    const startedAt = '2026-06-09T13:06:00.000Z'
+    const conversation = baseConversation({ startedAt, application: undefined })
+    render(<AssessmentPanel conversation={conversation} conversationId="conv-001" />)
+    const appBtn = screen.getAllByRole('button').find((b) => b.textContent?.includes('Application'))
+    fireEvent.click(appBtn!)
+    expect(screen.getByText('Started')).toBeTruthy()
+    expect(screen.queryByText('No application data available.')).toBeNull()
   })
 })
 

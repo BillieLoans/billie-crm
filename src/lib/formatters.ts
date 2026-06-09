@@ -60,6 +60,23 @@ export function formatDateMedium(date: string | Date): string {
   return dateFormatterMedium.format(d)
 }
 
+/** Australian date formatter - date only, full month (e.g., "9 June 2026") */
+export const dateFormatterMediumDateOnly = new Intl.DateTimeFormat('en-AU', {
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+})
+
+/**
+ * Format a date without a time component (full month name).
+ * @param date - Date string or Date object
+ * @returns Formatted date string (e.g., "9 June 2026")
+ */
+export function formatDateOnly(date: string | Date): string {
+  const d = typeof date === 'string' ? new Date(date) : date
+  return dateFormatterMediumDateOnly.format(d)
+}
+
 /**
  * Format a timestamp as relative time (e.g., "5 minutes ago").
  * Used in notifications and failed actions panels.

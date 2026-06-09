@@ -3,7 +3,7 @@
 import React from 'react'
 import Link from 'next/link'
 import { StatusBadge } from '../StatusBadge'
-import { formatRelativeTime, formatCurrency } from '@/lib/formatters'
+import { formatRelativeTime, formatCurrency, formatDateOnly } from '@/lib/formatters'
 import type { ConversationSummary } from '@/lib/schemas/conversations'
 import styles from './styles.module.css'
 
@@ -35,7 +35,14 @@ export function ConversationCard({ conversation }: ConversationCardProps) {
     messageCount,
     lastMessageAt,
     updatedAt,
+    startedAt,
   } = conversation
+
+  // Heading is always the customer's name (or a generic fallback) so cards don't
+  // reshuffle between named and unnamed customers — the customer ID keeps a fixed
+  // spot as a subline below, regardless of whether a name is on file.
+  const heading = customer?.fullName ?? 'Unknown customer'
+  const customerId = customer?.customerId ?? null
 
   // Amber accent: paused and last activity > 5 minutes ago
   const isPausedAlert =
@@ -53,25 +60,31 @@ export function ConversationCard({ conversation }: ConversationCardProps) {
       href={`/admin/applications/${conversationId}`}
       className={`${styles.card} ${isPausedAlert ? styles.pausedAlert : ''}`}
       tabIndex={0}
-      aria-label={`Conversation ${applicationNumber ?? conversationId}: ${customer?.fullName ?? 'Unknown customer'}, status ${status ?? 'unknown'}`}
+      aria-label={`Conversation ${applicationNumber ?? conversationId}: ${heading}, status ${status ?? 'unknown'}`}
     >
       <div className={styles.cardHeader}>
         <div>
-          <p className={styles.customerName}>{customer?.fullName ?? 'Unknown customer'}</p>
+          <p className={styles.customerName}>{heading}</p>
           {applicationNumber && (
-            <p className={styles.appNumber}>{applicationNumber}</p>
+            <p className={styles.appNumber}>Application {applicationNumber}</p>
+          )}
+          {customerId && (
+            <p className={styles.customerId}>Customer {customerId}</p>
           )}
         </div>
         <StatusBadge status={status} />
       </div>
 
-      {(loanAmountFormatted || application?.purpose) && (
+      {(loanAmountFormatted || application?.purpose || startedAt) && (
         <div className={styles.meta}>
           {loanAmountFormatted && (
             <span className={styles.loanAmount}>{loanAmountFormatted}</span>
           )}
           {application?.purpose && (
             <span className={styles.purpose}>{application.purpose}</span>
+          )}
+          {startedAt && (
+            <span className={styles.started}>Started {formatDateOnly(startedAt)}</span>
           )}
         </div>
       )}
