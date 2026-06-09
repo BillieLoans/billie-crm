@@ -11,6 +11,7 @@ Handles events:
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -476,8 +477,11 @@ async def handle_schedule_updated(pool: asyncpg.Pool, parsed_event: Any) -> None
                     if getattr(payment, "amount_remaining", None) is not None
                     else None
                 )
+                # linked_transaction_ids is a jsonb column. asyncpg needs a JSON
+                # *string* for jsonb (no list/dict codec is registered) — passing a
+                # raw Python list raises DataError. Serialise it like db.merge_jsonb.
                 linked_ids = (
-                    list(payment.linked_transaction_ids)
+                    json.dumps(list(payment.linked_transaction_ids))
                     if getattr(payment, "linked_transaction_ids", None)
                     else None
                 )
