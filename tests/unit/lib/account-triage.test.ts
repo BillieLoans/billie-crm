@@ -85,6 +85,15 @@ describe('sortAccountsForRail', () => {
     expect(active.map((a) => a.loanAccountId)).toEqual(['over', 'pend', 'live'])
     expect(closed.map((a) => a.loanAccountId)).toEqual(['paid'])
   })
+
+  it('orders multiple closed accounts most-recent-first', () => {
+    const accounts = [
+      acc({ loanAccountId: 'old', accountStatus: 'paid_off', updatedAt: '2026-01-10T00:00:00Z' }),
+      acc({ loanAccountId: 'new', accountStatus: 'written_off', updatedAt: '2026-05-30T00:00:00Z' }),
+    ]
+    const { closed } = sortAccountsForRail(accounts, TODAY)
+    expect(closed.map((a) => a.loanAccountId)).toEqual(['new', 'old'])
+  })
 })
 
 describe('getAttentionItems', () => {
@@ -102,5 +111,13 @@ describe('getAttentionItems', () => {
   it('returns empty when nothing needs attention', () => {
     const accounts = [acc({ loanAccountId: 'ok', repaymentSchedule: { scheduleId: 's', numberOfPayments: 1, paymentFrequency: 'fortnightly', createdDate: null, payments: [pay(1, '2026-06-20', 'scheduled')] } })]
     expect(getAttentionItems({ vulnerable: false, accounts, today: TODAY })).toEqual([])
+  })
+
+  it('emits a writeoff_pending chip targeting the flagged account', () => {
+    const accounts = [acc({ loanAccountId: 'wo' }), acc({ loanAccountId: 'other' })]
+    const items = getAttentionItems({ vulnerable: false, accounts, pendingWriteOffAccountIds: ['wo'], today: TODAY })
+    expect(items.map((i) => i.kind)).toEqual(['writeoff_pending'])
+    expect(items[0].accountId).toBe('wo')
+    expect(items[0].severity).toBe('medium')
   })
 })
