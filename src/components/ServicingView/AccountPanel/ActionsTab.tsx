@@ -3,6 +3,7 @@
 import type { LoanAccountData } from '@/hooks/queries/useCustomer'
 import { useUIStore } from '@/stores/ui'
 import { useOptimisticStore } from '@/stores/optimistic'
+import { getAccountActions, type AccountActionId } from '@/lib/getAccountActions'
 import styles from './styles.module.css'
 
 export interface ActionsTabProps {
@@ -16,219 +17,80 @@ export interface ActionsTabProps {
   hasPendingWriteOff?: boolean
 }
 
-// Hoisted for performance
-const currencyFormatter = new Intl.NumberFormat('en-AU', {
-  style: 'currency',
-  currency: 'AUD',
-})
+const currency = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' })
 
-/**
- * ActionsTab - Displays available actions for the account.
- * Shows Record Payment and Waive Fee with descriptions.
- */
-export const ActionsTab: React.FC<ActionsTabProps> = ({
-  account,
-  onRecordRepayment,
-  onWaiveFee,
-  onApplyLateFee,
-  onApplyDishonourFee,
-  onRequestWriteOff,
-  onDisburseLoan,
-  hasPendingWriteOff = false,
-}) => {
-  const readOnlyMode = useUIStore((state) => state.readOnlyMode)
-  const hasPendingAction = useOptimisticStore((state) => state.hasPendingAction)
-  const hasPendingWaive = hasPendingAction(account.loanAccountId, 'waive-fee')
-  const hasPendingRepayment = hasPendingAction(account.loanAccountId, 'record-repayment')
+const COPY: Record<AccountActionId, { icon: string; description: string }> = {
+  disburse: { icon: '🏦', description: 'Record disbursement of funds to the customer. This transitions the account to active and begins the repayment schedule.' },
+  'record-payment': { icon: '💳', description: 'Record a manual repayment for this account. Use this for payments received outside of automatic debit.' },
+  'waive-fee': { icon: '🎁', description: 'Waive outstanding fees for this account as a goodwill gesture or to resolve a dispute.' },
+  'apply-late-fee': { icon: '⏰', description: 'Apply a late fee for missed or overdue payments on this account.' },
+  'apply-dishonour-fee': { icon: '🔄', description: 'Apply a dishonour fee for a failed direct debit on this account.' },
+  'request-write-off': { icon: '📝', description: 'Submit a write-off request for this account. Requires approval from a supervisor.' },
+}
 
-  const hasLiveBalance = account.liveBalance !== null
-  const fees = hasLiveBalance ? account.liveBalance!.feeBalance : 0
-  const totalOutstanding = hasLiveBalance
-    ? account.liveBalance!.totalOutstanding
-    : account.balances?.totalOutstanding ?? 0
+export const ActionsTab: React.FC<ActionsTabProps> = (props) => {
+  const { account, hasPendingWriteOff = false } = props
+  const readOnly = useUIStore((s) => s.readOnlyMode)
+  const hasPendingAction = useOptimisticStore((s) => s.hasPendingAction)
+
+  const handler: Record<AccountActionId, (() => void) | undefined> = {
+    disburse: props.onDisburseLoan,
+    'record-payment': props.onRecordRepayment,
+    'waive-fee': props.onWaiveFee,
+    'apply-late-fee': props.onApplyLateFee,
+    'apply-dishonour-fee': props.onApplyDishonourFee,
+    'request-write-off': props.onRequestWriteOff,
+  }
+  const testId: Record<AccountActionId, string> = {
+    disburse: 'action-disburse-loan',
+    'record-payment': 'action-record-repayment',
+    'waive-fee': 'action-waive-fee',
+    'apply-late-fee': 'action-apply-late-fee',
+    'apply-dishonour-fee': 'action-apply-dishonour-fee',
+    'request-write-off': 'action-request-writeoff',
+  }
+
+  const actions = getAccountActions(account, {
+    readOnly,
+    hasPendingWriteOff,
+    pendingRepayment: hasPendingAction(account.loanAccountId, 'record-repayment'),
+    pendingWaive: hasPendingAction(account.loanAccountId, 'waive-fee'),
+  }).filter((a) => a.visible && handler[a.id])
+
+  const totalOutstanding = account.liveBalance?.totalOutstanding ?? account.balances?.totalOutstanding ?? 0
 
   return (
-    <div
-      className={styles.actionsTab}
-      role="tabpanel"
-      id="tabpanel-actions"
-      aria-labelledby="tab-actions"
-      data-testid="actions-tab"
-    >
+    <div className={styles.actionsTab} role="tabpanel" id="tabpanel-actions" aria-labelledby="tab-actions" data-testid="actions-tab">
       <h4 className={styles.actionsTitle}>Available Actions</h4>
-
-      {readOnlyMode && (
+      {readOnly && (
         <div className={styles.actionsReadOnlyWarning} role="alert">
           <span className={styles.actionsWarningIcon}>🔒</span>
           <span>System is in read-only mode. Actions are temporarily disabled.</span>
         </div>
       )}
-
-      {/* Disburse Loan Action - only visible for pending disbursement accounts */}
-      {onDisburseLoan && account.accountStatus === 'pending_disbursement' && (
-        <div className={styles.actionCard}>
+      {actions.map((a) => (
+        <div className={styles.actionCard} key={a.id}>
           <div className={styles.actionCardHeader}>
-            <span className={styles.actionCardIcon}>🏦</span>
-            <span className={styles.actionCardTitle}>Disburse Loan</span>
+            <span className={styles.actionCardIcon}>{COPY[a.id].icon}</span>
+            <span className={styles.actionCardTitle}>{a.label}</span>
+            {a.id === 'request-write-off' && hasPendingWriteOff && <span className={styles.actionCardBadge}>Pending</span>}
           </div>
-          <p className={styles.actionCardDescription}>
-            Record disbursement of funds to the customer. This will transition the account to active
-            status and begin the repayment schedule.
-          </p>
+          <p className={styles.actionCardDescription}>{COPY[a.id].description}</p>
           <div className={styles.actionCardFooter}>
-            <span className={styles.actionCardMeta}>
-              Loan Amount: {currencyFormatter.format(account.loanTerms?.loanAmount ?? 0)}
-            </span>
+            <span className={styles.actionCardMeta}>{currency.format(totalOutstanding)}</span>
             <button
               type="button"
-              className={`${styles.actionCardBtn} ${styles.actionCardBtnPrimary}`}
-              onClick={onDisburseLoan}
-              disabled={readOnlyMode}
-              data-testid="action-disburse-loan"
+              className={`${styles.actionCardBtn} ${a.primary ? styles.actionCardBtnPrimary : ''} ${a.danger ? styles.actionCardBtnDanger : ''}`}
+              onClick={handler[a.id]}
+              disabled={!a.enabled}
+              title={a.disabledReason ?? undefined}
+              data-testid={testId[a.id]}
             >
-              Disburse Loan
+              {a.label}
             </button>
           </div>
         </div>
-      )}
-
-      {/* Record Payment Action */}
-      <div className={styles.actionCard}>
-        <div className={styles.actionCardHeader}>
-          <span className={styles.actionCardIcon}>💳</span>
-          <span className={styles.actionCardTitle}>Record Payment</span>
-        </div>
-        <p className={styles.actionCardDescription}>
-          Record a manual repayment for this account. Use this for payments received outside of
-          automatic debit.
-        </p>
-        <div className={styles.actionCardFooter}>
-          <span className={styles.actionCardMeta}>
-            Outstanding: {currencyFormatter.format(totalOutstanding)}
-          </span>
-          <button
-            type="button"
-            className={styles.actionCardBtn}
-            onClick={onRecordRepayment}
-            disabled={readOnlyMode || hasPendingRepayment}
-            data-testid="action-record-repayment"
-          >
-            {hasPendingRepayment ? '⏳ Processing...' : 'Record Payment'}
-          </button>
-        </div>
-      </div>
-
-      {/* Waive Fee Action */}
-      <div className={styles.actionCard}>
-        <div className={styles.actionCardHeader}>
-          <span className={styles.actionCardIcon}>🎁</span>
-          <span className={styles.actionCardTitle}>Waive Fee</span>
-        </div>
-        <p className={styles.actionCardDescription}>
-          Waive outstanding fees for this account as a goodwill gesture or to resolve a dispute.
-        </p>
-        <div className={styles.actionCardFooter}>
-          <span className={styles.actionCardMeta}>
-            Current fees: {currencyFormatter.format(fees)}
-          </span>
-          <button
-            type="button"
-            className={`${styles.actionCardBtn} ${styles.actionCardBtnPrimary}`}
-            onClick={onWaiveFee}
-            disabled={readOnlyMode || hasPendingWaive || fees <= 0}
-            data-testid="action-waive-fee"
-          >
-            {hasPendingWaive ? '⏳ Waiving...' : 'Waive Fee'}
-          </button>
-        </div>
-      </div>
-
-      {/* Apply Late Fee Action */}
-      <div className={styles.actionCard}>
-        <div className={styles.actionCardHeader}>
-          <span className={styles.actionCardIcon}>⏰</span>
-          <span className={styles.actionCardTitle}>Apply Late Fee</span>
-        </div>
-        <p className={styles.actionCardDescription}>
-          Apply a late fee for missed or overdue payments on this account.
-        </p>
-        <div className={styles.actionCardFooter}>
-          <span className={styles.actionCardMeta}>
-            Standard fee: {currencyFormatter.format(10)}
-          </span>
-          <button
-            type="button"
-            className={styles.actionCardBtn}
-            onClick={onApplyLateFee}
-            disabled={readOnlyMode}
-            data-testid="action-apply-late-fee"
-          >
-            Apply Late Fee
-          </button>
-        </div>
-      </div>
-
-      {/* Apply Dishonour Fee Action */}
-      <div className={styles.actionCard}>
-        <div className={styles.actionCardHeader}>
-          <span className={styles.actionCardIcon}>🔄</span>
-          <span className={styles.actionCardTitle}>Apply Dishonour Fee</span>
-        </div>
-        <p className={styles.actionCardDescription}>
-          Apply a dishonour fee for a failed direct debit on this account.
-        </p>
-        <div className={styles.actionCardFooter}>
-          <span className={styles.actionCardMeta}>
-            Standard fee: {currencyFormatter.format(10)}
-          </span>
-          <button
-            type="button"
-            className={styles.actionCardBtn}
-            onClick={onApplyDishonourFee}
-            disabled={readOnlyMode}
-            data-testid="action-apply-dishonour-fee"
-          >
-            Apply Dishonour Fee
-          </button>
-        </div>
-      </div>
-
-      {/* Request Write-Off Action */}
-      {onRequestWriteOff && (
-        <div className={styles.actionCard}>
-          <div className={styles.actionCardHeader}>
-            <span className={styles.actionCardIcon}>📝</span>
-            <span className={styles.actionCardTitle}>Request Write-Off</span>
-            {hasPendingWriteOff && (
-              <span className={styles.actionCardBadge}>Pending</span>
-            )}
-          </div>
-          <p className={styles.actionCardDescription}>
-            Submit a write-off request for this account. Requires approval from a supervisor.
-          </p>
-          <div className={styles.actionCardFooter}>
-            <span className={styles.actionCardMeta}>
-              Balance: {currencyFormatter.format(totalOutstanding)}
-            </span>
-            <button
-              type="button"
-              className={`${styles.actionCardBtn} ${styles.actionCardBtnDanger}`}
-              onClick={onRequestWriteOff}
-              disabled={readOnlyMode || hasPendingWriteOff}
-              data-testid="action-request-writeoff"
-            >
-              {hasPendingWriteOff ? '⏳ Pending Approval' : 'Request Write-Off'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Future actions placeholder */}
-      <div className={styles.actionsFuture}>
-        <p className={styles.actionsFutureText}>
-          More actions coming soon: Reschedule Payment, Send Statement
-        </p>
-      </div>
+      ))}
     </div>
   )
 }
