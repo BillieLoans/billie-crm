@@ -1491,3 +1491,12 @@
 /* AccountPanel/styles.module.css — append */
 .overviewGridTwo { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 .overviewGridTwo > * { flex: 1 1 260px; }
+
+/* Repayment progress card (Overview top-right) */
+.progressTop { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; color: var(--theme-text, #1f2733); margin-bottom: 8px; }
+.progressFreq { color: var(--theme-elevation-500, #8a93a0); font-size: 12px; }
+.progressBar { height: 7px; background: var(--theme-elevation-100, #eceef1); border-radius: 4px; overflow: hidden; margin-bottom: 10px; }
+.progressFill { height: 100%; background: #2f6fb0; }
+.progressNext { font-size: 12.5px; color: var(--theme-elevation-650, #475160); margin-bottom: 6px; }
+.progressNextOverdue { font-size: 12.5px; color: #c0362c; font-weight: 600; margin-bottom: 6px; }
+.progressLast { font-size: 12.5px; color: var(--theme-elevation-500, #8a93a0); }

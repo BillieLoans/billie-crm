@@ -38,4 +38,23 @@ describe('OverviewTab', () => {
     render(<OverviewTab account={account()} />)
     expect(screen.getByText('$480.00')).toBeInTheDocument() // total payable
   })
+
+  test('renders the Repayment progress card (paid count + next instalment)', () => {
+    const a = account()
+    a.repaymentSchedule = {
+      scheduleId: 's',
+      numberOfPayments: 2,
+      paymentFrequency: 'fortnightly',
+      createdDate: null,
+      payments: [
+        { paymentNumber: 1, dueDate: '2026-05-09', amount: 85, status: 'paid' },
+        { paymentNumber: 2, dueDate: '2026-07-01', amount: 85, status: 'scheduled' },
+      ],
+    } as never
+    render(<OverviewTab account={a} />)
+    expect(screen.getByText(/Repayment progress/i)).toBeInTheDocument()
+    expect(screen.getByText(/1 of 2/)).toBeInTheDocument()
+    expect(screen.getByText(/Next:/)).toBeInTheDocument()
+    expect(screen.getByText(/\$85\.00/)).toBeInTheDocument()
+  })
 })
