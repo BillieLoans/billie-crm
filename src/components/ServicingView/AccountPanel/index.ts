@@ -1,8 +1,6 @@
 export { AccountPanel } from './AccountPanel'
 export type { AccountPanelProps } from './AccountPanel'
 
-export { AccountHeader } from './AccountHeader'
-export type { AccountHeaderProps } from './AccountHeader'
 
 export { AccountTabs } from './AccountTabs'
 export type { AccountTabsProps, TabId, TabConfig } from './AccountTabs'

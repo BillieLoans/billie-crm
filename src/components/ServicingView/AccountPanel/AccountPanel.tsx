@@ -46,7 +46,7 @@ export interface AccountPanelProps {
  * Replaces the drawer-based approach with an inline panel.
  *
  * Keyboard shortcuts:
- * - 1-6: Switch tabs (Overview, Transactions, Fees, Actions)
+ * - 1-6: Switch tabs (Overview, Transactions, Fees, Accruals, ECL, Actions)
  * - ↑/↓: Navigate between accounts
  * - Escape: Close panel
  */

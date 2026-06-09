@@ -22,7 +22,7 @@ export const ContextPane: React.FC<ContextPaneProps> = (props) => {
 
   return (
     <div className={styles.pane} data-testid="context-pane">
-      <div className={styles.tabs} role="tablist">
+      <div className={styles.tabs} role="tablist" aria-label="Customer context">
         <button
           type="button"
           role="tab"
@@ -42,7 +42,7 @@ export const ContextPane: React.FC<ContextPaneProps> = (props) => {
           Applications
         </button>
       </div>
-      <div className={styles.body}>
+      <div className={styles.body} role="tabpanel">
         {tab === 'communications' ? (
           <CommunicationsPanel
             customerDocId={props.customerDocId}

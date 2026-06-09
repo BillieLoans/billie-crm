@@ -114,6 +114,9 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
       getAttentionItems({
         vulnerable: customer?.vulnerableFlag ?? false,
         accounts,
+        // NOTE: pending-write-off detection is intentionally scoped to the SELECTED account because
+        // `usePendingWriteOff` is a per-account query and the design avoids firing extra fetches for
+        // every account on the rail. A customer-level pending-write-off query would be a follow-up.
         pendingWriteOffAccountIds: selectedAccountId && hasPendingWriteOff ? [selectedAccountId] : [],
       }),
     [customer?.vulnerableFlag, accounts, selectedAccountId, hasPendingWriteOff]
