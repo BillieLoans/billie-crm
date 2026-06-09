@@ -29,4 +29,11 @@ describe('AttentionStrip', () => {
     fireEvent.click(screen.getByText('1 account overdue'))
     expect(onSelectAccount).toHaveBeenCalledWith('LOAN-9')
   })
+
+  test('a chip with no accountId (e.g. vulnerable) is not clickable', () => {
+    const onSelectAccount = vi.fn()
+    render(<AttentionStrip items={items} onSelectAccount={onSelectAccount} />)
+    fireEvent.click(screen.getByText('Vulnerable customer'))
+    expect(onSelectAccount).not.toHaveBeenCalled()
+  })
 })
