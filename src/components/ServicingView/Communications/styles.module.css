@@ -13,19 +13,21 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
+  gap: 10px;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--theme-elevation-150, #e5e7eb);
   background: var(--theme-elevation-50, #f9fafb);
 }
 
 .panelTitle {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--theme-text, #1a1a1a);
-  display: flex;
-  align-items: center;
-  gap: 8px;
   margin: 0;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .headerActions {
@@ -46,6 +48,8 @@
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .addNoteBtn:hover {
@@ -230,6 +234,7 @@
   border-radius: 4px;
   font-size: 11px;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .badgeSent {

@@ -127,11 +127,62 @@ export const AccountSummaryBar: React.FC<AccountSummaryBarProps> = (props) => {
             </div>
           )}
         </div>
-        {props.onRefresh && (
-          <button type="button" className={styles.refresh} onClick={props.onRefresh} disabled={props.isRefreshing} aria-label="Refresh data" data-testid="refresh-account-data">⟳</button>
-        )}
-        {props.showClose && props.onClose && (
-          <button type="button" className={styles.close} onClick={props.onClose} aria-label="Close account panel" data-testid="close-account-panel">✕</button>
+        {(props.onRefresh || (props.showClose && props.onClose)) && (
+          <div className={styles.iconRow}>
+            {props.onRefresh && (
+              <button
+                type="button"
+                className={`${styles.iconBtn} ${props.isRefreshing ? styles.spinning : ''}`}
+                onClick={props.onRefresh}
+                disabled={props.isRefreshing}
+                aria-label="Refresh data"
+                title="Refresh data"
+                data-testid="refresh-account-data"
+              >
+                <svg
+                  className={styles.refreshIcon}
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <polyline points="23 4 23 10 17 10" />
+                  <polyline points="1 20 1 14 7 14" />
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                </svg>
+              </button>
+            )}
+            {props.showClose && props.onClose && (
+              <button
+                type="button"
+                className={styles.iconBtn}
+                onClick={props.onClose}
+                aria-label="Close account panel"
+                title="Close"
+                data-testid="close-account-panel"
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>

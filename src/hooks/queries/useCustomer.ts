@@ -149,6 +149,11 @@ export function useCustomer(customerId: string) {
     queryFn: () => fetchCustomer(customerId),
     enabled: !!customerId,
     staleTime: 60_000, // 1 minute - customer data doesn't change often
+    // Light background poll so out-of-band changes (other staff, or the event
+    // processor projecting an inbound payment/fee) surface without a manual
+    // refresh. Paused while the tab is hidden to avoid needless load.
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
     retry: false, // Don't retry on 404
   })
 

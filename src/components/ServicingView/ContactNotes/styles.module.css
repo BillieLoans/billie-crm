@@ -2,7 +2,7 @@
 .panel { border: 1px solid var(--theme-elevation-150, #e5e7eb); border-radius: 8px; overflow: hidden; margin-top: 24px; }
 .panelHeader { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--theme-elevation-150, #e5e7eb); background: var(--theme-elevation-50, #f9fafb); }
 .panelTitle { font-size: 16px; font-weight: 600; color: var(--theme-text, #1a1a1a); display: flex; align-items: center; gap: 8px; margin: 0; }
-.addNoteBtn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; background: var(--theme-success-500, #2563eb); color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; }
+.addNoteBtn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; background: var(--theme-success-500, #2563eb); color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
 .addNoteBtn:hover { background: var(--theme-success-600, #1d4ed8); }
 .filtersBar { display: flex; gap: 8px; padding: 12px 20px; border-bottom: 1px solid var(--theme-elevation-150, #e5e7eb); background: var(--theme-elevation-50, #f9fafb); }
 .filterSelect { padding: 6px 10px; border: 1px solid var(--theme-elevation-200, #d1d5db); border-radius: 6px; font-size: 13px; color: var(--theme-text, #1a1a1a); background: var(--theme-elevation-0, #fff); cursor: pointer; }
@@ -13,11 +13,11 @@
 .noteCardAmended .noteBody,
 .noteCardAmended .noteBodyRich { opacity: 0.65; }
 .noteCardHeader { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 4px; }
-.noteCardHeaderRight { display: flex; align-items: center; gap: 8px; }
-.noteTypeLabel { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: var(--theme-text, #1a1a1a); }
+.noteCardHeaderRight { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.noteTypeLabel { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: var(--theme-text, #1a1a1a); white-space: nowrap; }
 .noteTimestamp { font-size: 12px; color: var(--theme-elevation-600, #6b7280); white-space: nowrap; }
 .noteBadges { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
-.badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; }
+.badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; white-space: nowrap; }
 .badgeAmended { background: #fef3c7; color: #92400e; }
 .badgeAmendment { background: #dbeafe; color: #1e40af; }
 .badgeTopic { background: var(--theme-elevation-100, #f3f4f6); color: var(--theme-elevation-700, #374151); }
@@ -44,11 +44,11 @@
 .bodyTruncated { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .showMoreBtn { background: none; border: none; color: var(--theme-success-500, #2563eb); font-size: 12px; cursor: pointer; padding: 2px 0; margin-top: 4px; }
 .noteDivider { border: none; border-top: 1px solid var(--theme-elevation-100, #f0f0f0); margin: 10px 0; }
-.noteFooter { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--theme-elevation-600, #6b7280); }
-.noteLinkedAccount { display: flex; align-items: center; gap: 4px; }
-.noteAccountLinkBtn { display: inline-flex; align-items: center; gap: 4px; background: none; border: none; color: var(--theme-success-500, #2563eb); font-size: 12px; cursor: pointer; padding: 0; text-decoration: underline; }
-.noteAuthor { flex: 1; }
-.amendBtn { background: none; border: none; color: var(--theme-success-500, #2563eb); font-size: 12px; cursor: pointer; padding: 0; }
+.noteFooter { display: flex; align-items: center; gap: 8px; row-gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--theme-elevation-600, #6b7280); }
+.noteLinkedAccount { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.noteAccountLinkBtn { display: inline-flex; align-items: center; gap: 4px; background: none; border: none; color: var(--theme-success-500, #2563eb); font-size: 12px; cursor: pointer; padding: 0; text-decoration: underline; white-space: nowrap; }
+.noteAuthor { flex: 1; white-space: nowrap; }
+.amendBtn { background: none; border: none; color: var(--theme-success-500, #2563eb); font-size: 12px; cursor: pointer; padding: 0; white-space: nowrap; }
 .amendBtn:hover { text-decoration: underline; }
 .noteLinkBtn { background: none; border: none; color: var(--theme-success-500, #2563eb); font-size: 12px; cursor: pointer; padding: 0; text-decoration: underline; }
 

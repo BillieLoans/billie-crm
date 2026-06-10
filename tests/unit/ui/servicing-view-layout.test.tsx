@@ -1,6 +1,6 @@
 // tests/unit/ui/servicing-view-layout.test.tsx
 import { describe, test, expect, afterEach, vi } from 'vitest'
-import { render, screen, cleanup, within } from '@testing-library/react'
+import { render, screen, cleanup, within, fireEvent } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import type { LoanAccountData } from '@/hooks/queries/useCustomer'
@@ -80,5 +80,15 @@ describe('ServicingView cockpit layout', () => {
     // its account number appears in the summary bar. (Scoped because the rail also
     // lists the same account number.)
     expect(within(summaryBar).getByText('over')).toBeInTheDocument()
+  })
+
+  test('close button dismisses the detail panel instead of re-selecting an account', () => {
+    renderWithClient(<ServicingView customerId="CUST-1" />)
+    // Multi-account customer, so the close (deselect) control is shown.
+    fireEvent.click(screen.getByTestId('close-account-panel'))
+    // The panel should collapse to the empty state — auto-select must NOT
+    // immediately re-pick the top-triaged account.
+    expect(screen.queryByTestId('account-summary-bar')).not.toBeInTheDocument()
+    expect(screen.getByText('Select an account from the list.')).toBeInTheDocument()
   })
 })
