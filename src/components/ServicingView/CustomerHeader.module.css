@@ -186,6 +186,31 @@
   gap: 8px;
 }
 
+/* Identity verification (LAB EVS, PR #67) */
+.idvPass {
+  color: #15803d;
+  font-weight: 600;
+}
+
+.idvFail {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.reportLinks {
+  font-size: 13px;
+}
+
+.reportLink {
+  color: var(--theme-success-700, #0369a1);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.reportLink:hover {
+  text-decoration: underline;
+}
+
 /* Badge styles */
 .badge {
   display: inline-flex;

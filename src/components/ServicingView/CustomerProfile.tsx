@@ -2,8 +2,6 @@
 
 import type { CustomerData } from '@/hooks/queries/useCustomer'
 import { getAddressForMapLink, getGoogleMapsUrl } from '@/lib/utils'
-import { formatDateMedium } from '@/lib/formatters'
-import { formatBlockReason, formatBlockedUntil, isBlockActive } from '@/lib/reapplicationBlock'
 import { CopyButton } from '@/components/ui'
 import styles from './styles.module.css'
 
@@ -64,17 +62,6 @@ export const CustomerProfile: React.FC<CustomerProfileProps> = ({ customer }) =>
     .slice(0, 2)
     .toUpperCase() || '?'
 
-  // Re-application block (BTB-135) — alert while the exclusion window applies.
-  const block = customer.reapplicationBlock
-  const blockActive = isBlockActive(block)
-
-  // Latest LAB EVS identity verification (PR #67). Rows render in fixed
-  // positions; '—' when no verification has happened yet.
-  const verification = customer.identityVerification
-  const overallResult = verification?.overallResult ?? null
-  const verificationPassed = overallResult ? /pass/i.test(overallResult) : null
-  const reportBase = `/api/customer/${encodeURIComponent(customer.customerId)}/identity-report`
-
   // Check for any identity flags
   const hasFlags = 
     customer.identityVerified || 
@@ -95,20 +82,6 @@ export const CustomerProfile: React.FC<CustomerProfileProps> = ({ customer }) =>
           </span>
         </div>
       </div>
-
-      {/* Re-application block alert (BTB-135) */}
-      {blockActive && block && (
-        <div className={styles.profileBlockStrip} data-testid="reapplication-block-strip">
-          <span aria-hidden>⛔</span>
-          <span>
-            Re-application blocked — {formatBlockReason(block.reason)}{' '}
-            <span className={styles.profileBlockMeta}>
-              {formatBlockedUntil(block)}
-              {block.applicationNumber ? ` · from ${block.applicationNumber}` : ''}
-            </span>
-          </span>
-        </div>
-      )}
 
       <div className={styles.profileDetails}>
         <div className={styles.profileRow}>
@@ -162,72 +135,6 @@ export const CustomerProfile: React.FC<CustomerProfileProps> = ({ customer }) =>
               ) : null
             })()}
           </span>
-        </div>
-      </div>
-
-      {/* Identity verification (LAB EVS, PR #67) — fixed rows, '—' until verified */}
-      <div className={styles.profileSection} data-testid="identity-verification-section">
-        <div className={styles.profileSectionTitle}>Identity verification</div>
-        <div className={styles.profileRow}>
-          <span className={styles.profileLabel}>Status</span>
-          <span
-            className={`${styles.profileValue} ${
-              verificationPassed == null
-                ? ''
-                : verificationPassed
-                  ? styles.profileVerificationPass
-                  : styles.profileVerificationFail
-            }`}
-          >
-            {overallResult
-              ? `${verificationPassed ? '✓' : '✗'} ${overallResult}${
-                  verification?.provider ? ` · ${verification.provider}` : ''
-                }`
-              : '—'}
-          </span>
-        </div>
-        <div className={styles.profileRow}>
-          <span className={styles.profileLabel}>Checked</span>
-          <span className={styles.profileValue}>
-            {verification?.checkedAt ? formatDateMedium(verification.checkedAt) : '—'}
-          </span>
-        </div>
-        <div className={styles.profileRow}>
-          <span className={styles.profileLabel}>Reference</span>
-          {verification?.providerReference ? (
-            <span className={styles.profileCopyable}>
-              <span className={styles.profileValue}>{verification.providerReference}</span>
-              <CopyButton value={verification.providerReference} label="Copy provider reference" />
-            </span>
-          ) : (
-            <span className={styles.profileValue}>—</span>
-          )}
-        </div>
-        <div className={styles.profileRow}>
-          <span className={styles.profileLabel}>Report</span>
-          {verification?.reportArchived ? (
-            <span className={styles.profileReportLinks}>
-              <a
-                href={`${reportBase}?artifact=report`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={styles.profileReportLink}
-                data-testid="view-identity-report"
-              >
-                View report ⤢
-              </a>
-              <span aria-hidden> · </span>
-              <a
-                href={`${reportBase}?artifact=raw&disposition=attachment`}
-                className={styles.profileReportLink}
-                data-testid="download-identity-raw"
-              >
-                Raw JSON ⤓
-              </a>
-            </span>
-          ) : (
-            <span className={styles.profileValue}>—</span>
-          )}
         </div>
       </div>
 
