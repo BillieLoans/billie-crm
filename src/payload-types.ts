@@ -288,6 +288,48 @@ export interface Customer {
    * Lifecycle status of the individual
    */
   individualStatus?: ('LIVING' | 'DECEASED' | 'MISSING') | null;
+  /**
+   * Active re-application block (mirrored from the blocking application)
+   */
+  reapplicationBlock?: {
+    /**
+     * Block reason enum: ACTIVE_LOAN, PRIOR_DEFAULT, PEP, ID_VERIFICATION, SERVICEABILITY, ACCOUNT_CONDUCT, IDENTITY_CONFLICT
+     */
+    reason?: string | null;
+    /**
+     * End of exclusion window (inclusive). Null = permanent or while-loan-open
+     */
+    blockedUntil?: string | null;
+    blockedAt?: string | null;
+    /**
+     * Application that was halted by the block
+     */
+    applicationNumber?: string | null;
+  };
+  /**
+   * Latest LAB EVS identity verification result
+   */
+  identityVerification?: {
+    /**
+     * e.g. Passed / Failed
+     */
+    overallResult?: string | null;
+    /**
+     * e.g. IDMatrix
+     */
+    provider?: string | null;
+    providerReference?: string | null;
+    labRequestId?: string | null;
+    /**
+     * requestDateTime of the verification
+     */
+    checkedAt?: string | null;
+    /**
+     * True once the report/raw response landed in S3
+     */
+    reportArchived?: boolean | null;
+    archivedAt?: string | null;
+  };
   identityDocuments?:
     | {
         documentType: 'DRIVERS_LICENCE' | 'PASSPORT' | 'MEDICARE';
@@ -575,6 +617,92 @@ export interface Conversation {
    * Final decision outcome (APPROVED, DECLINED, REFERRED)
    */
   finalDecision?: string | null;
+  /**
+   * Optional detail from final_credit_decision (reason, block info)
+   */
+  decisionDetail?: {
+    /**
+     * Raw decision reason, e.g. REAPPLICATION_BLOCK:ID_VERIFICATION
+     */
+    reason?: string | null;
+    /**
+     * Whether the customer may retry
+     */
+    retryEligible?: boolean | null;
+    /**
+     * Prior declined application that caused a block-decline
+     */
+    sourceApplicationNumber?: string | null;
+    /**
+     * End of the re-application exclusion window (inclusive)
+     */
+    blockedUntil?: string | null;
+  };
+  /**
+   * Re-application block details (application.reapplication_blocked.v1)
+   */
+  reapplicationBlock?: {
+    /**
+     * Block reason enum: ACTIVE_LOAN, PRIOR_DEFAULT, PEP, ID_VERIFICATION, SERVICEABILITY, ACCOUNT_CONDUCT, IDENTITY_CONFLICT
+     */
+    reason?: string | null;
+    /**
+     * Stop-copy variant actually shown to the customer
+     */
+    messageVariant?: string | null;
+    /**
+     * Exact stop copy the customer saw
+     */
+    stopMessage?: string | null;
+    /**
+     * Prior decline that caused the block (assessment-based reasons)
+     */
+    sourceApplicationNumber?: string | null;
+    /**
+     * Account that caused the block (ACTIVE_LOAN, PRIOR_DEFAULT)
+     */
+    sourceAccountId?: string | null;
+    /**
+     * When the prior decline was decided
+     */
+    sourceDecidedAt?: string | null;
+    /**
+     * End of exclusion window (inclusive). Null = permanent or while-loan-open
+     */
+    blockedUntil?: string | null;
+    /**
+     * When the block halted this application
+     */
+    blockedAt?: string | null;
+    /**
+     * Resolved identity shared by all linked journeys
+     */
+    canonicalCustomerId?: string | null;
+  };
+  /**
+   * Archived identity verification artifacts (S3)
+   */
+  identityVerificationReport?: {
+    /**
+     * LAB EVS request id
+     */
+    labRequestId?: string | null;
+    /**
+     * Verification provider reference
+     */
+    providerReference?: string | null;
+    /**
+     * S3 URI of the verification report PDF
+     */
+    reportFileLocation?: string | null;
+    reportFileName?: string | null;
+    /**
+     * S3 URI of the raw verify response JSON
+     */
+    rawResponseFileLocation?: string | null;
+    rawResponseFileName?: string | null;
+    archivedAt?: string | null;
+  };
   /**
    * Risk and serviceability assessments
    */
@@ -1375,6 +1503,25 @@ export interface CustomersSelect<T extends boolean = true> {
   ekycEntityId?: T;
   ekycStatus?: T;
   individualStatus?: T;
+  reapplicationBlock?:
+    | T
+    | {
+        reason?: T;
+        blockedUntil?: T;
+        blockedAt?: T;
+        applicationNumber?: T;
+      };
+  identityVerification?:
+    | T
+    | {
+        overallResult?: T;
+        provider?: T;
+        providerReference?: T;
+        labRequestId?: T;
+        checkedAt?: T;
+        reportArchived?: T;
+        archivedAt?: T;
+      };
   identityDocuments?:
     | T
     | {
@@ -1430,6 +1577,38 @@ export interface ConversationsSelect<T extends boolean = true> {
   version?: T;
   lastUtteranceTime?: T;
   finalDecision?: T;
+  decisionDetail?:
+    | T
+    | {
+        reason?: T;
+        retryEligible?: T;
+        sourceApplicationNumber?: T;
+        blockedUntil?: T;
+      };
+  reapplicationBlock?:
+    | T
+    | {
+        reason?: T;
+        messageVariant?: T;
+        stopMessage?: T;
+        sourceApplicationNumber?: T;
+        sourceAccountId?: T;
+        sourceDecidedAt?: T;
+        blockedUntil?: T;
+        blockedAt?: T;
+        canonicalCustomerId?: T;
+      };
+  identityVerificationReport?:
+    | T
+    | {
+        labRequestId?: T;
+        providerReference?: T;
+        reportFileLocation?: T;
+        reportFileName?: T;
+        rawResponseFileLocation?: T;
+        rawResponseFileName?: T;
+        archivedAt?: T;
+      };
   assessments?:
     | T
     | {

@@ -207,6 +207,146 @@ export const Conversations: CollectionConfig = {
       },
     },
     {
+      // BTB-135: optional detail accompanying final_credit_decision. All fields
+      // nullable — legacy/mock decision payloads carry none of these.
+      name: 'decisionDetail',
+      type: 'group',
+      admin: {
+        readOnly: true,
+        description: 'Optional detail from final_credit_decision (reason, block info)',
+      },
+      fields: [
+        {
+          name: 'reason',
+          type: 'text',
+          admin: {
+            description: 'Raw decision reason, e.g. REAPPLICATION_BLOCK:ID_VERIFICATION',
+          },
+        },
+        {
+          name: 'retryEligible',
+          type: 'checkbox',
+          admin: { description: 'Whether the customer may retry' },
+        },
+        {
+          name: 'sourceApplicationNumber',
+          type: 'text',
+          admin: { description: 'Prior declined application that caused a block-decline' },
+        },
+        {
+          name: 'blockedUntil',
+          type: 'date',
+          admin: { description: 'End of the re-application exclusion window (inclusive)' },
+        },
+      ],
+    },
+    {
+      // BTB-135: application.reapplication_blocked.v1 — the rich "why" behind a
+      // block-decline, emitted before the customer-facing stop message.
+      name: 'reapplicationBlock',
+      type: 'group',
+      admin: {
+        readOnly: true,
+        description: 'Re-application block details (application.reapplication_blocked.v1)',
+      },
+      fields: [
+        {
+          name: 'reason',
+          type: 'text',
+          admin: {
+            description:
+              'Block reason enum: ACTIVE_LOAN, PRIOR_DEFAULT, PEP, ID_VERIFICATION, SERVICEABILITY, ACCOUNT_CONDUCT, IDENTITY_CONFLICT',
+          },
+        },
+        {
+          name: 'messageVariant',
+          type: 'text',
+          admin: { description: 'Stop-copy variant actually shown to the customer' },
+        },
+        {
+          name: 'stopMessage',
+          type: 'textarea',
+          admin: { description: 'Exact stop copy the customer saw' },
+        },
+        {
+          name: 'sourceApplicationNumber',
+          type: 'text',
+          admin: { description: 'Prior decline that caused the block (assessment-based reasons)' },
+        },
+        {
+          name: 'sourceAccountId',
+          type: 'text',
+          admin: { description: 'Account that caused the block (ACTIVE_LOAN, PRIOR_DEFAULT)' },
+        },
+        {
+          name: 'sourceDecidedAt',
+          type: 'date',
+          admin: { description: 'When the prior decline was decided' },
+        },
+        {
+          name: 'blockedUntil',
+          type: 'date',
+          admin: {
+            description: 'End of exclusion window (inclusive). Null = permanent or while-loan-open',
+          },
+        },
+        {
+          name: 'blockedAt',
+          type: 'date',
+          admin: { description: 'When the block halted this application' },
+        },
+        {
+          name: 'canonicalCustomerId',
+          type: 'text',
+          admin: { description: 'Resolved identity shared by all linked journeys' },
+        },
+      ],
+    },
+    {
+      // PR #67: identity_verification.report.archived.v1 — S3 locations of the
+      // archived KYC artifacts. Each artifact independently nullable.
+      name: 'identityVerificationReport',
+      type: 'group',
+      admin: {
+        readOnly: true,
+        description: 'Archived identity verification artifacts (S3)',
+      },
+      fields: [
+        {
+          name: 'labRequestId',
+          type: 'text',
+          admin: { description: 'LAB EVS request id' },
+        },
+        {
+          name: 'providerReference',
+          type: 'text',
+          admin: { description: 'Verification provider reference' },
+        },
+        {
+          name: 'reportFileLocation',
+          type: 'text',
+          admin: { description: 'S3 URI of the verification report PDF' },
+        },
+        {
+          name: 'reportFileName',
+          type: 'text',
+        },
+        {
+          name: 'rawResponseFileLocation',
+          type: 'text',
+          admin: { description: 'S3 URI of the raw verify response JSON' },
+        },
+        {
+          name: 'rawResponseFileName',
+          type: 'text',
+        },
+        {
+          name: 'archivedAt',
+          type: 'date',
+        },
+      ],
+    },
+    {
       name: 'assessments',
       type: 'group',
       admin: {
