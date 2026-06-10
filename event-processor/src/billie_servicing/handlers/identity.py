@@ -34,6 +34,22 @@ logger = structlog.get_logger()
 _REATTRIBUTE_TABLES = ("conversations", "applications", "loan_accounts")
 
 
+async def resolve_canonical_customer_id(target: Any, customer_id: str | None) -> str | None:
+    """Follow a ``merged_into`` tombstone one hop to the canonical customer id.
+
+    Customer-level mirrors (re-application block, identity verification) must
+    land on the row the servicing view reads — the canonical one. A single hop
+    matches how ``_merge_identity`` writes tombstones (aliases always point
+    directly at the surviving canonical id).
+    """
+    if not customer_id:
+        return None
+    merged_into = await target.fetchval(
+        "SELECT merged_into FROM customers WHERE customer_id = $1", customer_id
+    )
+    return str(merged_into) if merged_into else customer_id
+
+
 def _extract_payload(event: dict[str, Any]) -> dict[str, Any]:
     """Return the event payload as a dict (it may arrive as a JSON string)."""
     payload = event.get("payload", {})

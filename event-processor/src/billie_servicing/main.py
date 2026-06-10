@@ -22,6 +22,10 @@ from .handlers import (
     # Identity link/merge handlers (BTB-120)
     handle_customer_identity_linked,
     handle_customer_identity_merged,
+    # Identity verification archival (PR #67)
+    handle_identity_report_archived,
+    # Re-application block (BTB-135)
+    handle_reapplication_blocked,
     # Conversation handlers
     handle_conversation_started,
     handle_utterance,
@@ -139,6 +143,17 @@ def setup_handlers(processor: EventProcessor) -> None:
 
     # Final decision
     processor.register_handler("final_credit_decision", handle_final_decision)
+
+    # Re-application block (BTB-135) — the rich "why" behind a block-decline,
+    # arrives before the final_credit_decision for the same application.
+    processor.register_handler(
+        "application.reapplication_blocked.v1", handle_reapplication_blocked
+    )
+
+    # Identity verification report archival (PR #67)
+    processor.register_handler(
+        "identity_verification.report.archived.v1", handle_identity_report_archived
+    )
 
     # Summary
     processor.register_handler("conversation_summary", handle_conversation_summary)

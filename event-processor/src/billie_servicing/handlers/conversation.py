@@ -24,8 +24,9 @@ import asyncpg
 import structlog
 
 from ..config import settings
-from ..db import merge_jsonb, upsert, upsert_conversation
-from .sanitize import safe_str, strip_dollar_keys
+from ..db import coerce_date, merge_jsonb, upsert, upsert_conversation
+from .identity_verification import mirror_lab_verification
+from .sanitize import parse_payload, safe_str, strip_dollar_keys
 
 logger = structlog.get_logger()
 
@@ -555,6 +556,17 @@ async def handle_assessment(pool: asyncpg.Pool, event: dict[str, Any]) -> None:
         data["s3Key"] = data["file_location"]
 
     await _set_assessment(pool, conversation_id, column, data)
+
+    # PR #67: identityRisk assessments may carry a verbatim LAB EVS
+    # `lab_verification` block — mirror its summary onto the customer row so
+    # the servicing view's customer details read one row. The full block stays
+    # in the assessment jsonb stored above.
+    if key == "identityRisk":
+        lab = data.get("lab_verification")
+        if isinstance(lab, dict) and lab:
+            customer_id = safe_str(event.get("usr") or event.get("user_id"), "customer_id")
+            await mirror_lab_verification(pool, customer_id or None, lab)
+
     log.info("Assessment updated", assessment_key=key)
 
 
@@ -671,8 +683,7 @@ async def handle_final_decision(pool: asyncpg.Pool, event: dict[str, Any]) -> No
         event.get("cid") or event.get("conv") or event.get("conversation_id"),
         "conversation_id",
     )
-    payload = event.get("payload", {})
-    payload_dict = payload if isinstance(payload, dict) else {}
+    payload_dict = parse_payload(event)
     decision = (
         event.get("decision")
         or event.get("outcome")
@@ -688,14 +699,32 @@ async def handle_final_decision(pool: asyncpg.Pool, event: dict[str, Any]) -> No
     status = status_map.get(decision, "hard_end")
     decision_status = status_map.get(decision, "no_decision")
 
+    set_values: dict[str, Any] = {
+        "status": status,
+        "final_decision": decision,
+        "decision_status": decision_status,
+    }
+
+    # BTB-135: optional decision detail. Pre-existing payloads have no
+    # `reason`; block-declines carry `REAPPLICATION_BLOCK:{BlockReason}` plus
+    # source application and blocked-until. Only set columns the payload
+    # actually carries so legacy redeliveries can't wipe earlier detail.
+    reason = payload_dict.get("reason")
+    if reason:
+        set_values["decision_detail_reason"] = str(reason)
+    if payload_dict.get("retry_eligible") is not None:
+        set_values["decision_detail_retry_eligible"] = bool(payload_dict["retry_eligible"])
+    source_application = payload_dict.get("source_application_number")
+    if source_application:
+        set_values["decision_detail_source_application_number"] = str(source_application)
+    blocked_until = coerce_date(payload_dict.get("blocked_until"))
+    if blocked_until:
+        set_values["decision_detail_blocked_until"] = blocked_until
+
     await upsert_conversation(
         pool,
         conversation_id=conversation_id,
-        set_values={
-            "status": status,
-            "final_decision": decision,
-            "decision_status": decision_status,
-        },
+        set_values=set_values,
     )
     log.info("Final decision recorded", status=status)
 
