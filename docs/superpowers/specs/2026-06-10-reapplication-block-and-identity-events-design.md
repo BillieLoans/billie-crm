@@ -31,8 +31,9 @@ would scan conversations.)
 - `decisionDetail` (group): `reason` (text, raw e.g. `REAPPLICATION_BLOCK:ID_VERIFICATION`),
   `retryEligible` (checkbox), `sourceApplicationNumber` (text), `blockedUntil` (date).
   All nullable — legacy payloads carry none of these.
-- `reapplicationBlock` (group): `reason` (select: ACTIVE_LOAN · PRIOR_DEFAULT · PEP ·
-  ID_VERIFICATION · SERVICEABILITY · ACCOUNT_CONDUCT · IDENTITY_CONFLICT), `messageVariant`,
+- `reapplicationBlock` (group): `reason` (text — enum values ACTIVE_LOAN · PRIOR_DEFAULT · PEP ·
+  ID_VERIFICATION · SERVICEABILITY · ACCOUNT_CONDUCT · IDENTITY_CONFLICT; stored as text, not a
+  pg enum, so unknown future values can't fail the projection insert), `messageVariant`,
   `stopMessage` (textarea), `sourceApplicationNumber`, `sourceAccountId`, `sourceDecidedAt` (date),
   `blockedUntil` (date, null = permanent or ongoing), `blockedAt` (date), `canonicalCustomerId`.
 - `identityVerificationReport` (group): `labRequestId`, `providerReference`,
