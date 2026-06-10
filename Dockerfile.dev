@@ -1,5 +1,7 @@
 # Development Dockerfile - runs both Next.js frontend and Python event processor
-FROM node:22-alpine
+# Pin the Alpine minor: bare `node:22-alpine` floats to Alpine w/ Python 3.14,
+# which has no musllinux wheels for our pinned asyncpg/pydantic-core. 3.21 = py3.12.
+FROM node:22-alpine3.21
 
 # Install Python and dependencies
 RUN apk add --no-cache \
