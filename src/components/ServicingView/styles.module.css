@@ -162,6 +162,69 @@
   height: 14px;
 }
 
+/* Re-application block alert (BTB-135) */
+.profileBlockStrip {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--theme-error-100, #fdecea);
+  border: 1px solid var(--theme-error-300, #f0b8b1);
+  color: var(--theme-error-500, #b4231a);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.profileBlockMeta {
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+/* Bordered sub-section within the profile card (e.g. identity verification) */
+.profileSection {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--theme-elevation-100, #e5e5e5);
+}
+
+.profileSectionTitle {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--theme-elevation-600, #6b7280);
+}
+
+.profileVerificationPass {
+  color: #15803d;
+  font-weight: 600;
+}
+
+.profileVerificationFail {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.profileReportLinks {
+  font-size: 14px;
+  text-align: right;
+}
+
+.profileReportLink {
+  color: var(--theme-success-700, #0369a1);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.profileReportLink:hover {
+  text-decoration: underline;
+}
+
 .profileBadges {
   display: flex;
   flex-wrap: wrap;

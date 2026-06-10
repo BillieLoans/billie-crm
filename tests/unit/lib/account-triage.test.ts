@@ -122,4 +122,38 @@ describe('getAttentionItems', () => {
     expect(items[0].accountId).toBe('wo')
     expect(items[0].severity).toBe('medium')
   })
+
+  it('emits a high-severity reapplication_blocked chip while the block is active (BTB-135)', () => {
+    const items = getAttentionItems({
+      vulnerable: false,
+      accounts: [],
+      reapplicationBlock: { reason: 'ID_VERIFICATION', blockedUntil: '2026-12-10T01:02:21+00:00', blockedAt: null, applicationNumber: 'A3CD3461-11F' },
+      today: TODAY,
+    })
+    expect(items.map((i) => i.kind)).toEqual(['reapplication_blocked'])
+    expect(items[0].severity).toBe('high')
+    expect(items[0].accountId).toBeNull()
+    expect(items[0].label).toBe('Re-application blocked — ID verification (until 10 December 2026)')
+  })
+
+  it('permanent block (null blockedUntil) emits a chip', () => {
+    const items = getAttentionItems({
+      vulnerable: false,
+      accounts: [],
+      reapplicationBlock: { reason: 'PEP', blockedUntil: null, blockedAt: null, applicationNumber: null },
+      today: TODAY,
+    })
+    expect(items.map((i) => i.kind)).toEqual(['reapplication_blocked'])
+    expect(items[0].label).toContain('permanent')
+  })
+
+  it('lapsed block emits no chip', () => {
+    const items = getAttentionItems({
+      vulnerable: false,
+      accounts: [],
+      reapplicationBlock: { reason: 'SERVICEABILITY', blockedUntil: '2026-01-01T00:00:00+00:00', blockedAt: null, applicationNumber: null },
+      today: TODAY,
+    })
+    expect(items).toEqual([])
+  })
 })

@@ -91,6 +91,24 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     // Identity verification report: expose availability + names only — the S3
     // locations stay server-side (the identity-report route resolves them).
     const ivr = doc.identityVerificationReport as Record<string, unknown> | null | undefined
+
+    // Block-declines reference the prior decline by application number; resolve
+    // its conversation id so the UI can deep-link to the source application.
+    const block = doc.reapplicationBlock as Record<string, unknown> | null | undefined
+    const decisionDetail = doc.decisionDetail as Record<string, unknown> | null | undefined
+    const sourceApplicationNumber = (block?.sourceApplicationNumber ??
+      decisionDetail?.sourceApplicationNumber) as string | null | undefined
+    let sourceConversationId: string | null = null
+    if (sourceApplicationNumber) {
+      const sourceResult = await payload.find({
+        collection: 'conversations',
+        where: { applicationNumber: { equals: sourceApplicationNumber } },
+        sort: '-updatedAt',
+        limit: 1,
+        select: { conversationId: true },
+      })
+      sourceConversationId = (sourceResult.docs[0]?.conversationId as string) ?? null
+    }
     // applicationData may be flat {loanAmount, ...} (new format) or nested {payload: {loanAmount, ...}} (old format)
     const appDataRaw = doc.applicationData as Record<string, unknown> | undefined
     const appData = (appDataRaw?.payload as Record<string, unknown> | undefined) ?? appDataRaw
@@ -101,8 +119,9 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       status: (doc.status as string) ?? null,
       decisionStatus: (doc.decisionStatus as string) ?? null,
       finalDecision: (doc.finalDecision as string) ?? null,
-      decisionDetail: (doc.decisionDetail as Record<string, unknown>) ?? null,
-      reapplicationBlock: (doc.reapplicationBlock as Record<string, unknown>) ?? null,
+      decisionDetail: decisionDetail ?? null,
+      reapplicationBlock: block ?? null,
+      sourceConversationId,
       identityVerificationReport: {
         labRequestId: (ivr?.labRequestId as string) ?? null,
         providerReference: (ivr?.providerReference as string) ?? null,

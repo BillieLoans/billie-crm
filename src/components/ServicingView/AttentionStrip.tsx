@@ -13,6 +13,7 @@ const ICON: Record<AttentionItem['kind'], string> = {
   overdue: '●',
   pending_disbursement: '⏳',
   writeoff_pending: '📝',
+  reapplication_blocked: '⛔',
 }
 
 export const AttentionStrip: React.FC<AttentionStripProps> = ({ items, onSelectAccount }) => {

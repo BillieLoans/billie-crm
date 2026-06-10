@@ -178,3 +178,117 @@ describe('CustomerProfile identity badges', () => {
     expect(screen.getByText('⚠ Vulnerable')).toBeInTheDocument()
   })
 })
+
+describe('CustomerProfile re-application block strip (BTB-135)', () => {
+  afterEach(cleanup)
+
+  test('hidden when there is no block', () => {
+    render(<CustomerProfile customer={createMockCustomer()} />)
+    expect(screen.queryByTestId('reapplication-block-strip')).not.toBeInTheDocument()
+  })
+
+  test('shows an active dated block with reason, window and source application', () => {
+    const customer = createMockCustomer({
+      reapplicationBlock: {
+        reason: 'ID_VERIFICATION',
+        blockedUntil: '2099-12-10T01:02:21+00:00',
+        blockedAt: '2026-06-10T07:08:40+00:00',
+        applicationNumber: 'A3CD3461-11F',
+      },
+    })
+    render(<CustomerProfile customer={customer} />)
+    const strip = screen.getByTestId('reapplication-block-strip')
+    expect(strip).toHaveTextContent('Re-application blocked — ID verification')
+    expect(strip).toHaveTextContent('until 10 December 2099')
+    expect(strip).toHaveTextContent('from A3CD3461-11F')
+  })
+
+  test('permanent block (null blockedUntil) stays visible', () => {
+    const customer = createMockCustomer({
+      reapplicationBlock: { reason: 'PEP', blockedUntil: null, blockedAt: null, applicationNumber: null },
+    })
+    render(<CustomerProfile customer={customer} />)
+    expect(screen.getByTestId('reapplication-block-strip')).toHaveTextContent('permanent')
+  })
+
+  test('expired block is hidden', () => {
+    const customer = createMockCustomer({
+      reapplicationBlock: {
+        reason: 'SERVICEABILITY',
+        blockedUntil: '2020-01-01T00:00:00+00:00',
+        blockedAt: null,
+        applicationNumber: null,
+      },
+    })
+    render(<CustomerProfile customer={customer} />)
+    expect(screen.queryByTestId('reapplication-block-strip')).not.toBeInTheDocument()
+  })
+})
+
+describe('CustomerProfile identity verification section (PR #67)', () => {
+  afterEach(cleanup)
+
+  test('section renders in fixed position with em dashes before any verification', () => {
+    render(<CustomerProfile customer={createMockCustomer()} />)
+    const section = screen.getByTestId('identity-verification-section')
+    expect(section).toHaveTextContent('Identity verification')
+    expect(section).toHaveTextContent('Status')
+    expect(section).toHaveTextContent('Checked')
+    expect(section).toHaveTextContent('Reference')
+    expect(section).toHaveTextContent('Report')
+    expect(screen.queryByTestId('view-identity-report')).not.toBeInTheDocument()
+  })
+
+  test('shows passed result with provider, reference and report links', () => {
+    const customer = createMockCustomer({
+      identityVerification: {
+        overallResult: 'Passed',
+        provider: 'IDMatrix',
+        providerReference: '260610-52BC8-A4A67',
+        labRequestId: '468881',
+        checkedAt: '2026-06-10T07:32:35+00:00',
+        reportArchived: true,
+        archivedAt: '2026-06-10T07:35:12+00:00',
+      },
+    })
+    render(<CustomerProfile customer={customer} />)
+    expect(screen.getByText('✓ Passed · IDMatrix')).toBeInTheDocument()
+    expect(screen.getByText('260610-52BC8-A4A67')).toBeInTheDocument()
+    const view = screen.getByTestId('view-identity-report')
+    expect(view).toHaveAttribute('href', '/api/customer/CUST-12345/identity-report?artifact=report')
+    expect(view).toHaveAttribute('target', '_blank')
+    expect(screen.getByTestId('download-identity-raw')).toHaveAttribute(
+      'href',
+      '/api/customer/CUST-12345/identity-report?artifact=raw&disposition=attachment',
+    )
+  })
+
+  test('failed result renders with cross marker', () => {
+    const customer = createMockCustomer({
+      identityVerification: {
+        overallResult: 'Failed',
+        provider: 'IDMatrix',
+        reportArchived: false,
+      },
+    })
+    render(<CustomerProfile customer={customer} />)
+    expect(screen.getByText('✗ Failed · IDMatrix')).toBeInTheDocument()
+    // Report not archived → no links
+    expect(screen.queryByTestId('view-identity-report')).not.toBeInTheDocument()
+  })
+
+  test('verification result without archived report shows result but no links', () => {
+    const customer = createMockCustomer({
+      identityVerification: {
+        overallResult: 'Passed',
+        provider: 'IDMatrix',
+        checkedAt: '2026-06-10T07:32:35+00:00',
+        reportArchived: false,
+      },
+    })
+    render(<CustomerProfile customer={customer} />)
+    expect(screen.getByText('✓ Passed · IDMatrix')).toBeInTheDocument()
+    expect(screen.queryByTestId('view-identity-report')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('download-identity-raw')).not.toBeInTheDocument()
+  })
+})

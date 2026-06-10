@@ -6,6 +6,7 @@ import type { ConversationDetail } from '@/lib/schemas/conversations'
 import { ContextDrawer } from '@/components/ui/ContextDrawer'
 import { StatementFileViewer } from '../StatementFileViewer'
 import { AssessmentDrawer } from '../AssessmentDrawer'
+import { DecisionBanner } from '../DecisionBanner'
 import type { AssessmentType } from '../AssessmentDetailView'
 import type { StatementSlot } from '@/hooks'
 import styles from './styles.module.css'
@@ -196,6 +197,9 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
 
   return (
     <div className={styles.panel}>
+      {/* Decision — fixed slot, always first: "what was decided, and why?" */}
+      <DecisionBanner conversation={conversation} />
+
       {/* Application Details */}
       <AssessmentSection title="Application" summary={appSummary || 'No data'}>
         {application || startedAt ? (

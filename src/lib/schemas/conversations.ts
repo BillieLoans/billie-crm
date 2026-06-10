@@ -127,6 +127,8 @@ export const ConversationDetailSchema = z.object({
   finalDecision: z.string().nullable().optional(),
   decisionDetail: DecisionDetailSchema.nullable().optional(),
   reapplicationBlock: ReapplicationBlockSchema.nullable().optional(),
+  /** Conversation id of the prior decline referenced by a block (deep-link target). */
+  sourceConversationId: z.string().nullable().optional(),
   identityVerificationReport: IdentityVerificationReportSchema.nullable().optional(),
   startedAt: z.union([z.string(), z.date()]).nullable().optional(),
   updatedAt: z.union([z.string(), z.date()]).nullable().optional(),
