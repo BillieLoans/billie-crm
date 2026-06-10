@@ -206,7 +206,7 @@ export const ContactNoteCard: React.FC<ContactNoteCardProps> = ({
           {hasPreviousVersions && (
             <span className={`${styles.badge} ${styles.badgeAmendment}`}>AMENDED</span>
           )}
-          <span className={`${styles.badge} ${styles.badgeTopic}`}>{topicLabel}</span>
+          {/* Topic is shown once in the meta row below — keep the header light. */}
           <span className={styles.noteTimestamp}>{timestamp}</span>
         </div>
       </div>

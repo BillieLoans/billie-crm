@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useMemo, useEffect } from 'react'
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useQueryClient } from '@tanstack/react-query'
 import { useCustomer, type LoanAccountData } from '@/hooks/queries/useCustomer'
@@ -69,7 +69,7 @@ const CustomerNotFound: React.FC = () => {
  */
 export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
   const queryClient = useQueryClient()
-  const { data: customer, isLoading, isError, isFetching: isCustomerFetching, refetch: refetchCustomer } = useCustomer(customerId)
+  const { data: customer, isLoading, isError, refetch: refetchCustomer } = useCustomer(customerId)
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   // Track this customer view for "Recent Customers" feature
@@ -122,9 +122,24 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
     [customer?.vulnerableFlag, accounts, selectedAccountId, hasPendingWriteOff]
   )
 
+  // Auto-select runs ONCE per mount (the component fully remounts on customer
+  // navigation via window.location). Without this guard the effect re-fires
+  // whenever selection is cleared — e.g. the close button setting it to null,
+  // or the 30s background poll handing back a new `accounts` reference — and
+  // immediately re-selects the top account, defeating both.
+  const hasAutoSelectedRef = useRef(false)
+
   // Auto-select top-triaged account or account from URL query parameter
   useEffect(() => {
     if (accounts.length === 0) return
+    if (hasAutoSelectedRef.current) return
+
+    // A selection already exists (e.g. user clicked before this ran): record
+    // that initial selection is settled and never override it.
+    if (selectedAccountId) {
+      hasAutoSelectedRef.current = true
+      return
+    }
 
     // Check for account selection in URL query parameter
     if (typeof window !== 'undefined') {
@@ -133,8 +148,9 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
       if (accountIdParam) {
         // Find account by loanAccountId
         const account = accounts.find((a) => a.loanAccountId === accountIdParam)
-        if (account && !selectedAccountId) {
+        if (account) {
           setSelectedAccountId(account.loanAccountId)
+          hasAutoSelectedRef.current = true
           // Clean up URL by removing query parameter
           urlParams.delete('accountId')
           const newUrl = `${window.location.pathname}${urlParams.toString() ? `?${urlParams.toString()}` : ''}`
@@ -147,10 +163,11 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
     // Auto-select the top-triaged account (in-arrears first, then pending,
     // then active; falling back to the most recently closed) when nothing
     // is selected and no ?accountId= param applied above.
-    if (!selectedAccountId && accounts.length > 0) {
-      const { active, closed } = sortAccountsForRail(accounts)
-      const top = active[0] ?? closed[0]
-      if (top) setSelectedAccountId(top.loanAccountId)
+    const { active, closed } = sortAccountsForRail(accounts)
+    const top = active[0] ?? closed[0]
+    if (top) {
+      setSelectedAccountId(top.loanAccountId)
+      hasAutoSelectedRef.current = true
     }
   }, [accounts, selectedAccountId])
 
@@ -274,9 +291,6 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
     }
   }, [activeTab, selectedAccountId, refetchCustomer, queryClient])
 
-  // Combined refreshing state
-  const isFetchingData = isRefreshing || isCustomerFetching
-
   // Error state
   if (isError) {
     return (
@@ -368,7 +382,7 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
               onBulkWaive={handleBulkWaive}
               feesCount={feesCount}
               onRefresh={handleRefresh}
-              isRefreshing={isFetchingData}
+              isRefreshing={isRefreshing}
               onRequestWriteOff={handleOpenWriteOff}
               hasPendingWriteOff={hasPendingWriteOff}
               onDisburseLoan={handleOpenDisburseLoan}

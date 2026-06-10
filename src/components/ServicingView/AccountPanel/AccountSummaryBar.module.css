@@ -24,4 +24,10 @@
 .menuItem { display: block; width: 100%; text-align: left; padding: 8px 10px; font-size: 12.5px; border: none; background: none; border-radius: 5px; cursor: pointer; color: var(--theme-text, #374151); }
 .menuItem:hover:not(:disabled) { background: var(--theme-elevation-50, #f4f5f7); }
 .menuItem:disabled { opacity: 0.5; cursor: not-allowed; }
-.refresh, .close { background: none; border: none; cursor: pointer; font-size: 14px; color: var(--theme-elevation-600, #6b7280); }
+.iconRow { display: flex; align-items: center; gap: 4px; }
+.iconBtn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; background: var(--theme-elevation-0, #fff); border: 1px solid var(--theme-elevation-150, #d6dae1); border-radius: 6px; cursor: pointer; line-height: 1; color: var(--theme-elevation-600, #6b7280); transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease; }
+.iconBtn:hover:not(:disabled) { background: var(--theme-elevation-50, #f4f5f7); color: var(--theme-text, #374151); border-color: var(--theme-elevation-250, #c2c8d0); }
+.iconBtn:disabled { opacity: 0.55; cursor: not-allowed; }
+.iconBtn svg { display: block; }
+.spinning .refreshIcon { animation: summaryRefreshSpin 0.7s linear infinite; transform-origin: center; }
+@keyframes summaryRefreshSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
