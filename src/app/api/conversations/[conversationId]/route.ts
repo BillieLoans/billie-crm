@@ -88,6 +88,9 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 
     // 4. Shape response — no PII in logs (NFR11)
     const utterances = Array.isArray(doc.utterances) ? doc.utterances : []
+    // Identity verification report: expose availability + names only — the S3
+    // locations stay server-side (the identity-report route resolves them).
+    const ivr = doc.identityVerificationReport as Record<string, unknown> | null | undefined
     // applicationData may be flat {loanAmount, ...} (new format) or nested {payload: {loanAmount, ...}} (old format)
     const appDataRaw = doc.applicationData as Record<string, unknown> | undefined
     const appData = (appDataRaw?.payload as Record<string, unknown> | undefined) ?? appDataRaw
@@ -98,6 +101,17 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       status: (doc.status as string) ?? null,
       decisionStatus: (doc.decisionStatus as string) ?? null,
       finalDecision: (doc.finalDecision as string) ?? null,
+      decisionDetail: (doc.decisionDetail as Record<string, unknown>) ?? null,
+      reapplicationBlock: (doc.reapplicationBlock as Record<string, unknown>) ?? null,
+      identityVerificationReport: {
+        labRequestId: (ivr?.labRequestId as string) ?? null,
+        providerReference: (ivr?.providerReference as string) ?? null,
+        reportAvailable: Boolean(ivr?.reportFileLocation),
+        reportFileName: (ivr?.reportFileName as string) ?? null,
+        rawResponseAvailable: Boolean(ivr?.rawResponseFileLocation),
+        rawResponseFileName: (ivr?.rawResponseFileName as string) ?? null,
+        archivedAt: toIso(ivr?.archivedAt),
+      },
       startedAt: toIso(doc.startedAt),
       updatedAt: toIso(doc.updatedAt),
       lastMessageAt: toIso(doc.lastUtteranceTime),

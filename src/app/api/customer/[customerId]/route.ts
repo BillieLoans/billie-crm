@@ -104,6 +104,9 @@ export async function GET(
         staffFlag: customer.staffFlag || false,
         investorFlag: customer.investorFlag || false,
         founderFlag: customer.founderFlag || false,
+        vulnerableFlag: customer.vulnerableFlag || false,
+        reapplicationBlock: customer.reapplicationBlock ?? null,
+        identityVerification: customer.identityVerification ?? null,
       },
       accounts: accountsWithBalances.map((account) => ({
         id: account.id,
