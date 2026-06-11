@@ -471,7 +471,11 @@ async def _sync_customer(target: Any, customer_id: str, customer_data: dict[str,
         values["mobile_phone_number"] = phone
     dob = customer_data.get("date_of_birth") or customer_data.get("dateOfBirth")
     if dob:
-        values["date_of_birth"] = dob
+        # DOB lands in a timestamp column — asyncpg rejects a raw ISO string
+        # ("expected a datetime.date or datetime.datetime instance, got 'str'"),
+        # which throws the whole upsert and loses DOB *and* address together.
+        # Coerce to a date/datetime, mirroring handle_customer_changed.
+        values["date_of_birth"] = coerce_date(dob)
 
     addr = customer_data.get("residential_address") or customer_data.get("residentialAddress")
     if isinstance(addr, dict):
