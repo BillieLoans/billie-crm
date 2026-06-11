@@ -118,8 +118,9 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
         // `usePendingWriteOff` is a per-account query and the design avoids firing extra fetches for
         // every account on the rail. A customer-level pending-write-off query would be a follow-up.
         pendingWriteOffAccountIds: selectedAccountId && hasPendingWriteOff ? [selectedAccountId] : [],
+        reapplicationBlock: customer?.reapplicationBlock ?? null,
       }),
-    [customer?.vulnerableFlag, accounts, selectedAccountId, hasPendingWriteOff]
+    [customer?.vulnerableFlag, customer?.reapplicationBlock, accounts, selectedAccountId, hasPendingWriteOff]
   )
 
   // Auto-select runs ONCE per mount (the component fully remounts on customer

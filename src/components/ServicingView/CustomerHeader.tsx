@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import type { CustomerData } from '@/hooks/queries/useCustomer'
 import { getAddressForMapLink, getGoogleMapsUrl } from '@/lib/utils'
+import { formatDateMedium } from '@/lib/formatters'
 import { CopyButton } from '@/components/ui'
 import { NotificationStatusPill } from './NotificationControls/NotificationStatusPill'
 import styles from './CustomerHeader.module.css'
@@ -67,12 +68,20 @@ export const CustomerHeader: React.FC<CustomerHeaderProps> = ({ customer }) => {
     .toUpperCase() || '?'
 
   // Check for any identity flags
-  const hasFlags = 
-    customer.identityVerified || 
-    customer.staffFlag || 
-    customer.investorFlag || 
+  const hasFlags =
+    customer.identityVerified ||
+    customer.staffFlag ||
+    customer.investorFlag ||
     customer.founderFlag ||
     customer.vulnerableFlag
+
+  // LAB EVS identity verification (PR #67). Rows render in fixed positions in
+  // the expanded details; '—' until the verification events flow, and the
+  // report links only appear once the archive event lands (reportArchived).
+  const verification = customer.identityVerification
+  const overallResult = verification?.overallResult ?? null
+  const verificationPassed = overallResult ? /pass/i.test(overallResult) : null
+  const reportBase = `/api/customer/${encodeURIComponent(customer.customerId)}/identity-report`
 
   return (
     <div className={styles.headerCard} data-testid="customer-header">
@@ -171,6 +180,70 @@ export const CustomerHeader: React.FC<CustomerHeaderProps> = ({ customer }) => {
                   ) : null
                 })()}
               </span>
+            </div>
+
+            {/* Identity verification (LAB EVS, PR #67) */}
+            <div className={styles.detailItem} data-testid="identity-verification">
+              <span className={styles.detailLabel}>Identity check</span>
+              <span
+                className={`${styles.detailValue} ${
+                  verificationPassed == null
+                    ? ''
+                    : verificationPassed
+                      ? styles.idvPass
+                      : styles.idvFail
+                }`}
+              >
+                {overallResult
+                  ? `${verificationPassed ? '✓' : '✗'} ${overallResult}${
+                      verification?.provider ? ` · ${verification.provider}` : ''
+                    }`
+                  : '—'}
+              </span>
+            </div>
+            <div className={styles.detailItem}>
+              <span className={styles.detailLabel}>Checked</span>
+              <span className={styles.detailValue}>
+                {verification?.checkedAt ? formatDateMedium(verification.checkedAt) : '—'}
+              </span>
+            </div>
+            <div className={styles.detailItem}>
+              <span className={styles.detailLabel}>Reference</span>
+              <span className={styles.detailValueWithIcon}>
+                <span>{verification?.providerReference ?? '—'}</span>
+                {verification?.providerReference && (
+                  <CopyButton
+                    value={verification.providerReference}
+                    label="Copy provider reference"
+                  />
+                )}
+              </span>
+            </div>
+            <div className={styles.detailItem}>
+              <span className={styles.detailLabel}>Report</span>
+              {verification?.reportArchived ? (
+                <span className={styles.reportLinks}>
+                  <a
+                    href={`${reportBase}?artifact=report`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={styles.reportLink}
+                    data-testid="view-identity-report"
+                  >
+                    View report ⤢
+                  </a>
+                  <span aria-hidden> · </span>
+                  <a
+                    href={`${reportBase}?artifact=raw&disposition=attachment`}
+                    className={styles.reportLink}
+                    data-testid="download-identity-raw"
+                  >
+                    Raw JSON ⤓
+                  </a>
+                </span>
+              ) : (
+                <span className={styles.detailValue}>—</span>
+              )}
             </div>
           </div>
 

@@ -283,6 +283,87 @@ export const Customers: CollectionConfig = {
       },
     },
     {
+      // BTB-135: customer-level mirror of application.reapplication_blocked.v1,
+      // written against the canonical customer id so the servicing view reads one row.
+      name: 'reapplicationBlock',
+      type: 'group',
+      admin: {
+        readOnly: true,
+        description: 'Active re-application block (mirrored from the blocking application)',
+      },
+      fields: [
+        {
+          name: 'reason',
+          type: 'text',
+          admin: {
+            description:
+              'Block reason enum: ACTIVE_LOAN, PRIOR_DEFAULT, PEP, ID_VERIFICATION, SERVICEABILITY, ACCOUNT_CONDUCT, IDENTITY_CONFLICT',
+          },
+        },
+        {
+          name: 'blockedUntil',
+          type: 'date',
+          admin: {
+            description: 'End of exclusion window (inclusive). Null = permanent or while-loan-open',
+          },
+        },
+        {
+          name: 'blockedAt',
+          type: 'date',
+        },
+        {
+          name: 'applicationNumber',
+          type: 'text',
+          admin: { description: 'Application that was halted by the block' },
+        },
+      ],
+    },
+    {
+      // PR #67: latest LAB EVS identity verification, merged from
+      // identityRisk_assessment.lab_verification and identity_verification.report.archived.v1
+      // (either arrival order).
+      name: 'identityVerification',
+      type: 'group',
+      admin: {
+        readOnly: true,
+        description: 'Latest LAB EVS identity verification result',
+      },
+      fields: [
+        {
+          name: 'overallResult',
+          type: 'text',
+          admin: { description: 'e.g. Passed / Failed' },
+        },
+        {
+          name: 'provider',
+          type: 'text',
+          admin: { description: 'e.g. IDMatrix' },
+        },
+        {
+          name: 'providerReference',
+          type: 'text',
+        },
+        {
+          name: 'labRequestId',
+          type: 'text',
+        },
+        {
+          name: 'checkedAt',
+          type: 'date',
+          admin: { description: 'requestDateTime of the verification' },
+        },
+        {
+          name: 'reportArchived',
+          type: 'checkbox',
+          admin: { description: 'True once the report/raw response landed in S3' },
+        },
+        {
+          name: 'archivedAt',
+          type: 'date',
+        },
+      ],
+    },
+    {
       name: 'identityDocuments',
       type: 'array',
       admin: {

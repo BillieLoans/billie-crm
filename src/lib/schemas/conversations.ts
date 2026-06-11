@@ -86,12 +86,50 @@ export const NoticeboardEntrySchema = z.object({
   timestamp: z.union([z.string(), z.date()]).nullable().optional(),
 })
 
+/** Optional detail accompanying final_credit_decision (BTB-135). */
+export const DecisionDetailSchema = z.object({
+  reason: z.string().nullable().optional(),
+  retryEligible: z.boolean().nullable().optional(),
+  sourceApplicationNumber: z.string().nullable().optional(),
+  blockedUntil: z.union([z.string(), z.date()]).nullable().optional(),
+})
+
+/** application.reapplication_blocked.v1 — the rich "why" behind a block-decline. */
+export const ReapplicationBlockSchema = z.object({
+  reason: z.string().nullable().optional(),
+  messageVariant: z.string().nullable().optional(),
+  stopMessage: z.string().nullable().optional(),
+  sourceApplicationNumber: z.string().nullable().optional(),
+  sourceAccountId: z.string().nullable().optional(),
+  sourceDecidedAt: z.union([z.string(), z.date()]).nullable().optional(),
+  /** null = permanent (PEP, PRIOR_DEFAULT, IDENTITY_CONFLICT) or while-loan-open (ACTIVE_LOAN) */
+  blockedUntil: z.union([z.string(), z.date()]).nullable().optional(),
+  blockedAt: z.union([z.string(), z.date()]).nullable().optional(),
+  canonicalCustomerId: z.string().nullable().optional(),
+})
+
+/** Archived KYC artifact availability (S3 locations stay server-side). */
+export const IdentityVerificationReportSchema = z.object({
+  labRequestId: z.string().nullable().optional(),
+  providerReference: z.string().nullable().optional(),
+  reportAvailable: z.boolean().optional(),
+  reportFileName: z.string().nullable().optional(),
+  rawResponseAvailable: z.boolean().optional(),
+  rawResponseFileName: z.string().nullable().optional(),
+  archivedAt: z.union([z.string(), z.date()]).nullable().optional(),
+})
+
 export const ConversationDetailSchema = z.object({
   conversationId: z.string(),
   applicationNumber: z.string().nullable().optional(),
   status: z.string().nullable().optional(),
   decisionStatus: z.string().nullable().optional(),
   finalDecision: z.string().nullable().optional(),
+  decisionDetail: DecisionDetailSchema.nullable().optional(),
+  reapplicationBlock: ReapplicationBlockSchema.nullable().optional(),
+  /** Conversation id of the prior decline referenced by a block (deep-link target). */
+  sourceConversationId: z.string().nullable().optional(),
+  identityVerificationReport: IdentityVerificationReportSchema.nullable().optional(),
   startedAt: z.union([z.string(), z.date()]).nullable().optional(),
   updatedAt: z.union([z.string(), z.date()]).nullable().optional(),
   lastMessageAt: z.union([z.string(), z.date()]).nullable().optional(),

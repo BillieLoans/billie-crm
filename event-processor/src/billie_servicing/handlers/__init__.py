@@ -16,6 +16,12 @@ from .identity import (
     handle_customer_identity_linked,
     handle_customer_identity_merged,
 )
+from .identity_verification import (
+    handle_identity_report_archived,
+)
+from .reapplication import (
+    handle_reapplication_blocked,
+)
 from .conversation import (
     handle_conversation_started,
     handle_utterance,
@@ -64,6 +70,10 @@ __all__ = [
     "handle_customer_verified",
     "handle_customer_identity_linked",
     "handle_customer_identity_merged",
+    # Re-application block (BTB-135)
+    "handle_reapplication_blocked",
+    # Identity verification archival (PR #67)
+    "handle_identity_report_archived",
     # Conversation handlers
     "handle_conversation_started",
     "handle_utterance",

@@ -617,6 +617,15 @@ class EventProcessor:
             # installed customers SDK version; the handler reads the payload dict.
             return sanitize_envelope(sanitized)
 
+        elif event_type == "application.reapplication_blocked.v1":
+            # BTB-135: agent-emitted (customerLiaisonAgent) event carrying a plain
+            # JSON payload — NOT a customers-SDK-typed LedgerMessage. Route it via
+            # the envelope path so the handler receives a dict, exactly like
+            # final_credit_decision / identityRisk_assessment. This MUST precede the
+            # `application.`-prefixed customers-SDK branch below, which would
+            # otherwise raise EventValidationError trying to validate the envelope.
+            return sanitize_envelope(sanitized)
+
         elif event_type.startswith("customer.") or event_type.startswith("application."):
             # Use customers SDK
             payload = parse_customer_message(sdk_data)

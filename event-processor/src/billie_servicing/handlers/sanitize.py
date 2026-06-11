@@ -5,9 +5,28 @@ primitive types (strings), not dicts that MongoDB would interpret as
 query operators (e.g., {"$ne": null}, {"$gt": ""}).
 """
 
+import json
+
 import structlog
 
 logger = structlog.get_logger()
+
+
+def parse_payload(event: dict) -> dict:
+    """Return ``event['payload']`` as a dict.
+
+    The ledger contract allows payloads to arrive as a JSON object **or** a
+    JSON-encoded string — parse defensively. Returns ``{}`` for anything that
+    isn't (or doesn't decode to) a dict.
+    """
+    payload = event.get("payload", {})
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except (ValueError, TypeError):
+            logger.warning("Failed to decode string payload as JSON")
+            return {}
+    return payload if isinstance(payload, dict) else {}
 
 
 def safe_str(value: object, field_name: str = "unknown") -> str:

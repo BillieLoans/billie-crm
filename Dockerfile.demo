@@ -6,7 +6,13 @@
 #   2. Python event processor (background worker)
 # =============================================================================
 
-FROM node:22-alpine AS base
+# Pin the Alpine minor, not just Node: the bare `node:22-alpine` tag floats to
+# the latest Alpine, which now ships Python 3.14 — and there are no musllinux
+# wheels for our pinned asyncpg/pydantic-core on 3.14, so pip falls back to a
+# source build that fails (no C/Rust toolchain in the image). Alpine 3.21 ships
+# Python 3.12, which has the wheels. Keep this pinned; do not revert to the
+# floating tag. (See requirements.txt — "pinned for reproducible builds".)
+FROM node:22-alpine3.21 AS base
 
 # Install Python and dependencies in base image. redis + postgresql-client
 # come along so the cutover Make targets (pg-migrate, pg-replay-reset,

@@ -176,11 +176,18 @@ class MockConnection:
         self.fetchrow = AsyncMock(side_effect=self._record_fetchrow)
         self.fetch = AsyncMock(side_effect=self._record_fetch)
         self._fetchval_returns: Any = None
+        self._fetchval_sequence: list[Any] = []
         self._fetchrow_returns: Any = None
         self._fetch_returns: list[Any] = []
 
     def set_fetchval(self, value: Any) -> None:
         self._fetchval_returns = value
+
+    def set_fetchval_sequence(self, values: list[Any]) -> None:
+        """Queue per-call fetchval returns (popped in order; falls back to
+        ``set_fetchval``'s value once exhausted). For handlers that issue
+        multiple different lookups."""
+        self._fetchval_sequence = list(values)
 
     def set_fetchrow(self, value: Any) -> None:
         self._fetchrow_returns = value
@@ -194,6 +201,8 @@ class MockConnection:
 
     async def _record_fetchval(self, sql: str, *args: Any) -> Any:
         self.calls.append(_parse_call(sql, args))
+        if self._fetchval_sequence:
+            return self._fetchval_sequence.pop(0)
         return self._fetchval_returns
 
     async def _record_fetchrow(self, sql: str, *args: Any) -> Any:
@@ -243,6 +252,10 @@ class MockPool:
     def set_fetchval(self, value: Any) -> None:
         """Set the default return for the next fetchval call(s)."""
         self.connection.set_fetchval(value)
+
+    def set_fetchval_sequence(self, values: list[Any]) -> None:
+        """Queue per-call fetchval returns (popped in order)."""
+        self.connection.set_fetchval_sequence(values)
 
     def set_fetchrow(self, value: Any) -> None:
         self.connection.set_fetchrow(value)

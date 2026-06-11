@@ -1,0 +1,116 @@
+.banner {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 10px 14px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.headline {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.pending {
+  background: var(--theme-elevation-50, #f9fafb);
+  border-color: var(--theme-elevation-150, #e5e7eb);
+  color: var(--theme-elevation-500, #6b7280);
+}
+
+.approved {
+  background: var(--theme-success-100, #ecfdf5);
+  border-color: var(--theme-success-200, #a7f3d0);
+  color: #15803d;
+}
+
+.referred {
+  background: var(--theme-warning-100, #fdf3e0);
+  border-color: var(--theme-warning-200, #f0dcae);
+  color: #b7791f;
+}
+
+.declined {
+  background: var(--theme-error-100, #fdecea);
+  border-color: var(--theme-error-300, #f0b8b1);
+  color: #b91c1c;
+}
+
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.detailRow {
+  display: flex;
+  gap: 10px;
+  font-size: 12.5px;
+  align-items: baseline;
+}
+
+.detailLabel {
+  flex: 0 0 88px;
+  color: var(--theme-elevation-600, #7f1d1d);
+  opacity: 0.75;
+}
+
+.detailValue {
+  flex: 1;
+  color: var(--theme-elevation-800, #450a0a);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.detailLink {
+  color: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.mono {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 12px;
+}
+
+.stopMessage {
+  font-style: italic;
+  font-weight: 400;
+}
+
+/* Dark mode */
+:global([data-theme='dark']) .pending {
+  background: #1f2937;
+  border-color: #374151;
+  color: #9ca3af;
+}
+
+:global([data-theme='dark']) .approved {
+  background: rgba(21, 128, 61, 0.15);
+  border-color: rgba(21, 128, 61, 0.4);
+  color: #4ade80;
+}
+
+:global([data-theme='dark']) .referred {
+  background: rgba(183, 121, 31, 0.15);
+  border-color: rgba(183, 121, 31, 0.4);
+  color: #fbbf24;
+}
+
+:global([data-theme='dark']) .declined {
+  background: rgba(185, 28, 28, 0.15);
+  border-color: rgba(185, 28, 28, 0.45);
+  color: #f87171;
+}
+
+:global([data-theme='dark']) .detailLabel {
+  color: #fca5a5;
+  opacity: 0.7;
+}
+
+:global([data-theme='dark']) .detailValue {
+  color: #fecaca;
+}

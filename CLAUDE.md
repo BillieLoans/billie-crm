@@ -38,6 +38,11 @@ make -C infra/fly deploy ENV=demo GITHUB_TOKEN="..."              # Deploy with 
 make -C infra/fly deploy ENV=demo GITHUB_TOKEN="..." NO_CACHE=1   # Force SDK re-download
 ```
 
+`deploy` first applies pending Payload migrations to the target env's Neon DB (idempotent —
+recorded in `payload_migrations`), then rolls the image. `SKIP_MIGRATE=1` bypasses the
+migration step. Schema changes need a committed migration (`make -C infra/fly pg-migrate-create
+ENV=dev NAME=...` against a local Postgres) — dev/test environments use `push: true` instead.
+
 ### Event Processor (Python)
 ```bash
 cd event-processor

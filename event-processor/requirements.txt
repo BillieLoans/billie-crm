@@ -7,9 +7,15 @@ structlog==25.5.0
 email-validator==2.2.0
 
 # Billie Event SDKs
-# Install event sdks directly from git repo
-git+https://${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@accounts-v2.8.0#subdirectory=packages/accounts
-git+https://${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@customers-v2.1.0#subdirectory=packages/customers
-git+https://${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@ledger-v1.1.0#subdirectory=packages/ledger
-git+https://${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@notifications-v1.1.1#subdirectory=packages/notifications
-git+https://${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@aging-v1.1.0#subdirectory=packages/aging
+# Install event sdks directly from git repo.
+# The token MUST be in the password position (x-access-token:<token>@). With the
+# token as username only (<token>@), modern git treats the password as missing
+# and tries to prompt for it — which fails non-interactively in Docker builds
+# ("could not read Password ... No such device or address"). Keep the
+# x-access-token: prefix. Applies to both `pip install -r` (pip expands ${...})
+# and the Docker subst-sdk-requirements.py path.
+git+https://x-access-token:${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@accounts-v2.8.0#subdirectory=packages/accounts
+git+https://x-access-token:${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@customers-v2.1.0#subdirectory=packages/customers
+git+https://x-access-token:${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@ledger-v1.1.0#subdirectory=packages/ledger
+git+https://x-access-token:${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@notifications-v1.1.1#subdirectory=packages/notifications
+git+https://x-access-token:${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@aging-v1.1.0#subdirectory=packages/aging

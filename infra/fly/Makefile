@@ -65,7 +65,8 @@ help:
 	@echo "  create-app   Create Fly app in the correct org"
 	@echo "  allocate-ip  Allocate ingress and egress IPs"
 	@echo "  secrets      Import secrets from infra/fly/env/.env.<env>"
-	@echo "  deploy       Deploy application (pass GITHUB_TOKEN for private SDKs)"
+	@echo "  deploy       Apply pending DB migrations, then deploy (SKIP_MIGRATE=1 to bypass;"
+	@echo "               pass GITHUB_TOKEN for private SDKs)"
 	@echo "  deploy-local Deploy with local Docker build"
 	@echo "  scale-count  Set machine count (prod: 2 for HA; others: 1)"
 	@echo "  restart      Restart application"
@@ -76,7 +77,7 @@ help:
 	@echo ""
 	@echo "Postgres cutover (see cutover-postgres.md for the full runbook):"
 	@echo "  pg-migrate-create  Generate a new migration from the current schema (local pg)"
-	@echo "  pg-migrate         Apply migrations to the <env> Neon DB (from your laptop)"
+	@echo "  pg-migrate         Apply migrations to the <env> Neon DB (deploy runs this automatically)"
 	@echo "  pg-migrate-status  Show recorded/pending migrations on the <env> Neon DB"
 	@echo "  pg-wipe            DROP SCHEMA public on the <env> Neon DB (when migrations are out of sync)"
 	@echo "  pg-etl             Run mongo → pg ETL via the local dev container (needs MONGO_URI in env)"
@@ -161,6 +162,15 @@ preflight:
 
 deploy: check-config preflight
 	$(call PROD_CHECK,deploy)
+	@# Apply pending Payload migrations BEFORE the new image rolls so handlers
+	@# never run ahead of the schema. Idempotent — applied migrations are
+	@# recorded in payload_migrations and skipped on re-run. SKIP_MIGRATE=1 to
+	@# bypass (e.g. config-only redeploys without the secrets file on hand).
+	@if [ "$(SKIP_MIGRATE)" = "1" ]; then \
+		echo "Skipping DB migrations (SKIP_MIGRATE=1)"; \
+	else \
+		$(MAKE) pg-migrate ENV=$(ENV) CONFIRM=$(CONFIRM); \
+	fi
 	@echo ""
 	@echo "Deploying $(SERVICE) to $(ENV)..."
 	@echo ""

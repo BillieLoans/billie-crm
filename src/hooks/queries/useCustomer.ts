@@ -99,6 +99,24 @@ export interface CustomerData {
     state?: string | null
     postcode?: string | null
   } | null
+  /** Active re-application block mirrored from the blocking application (BTB-135). */
+  reapplicationBlock?: {
+    reason?: string | null
+    /** null = permanent (PEP, PRIOR_DEFAULT, IDENTITY_CONFLICT) or while-loan-open (ACTIVE_LOAN) */
+    blockedUntil?: string | null
+    blockedAt?: string | null
+    applicationNumber?: string | null
+  } | null
+  /** Latest LAB EVS identity verification result (PR #67). */
+  identityVerification?: {
+    overallResult?: string | null
+    provider?: string | null
+    providerReference?: string | null
+    labRequestId?: string | null
+    checkedAt?: string | null
+    reportArchived?: boolean | null
+    archivedAt?: string | null
+  } | null
   loanAccounts?: LoanAccountData[] | null
 }
 

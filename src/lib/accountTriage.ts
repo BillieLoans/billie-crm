@@ -1,5 +1,6 @@
 // src/lib/accountTriage.ts
-import type { LoanAccountData } from '@/hooks/queries/useCustomer'
+import type { CustomerData, LoanAccountData } from '@/hooks/queries/useCustomer'
+import { formatBlockReason, formatBlockedUntil, isBlockActive } from '@/lib/reapplicationBlock'
 
 export type AccountTier = 'overdue' | 'pending' | 'active' | 'closed'
 
@@ -12,7 +13,12 @@ export interface AccountSignal {
 }
 
 export interface AttentionItem {
-  kind: 'vulnerable' | 'overdue' | 'pending_disbursement' | 'writeoff_pending'
+  kind:
+    | 'vulnerable'
+    | 'overdue'
+    | 'pending_disbursement'
+    | 'writeoff_pending'
+    | 'reapplication_blocked'
   label: string
   accountId: string | null
   severity: 'high' | 'medium'
@@ -83,13 +89,31 @@ export function getAttentionItems(opts: {
   vulnerable: boolean
   accounts: LoanAccountData[]
   pendingWriteOffAccountIds?: string[]
+  reapplicationBlock?: CustomerData['reapplicationBlock']
   today?: Date
 }): AttentionItem[] {
-  const { vulnerable, accounts, pendingWriteOffAccountIds = [], today = new Date() } = opts
+  const {
+    vulnerable,
+    accounts,
+    pendingWriteOffAccountIds = [],
+    reapplicationBlock = null,
+    today = new Date(),
+  } = opts
   const items: AttentionItem[] = []
 
   if (vulnerable) {
     items.push({ kind: 'vulnerable', label: 'Vulnerable customer', accountId: null, severity: 'high' })
+  }
+
+  // Re-application block (BTB-135) — customer-level, mirrored from the blocking
+  // application. Hidden once the exclusion window has lapsed.
+  if (isBlockActive(reapplicationBlock, today)) {
+    items.push({
+      kind: 'reapplication_blocked',
+      label: `Re-application blocked — ${formatBlockReason(reapplicationBlock?.reason)} (${formatBlockedUntil(reapplicationBlock ?? {})})`,
+      accountId: null,
+      severity: 'high',
+    })
   }
 
   const sigs = accounts.map((a) => ({ a, s: getAccountSignal(a, today) }))
