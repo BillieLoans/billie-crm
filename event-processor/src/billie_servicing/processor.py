@@ -548,16 +548,21 @@ class EventProcessor:
                 await self.redis.xack(stream, settings.consumer_group, message_id)
                 return
 
-            # Parse with appropriate SDK
-            parsed_event = self._parse_event(event_type, sanitized)
-
-            # Get handler
+            # Get handler. Look this up BEFORE parsing: the external stream carries
+            # many event types the CRM doesn't consume, and the typed SDK parsers
+            # (e.g. parse_customer_message) are strict allowlists that raise
+            # UnsupportedEventTypeError on unknown types. Parsing an event we have
+            # no handler for is wasted work that would otherwise crash and DLQ
+            # perfectly benign events (e.g. customer.contact.verified.v1).
             handler = self.handlers.get(event_type)
             if not handler:
                 print(f"   ⚠️  No handler for event type: {event_type}")
                 log.warning("No handler registered for event type")
                 await self.redis.xack(stream, settings.consumer_group, message_id)
                 return
+
+            # Parse with appropriate SDK (only for events we will actually handle)
+            parsed_event = self._parse_event(event_type, sanitized)
 
             # Execute handler (writes to Postgres via the asyncpg pool)
             await handler(self.pool, parsed_event)
