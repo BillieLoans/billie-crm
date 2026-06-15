@@ -115,6 +115,165 @@ class TestReapplicationBlocked:
         assert mock_pool.last_insert("customers")["customer_id"] == "22F0652F"
 
 
+class TestReapplicationBlockedReattribution:
+    """A blocked returning customer never gets a ``customer.identity.linked.v1``
+    (halted journeys stay evidence-only upstream), so the block lands under the
+    journey id and is invisible in the canonical customer's application list.
+
+    The handler re-points the journey's records onto the canonical — but ONLY
+    for reasons that reflect a confident single-canonical identity match
+    (``ACTIVE_LOAN``, ``PRIOR_DEFAULT``). Everything else default-denies and
+    records the block only, because mis-merging two people in the servicing
+    view is worse than a missing app.
+    """
+
+    JOURNEY = "4A8C91AB"  # BLOCK_PAYLOAD journey_customer_id
+    CANONICAL = "22F0652F"  # BLOCK_PAYLOAD canonical_customer_id
+
+    def _event(self, reason: str, **overrides: object) -> dict:
+        payload = dict(BLOCK_PAYLOAD)
+        payload["reason"] = reason
+        payload.update(overrides)
+        return {
+            "typ": "application.reapplication_blocked.v1",
+            "usr": self.JOURNEY,
+            "payload": payload,
+        }
+
+    @staticmethod
+    def _string_reattributions(mock_pool, table):
+        """UPDATEs that re-point <table>'s customer_id_string (alias→canonical)."""
+        return [
+            c
+            for c in mock_pool.calls_against(table)
+            if c.op == "UPDATE" and "customer_id_string" in c.values
+        ]
+
+    @staticmethod
+    def _ref_reattributions(mock_pool, table):
+        """UPDATEs that re-point <table> by the customer_id_id ref only (applications
+        has no customer_id_string column)."""
+        return [
+            c
+            for c in mock_pool.calls_against(table)
+            if c.op == "UPDATE"
+            and "customer_id_id" in c.values
+            and "customer_id_string" not in c.values
+        ]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("reason", ["ACTIVE_LOAN", "PRIOR_DEFAULT"])
+    async def test_confident_reason_reattributes_all_tables(self, mock_pool, reason):
+        # fetchvals in order: resolve merged_into (mirror), canonical ref, alias ref.
+        mock_pool.set_fetchval_sequence([None, "canon-ref", "alias-ref"])
+        await handle_reapplication_blocked(mock_pool, self._event(reason))
+
+        # conversations + loan_accounts re-point by customer_id_string.
+        for table in ("conversations", "loan_accounts"):
+            ups = self._string_reattributions(mock_pool, table)
+            assert ups, f"expected string re-attribution UPDATE for {table} (reason={reason})"
+            assert ups[-1].values["customer_id_string"] == self.CANONICAL
+            assert ups[-1].where["customer_id_string"] == self.JOURNEY
+        # applications has no customer_id_string — re-pointed by the customer_id_id ref.
+        appls = self._ref_reattributions(mock_pool, "applications")
+        assert appls, f"expected ref re-attribution UPDATE for applications (reason={reason})"
+        assert appls[-1].values["customer_id_id"] == "canon-ref"
+        assert appls[-1].where["customer_id_id"] == "alias-ref"
+
+    @pytest.mark.asyncio
+    async def test_confident_reason_tombstones_journey_customer_row(self, mock_pool):
+        mock_pool.set_fetchval(None)
+        await handle_reapplication_blocked(mock_pool, self._event("ACTIVE_LOAN"))
+
+        tombstones = [
+            c
+            for c in mock_pool.calls_against("customers")
+            if c.op == "UPDATE" and "merged_into" in c.values
+        ]
+        assert tombstones, "expected merged_into tombstone on the journey customer row"
+        assert tombstones[-1].values["merged_into"] == self.CANONICAL
+        assert tombstones[-1].where["customer_id"] == self.JOURNEY
+
+    @pytest.mark.asyncio
+    async def test_identity_conflict_records_block_but_does_not_reattribute(self, mock_pool):
+        # Strong-vs-strong: the canonical is ambiguous, so auto-merging could
+        # attribute the app to the WRONG person — record the block only.
+        mock_pool.set_fetchval(None)
+        await handle_reapplication_blocked(mock_pool, self._event("IDENTITY_CONFLICT"))
+
+        # Block still recorded …
+        conv = mock_pool.last_insert("conversations")
+        assert conv["reapplication_block_reason"] == "IDENTITY_CONFLICT"
+        assert mock_pool.last_insert("customers")["customer_id"] == self.CANONICAL
+        # … but nothing re-attributed.
+        assert not mock_pool.updates_to("conversations")
+        assert not mock_pool.calls_against("applications")
+        assert not mock_pool.calls_against("loan_accounts")
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "reason",
+        ["PEP", "ID_VERIFICATION", "SERVICEABILITY", "ACCOUNT_CONDUCT", "FUTURE_UNKNOWN_REASON"],
+    )
+    async def test_non_allowlisted_reasons_do_not_reattribute(self, mock_pool, reason):
+        mock_pool.set_fetchval(None)
+        await handle_reapplication_blocked(mock_pool, self._event(reason))
+        assert not mock_pool.updates_to("conversations")
+        assert not mock_pool.calls_against("applications")
+        assert not mock_pool.calls_against("loan_accounts")
+
+    @pytest.mark.asyncio
+    async def test_canonical_equals_journey_is_noop(self, mock_pool):
+        # Recognised but same id as the journey → nothing to re-point even with
+        # an allowlisted reason.
+        mock_pool.set_fetchval(None)
+        event = self._event("ACTIVE_LOAN", journey_customer_id=self.CANONICAL)
+        event["usr"] = self.CANONICAL
+        await handle_reapplication_blocked(mock_pool, event)
+
+        assert not mock_pool.updates_to("conversations")
+        assert not mock_pool.calls_against("applications")
+        assert not mock_pool.calls_against("loan_accounts")
+
+    @pytest.mark.asyncio
+    async def test_redelivery_is_idempotent(self, mock_pool):
+        # Per delivery the handler issues: resolve merged_into, canonical ref, alias ref.
+        seq = [None, "canon-ref", "alias-ref"]
+        mock_pool.set_fetchval_sequence(seq + seq)
+        event = self._event("ACTIVE_LOAN")
+        await handle_reapplication_blocked(mock_pool, event)
+        await handle_reapplication_blocked(mock_pool, event)
+
+        # Re-attribution targets the alias on every delivery, so the real-DB second
+        # run matches no rows (they already moved on the first) — a no-op. The mock
+        # is stateless, so we assert the statement shape that guarantees that.
+        for table in ("conversations", "loan_accounts"):
+            ups = self._string_reattributions(mock_pool, table)
+            assert ups, f"no string re-attribution UPDATE for {table}"
+            assert all(c.where["customer_id_string"] == self.JOURNEY for c in ups)
+            assert all(c.values["customer_id_string"] == self.CANONICAL for c in ups)
+        appls = self._ref_reattributions(mock_pool, "applications")
+        assert appls, "no ref re-attribution UPDATE for applications"
+        assert all(c.where["customer_id_id"] == "alias-ref" for c in appls)
+        assert all(c.values["customer_id_id"] == "canon-ref" for c in appls)
+
+    @pytest.mark.asyncio
+    async def test_existing_block_projections_preserved_alongside_reattribution(self, mock_pool):
+        mock_pool.set_fetchval(None)
+        await handle_reapplication_blocked(mock_pool, self._event("ACTIVE_LOAN"))
+
+        # Conversation block fields still seeded …
+        conv = mock_pool.last_insert("conversations")
+        assert conv["reapplication_block_reason"] == "ACTIVE_LOAN"
+        assert conv["application_number"] == "A3CD3461-11F"
+        assert conv["reapplication_block_canonical_customer_id"] == self.CANONICAL
+        # … and the canonical "blocked until…" customer mirror still written.
+        cust = mock_pool.last_insert("customers")
+        assert cust["customer_id"] == self.CANONICAL
+        assert cust["reapplication_block_reason"] == "ACTIVE_LOAN"
+        assert cust["reapplication_block_application_number"] == "A3CD3461-11F"
+
+
 class TestFinalDecisionDetail:
     @pytest.mark.asyncio
     async def test_block_decline_stores_detail(self, mock_pool):

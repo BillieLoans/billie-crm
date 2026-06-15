@@ -29,9 +29,14 @@ from .sanitize import safe_str
 
 logger = structlog.get_logger()
 
-# Projection tables that carry a (customer_id_string, customer_id_id) pair we
-# re-point to the canonical customer.
-_REATTRIBUTE_TABLES = ("conversations", "applications", "loan_accounts")
+# Projection tables that carry a denormalised customer_id_string column we
+# re-point directly to the canonical customer. The applications table is NOT in
+# this list — it links to the customer only by the customer_id_id relationship
+# (it has no customer_id_string column), so it is re-pointed by ref below.
+# Putting it here made every re-attribution UPDATE raise
+# ``column "customer_id_string" does not exist`` and roll back the whole
+# transaction, so no records ever moved and the event hit the DLQ.
+_STRING_KEYED_TABLES = ("conversations", "loan_accounts")
 
 
 async def resolve_canonical_customer_id(target: Any, customer_id: str | None) -> str | None:
@@ -94,16 +99,22 @@ async def _merge_identity(
 
     log.info("Processing customer.identity event — re-attributing to canonical")
 
-    # Resolve the canonical customers row reference (may be None if the canonical
-    # customer row hasn't been projected yet — the string column still re-buckets
-    # the monitoring grid, and the ref backfills on the next canonical event).
+    # Resolve both customers-row references. canonical_ref may be None if the
+    # canonical customer row hasn't been projected yet — the string column still
+    # re-buckets the monitoring grid, and the ref backfills on the next canonical
+    # event. alias_ref is needed to re-point `applications`, which links to the
+    # customer only by customer_id_id (it has no customer_id_string column).
     canonical_ref = await pool.fetchval(
         "SELECT id FROM customers WHERE customer_id = $1", canonical_id
+    )
+    alias_ref = await pool.fetchval(
+        "SELECT id FROM customers WHERE customer_id = $1", alias_id
     )
     now = datetime.now(timezone.utc)
 
     async with pool.acquire() as conn, conn.transaction():
-        for table in _REATTRIBUTE_TABLES:
+        # String-keyed projections carry customer_id_string + customer_id_id.
+        for table in _STRING_KEYED_TABLES:
             await conn.execute(
                 f"UPDATE {table} "
                 f"SET customer_id_string = $1, customer_id_id = $2 "
@@ -111,6 +122,17 @@ async def _merge_identity(
                 canonical_id,
                 canonical_ref,
                 alias_id,
+            )
+        # applications has no customer_id_string — re-point it by the customer_id_id
+        # relationship. Only when both refs resolve: if the canonical row isn't
+        # projected yet we'd otherwise NULL the link (applications has no string
+        # fallback), so leave it on the alias row — now tombstoned via merged_into —
+        # until a later canonical event re-points it.
+        if alias_ref is not None and canonical_ref is not None:
+            await conn.execute(
+                "UPDATE applications SET customer_id_id = $1 WHERE customer_id_id = $2",
+                canonical_ref,
+                alias_ref,
             )
         # Tombstone/redirect the orphan customers row created under the alias.
         await conn.execute(

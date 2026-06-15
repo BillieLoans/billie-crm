@@ -11,7 +11,10 @@ from billie_servicing.handlers.identity import (
     handle_customer_identity_merged,
 )
 
-_REATTRIBUTE_TABLES = ("conversations", "applications", "loan_accounts")
+# conversations + loan_accounts carry a denormalised customer_id_string column;
+# the applications table links to the customer ONLY by the customer_id_id
+# relationship (no customer_id_string column exists on it).
+_STRING_KEYED_TABLES = ("conversations", "loan_accounts")
 
 
 def _last_update_call(mock_pool, table):
@@ -20,9 +23,10 @@ def _last_update_call(mock_pool, table):
 
 
 @pytest.mark.asyncio
-async def test_linked_reattributes_all_tables_to_canonical(mock_pool):
-    """AC-C2/AC-C3: conversations, applications and accounts move alias→canonical."""
-    mock_pool.set_fetchval("canonical-ref-uuid")  # SELECT id FROM customers ...
+async def test_linked_reattributes_string_keyed_tables_to_canonical(mock_pool):
+    """AC-C2/AC-C3: conversations and loan_accounts move alias→canonical by string."""
+    # fetchval 1: canonical ref, fetchval 2: alias ref.
+    mock_pool.set_fetchval_sequence(["canonical-ref-uuid", "alias-ref-uuid"])
 
     event = {
         "typ": "customer.identity.linked.v1",
@@ -32,13 +36,37 @@ async def test_linked_reattributes_all_tables_to_canonical(mock_pool):
     }
     await handle_customer_identity_linked(mock_pool, event)
 
-    for table in _REATTRIBUTE_TABLES:
+    for table in _STRING_KEYED_TABLES:
         upd = mock_pool.last_update(table)
         assert upd is not None, f"no UPDATE recorded for {table}"
         assert upd["customer_id_string"] == "A"
         assert upd["customer_id_id"] == "canonical-ref-uuid"
         call = _last_update_call(mock_pool, table)
         assert call.where["customer_id_string"] == "B"
+
+
+@pytest.mark.asyncio
+async def test_linked_reattributes_applications_by_ref_not_string(mock_pool):
+    """applications has no customer_id_string column — re-point it by the
+    customer_id_id relationship. Including it in the string-keyed UPDATE made the
+    whole re-attribution transaction raise ``column "customer_id_string" does not
+    exist`` and roll back, so nothing moved and the event hit the DLQ.
+    """
+    # fetchval 1: canonical ref, fetchval 2: alias ref.
+    mock_pool.set_fetchval_sequence(["canonical-ref-uuid", "alias-ref-uuid"])
+
+    await handle_customer_identity_linked(
+        mock_pool, {"payload": {"journey_id": "B", "canonical_id": "A"}}
+    )
+
+    appl = _last_update_call(mock_pool, "applications")
+    assert appl is not None, "no UPDATE recorded for applications"
+    # Must NEVER reference customer_id_string (the column doesn't exist here).
+    assert "customer_id_string" not in appl.values, appl.values
+    assert "customer_id_string" not in appl.where, appl.where
+    # Re-pointed by the customer_id_id ref (alias ref → canonical ref).
+    assert appl.values.get("customer_id_id") == "canonical-ref-uuid"
+    assert appl.where.get("customer_id_id") == "alias-ref-uuid"
 
 
 @pytest.mark.asyncio

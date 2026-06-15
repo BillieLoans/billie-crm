@@ -24,10 +24,21 @@ import asyncpg
 import structlog
 
 from ..db import coerce_date, upsert, upsert_conversation
-from .identity import resolve_canonical_customer_id
+from .identity import _merge_identity, resolve_canonical_customer_id
 from .sanitize import parse_payload, safe_str
 
 logger = structlog.get_logger()
+
+# Block reasons that reflect a confident match to a single canonical identity —
+# only these re-attribute the blocked journey's records onto the canonical
+# customer so the app surfaces in the canonical's application list. DEFAULT-DENY
+# everything else (PEP, ID_VERIFICATION, SERVICEABILITY, ACCOUNT_CONDUCT,
+# IDENTITY_CONFLICT and any unknown future value): record the block only.
+# IDENTITY_CONFLICT is excluded on purpose — strong-vs-strong means the canonical
+# is ambiguous, so auto-merging could attribute an application to the WRONG
+# person. Mis-merging two people in the servicing view is worse than a missing
+# app; start conservative and expand this allowlist deliberately.
+_REATTRIBUTE_BLOCK_REASONS = frozenset({"ACTIVE_LOAN", "PRIOR_DEFAULT"})
 
 
 async def handle_reapplication_blocked(pool: asyncpg.Pool, event: dict[str, Any]) -> None:
@@ -109,5 +120,43 @@ async def handle_reapplication_blocked(pool: asyncpg.Pool, event: dict[str, Any]
         )
     else:
         log.warning("Re-application block event without customer id — no customer mirror")
+
+    # Surface the blocked application under the canonical customer. A blocked
+    # returning customer never gets a customer.identity.linked.v1 (halted
+    # journeys stay evidence-only upstream), so without this the conversation /
+    # application stays under the journey id — invisible in the canonical's
+    # application list. Reuse _merge_identity (the same UPDATE-by-alias the
+    # linked/merged path uses) so re-attribution semantics and idempotency stay
+    # identical. Runs AFTER the conversation seed above so that row is moved too.
+    journey_id = (
+        safe_str(payload.get("journey_customer_id") or event.get("usr"), "journey_customer_id")
+        or None
+    )
+    block_canonical_id = (
+        safe_str(payload.get("canonical_customer_id"), "canonical_customer_id") or None
+    )
+    if (
+        reason in _REATTRIBUTE_BLOCK_REASONS
+        and journey_id
+        and block_canonical_id
+        and block_canonical_id != journey_id
+    ):
+        # Idempotent: _merge_identity UPDATEs WHERE customer_id_string =
+        # journey_id, so a redelivery finds the rows already on the canonical and
+        # matches nothing. CRM-local attribution only — no write-back to the
+        # upstream identity:canonical / identity:aliases keys.
+        await _merge_identity(
+            pool,
+            canonical_id=block_canonical_id,
+            alias_id=journey_id,
+            kind="reapplication_blocked",
+        )
+        log.info(
+            "Re-attributed blocked journey records to canonical",
+            journey_customer_id=journey_id,
+            canonical_customer_id=block_canonical_id,
+        )
+    elif reason not in _REATTRIBUTE_BLOCK_REASONS:
+        log.debug("Block reason not in re-attribution allowlist — block recorded only")
 
     log.info("Re-application block recorded")
