@@ -102,7 +102,11 @@ export const ReapplicationBlockSchema = z.object({
   sourceApplicationNumber: z.string().nullable().optional(),
   sourceAccountId: z.string().nullable().optional(),
   sourceDecidedAt: z.union([z.string(), z.date()]).nullable().optional(),
-  /** null = permanent (PEP, PRIOR_DEFAULT, IDENTITY_CONFLICT) or while-loan-open (ACTIVE_LOAN) */
+  /**
+   * null = permanent (PEP, PRIOR_DEFAULT, IDENTITY_CONFLICT) or while-loan-open
+   * (ACTIVE_LOAN); a dated value for the decline windows and PRIOR_SERIOUS_ARREARS
+   * (BTB-154 — cured serious arrears/default, 12 months from loan closure).
+   */
   blockedUntil: z.union([z.string(), z.date()]).nullable().optional(),
   blockedAt: z.union([z.string(), z.date()]).nullable().optional(),
   canonicalCustomerId: z.string().nullable().optional(),
