@@ -102,7 +102,11 @@ export interface CustomerData {
   /** Active re-application block mirrored from the blocking application (BTB-135). */
   reapplicationBlock?: {
     reason?: string | null
-    /** null = permanent (PEP, PRIOR_DEFAULT, IDENTITY_CONFLICT) or while-loan-open (ACTIVE_LOAN) */
+    /**
+     * null = permanent (PEP, PRIOR_DEFAULT, IDENTITY_CONFLICT) or while-loan-open
+     * (ACTIVE_LOAN); a dated value for the decline windows and PRIOR_SERIOUS_ARREARS
+     * (BTB-154 — cured serious arrears/default, 12 months from loan closure).
+     */
     blockedUntil?: string | null
     blockedAt?: string | null
     applicationNumber?: string | null

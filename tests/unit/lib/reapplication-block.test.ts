@@ -18,6 +18,7 @@ describe('formatBlockReason', () => {
     expect(formatBlockReason('SERVICEABILITY')).toBe('Serviceability')
     expect(formatBlockReason('ACCOUNT_CONDUCT')).toBe('Account conduct')
     expect(formatBlockReason('IDENTITY_CONFLICT')).toBe('Identity conflict')
+    expect(formatBlockReason('PRIOR_SERIOUS_ARREARS')).toBe('Prior serious arrears')
   })
 
   it('falls back to the raw value for unknown enums', () => {
@@ -45,6 +46,17 @@ describe('formatBlockedUntil', () => {
 
   it('null window is while-loan-open for ACTIVE_LOAN', () => {
     expect(formatBlockedUntil({ reason: 'ACTIVE_LOAN', blockedUntil: null })).toBe('while loan open')
+  })
+
+  it('PRIOR_SERIOUS_ARREARS is a dated window, not permanent (BTB-154)', () => {
+    // Cured serious arrears/default carries a 12-month blockedUntil from
+    // closure — it must render as a date, never "permanent".
+    expect(
+      formatBlockedUntil({
+        reason: 'PRIOR_SERIOUS_ARREARS',
+        blockedUntil: '2027-06-10T01:02:21+00:00',
+      }),
+    ).toBe('until 10 June 2027')
   })
 })
 

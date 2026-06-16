@@ -6,6 +6,9 @@
  * - `blockedUntil` is the inclusive end of the exclusion window.
  * - `blockedUntil = null` means permanent (PEP, PRIOR_DEFAULT, IDENTITY_CONFLICT)
  *   or ongoing-state (ACTIVE_LOAN — blocked while the loan is open).
+ * - dated windows carry a non-null `blockedUntil`: the decline windows
+ *   (ID_VERIFICATION, SERVICEABILITY, ACCOUNT_CONDUCT) and PRIOR_SERIOUS_ARREARS
+ *   (BTB-154 — cured serious-arrears/default, 12 months from loan closure).
  */
 
 import { formatDateOnly } from '@/lib/formatters'
@@ -14,6 +17,7 @@ import { formatDateOnly } from '@/lib/formatters'
 const BLOCK_REASON_LABELS: Record<string, string> = {
   ACTIVE_LOAN: 'Active loan',
   PRIOR_DEFAULT: 'Prior default',
+  PRIOR_SERIOUS_ARREARS: 'Prior serious arrears',
   PEP: 'PEP',
   ID_VERIFICATION: 'ID verification',
   SERVICEABILITY: 'Serviceability',
