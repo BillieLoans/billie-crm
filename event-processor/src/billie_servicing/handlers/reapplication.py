@@ -38,7 +38,14 @@ logger = structlog.get_logger()
 # is ambiguous, so auto-merging could attribute an application to the WRONG
 # person. Mis-merging two people in the servicing view is worse than a missing
 # app; start conservative and expand this allowlist deliberately.
-_REATTRIBUTE_BLOCK_REASONS = frozenset({"ACTIVE_LOAN", "PRIOR_DEFAULT"})
+#
+# PRIOR_SERIOUS_ARREARS (BTB-154) is account-history-derived — it fires off the
+# resolved canonical's own prior closed-loan aging (ever reached late_arrears /
+# default, then cured), the same confident single-identity basis as
+# PRIOR_DEFAULT — so it re-attributes too.
+_REATTRIBUTE_BLOCK_REASONS = frozenset(
+    {"ACTIVE_LOAN", "PRIOR_DEFAULT", "PRIOR_SERIOUS_ARREARS"}
+)
 
 
 async def handle_reapplication_blocked(pool: asyncpg.Pool, event: dict[str, Any]) -> None:

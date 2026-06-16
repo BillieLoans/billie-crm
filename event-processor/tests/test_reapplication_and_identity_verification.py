@@ -122,9 +122,9 @@ class TestReapplicationBlockedReattribution:
 
     The handler re-points the journey's records onto the canonical — but ONLY
     for reasons that reflect a confident single-canonical identity match
-    (``ACTIVE_LOAN``, ``PRIOR_DEFAULT``). Everything else default-denies and
-    records the block only, because mis-merging two people in the servicing
-    view is worse than a missing app.
+    (``ACTIVE_LOAN``, ``PRIOR_DEFAULT``, ``PRIOR_SERIOUS_ARREARS``). Everything
+    else default-denies and records the block only, because mis-merging two
+    people in the servicing view is worse than a missing app.
     """
 
     JOURNEY = "4A8C91AB"  # BLOCK_PAYLOAD journey_customer_id
@@ -162,7 +162,9 @@ class TestReapplicationBlockedReattribution:
         ]
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("reason", ["ACTIVE_LOAN", "PRIOR_DEFAULT"])
+    @pytest.mark.parametrize(
+        "reason", ["ACTIVE_LOAN", "PRIOR_DEFAULT", "PRIOR_SERIOUS_ARREARS"]
+    )
     async def test_confident_reason_reattributes_all_tables(self, mock_pool, reason):
         # fetchvals in order: resolve merged_into (mirror), canonical ref, alias ref.
         mock_pool.set_fetchval_sequence([None, "canon-ref", "alias-ref"])
