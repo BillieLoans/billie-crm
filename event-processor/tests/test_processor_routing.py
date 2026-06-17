@@ -61,6 +61,48 @@ def test_reapplication_blocked_routes_to_envelope_dict(make_processor):
     assert parsed["payload"]["application_number"] == "A1"
 
 
+def test_aging_event_drops_billiechat_rec_routing_field(make_processor, monkeypatch):
+    """`rec` is a billieChat routing field (a recipients list) the aging
+    projection never reads. The aging SDK envelope mistypes it as `str`, so the
+    sanitized list value (`[]` for broadcast scheduler events) fails Pydantic
+    validation and DLQs *every* aging event. The processor must not hand `rec`
+    to the aging parser — it should fall back to the SDK's "" default.
+    """
+    import billie_servicing.processor as procmod
+
+    captured: dict = {}
+
+    def _capture(data):
+        captured["data"] = data
+        return None
+
+    monkeypatch.setattr(procmod, "parse_aging_event", _capture)
+
+    proc = make_processor
+    sanitized = {
+        "typ": "loan.aging.updated.v1",
+        "conv": "c1",
+        # the broker sends `rec` as a JSON-string list (broadcast => [])
+        "rec": "[]",
+        "payload": json.dumps(
+            {
+                "event_id": "age_1",
+                "timestamp": "2026-06-17T00:01:00Z",
+                "account_id": "acc_1",
+                "dpd": 2,
+                "bucket": "early_arrears",
+            }
+        ),
+    }
+
+    proc._parse_event("loan.aging.updated.v1", sanitized)
+
+    # `rec` must not reach the aging SDK as a list — its str-typed envelope
+    # rejects it. The payload (what the handler actually reads) is untouched.
+    assert not isinstance(captured["data"].get("rec"), list)
+    assert captured["data"]["payload"]["account_id"] == "acc_1"
+
+
 def test_other_application_events_still_use_customers_sdk(make_processor):
     # Precedence guard: a different application.* type must NOT be captured by the
     # exact-match reapplication_blocked branch — it stays on the customers-SDK

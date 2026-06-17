@@ -651,8 +651,15 @@ class EventProcessor:
             return parse_notification_event(sdk_data)
 
         elif event_type.startswith("loan.aging."):
-            # Use aging SDK (aging-v1.1.0+ — typed Pydantic payload + envelope)
-            return parse_aging_event(sdk_data)
+            # Use aging SDK (aging-v1.1.0+ — typed Pydantic payload + envelope).
+            # `rec` is a billieChat routing field (a recipients list) this
+            # projection never reads. The aging SDK envelope mistypes it as
+            # `str`, so the sanitized list value (`[]` for broadcast scheduler
+            # events) fails Pydantic validation and DLQs every aging event. Drop
+            # it — the SDK falls back to its "" default. Other SDKs (accounts /
+            # customers) correctly type `rec` as a list, so this is aging-only.
+            aging_data = {k: v for k, v in sdk_data.items() if k != "rec"}
+            return parse_aging_event(aging_data)
 
         else:
             # Chat/conversation events — sanitize envelope so payload JSON string
