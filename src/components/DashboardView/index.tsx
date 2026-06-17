@@ -8,7 +8,7 @@ import { useRecentCustomersStore } from '@/stores/recentCustomers'
 import { useFailedActionsStore } from '@/stores/failed-actions'
 import { formatRelativeTime } from '@/lib/formatters'
 import { SystemHealthStrip } from './SystemHealthStrip'
-import { DisbursementsHeroTile } from './DisbursementsHeroTile'
+import { DisbursementTriagePanel } from './DisbursementTriagePanel'
 import { OverdueHeroTile } from './OverdueHeroTile'
 import { ApprovalsHeroTile } from './ApprovalsHeroTile'
 import { MoneyFlowsRow } from './MoneyFlowsRow'
@@ -77,9 +77,7 @@ export function DashboardView() {
     summaryParts.push(`${overdueCount} overdue`)
   }
   if (canSeeApprovals && pendingApprovals > 0) {
-    summaryParts.push(
-      `${pendingApprovals} approval${pendingApprovals === 1 ? '' : 's'} waiting`,
-    )
+    summaryParts.push(`${pendingApprovals} approval${pendingApprovals === 1 ? '' : 's'} waiting`)
   }
   const summarySuffix = summaryParts.length > 0 ? ' — ' + summaryParts.join(', ') : ''
 
@@ -114,6 +112,8 @@ export function DashboardView() {
     <div className={styles.container} data-testid="dashboard-view">
       <SystemHealthStrip />
 
+      <DisbursementTriagePanel />
+
       <div className={styles.header}>
         <h1 className={styles.greeting} data-testid="dashboard-greeting">
           {greeting}, {firstName}!
@@ -122,7 +122,6 @@ export function DashboardView() {
       </div>
 
       <div className={styles.heroRow} data-testid="hero-tiles">
-        <DisbursementsHeroTile />
         <OverdueHeroTile />
         {canSeeApprovals && <ApprovalsHeroTile />}
       </div>
@@ -174,9 +173,7 @@ export function DashboardView() {
                 >
                   <span className={styles.customerName}>
                     <span className={styles.customerId}>{recent.customerId}</span>
-                    <span className={styles.customerFullName}>
-                      {summary?.name ?? 'Loading...'}
-                    </span>
+                    <span className={styles.customerFullName}>{summary?.name ?? 'Loading...'}</span>
                   </span>
                   <span className={styles.customerAccounts}>{summary?.accountCount ?? '—'}</span>
                   <span className={styles.customerOutstanding}>
@@ -200,8 +197,7 @@ export function DashboardView() {
       <div className={styles.tipFooter} data-testid="keyboard-tip">
         <span className={styles.tipIcon}>💡</span>
         <span className={styles.tipText}>
-          Press <kbd className={styles.kbd}>{shortcutLabel}</kbd> to quickly search for any
-          customer
+          Press <kbd className={styles.kbd}>{shortcutLabel}</kbd> to quickly search for any customer
         </span>
       </div>
     </div>
