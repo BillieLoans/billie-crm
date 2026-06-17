@@ -25,6 +25,13 @@ export function PendingDisbursementsView() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [pendingEarly, setPendingEarly] = useState<QueueItem | null>(null)
 
+  const [targetBucket, setTargetBucket] = useState<string | null>(null)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setTargetBucket(new URLSearchParams(window.location.search).get('bucket'))
+    }
+  }, [])
+
   const fetchPendingDisbursements = useCallback(async () => {
     setIsLoading(true)
     setError(null)
@@ -94,6 +101,14 @@ export function PendingDisbursementsView() {
     [byBucket],
   )
 
+  useEffect(() => {
+    if (isLoading || !targetBucket) return
+    const el = document.getElementById(`section-${targetBucket}`)
+    if (el && typeof el.scrollIntoView === 'function') {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [isLoading, targetBucket, items])
+
   const headerSubtitle = useMemo(() => {
     if (isLoading) return 'Loading...'
     if (totalCount === 0) return 'No loans awaiting disbursement'
@@ -140,7 +155,7 @@ export function PendingDisbursementsView() {
             bucket="scheduled"
             items={byBucket('scheduled')}
             totalFormatted={subtotal('scheduled')}
-            defaultCollapsed
+            defaultCollapsed={targetBucket !== 'scheduled'}
             onDisburse={handleDisburse}
             onView={handleView}
           />

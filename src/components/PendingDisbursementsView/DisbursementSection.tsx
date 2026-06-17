@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { formatDateMedium } from '@/lib/formatters'
+import { formatDateOnly } from '@/lib/formatters'
 import styles from './DisbursementSection.module.css'
 
 export interface QueueItem {
@@ -58,7 +58,11 @@ export function DisbursementSection({
   const m = META[bucket]
 
   return (
-    <div className={`${styles.section} ${styles[m.cls]}`} data-testid={`section-${bucket}`}>
+    <div
+      className={`${styles.section} ${styles[m.cls]}`}
+      id={`section-${bucket}`}
+      data-testid={`section-${bucket}`}
+    >
       <button type="button" className={styles.head} onClick={() => setCollapsed((c) => !c)}>
         <span className={styles.headTitle}>
           {collapsed ? '▸' : '▾'} {m.title}
@@ -88,7 +92,7 @@ export function DisbursementSection({
                   {bucket === 'today'
                     ? '3:00pm today'
                     : it.commencementDate
-                      ? formatDateMedium(it.commencementDate)
+                      ? formatDateOnly(it.commencementDate)
                       : '—'}
                 </td>
                 <td className={styles.actions}>

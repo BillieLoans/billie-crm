@@ -36,7 +36,8 @@ function getShortcutLabel(): string {
  * Operational triage screen for ops staff. Top-to-bottom narrative:
  *   1. System health strip (only visible when degraded)
  *   2. Personalised one-line summary
- *   3. Hero tiles: Disbursements / Overdue / Approvals
+ *   3. Full-width Disbursement triage band (Overdue / Today / Scheduled buckets)
+ *   3a. Hero row: Overdue / Approvals
  *   4. Money flows today (placeholder until Phase 2)
  *   5. Recent customers
  *   6. Upcoming payments (grouped by due date)

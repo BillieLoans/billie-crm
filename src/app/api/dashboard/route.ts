@@ -383,6 +383,7 @@ export async function GET(request: NextRequest) {
     const pendingDisbursements: PendingDisbursement[] = pendingDisbursementResult.docs.map(
       (acc) => {
         const commencementDate = getCommencementDate(acc)
+        // No commencement date yet → surface in today's queue for ops attention rather than hiding it.
         const bucket = commencementDate ? classifyBucket(commencementDate, now) : 'today'
         return {
           loanAccountId: acc.loanAccountId ?? '',

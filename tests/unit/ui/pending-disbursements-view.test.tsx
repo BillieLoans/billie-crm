@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/react'
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { PendingDisbursementsView } from '@/components/PendingDisbursementsView/PendingDisbursementsView'
 
@@ -65,5 +65,22 @@ describe('PendingDisbursementsView', () => {
     fireEvent.click(screen.getByText(/SCHEDULED/i))
     fireEvent.click(screen.getByRole('button', { name: /disburse early/i }))
     expect(screen.getByText(/before the scheduled start date/i)).toBeInTheDocument()
+  })
+
+  it('does not warn when disbursing a today loan', async () => {
+    render(<PendingDisbursementsView />)
+    await waitFor(() => expect(screen.getByTestId('section-today')).toBeInTheDocument())
+    const todaySection = screen.getByTestId('section-today')
+    fireEvent.click(within(todaySection).getByRole('button', { name: /^Disburse$/ }))
+    expect(screen.queryByText(/before the scheduled start date/i)).not.toBeInTheDocument()
+  })
+
+  it('expands the scheduled section when deep-linked', async () => {
+    window.history.replaceState({}, '', '/admin/pending-disbursements?bucket=scheduled')
+    render(<PendingDisbursementsView />)
+    await waitFor(() => expect(screen.getByTestId('section-scheduled')).toBeInTheDocument())
+    // disburse-early button only renders when the scheduled section is expanded
+    expect(screen.getByRole('button', { name: /disburse early/i })).toBeInTheDocument()
+    window.history.replaceState({}, '', '/admin/pending-disbursements') // reset for other tests
   })
 })

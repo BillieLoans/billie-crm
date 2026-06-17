@@ -59,6 +59,7 @@ export async function GET(request: NextRequest) {
       const loanAmount = acc.loanTerms?.loanAmount ?? 0
       const totalOutstanding = acc.balances?.totalOutstanding ?? 0
       const commencementDate = getCommencementDate(acc)
+      // No commencement date yet → surface in today's queue for ops attention rather than hiding it.
       const bucket = commencementDate ? classifyBucket(commencementDate) : 'today'
 
       return {

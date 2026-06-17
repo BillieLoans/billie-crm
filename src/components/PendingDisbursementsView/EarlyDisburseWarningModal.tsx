@@ -1,6 +1,6 @@
 'use client'
 
-import { formatDateMedium } from '@/lib/formatters'
+import { formatDateOnly } from '@/lib/formatters'
 import styles from './EarlyDisburseWarningModal.module.css'
 
 interface Props {
@@ -21,8 +21,8 @@ interface Props {
 export function EarlyDisburseWarningModal(props: Props) {
   if (!props.isOpen) return null
 
-  const today = formatDateMedium(new Date())
-  const scheduled = props.commencementDate ? formatDateMedium(props.commencementDate) : '—'
+  const today = formatDateOnly(new Date())
+  const scheduled = props.commencementDate ? formatDateOnly(props.commencementDate) : '—'
 
   return (
     <div className={styles.overlay} role="dialog" aria-modal="true">
