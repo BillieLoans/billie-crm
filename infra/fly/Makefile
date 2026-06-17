@@ -149,7 +149,7 @@ ips:
 
 secrets: check-secrets
 	$(call PROD_CHECK,secrets)
-	@awk 'NF && $$1 !~ /^#/' "$(SECRETS_FILE)" | fly secrets import -a "$(APP_NAME)"
+	@awk 'NF && $$1 !~ /^#/ && $$0 !~ /^MIGRATE_DATABASE_URI=/' "$(SECRETS_FILE)" | fly secrets import -a "$(APP_NAME)"
 
 secrets-list:
 	fly secrets list -a "$(APP_NAME)"
@@ -260,7 +260,13 @@ destroy:
 
 # Pull DATABASE_URI out of the env file the same way `make secrets` will
 # import it. Honours `DATABASE_URI=value` and `DATABASE_URI="value"`.
-DSN_FROM_ENV = $(shell awk -F= '/^DATABASE_URI=/{sub(/^DATABASE_URI=/,""); gsub(/^"|"$$/,""); print; exit}' "$(SECRETS_FILE)" 2>/dev/null)
+DATABASE_URI_FROM_ENV = $(shell awk -F= '/^DATABASE_URI=/{sub(/^DATABASE_URI=/,""); gsub(/^"|"$$/,""); print; exit}' "$(SECRETS_FILE)" 2>/dev/null)
+# DDL/admin targets (pg-migrate, pg-wipe, …) run as the owner role. Prefer
+# MIGRATE_DATABASE_URI (neondb_owner, deployer-local only — excluded from the
+# Fly secret import above) so the runtime DATABASE_URI can be a DML-only role.
+# Falls back to DATABASE_URI when no migration DSN is set (e.g. dev/demo).
+MIGRATE_DSN_FROM_ENV = $(shell awk -F= '/^MIGRATE_DATABASE_URI=/{sub(/^MIGRATE_DATABASE_URI=/,""); gsub(/^"|"$$/,""); print; exit}' "$(SECRETS_FILE)" 2>/dev/null)
+DSN_FROM_ENV = $(if $(MIGRATE_DSN_FROM_ENV),$(MIGRATE_DSN_FROM_ENV),$(DATABASE_URI_FROM_ENV))
 REDIS_FROM_ENV = $(shell awk -F= '/^REDIS_URL=/{sub(/^REDIS_URL=/,""); gsub(/^"|"$$/,""); print; exit}' "$(SECRETS_FILE)" 2>/dev/null)
 
 # Generate a new Payload migration capturing schema drift. Run against a
