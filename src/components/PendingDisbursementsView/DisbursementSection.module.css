@@ -1,0 +1,106 @@
+.section {
+  border: 1px solid #2a2f3a;
+  border-radius: 10px;
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+.overdue {
+  border-color: rgba(239, 68, 68, 0.5);
+}
+.today {
+  border-color: rgba(245, 158, 11, 0.6);
+}
+.scheduled {
+  border-color: rgba(96, 165, 250, 0.45);
+}
+.head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+.overdue .head {
+  background: rgba(239, 68, 68, 0.12);
+}
+.today .head {
+  background: rgba(245, 158, 11, 0.14);
+}
+.scheduled .head {
+  background: rgba(96, 165, 250, 0.1);
+}
+.headTitle {
+  font-weight: 700;
+  font-size: 13px;
+}
+.overdue .headTitle {
+  color: #f87171;
+}
+.today .headTitle {
+  color: #fbbf24;
+}
+.scheduled .headTitle {
+  color: #93c5fd;
+}
+.headCount {
+  font-size: 12px;
+  color: #cbd2e0;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  color: #cbd2e0;
+}
+.table thead th {
+  text-align: left;
+  font-weight: 600;
+  color: #7e8aa0;
+  padding: 8px 14px;
+}
+.table tbody td {
+  border-top: 1px solid #1c2230;
+  padding: 9px 14px;
+}
+.actions {
+  text-align: right;
+  white-space: nowrap;
+}
+.disburseBtn {
+  background: #f59e0b;
+  border: none;
+  color: #1a1205;
+  font-weight: 700;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-right: 8px;
+}
+.overdue .disburseBtn {
+  background: #ef4444;
+  color: #fff;
+}
+.earlyBtn {
+  background: transparent;
+  border: 1px solid #3a4150;
+  color: #9aa3b5;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 11px;
+  margin-right: 8px;
+}
+.viewBtn {
+  background: transparent;
+  border: none;
+  color: #6b7280;
+  cursor: pointer;
+}
+.empty {
+  padding: 14px;
+  text-align: center;
+  color: #6b7280;
+}

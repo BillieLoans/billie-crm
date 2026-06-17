@@ -126,3 +126,13 @@
 .viewButton:hover {
   background: var(--theme-elevation-100, #1f1f1f);
 }
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.sections {
+  display: flex;
+  flex-direction: column;
+}
