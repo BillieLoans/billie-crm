@@ -7,6 +7,8 @@ import {
   msUntilCutoff,
   formatCountdown,
   getCommencementDate,
+  nextSydneyDateString,
+  summariseDisbursementBuckets,
 } from '@/lib/disbursement-cutoff'
 
 describe('sydneyDateString', () => {
@@ -82,5 +84,39 @@ describe('sydneyOffsetMinutes', () => {
 describe('formatCountdown negative clamp', () => {
   it('clamps negative durations to 0m', () => {
     expect(formatCountdown(-5 * 60_000)).toBe('0m')
+  })
+})
+
+describe('nextSydneyDateString', () => {
+  it('returns the next Sydney calendar day', () => {
+    expect(nextSydneyDateString(new Date('2026-06-17T01:00:00Z'))).toBe('2026-06-18')
+  })
+  it('rolls month/year boundaries', () => {
+    expect(nextSydneyDateString(new Date('2026-06-30T01:00:00Z'))).toBe('2026-07-01')
+  })
+})
+
+describe('summariseDisbursementBuckets', () => {
+  const now = new Date('2026-06-17T01:00:00Z') // Wed 17 Jun 2026, 11:00 AEST
+  it('aggregates counts/totals per bucket and flags tomorrow', () => {
+    const loans = [
+      { loanAmount: 100, commencementDate: '2026-06-16', bucket: 'overdue' as const },
+      { loanAmount: 200, commencementDate: '2026-06-17', bucket: 'today' as const },
+      { loanAmount: 50, commencementDate: '2026-06-18', bucket: 'scheduled' as const },
+      { loanAmount: 75, commencementDate: '2026-06-20', bucket: 'scheduled' as const },
+    ]
+    const s = summariseDisbursementBuckets(loans, 3, now)
+    expect(s.overdue).toEqual({ count: 1, total: 100 })
+    expect(s.today).toEqual({ count: 1, total: 200 })
+    expect(s.scheduled).toEqual({ count: 2, total: 125 })
+    expect(s.scheduledTomorrowCount).toBe(1)
+    expect(s.todayDoneCount).toBe(3)
+    expect(s.todayTotalCount).toBe(4)
+  })
+  it('handles empty input', () => {
+    const s = summariseDisbursementBuckets([], 0, now)
+    expect(s.today).toEqual({ count: 0, total: 0 })
+    expect(s.todayTotalCount).toBe(0)
+    expect(s.scheduledTomorrowCount).toBe(0)
   })
 })

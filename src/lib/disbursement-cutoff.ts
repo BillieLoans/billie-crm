@@ -87,3 +87,61 @@ export function getCommencementDate(account: {
 }): string | null {
   return account.commencementDate ?? account.loanTerms?.openedDate ?? null
 }
+
+/** Loan shape the bucket summary needs. */
+export interface BucketableLoan {
+  loanAmount: number
+  commencementDate: string | null
+  bucket: DisbursementBucket
+}
+
+/** Raw (unformatted) per-bucket counts/totals for the dashboard summary. */
+export interface DisbursementBucketTotals {
+  overdue: { count: number; total: number }
+  today: { count: number; total: number }
+  scheduled: { count: number; total: number }
+  todayDoneCount: number
+  todayTotalCount: number
+  scheduledTomorrowCount: number
+}
+
+/** The Sydney calendar day AFTER `now`'s Sydney day — DST-safe (uses noon UTC, never ±24h). */
+export function nextSydneyDateString(now: Date = new Date()): string {
+  const [y, m, d] = sydneyDateString(now).split('-').map(Number)
+  // Noon UTC on the next day is ~22:00/23:00 Sydney the same calendar day → never crosses a DST boundary.
+  return sydneyDateString(new Date(Date.UTC(y, m - 1, d + 1, 12, 0, 0)))
+}
+
+/** Aggregate already-classified pending loans into the dashboard bucket summary. */
+export function summariseDisbursementBuckets(
+  loans: BucketableLoan[],
+  disbursedTodayCount: number,
+  now: Date = new Date(),
+): DisbursementBucketTotals {
+  const tomorrowStr = nextSydneyDateString(now)
+  const agg = {
+    overdue: { count: 0, total: 0 },
+    today: { count: 0, total: 0 },
+    scheduled: { count: 0, total: 0 },
+  }
+  let scheduledTomorrowCount = 0
+  for (const loan of loans) {
+    agg[loan.bucket].count += 1
+    agg[loan.bucket].total += loan.loanAmount
+    if (
+      loan.bucket === 'scheduled' &&
+      loan.commencementDate &&
+      sydneyDateString(new Date(loan.commencementDate)) === tomorrowStr
+    ) {
+      scheduledTomorrowCount += 1
+    }
+  }
+  return {
+    overdue: agg.overdue,
+    today: agg.today,
+    scheduled: agg.scheduled,
+    todayDoneCount: disbursedTodayCount,
+    todayTotalCount: agg.today.count + disbursedTodayCount,
+    scheduledTomorrowCount,
+  }
+}
