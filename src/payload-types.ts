@@ -929,6 +929,10 @@ export interface LoanAccount {
    */
   sdkStatus?: string | null;
   /**
+   * Authoritative loan start date (= disbursement/value date) from account.created.v1 commencement_date, computed upstream with the 3pm-AEST cut-off + public-holiday logic. Bucket key for disbursement triage.
+   */
+  commencementDate?: string | null;
+  /**
    * S3 URI for signed loan agreement document (from SDK: signed_loan_agreement_url, accounts-v2.7.0+)
    */
   signedLoanAgreementUrl?: string | null;
@@ -1771,6 +1775,7 @@ export interface LoanAccountsSelect<T extends boolean = true> {
       };
   accountStatus?: T;
   sdkStatus?: T;
+  commencementDate?: T;
   signedLoanAgreementUrl?: T;
   closure?:
     | T

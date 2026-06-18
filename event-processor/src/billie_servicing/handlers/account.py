@@ -106,6 +106,10 @@ async def handle_account_created(pool: asyncpg.Pool, parsed_event: Any) -> None:
         "created_at": now,
     }
 
+    commencement_date = getattr(payload, "commencement_date", None)
+    if commencement_date is not None:
+        values["commencement_date"] = coerce_date(commencement_date)
+
     signed_url = getattr(payload, "signed_loan_agreement_url", None)
     if signed_url is not None:
         values["signed_loan_agreement_url"] = str(signed_url) if signed_url else None
@@ -213,6 +217,13 @@ async def handle_account_updated(pool: asyncpg.Pool, parsed_event: Any) -> None:
                 new_balance=current_balance_value,
                 delta=delta,
             )
+
+    # Only update commencement_date when the field is present AND non-None —
+    # don't overwrite an existing value with None on unrelated account.updated.v1
+    # events (mirrors how signed_loan_agreement_url is handled via hasattr).
+    _commencement_date = getattr(payload, "commencement_date", None)
+    if _commencement_date is not None:
+        update_doc["commencement_date"] = coerce_date(_commencement_date)
 
     if hasattr(payload, "signed_loan_agreement_url"):
         update_doc["signed_loan_agreement_url"] = (

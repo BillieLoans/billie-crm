@@ -41,6 +41,14 @@ The **cut-off deadline** for the "today" bucket is 15:00 `Australia/Sydney` on t
 
 ## Data dependency (build prerequisite)
 
+> **VERIFIED 2026-06-17 (Task 0):** `opened_date` is **NOT** the commencement date. The producer
+> `billie-platform-services` (`src/services/accountsService/commands.py:123`) sets
+> `opened_date=datetime.now()` at account-creation time; `account.created.v1` carries no commencement
+> field. billieChat's `commencement_date` is cached in `ExecutionPlanCache` but never passed into
+> account creation. **Conclusion: Phase 5 is REQUIRED** — the `openedDate` fallback is semantically
+> wrong (buckets on account-creation time, not loan start date). Recommended fix: source the real
+> commencement date (see options below). Until then the feature is demo-only, NOT prod-ready.
+
 `commencement_date` is **not in the CRM today.** Confirmed: the event processor reads only `inbox:billie-servicing` + `…:internal` (not `chatLedger`), and no CRM code references `commencement`, `execution_plan`, or `offer_valid_until`.
 
 Resolve in this order (this decides build effort — do it **first**):
