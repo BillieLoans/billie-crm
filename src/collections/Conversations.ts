@@ -300,6 +300,28 @@ export const Conversations: CollectionConfig = {
           type: 'text',
           admin: { description: 'Resolved identity shared by all linked journeys' },
         },
+        // A halt is one of two kinds. "block" = a confirmed eligibility block
+        // (active loan / default / …). "review" = NOT a confirmed block —
+        // flagged as a probable returning customer and auto-held for manual
+        // review, carrying the identity-match context below.
+        {
+          name: 'dispositionKind',
+          type: 'text',
+          admin: { description: 'Halt kind: "block" (confirmed) or "review" (held for review)' },
+        },
+        {
+          name: 'manualReviewCandidate',
+          type: 'checkbox',
+          admin: { description: 'Whether this halt is a manual-review candidate' },
+        },
+        {
+          name: 'recognition',
+          type: 'json',
+          admin: {
+            description:
+              'Identity-recognition match context for a review halt (band, posterior, case_id, candidates with per-signal evidence). Stored verbatim from the event.',
+          },
+        },
       ],
     },
     {

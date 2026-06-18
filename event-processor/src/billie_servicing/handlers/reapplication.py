@@ -17,6 +17,7 @@ Two projections:
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from typing import Any
 
@@ -58,6 +59,14 @@ async def handle_reapplication_blocked(pool: asyncpg.Pool, event: dict[str, Any]
     application_number = safe_str(payload.get("application_number"), "application_number")
     reason = payload.get("reason")
 
+    # A halt is one of two kinds — "block" (a confirmed eligibility block) or
+    # "review" (held as a probable returning customer, carrying the
+    # identity-recognition match context). The recognition blob is projected
+    # verbatim into a jsonb column; asyncpg has no dict→jsonb codec, so serialise
+    # it to a JSON string here (None stays NULL — older events omit it).
+    recognition = payload.get("recognition")
+    recognition_json = json.dumps(recognition) if recognition is not None else None
+
     log = logger.bind(
         conversation_id=conversation_id,
         application_number=application_number,
@@ -87,6 +96,12 @@ async def handle_reapplication_blocked(pool: asyncpg.Pool, event: dict[str, Any]
                 "reapplication_block_canonical_customer_id": payload.get(
                     "canonical_customer_id"
                 ),
+                # Halt kind + the identity-recognition match context.
+                "reapplication_block_disposition_kind": payload.get("disposition_kind"),
+                "reapplication_block_manual_review_candidate": payload.get(
+                    "manual_review_candidate"
+                ),
+                "reapplication_block_recognition": recognition_json,
             },
             # Identifying columns only seed a fresh row — never overwrite an
             # existing one (identity merges may have re-pointed customer_id_string).

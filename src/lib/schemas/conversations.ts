@@ -94,6 +94,41 @@ export const DecisionDetailSchema = z.object({
   blockedUntil: z.union([z.string(), z.date()]).nullable().optional(),
 })
 
+/**
+ * Identity-recognition context attached to a review-kind halt.
+ *
+ * Stored verbatim from the event payload's `recognition` object (a Payload
+ * `json` column projects it untouched), so the keys here mirror the event's
+ * snake_case — unlike the camelCase scalar columns around it.
+ */
+export const RecognitionCandidateSchema = z.object({
+  candidate_id: z.string().nullable().optional(),
+  /** This candidate's match score, 0..1. */
+  posterior: z.number().nullable().optional(),
+  /** Applicant appears to be concealing the prior identity. */
+  concealment: z.boolean().nullable().optional(),
+  /**
+   * Evidence weight per signal: positive = the signal agrees (same person),
+   * negative = it disagrees. Magnitude = strength. `name`/`dob` are the identity
+   * core; `email`/`bank`/`address`/`phone` are corroborating hints.
+   */
+  per_signal_bits: z.record(z.string(), z.number()).nullable().optional(),
+})
+
+export type RecognitionCandidate = z.infer<typeof RecognitionCandidateSchema>
+
+export const RecognitionSchema = z.object({
+  /** "review" for review halts; null for eligibility blocks. */
+  band: z.string().nullable().optional(),
+  /** Overall match confidence, 0..1 (render as %). */
+  posterior: z.number().nullable().optional(),
+  case_id: z.string().nullable().optional(),
+  /** Matched prior customers, even weak ones; [] for eligibility blocks. */
+  candidates: z.array(RecognitionCandidateSchema).nullable().optional(),
+})
+
+export type Recognition = z.infer<typeof RecognitionSchema>
+
 /** application.reapplication_blocked.v1 — the rich "why" behind a block-decline. */
 export const ReapplicationBlockSchema = z.object({
   reason: z.string().nullable().optional(),
@@ -110,6 +145,16 @@ export const ReapplicationBlockSchema = z.object({
   blockedUntil: z.union([z.string(), z.date()]).nullable().optional(),
   blockedAt: z.union([z.string(), z.date()]).nullable().optional(),
   canonicalCustomerId: z.string().nullable().optional(),
+  /**
+   * A halt is one of two kinds:
+   * - "block": a confirmed eligibility block (active loan / default / …). Render
+   *   the reason/window/source detail (recognition.candidates is empty).
+   * - "review": NOT a confirmed block — flagged as a probable returning customer
+   *   and auto-held for manual review. Surface the recognition match context.
+   */
+  dispositionKind: z.enum(['review', 'block']).nullable().optional(),
+  manualReviewCandidate: z.boolean().nullable().optional(),
+  recognition: RecognitionSchema.nullable().optional(),
 })
 
 /** Archived KYC artifact availability (S3 locations stay server-side). */
