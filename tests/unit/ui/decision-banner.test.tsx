@@ -160,4 +160,151 @@ describe('DecisionBanner block-decline detail', () => {
     expect(screen.getByText('Serviceability')).toBeInTheDocument()
     expect(screen.getByText(/until 10 June 2027/)).toBeInTheDocument()
   })
+
+  test('an explicit block disposition still renders the red eligibility-block panel', () => {
+    render(
+      <DecisionBanner
+        conversation={createConversation({
+          finalDecision: 'DECLINED',
+          reapplicationBlock: {
+            reason: 'ACTIVE_LOAN',
+            dispositionKind: 'block',
+            blockedUntil: null,
+            sourceAccountId: 'LA-9',
+          },
+        })}
+      />,
+    )
+    expect(screen.getByText('✗ Declined · Re-application block')).toBeInTheDocument()
+    expect(screen.getByText(/while loan open/)).toBeInTheDocument()
+    expect(screen.queryByText(/Flagged for manual review/)).not.toBeInTheDocument()
+  })
+})
+
+describe('DecisionBanner review halt (recognition)', () => {
+  afterEach(cleanup)
+
+  const reviewConversation = createConversation({
+    // Held for manual review — not decided. The review panel must render
+    // regardless of the (absent) credit decision.
+    finalDecision: null,
+    status: 'paused',
+    reapplicationBlock: {
+      reason: 'review',
+      dispositionKind: 'review',
+      manualReviewCandidate: true,
+      stopMessage:
+        'Thanks for sending that through! We just need to take a closer look before we can continue.',
+      blockedUntil: null,
+      blockedAt: '2026-06-18T04:15:30Z',
+      canonicalCustomerId: null,
+      recognition: {
+        band: 'review',
+        posterior: 0.989831,
+        case_id: '4494ed09-25c3-4095-9dc5-a34f5e6db584',
+        candidates: [
+          {
+            candidate_id: 'C5C7DD3A',
+            posterior: 0.98,
+            concealment: false,
+            per_signal_bits: { email: 10.0, bank: 8.94, address: 5.0, name: -5.06, dob: -5.64 },
+          },
+        ],
+      },
+    },
+  })
+
+  test('labels the halt as manual review, not a decline or a permanent block', () => {
+    render(<DecisionBanner conversation={reviewConversation} />)
+    expect(screen.getByText(/Flagged for manual review/)).toBeInTheDocument()
+    expect(screen.queryByText(/permanent/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/✗ Declined/)).not.toBeInTheDocument()
+  })
+
+  test('surfaces the overall match confidence and the case id', () => {
+    render(<DecisionBanner conversation={reviewConversation} />)
+    expect(screen.getByText('98.98%')).toBeInTheDocument()
+    expect(screen.getByText(/4494ed09-25c3-4095-9dc5-a34f5e6db584/)).toBeInTheDocument()
+  })
+
+  test('lists each potential match with its own match score', () => {
+    render(<DecisionBanner conversation={reviewConversation} />)
+    expect(screen.getByText('C5C7DD3A')).toBeInTheDocument()
+    expect(screen.getByText('98.00%')).toBeInTheDocument()
+  })
+
+  test('groups per-signal evidence into identity-core vs corroborating', () => {
+    render(<DecisionBanner conversation={reviewConversation} />)
+    expect(screen.getByText('Identity core')).toBeInTheDocument()
+    expect(screen.getByText('Corroborating')).toBeInTheDocument()
+  })
+
+  test('colours each signal by whether it agrees or disagrees', () => {
+    render(<DecisionBanner conversation={reviewConversation} />)
+    // Disagreeing identity core — the "different identity" tell.
+    const nameChip = screen.getByTestId('signal-chip-name')
+    expect(nameChip.className).toMatch(/disagrees/)
+    expect(nameChip).toHaveTextContent('Name')
+    expect(nameChip).toHaveTextContent('-5.1')
+    // Agreeing corroborating hint.
+    const emailChip = screen.getByTestId('signal-chip-email')
+    expect(emailChip.className).toMatch(/agrees/)
+    expect(emailChip).toHaveTextContent('+10.0')
+  })
+
+  test('keeps the stop message the customer saw', () => {
+    render(<DecisionBanner conversation={reviewConversation} />)
+    expect(screen.getByText(/Thanks for sending that through/)).toBeInTheDocument()
+  })
+
+  test('does not show a concealment flag when the candidate is not concealing', () => {
+    render(<DecisionBanner conversation={reviewConversation} />)
+    expect(screen.queryByText(/concealment/i)).not.toBeInTheDocument()
+  })
+
+  test('flags concealment when a candidate is concealing the prior identity', () => {
+    render(
+      <DecisionBanner
+        conversation={createConversation({
+          reapplicationBlock: {
+            reason: 'review',
+            dispositionKind: 'review',
+            recognition: {
+              band: 'review',
+              posterior: 0.5,
+              case_id: 'case-conceal',
+              candidates: [
+                {
+                  candidate_id: 'X1',
+                  posterior: 0.5,
+                  concealment: true,
+                  per_signal_bits: { name: 2.0 },
+                },
+              ],
+            },
+          },
+        })}
+      />,
+    )
+    expect(screen.getByText(/concealment/i)).toBeInTheDocument()
+  })
+
+  test('does not break when recognition is absent (older review events)', () => {
+    render(
+      <DecisionBanner
+        conversation={createConversation({
+          reapplicationBlock: {
+            reason: 'review',
+            dispositionKind: 'review',
+            stopMessage: 'We just need to take a closer look.',
+            recognition: null,
+          },
+        })}
+      />,
+    )
+    expect(screen.getByText(/Flagged for manual review/)).toBeInTheDocument()
+    expect(screen.getByText(/We just need to take a closer look/)).toBeInTheDocument()
+    // No matches table, but no crash.
+    expect(screen.queryByText('Potential matches')).not.toBeInTheDocument()
+  })
 })

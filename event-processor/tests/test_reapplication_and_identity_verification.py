@@ -31,6 +31,41 @@ BLOCK_PAYLOAD = {
     "blocked_at": "2026-06-10T07:08:40.123456+00:00",
 }
 
+# A review-kind halt — NOT a confirmed block. The applicant was flagged
+# as a probable returning customer and auto-held for manual review, carrying the
+# identity-recognition match context.
+REVIEW_PAYLOAD = {
+    "application_number": "B68196E0-0A6",
+    "conversation_id": "aa11bb22-cc33-dd44-ee55-ff6677889900",
+    "journey_customer_id": "4A8C91AB",
+    "canonical_customer_id": None,
+    "reason": "review",
+    "stop_message": "Thanks for sending that through! We just need to take a closer look...",
+    "blocked_until": None,
+    "blocked_at": "2026-06-18T04:15:30Z",
+    "disposition_kind": "review",
+    "manual_review_candidate": True,
+    "recognition": {
+        "band": "review",
+        "posterior": 0.989831,
+        "case_id": "4494ed09-25c3-4095-9dc5-a34f5e6db584",
+        "candidates": [
+            {
+                "candidate_id": "C5C7DD3A",
+                "posterior": 0.98,
+                "concealment": False,
+                "per_signal_bits": {
+                    "email": 10.0,
+                    "bank": 8.94,
+                    "address": 5.0,
+                    "name": -5.06,
+                    "dob": -5.64,
+                },
+            }
+        ],
+    },
+}
+
 
 class TestReapplicationBlocked:
     @pytest.mark.asyncio
@@ -113,6 +148,38 @@ class TestReapplicationBlocked:
 
         assert not mock_pool.inserts_into("conversations")
         assert mock_pool.last_insert("customers")["customer_id"] == "22F0652F"
+
+    @pytest.mark.asyncio
+    async def test_writes_review_disposition_and_recognition(self, mock_pool):
+        event = {
+            "typ": "application.reapplication_blocked.v1",
+            "usr": "4A8C91AB",
+            "payload": dict(REVIEW_PAYLOAD),
+        }
+        await handle_reapplication_blocked(mock_pool, event)
+
+        doc = mock_pool.last_insert("conversations")
+        assert doc is not None
+        assert doc["reapplication_block_reason"] == "review"
+        assert doc["reapplication_block_disposition_kind"] == "review"
+        assert doc["reapplication_block_manual_review_candidate"] is True
+        # recognition is stored verbatim as a JSON string — asyncpg has no
+        # dict→jsonb codec, so the handler json.dumps it for the jsonb column.
+        stored = doc["reapplication_block_recognition"]
+        assert isinstance(stored, str)
+        assert json.loads(stored) == REVIEW_PAYLOAD["recognition"]
+
+    @pytest.mark.asyncio
+    async def test_legacy_block_payload_omits_recognition_fields(self, mock_pool):
+        # Older events carry none of the recognition fields — they must project as
+        # NULL, never crash, and never fabricate a recognition blob.
+        event = {"typ": "application.reapplication_blocked.v1", "payload": dict(BLOCK_PAYLOAD)}
+        await handle_reapplication_blocked(mock_pool, event)
+
+        doc = mock_pool.last_insert("conversations")
+        assert doc["reapplication_block_disposition_kind"] is None
+        assert doc["reapplication_block_manual_review_candidate"] is None
+        assert doc["reapplication_block_recognition"] is None
 
 
 class TestReapplicationBlockedReattribution:

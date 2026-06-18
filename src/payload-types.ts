@@ -678,6 +678,26 @@ export interface Conversation {
      * Resolved identity shared by all linked journeys
      */
     canonicalCustomerId?: string | null;
+    /**
+     * Halt kind: "block" (confirmed) or "review" (held for review)
+     */
+    dispositionKind?: string | null;
+    /**
+     * Whether this halt is a manual-review candidate
+     */
+    manualReviewCandidate?: boolean | null;
+    /**
+     * Identity-recognition match context for a review halt (band, posterior, case_id, candidates with per-signal evidence). Stored verbatim from the event.
+     */
+    recognition?:
+      | {
+          [k: string]: unknown;
+        }
+      | unknown[]
+      | string
+      | number
+      | boolean
+      | null;
   };
   /**
    * Archived identity verification artifacts (S3)
@@ -1597,6 +1617,9 @@ export interface ConversationsSelect<T extends boolean = true> {
         blockedUntil?: T;
         blockedAt?: T;
         canonicalCustomerId?: T;
+        dispositionKind?: T;
+        manualReviewCandidate?: T;
+        recognition?: T;
       };
   identityVerificationReport?:
     | T
