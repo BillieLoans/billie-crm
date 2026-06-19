@@ -150,6 +150,16 @@ ips:
 secrets: check-secrets
 	$(call PROD_CHECK,secrets)
 	@awk 'NF && $$1 !~ /^#/ && $$0 !~ /^MIGRATE_DATABASE_URI=/' "$(SECRETS_FILE)" | fly secrets import -a "$(APP_NAME)"
+	@# MIGRATE_DATABASE_URI is the owner-role DSN (deployer-local only) and must
+	@# never reach the container. The import above excludes it, but `fly secrets
+	@# import` only adds/updates keys — it never removes one — so scrub any copy
+	@# left by an earlier import. No-op (and no release) when already absent.
+	@if fly secrets list -a "$(APP_NAME)" 2>/dev/null | awk '{print $$1}' | grep -qx MIGRATE_DATABASE_URI; then \
+		echo "Scrubbing stale MIGRATE_DATABASE_URI from $(APP_NAME) Fly secrets…"; \
+		fly secrets unset MIGRATE_DATABASE_URI -a "$(APP_NAME)"; \
+	else \
+		echo "✓ MIGRATE_DATABASE_URI absent from $(APP_NAME) Fly secrets"; \
+	fi
 
 secrets-list:
 	fly secrets list -a "$(APP_NAME)"
@@ -267,6 +277,9 @@ DATABASE_URI_FROM_ENV = $(shell awk -F= '/^DATABASE_URI=/{sub(/^DATABASE_URI=/,"
 # Falls back to DATABASE_URI when no migration DSN is set (e.g. dev/demo).
 MIGRATE_DSN_FROM_ENV = $(shell awk -F= '/^MIGRATE_DATABASE_URI=/{sub(/^MIGRATE_DATABASE_URI=/,""); gsub(/^"|"$$/,""); print; exit}' "$(SECRETS_FILE)" 2>/dev/null)
 DSN_FROM_ENV = $(if $(MIGRATE_DSN_FROM_ENV),$(MIGRATE_DSN_FROM_ENV),$(DATABASE_URI_FROM_ENV))
+# Whether the owner-role DSN is present (yes/empty) WITHOUT exposing its value on
+# a command line — lets pg-migrate hard-fail prod DDL when it's missing.
+MIGRATE_DSN_SET = $(if $(MIGRATE_DSN_FROM_ENV),yes,)
 REDIS_FROM_ENV = $(shell awk -F= '/^REDIS_URL=/{sub(/^REDIS_URL=/,""); gsub(/^"|"$$/,""); print; exit}' "$(SECRETS_FILE)" 2>/dev/null)
 
 # Generate a new Payload migration capturing schema drift. Run against a
@@ -283,6 +296,16 @@ pg-migrate-create:
 # migrate` from your laptop with DATABASE_URI sourced from .env.<env>.
 pg-migrate: check-secrets
 	$(call PROD_CHECK,pg-migrate)
+	@# Prod DDL MUST run as the owner role. Refuse to silently fall back to the
+	@# runtime DATABASE_URI (DML-only) — that fails mid-migration with
+	@# "must be owner of table …". dev/demo still fall back for convenience.
+	@if [ -n "$(IS_PROD)" ] && [ -z "$(MIGRATE_DSN_SET)" ]; then \
+		echo "ERROR: MIGRATE_DATABASE_URI is not set in $(SECRETS_FILE)."; \
+		echo "       Prod migrations must run as the owner role (e.g. neondb_owner),"; \
+		echo "       not the runtime DATABASE_URI (DML-only) role."; \
+		echo "       Uncomment/set MIGRATE_DATABASE_URI in $(SECRETS_FILE) and retry."; \
+		exit 1; \
+	fi
 	@DSN='$(DSN_FROM_ENV)'; \
 	if [ -z "$$DSN" ]; then \
 		echo "DATABASE_URI not found in $(SECRETS_FILE)"; \
