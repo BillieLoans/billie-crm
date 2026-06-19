@@ -299,6 +299,16 @@ export const LoanAccounts: CollectionConfig = {
       },
     },
     {
+      name: 'commencementDate',
+      type: 'date',
+      index: true,
+      admin: {
+        readOnly: true,
+        description:
+          'Authoritative loan start date (= disbursement/value date) from account.created.v1 commencement_date, computed upstream with the 3pm-AEST cut-off + public-holiday logic. Bucket key for disbursement triage.',
+      },
+    },
+    {
       name: 'signedLoanAgreementUrl',
       type: 'text',
       admin: {

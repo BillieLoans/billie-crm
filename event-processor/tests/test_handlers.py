@@ -11,8 +11,9 @@ Mongo-style update_one shapes.
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, date
 from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -180,6 +181,96 @@ class TestAccountHandlers:
             assert doc["account_status"] == expected_status, (
                 f"{sdk_status} → expected {expected_status}, got {doc['account_status']}"
             )
+
+    @pytest.mark.asyncio
+    async def test_handle_account_created_stores_commencement_date(self, mock_pool):
+        """account.created.v1 with commencement_date writes it to the projection.
+
+        Uses SimpleNamespace to simulate the accounts-v2.9.0 SDK field without
+        requiring the actual (yet-unreleased) package to be installed.
+        """
+        payload = SimpleNamespace(
+            account_id="ACC-CD-001",
+            account_number="ACC-CD-001",
+            customer_id="CUS-CD-001",
+            status="ACTIVE",
+            loan_amount=Decimal("500.00"),
+            loan_fee=Decimal("80.00"),
+            loan_total_payable=Decimal("580.00"),
+            current_balance=Decimal("580.00"),
+            opened_date="2026-06-18",
+            commencement_date=date(2026, 6, 19),
+            # signed_loan_agreement_url absent → getattr returns None → not written
+        )
+        event = SimpleNamespace(payload=payload)
+
+        await handle_account_created(mock_pool, event)
+
+        doc = mock_pool.last_insert("loan_accounts")
+        assert doc is not None
+        assert doc["loan_account_id"] == "ACC-CD-001"
+        # commencement_date must be present in the insert values
+        assert "commencement_date" in doc
+        assert doc["commencement_date"] is not None
+
+    @pytest.mark.asyncio
+    async def test_handle_account_created_without_commencement_date(self, mock_pool):
+        """account.created.v1 without commencement_date (old SDK) silently skips the field."""
+        payload = SimpleNamespace(
+            account_id="ACC-CD-002",
+            account_number="ACC-CD-002",
+            customer_id="CUS-CD-002",
+            status="ACTIVE",
+            loan_amount=Decimal("300.00"),
+            loan_fee=Decimal("50.00"),
+            loan_total_payable=Decimal("350.00"),
+            current_balance=Decimal("350.00"),
+            opened_date="2026-06-18",
+            # commencement_date attribute absent — simulates accounts-v2.8.0
+        )
+        event = SimpleNamespace(payload=payload)
+
+        await handle_account_created(mock_pool, event)
+
+        doc = mock_pool.last_insert("loan_accounts")
+        assert doc is not None
+        assert doc["loan_account_id"] == "ACC-CD-002"
+        # Field must NOT be written when absent (getattr returns None)
+        assert "commencement_date" not in doc
+
+    @pytest.mark.asyncio
+    async def test_handle_account_updated_sets_commencement_date_when_present(self, mock_pool):
+        """account.updated.v1 with commencement_date updates the column."""
+        event = MagicMock()
+        event.payload = MagicMock()
+        event.payload.account_id = "ACC-CD-003"
+        event.payload.current_balance = None
+        event.payload.status = None
+        event.payload.commencement_date = date(2026, 6, 20)
+
+        await handle_account_updated(mock_pool, event)
+
+        update = mock_pool.last_update("loan_accounts")
+        assert update is not None
+        assert "commencement_date" in update
+        assert update["commencement_date"] is not None
+
+    @pytest.mark.asyncio
+    async def test_handle_account_updated_skips_commencement_date_when_none(self, mock_pool):
+        """account.updated.v1 does NOT overwrite commencement_date with None on unrelated updates."""
+        event = MagicMock()
+        event.payload = MagicMock()
+        event.payload.account_id = "ACC-CD-004"
+        event.payload.current_balance = None
+        event.payload.status = None
+        # commencement_date is None (field present but empty) — must not overwrite
+        event.payload.commencement_date = None
+
+        await handle_account_updated(mock_pool, event)
+
+        update = mock_pool.last_update("loan_accounts")
+        assert update is not None
+        assert "commencement_date" not in update
 
     @pytest.mark.asyncio
     async def test_handle_schedule_created_writes_parent_and_payments(self, mock_pool):

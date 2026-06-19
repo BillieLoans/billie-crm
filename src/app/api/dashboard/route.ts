@@ -22,6 +22,12 @@ import {
   type UpcomingPayment,
   type PendingDisbursement,
 } from '@/lib/schemas/dashboard'
+import {
+  sydneyOffsetMinutes,
+  classifyBucket,
+  getCommencementDate,
+  summariseDisbursementBuckets,
+} from '@/lib/disbursement-cutoff'
 
 /** Valid user roles */
 const VALID_ROLES = ['admin', 'supervisor', 'operations', 'readonly'] as const
@@ -67,29 +73,6 @@ function australianDayBoundaries(now: Date = new Date()): { start: Date; end: Da
   return { start, end }
 }
 
-function sydneyOffsetMinutes(instant: Date): number {
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Australia/Sydney',
-    hourCycle: 'h23',
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: 'numeric',
-    second: 'numeric',
-  }).formatToParts(instant)
-  const pick = (type: string) => Number(parts.find((p) => p.type === type)!.value)
-  const sydneyAsUtc = Date.UTC(
-    pick('year'),
-    pick('month') - 1,
-    pick('day'),
-    pick('hour'),
-    pick('minute'),
-    pick('second'),
-  )
-  return Math.round((sydneyAsUtc - instant.getTime()) / 60_000)
-}
-
 const EMPTY_METRIC: MoneyFlowMetric = {
   count: 0,
   totalAmount: 0,
@@ -117,7 +100,12 @@ async function fetchMoneyFlowsToday(
 ): Promise<MoneyFlowsToday> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const pool = (payload.db as any).pool as
-    | { query: (text: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>> }> }
+    | {
+        query: (
+          text: string,
+          params?: unknown[],
+        ) => Promise<{ rows: Array<Record<string, unknown>> }>
+      }
     | undefined
   if (!pool) {
     return {
@@ -181,7 +169,12 @@ async function fetchLedgerHealth(
 
     const data = await response.json()
     return {
-      status: data.status === 'connected' ? 'online' : data.status === 'degraded' ? 'degraded' : 'offline',
+      status:
+        data.status === 'connected'
+          ? 'online'
+          : data.status === 'degraded'
+            ? 'degraded'
+            : 'offline',
       latencyMs: data.latencyMs ?? 0,
     }
   } catch {
@@ -271,7 +264,7 @@ export async function GET(request: NextRequest) {
           accountStatus: { equals: 'pending_disbursement' },
         },
         sort: '-createdAt',
-        limit: 10,
+        limit: 200,
       }),
 
       // Today's money flows (expected / received / disbursed)
@@ -384,17 +377,42 @@ export async function GET(request: NextRequest) {
     // Limit to 10 most urgent
     const topUpcomingPayments = upcomingPayments.slice(0, 10)
 
-    // Process pending disbursement accounts
-    const pendingDisbursements: PendingDisbursement[] = pendingDisbursementResult.docs.map((acc) => ({
-      loanAccountId: acc.loanAccountId ?? '',
-      accountNumber: acc.accountNumber ?? '',
-      customerName: acc.customerName ?? 'Unknown',
-      customerId: acc.customerIdString ?? '',
-      loanAmount: acc.loanTerms?.loanAmount ?? 0,
-      loanAmountFormatted: formatCurrency(acc.loanTerms?.loanAmount ?? 0),
-      createdAt: acc.createdAt,
-      signedLoanAgreementUrl: acc.signedLoanAgreementUrl ?? undefined,
-    }))
+    // Process pending disbursement accounts with bucket classification
+    const now = new Date()
+
+    const pendingDisbursements: PendingDisbursement[] = pendingDisbursementResult.docs.map(
+      (acc) => {
+        const commencementDate = getCommencementDate(acc)
+        // No commencement date yet → surface in today's queue for ops attention rather than hiding it.
+        const bucket = commencementDate ? classifyBucket(commencementDate, now) : 'today'
+        return {
+          loanAccountId: acc.loanAccountId ?? '',
+          accountNumber: acc.accountNumber ?? '',
+          customerName: acc.customerName ?? 'Unknown',
+          customerId: acc.customerIdString ?? '',
+          loanAmount: acc.loanTerms?.loanAmount ?? 0,
+          loanAmountFormatted: formatCurrency(acc.loanTerms?.loanAmount ?? 0),
+          createdAt: acc.createdAt,
+          commencementDate,
+          bucket,
+          signedLoanAgreementUrl: acc.signedLoanAgreementUrl ?? undefined,
+        }
+      },
+    )
+
+    const rawBuckets = summariseDisbursementBuckets(
+      pendingDisbursements,
+      moneyFlowsToday.disbursed.count,
+      now,
+    )
+    const disbursementBuckets = {
+      overdue: buildMetric(rawBuckets.overdue.count, rawBuckets.overdue.total),
+      today: buildMetric(rawBuckets.today.count, rawBuckets.today.total),
+      scheduled: buildMetric(rawBuckets.scheduled.count, rawBuckets.scheduled.total),
+      todayDoneCount: rawBuckets.todayDoneCount,
+      todayTotalCount: rawBuckets.todayTotalCount,
+      scheduledTomorrowCount: rawBuckets.scheduledTomorrowCount,
+    }
 
     // 7. Build response
     const userRole = isValidRole(user.role) ? user.role : 'operations'
@@ -412,6 +430,7 @@ export async function GET(request: NextRequest) {
       upcomingPayments: topUpcomingPayments,
       pendingDisbursements,
       pendingDisbursementsCount: pendingDisbursementResult.totalDocs,
+      disbursementBuckets,
       moneyFlowsToday,
       systemStatus: {
         ledger: ledgerHealth.status,

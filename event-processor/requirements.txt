@@ -14,7 +14,7 @@ email-validator==2.2.0
 # ("could not read Password ... No such device or address"). Keep the
 # x-access-token: prefix. Applies to both `pip install -r` (pip expands ${...})
 # and the Docker subst-sdk-requirements.py path.
-git+https://x-access-token:${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@accounts-v2.8.0#subdirectory=packages/accounts
+git+https://x-access-token:${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@accounts-v2.9.0#subdirectory=packages/accounts
 git+https://x-access-token:${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@customers-v2.1.0#subdirectory=packages/customers
 git+https://x-access-token:${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@ledger-v1.1.0#subdirectory=packages/ledger
 git+https://x-access-token:${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@notifications-v1.1.1#subdirectory=packages/notifications

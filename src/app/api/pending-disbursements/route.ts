@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { headers } from 'next/headers'
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
+import { classifyBucket, getCommencementDate } from '@/lib/disbursement-cutoff'
 
 interface PendingDisbursementItem {
   loanAccountId: string
@@ -14,6 +15,8 @@ interface PendingDisbursementItem {
   totalOutstandingFormatted: string
   createdAt: string
   signedLoanAgreementUrl?: string | null
+  commencementDate: string | null
+  bucket: 'overdue' | 'today' | 'scheduled'
 }
 
 function formatCurrency(amount: number): string {
@@ -41,7 +44,7 @@ export async function GET(request: NextRequest) {
     }
 
     const limitParam = request.nextUrl.searchParams.get('limit')
-    const limit = limitParam ? Math.min(Math.max(parseInt(limitParam, 10) || 50, 1), 200) : 50
+    const limit = limitParam ? Math.min(Math.max(parseInt(limitParam, 10) || 50, 1), 200) : 200
 
     const pendingResult = await payload.find({
       collection: 'loan-accounts',
@@ -55,6 +58,9 @@ export async function GET(request: NextRequest) {
     const items: PendingDisbursementItem[] = pendingResult.docs.map((acc) => {
       const loanAmount = acc.loanTerms?.loanAmount ?? 0
       const totalOutstanding = acc.balances?.totalOutstanding ?? 0
+      const commencementDate = getCommencementDate(acc)
+      // No commencement date yet → surface in today's queue for ops attention rather than hiding it.
+      const bucket = commencementDate ? classifyBucket(commencementDate) : 'today'
 
       return {
         loanAccountId: acc.loanAccountId ?? '',
@@ -67,13 +73,19 @@ export async function GET(request: NextRequest) {
         totalOutstandingFormatted: formatCurrency(totalOutstanding),
         createdAt: acc.createdAt,
         signedLoanAgreementUrl: acc.signedLoanAgreementUrl ?? undefined,
+        commencementDate,
+        bucket,
       }
     })
 
-    return NextResponse.json({
-      totalCount: pendingResult.totalDocs,
-      items,
-    })
+    const bucketParam = request.nextUrl.searchParams.get('bucket')
+    const validBuckets = ['overdue', 'today', 'scheduled']
+    const filtered =
+      bucketParam && validBuckets.includes(bucketParam)
+        ? items.filter((i) => i.bucket === bucketParam)
+        : items
+
+    return NextResponse.json({ totalCount: filtered.length, items: filtered })
   } catch (error) {
     console.error('[Pending Disbursements API] Error:', error)
     return NextResponse.json(

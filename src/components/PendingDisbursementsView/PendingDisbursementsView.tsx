@@ -3,57 +3,47 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { DisburseLoanDrawer } from '@/components/ServicingView/DisburseLoanDrawer'
+import { CutoffCountdown } from '@/components/DashboardView/CutoffCountdown'
+import { formatCurrency } from '@/lib/formatters'
+import { DisbursementSection, type QueueItem } from './DisbursementSection'
+import { EarlyDisburseWarningModal } from './EarlyDisburseWarningModal'
 import styles from './styles.module.css'
-
-interface PendingDisbursementItem {
-  loanAccountId: string
-  accountNumber: string
-  customerId: string
-  customerName: string
-  loanAmount: number
-  loanAmountFormatted: string
-  totalOutstanding: number
-  totalOutstandingFormatted: string
-  createdAt: string
-  signedLoanAgreementUrl?: string | null
-}
 
 interface PendingDisbursementResponse {
   totalCount: number
-  items: PendingDisbursementItem[]
-}
-
-function formatDate(value: string): string {
-  const date = new Date(value)
-  return date.toLocaleDateString('en-AU', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  })
+  items: QueueItem[]
 }
 
 export function PendingDisbursementsView() {
   const router = useRouter()
-  const [items, setItems] = useState<PendingDisbursementItem[]>([])
+  const [items, setItems] = useState<QueueItem[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const [selectedItem, setSelectedItem] = useState<PendingDisbursementItem | null>(null)
+  const [selectedItem, setSelectedItem] = useState<QueueItem | null>(null)
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+  const [pendingEarly, setPendingEarly] = useState<QueueItem | null>(null)
+
+  const [targetBucket, setTargetBucket] = useState<string | null>(null)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setTargetBucket(new URLSearchParams(window.location.search).get('bucket'))
+    }
+  }, [])
 
   const fetchPendingDisbursements = useCallback(async () => {
     setIsLoading(true)
     setError(null)
-
     try {
-      const res = await fetch('/api/pending-disbursements?limit=100')
+      const res = await fetch('/api/pending-disbursements?limit=200')
       const data = (await res.json()) as PendingDisbursementResponse
-
       if (!res.ok) {
-        throw new Error((data as unknown as { error?: { message?: string } }).error?.message || 'Failed to fetch pending disbursements')
+        throw new Error(
+          (data as unknown as { error?: { message?: string } }).error?.message ||
+            'Failed to fetch pending disbursements',
+        )
       }
-
       setItems(data.items || [])
       setTotalCount(data.totalCount || 0)
     } catch (err) {
@@ -67,12 +57,32 @@ export function PendingDisbursementsView() {
     void fetchPendingDisbursements()
   }, [fetchPendingDisbursements])
 
-  const handleOpenDisburse = useCallback((item: PendingDisbursementItem) => {
+  const openDrawer = useCallback((item: QueueItem) => {
     setSelectedItem(item)
     setIsDrawerOpen(true)
   }, [])
 
-  const handleCloseDisburse = useCallback(() => {
+  const handleDisburse = useCallback(
+    (item: QueueItem) => {
+      if (item.bucket === 'scheduled') {
+        setPendingEarly(item)
+        return
+      }
+      openDrawer(item)
+    },
+    [openDrawer],
+  )
+
+  const handleView = useCallback(
+    (item: QueueItem) => {
+      router.push(
+        `/admin/servicing/${item.customerId}?accountId=${encodeURIComponent(item.loanAccountId)}`,
+      )
+    },
+    [router],
+  )
+
+  const handleCloseDrawer = useCallback(() => {
     setIsDrawerOpen(false)
     setSelectedItem(null)
   }, [])
@@ -81,11 +91,30 @@ export function PendingDisbursementsView() {
     void fetchPendingDisbursements()
   }, [fetchPendingDisbursements])
 
+  const byBucket = useCallback(
+    (b: QueueItem['bucket']) => items.filter((i) => i.bucket === b),
+    [items],
+  )
+  const subtotal = useCallback(
+    (b: QueueItem['bucket']) =>
+      formatCurrency(byBucket(b).reduce((s, i) => s + (i.loanAmount || 0), 0)),
+    [byBucket],
+  )
+
+  useEffect(() => {
+    if (isLoading || !targetBucket) return
+    const el = document.getElementById(`section-${targetBucket}`)
+    if (el && typeof el.scrollIntoView === 'function') {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [isLoading, targetBucket, items])
+
   const headerSubtitle = useMemo(() => {
     if (isLoading) return 'Loading...'
     if (totalCount === 0) return 'No loans awaiting disbursement'
-    return `${totalCount} loan${totalCount !== 1 ? 's' : ''} awaiting disbursement`
-  }, [isLoading, totalCount])
+    const total = formatCurrency(items.reduce((s, i) => s + (i.loanAmount || 0), 0))
+    return `${totalCount} loan${totalCount !== 1 ? 's' : ''} awaiting · ${total} total`
+  }, [isLoading, totalCount, items])
 
   return (
     <div className={styles.container}>
@@ -94,73 +123,49 @@ export function PendingDisbursementsView() {
           <h1 className={styles.title}>Pending Disbursements</h1>
           <p className={styles.subtitle}>{headerSubtitle}</p>
         </div>
-        <button className={styles.refreshButton} onClick={() => void fetchPendingDisbursements()}>
-          Refresh
-        </button>
+        <div className={styles.headerActions}>
+          <CutoffCountdown />
+          <button className={styles.refreshButton} onClick={() => void fetchPendingDisbursements()}>
+            Refresh
+          </button>
+        </div>
       </div>
 
       {error && <div className={styles.errorBanner}>{error}</div>}
 
-      <div className={styles.tableWrapper}>
-        {isLoading ? (
-          <div className={styles.loading}>Loading pending disbursements...</div>
-        ) : items.length === 0 ? (
-          <div className={styles.emptyState}>
-            <span className={styles.emptyIcon}>✅</span>
-            <h3>No pending disbursements</h3>
-            <p>All loans have been disbursed.</p>
-          </div>
-        ) : (
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>Account</th>
-                <th>Customer</th>
-                <th>Loan Amount</th>
-                <th>Outstanding</th>
-                <th>Created</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item) => (
-                <tr key={item.loanAccountId}>
-                  <td>{item.accountNumber}</td>
-                  <td>{item.customerName}</td>
-                  <td>{item.loanAmountFormatted}</td>
-                  <td>{item.totalOutstandingFormatted}</td>
-                  <td>{formatDate(item.createdAt)}</td>
-                  <td>
-                    <div className={styles.rowActions}>
-                      <button
-                        className={styles.disburseButton}
-                        onClick={() => handleOpenDisburse(item)}
-                      >
-                        Disburse Loan
-                      </button>
-                      <button
-                        className={styles.viewButton}
-                        onClick={() =>
-                          router.push(
-                            `/admin/servicing/${item.customerId}?accountId=${encodeURIComponent(item.loanAccountId)}`,
-                          )
-                        }
-                      >
-                        View
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      {isLoading ? (
+        <div className={styles.loading}>Loading pending disbursements...</div>
+      ) : (
+        <div className={styles.sections}>
+          <DisbursementSection
+            bucket="overdue"
+            items={byBucket('overdue')}
+            totalFormatted={subtotal('overdue')}
+            onDisburse={handleDisburse}
+            onView={handleView}
+          />
+          <DisbursementSection
+            bucket="today"
+            items={byBucket('today')}
+            totalFormatted={subtotal('today')}
+            onDisburse={handleDisburse}
+            onView={handleView}
+          />
+          <DisbursementSection
+            bucket="scheduled"
+            items={byBucket('scheduled')}
+            totalFormatted={subtotal('scheduled')}
+            defaultCollapsed={targetBucket !== 'scheduled'}
+            onDisburse={handleDisburse}
+            onView={handleView}
+          />
+        </div>
+      )}
 
       {selectedItem && (
         <DisburseLoanDrawer
           isOpen={isDrawerOpen}
-          onClose={handleCloseDisburse}
+          onClose={handleCloseDrawer}
           onSuccess={handleDisburseSuccess}
           loanAccountId={selectedItem.loanAccountId}
           accountNumber={selectedItem.accountNumber}
@@ -168,6 +173,20 @@ export function PendingDisbursementsView() {
           signedLoanAgreementUrl={selectedItem.signedLoanAgreementUrl}
         />
       )}
+
+      <EarlyDisburseWarningModal
+        isOpen={!!pendingEarly}
+        accountNumber={pendingEarly?.accountNumber ?? ''}
+        customerName={pendingEarly?.customerName ?? ''}
+        loanAmountFormatted={pendingEarly?.loanAmountFormatted ?? ''}
+        commencementDate={pendingEarly?.commencementDate ?? null}
+        onCancel={() => setPendingEarly(null)}
+        onConfirm={() => {
+          const it = pendingEarly!
+          setPendingEarly(null)
+          openDrawer(it)
+        }}
+      />
     </div>
   )
 }

@@ -56,6 +56,14 @@ const mockDashboardResponse: DashboardResponse = {
   ],
   pendingDisbursements: [],
   pendingDisbursementsCount: 0,
+  disbursementBuckets: {
+    overdue: { count: 0, totalAmount: 0, totalAmountFormatted: '$0.00' },
+    today: { count: 0, totalAmount: 0, totalAmountFormatted: '$0.00' },
+    scheduled: { count: 0, totalAmount: 0, totalAmountFormatted: '$0.00' },
+    todayDoneCount: 0,
+    todayTotalCount: 0,
+    scheduledTomorrowCount: 0,
+  },
   upcomingPayments: [
     {
       loanAccountId: 'LA-001',
@@ -69,6 +77,11 @@ const mockDashboardResponse: DashboardResponse = {
       status: 'upcoming',
     },
   ],
+  moneyFlowsToday: {
+    paymentsExpected: { count: 0, totalAmount: 0, totalAmountFormatted: '$0.00' },
+    paymentsReceived: { count: 0, totalAmount: 0, totalAmountFormatted: '$0.00' },
+    disbursed: { count: 0, totalAmount: 0, totalAmountFormatted: '$0.00' },
+  },
   systemStatus: {
     ledger: 'online',
     latencyMs: 42,

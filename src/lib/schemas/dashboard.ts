@@ -26,6 +26,8 @@ export const PendingDisbursementSchema = z.object({
   loanAmount: z.number(),
   loanAmountFormatted: z.string(),
   createdAt: z.string().datetime(),
+  commencementDate: z.string().nullable(), // ISO date; bucket key (see disbursement-cutoff.ts)
+  bucket: z.enum(['overdue', 'today', 'scheduled']),
   signedLoanAgreementUrl: z.string().nullable().optional(),
 })
 
@@ -70,6 +72,16 @@ export const MoneyFlowsTodaySchema = z.object({
 
 export type MoneyFlowsToday = z.infer<typeof MoneyFlowsTodaySchema>
 
+export const DisbursementBucketSummarySchema = z.object({
+  overdue: MoneyFlowMetricSchema,
+  today: MoneyFlowMetricSchema,
+  scheduled: MoneyFlowMetricSchema,
+  todayDoneCount: z.number().int().min(0),
+  todayTotalCount: z.number().int().min(0),
+  scheduledTomorrowCount: z.number().int().min(0),
+})
+export type DisbursementBucketSummary = z.infer<typeof DisbursementBucketSummarySchema>
+
 /**
  * Dashboard API response schema.
  *
@@ -103,6 +115,7 @@ export const DashboardResponseSchema = z.object({
   // Loans pending disbursement
   pendingDisbursements: z.array(PendingDisbursementSchema),
   pendingDisbursementsCount: z.number().int().min(0),
+  disbursementBuckets: DisbursementBucketSummarySchema,
   // Aggregates for the current Australian day
   moneyFlowsToday: MoneyFlowsTodaySchema,
   systemStatus: z.object({

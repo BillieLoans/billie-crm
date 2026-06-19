@@ -8,7 +8,7 @@ import { useRecentCustomersStore } from '@/stores/recentCustomers'
 import { useFailedActionsStore } from '@/stores/failed-actions'
 import { formatRelativeTime } from '@/lib/formatters'
 import { SystemHealthStrip } from './SystemHealthStrip'
-import { DisbursementsHeroTile } from './DisbursementsHeroTile'
+import { DisbursementTriagePanel } from './DisbursementTriagePanel'
 import { OverdueHeroTile } from './OverdueHeroTile'
 import { ApprovalsHeroTile } from './ApprovalsHeroTile'
 import { MoneyFlowsRow } from './MoneyFlowsRow'
@@ -36,7 +36,8 @@ function getShortcutLabel(): string {
  * Operational triage screen for ops staff. Top-to-bottom narrative:
  *   1. System health strip (only visible when degraded)
  *   2. Personalised one-line summary
- *   3. Hero tiles: Disbursements / Overdue / Approvals
+ *   3. Full-width Disbursement triage band (Overdue / Today / Scheduled buckets)
+ *   3a. Hero row: Overdue / Approvals
  *   4. Money flows today (placeholder until Phase 2)
  *   5. Recent customers
  *   6. Upcoming payments (grouped by due date)
@@ -77,9 +78,7 @@ export function DashboardView() {
     summaryParts.push(`${overdueCount} overdue`)
   }
   if (canSeeApprovals && pendingApprovals > 0) {
-    summaryParts.push(
-      `${pendingApprovals} approval${pendingApprovals === 1 ? '' : 's'} waiting`,
-    )
+    summaryParts.push(`${pendingApprovals} approval${pendingApprovals === 1 ? '' : 's'} waiting`)
   }
   const summarySuffix = summaryParts.length > 0 ? ' — ' + summaryParts.join(', ') : ''
 
@@ -114,6 +113,8 @@ export function DashboardView() {
     <div className={styles.container} data-testid="dashboard-view">
       <SystemHealthStrip />
 
+      <DisbursementTriagePanel />
+
       <div className={styles.header}>
         <h1 className={styles.greeting} data-testid="dashboard-greeting">
           {greeting}, {firstName}!
@@ -122,7 +123,6 @@ export function DashboardView() {
       </div>
 
       <div className={styles.heroRow} data-testid="hero-tiles">
-        <DisbursementsHeroTile />
         <OverdueHeroTile />
         {canSeeApprovals && <ApprovalsHeroTile />}
       </div>
@@ -174,9 +174,7 @@ export function DashboardView() {
                 >
                   <span className={styles.customerName}>
                     <span className={styles.customerId}>{recent.customerId}</span>
-                    <span className={styles.customerFullName}>
-                      {summary?.name ?? 'Loading...'}
-                    </span>
+                    <span className={styles.customerFullName}>{summary?.name ?? 'Loading...'}</span>
                   </span>
                   <span className={styles.customerAccounts}>{summary?.accountCount ?? '—'}</span>
                   <span className={styles.customerOutstanding}>
@@ -200,8 +198,7 @@ export function DashboardView() {
       <div className={styles.tipFooter} data-testid="keyboard-tip">
         <span className={styles.tipIcon}>💡</span>
         <span className={styles.tipText}>
-          Press <kbd className={styles.kbd}>{shortcutLabel}</kbd> to quickly search for any
-          customer
+          Press <kbd className={styles.kbd}>{shortcutLabel}</kbd> to quickly search for any customer
         </span>
       </div>
     </div>
