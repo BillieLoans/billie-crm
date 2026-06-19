@@ -18,11 +18,11 @@ export function NavCollectionsLink() {
   // Fetch overdue count (small page size since we only need count)
   const { totalCount, isFallback } = useOverdueAccounts({ pageSize: 1 })
 
-  const isActive = pathname === '/admin/collections'
+  const isActive = pathname === '/admin/collections-queue'
 
   return (
     <Link
-      href="/admin/collections"
+      href="/admin/collections-queue"
       className={`${styles.navLink} ${isActive ? styles.active : ''}`}
       aria-current={isActive ? 'page' : undefined}
     >
