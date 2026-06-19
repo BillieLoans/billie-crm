@@ -1,5 +1,5 @@
 .label {
-  color: #9aa3b5;
+  color: var(--theme-elevation-500);
   font-size: 12px;
   margin-right: 8px;
 }
@@ -16,17 +16,32 @@
 .normal {
   background: rgba(245, 158, 11, 0.2);
   border: 1px solid rgba(245, 158, 11, 0.6);
-  color: #fbbf24;
+  color: var(--theme-warning-500);
 }
 
 .urgent {
   background: rgba(251, 146, 60, 0.22);
   border: 1px solid rgba(251, 146, 60, 0.7);
-  color: #fdba74;
+  color: var(--theme-warning-400);
 }
 
 .passed {
   background: rgba(239, 68, 68, 0.2);
   border: 1px solid rgba(239, 68, 68, 0.6);
-  color: #fca5a5;
+  color: var(--theme-error-500);
+}
+
+:global([data-theme='light']) .normal {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.5);
+}
+
+:global([data-theme='light']) .urgent {
+  background: rgba(251, 146, 60, 0.12);
+  border-color: rgba(251, 146, 60, 0.5);
+}
+
+:global([data-theme='light']) .passed {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.4);
 }

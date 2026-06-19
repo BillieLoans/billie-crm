@@ -12,7 +12,6 @@ import { DisbursementTriagePanel } from './DisbursementTriagePanel'
 import { OverdueHeroTile } from './OverdueHeroTile'
 import { ApprovalsHeroTile } from './ApprovalsHeroTile'
 import { MoneyFlowsRow } from './MoneyFlowsRow'
-import { UpcomingPaymentsGrouped } from './UpcomingPaymentsGrouped'
 import { PortfolioHealthSection } from './PortfolioHealthSection'
 import styles from './styles.module.css'
 
@@ -189,8 +188,6 @@ export function DashboardView() {
           </div>
         )}
       </div>
-
-      <UpcomingPaymentsGrouped />
 
       <PortfolioHealthSection />
 
