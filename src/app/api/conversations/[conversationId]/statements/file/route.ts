@@ -47,9 +47,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const payload = await getPayload({ config: configPromise })
     const headersList = await headers()
-    const cookieHeader = headersList.get('cookie') || ''
 
-    const { user } = await payload.auth({ headers: new Headers({ cookie: cookieHeader }) })
+    const { user } = await payload.auth({ headers: new Headers(Array.from(headersList.entries())) })
     if (!user) {
       return NextResponse.json(
         { error: { code: 'UNAUTHENTICATED', message: 'Please log in to continue.' } },

@@ -60,7 +60,7 @@ export function OverdueHeroTile() {
           <AgingBars buckets={buckets} testId="overdue-aging-bars" />
         ) : undefined
       }
-      primaryAction={{ label: 'Open collections queue', href: '/admin/collections' }}
+      primaryAction={{ label: 'Open collections queue', href: '/admin/collections-queue' }}
       isLoading={isLoading}
       testId="overdue-hero-tile"
     />

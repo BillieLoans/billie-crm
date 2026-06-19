@@ -28,11 +28,18 @@ export async function requireAuth(
 ): Promise<AuthSuccess | AuthError> {
   const payload = await getPayload({ config: configPromise })
   const headersList = await headers()
-  const cookieHeader = headersList.get('cookie') || ''
 
-  const { user } = await payload.auth({
-    headers: new Headers({ cookie: cookieHeader }),
+  // Forward the full incoming request headers (not just `cookie`). Payload 3.85's
+  // extractJWT enforces a CSRF check on cookie-based auth: it only honours the
+  // payload-token cookie when the request carries an allowlisted `Origin` or a
+  // `Sec-Fetch-Site` of same-origin/same-site/none. A cookie-only Headers object
+  // (which worked pre-3.85) now fails that check, returning user: null → 401.
+  const authHeaders = new Headers()
+  headersList.forEach((value, key) => {
+    authHeaders.append(key, value)
   })
+
+  const { user } = await payload.auth({ headers: authHeaders })
 
   if (!user) {
     return {

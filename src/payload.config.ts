@@ -84,7 +84,10 @@ export default buildConfig({
         // Collections Queue view (Story E1-S1)
         collections: {
           Component: '@/components/CollectionsView/CollectionsViewWithTemplate#CollectionsViewWithTemplate',
-          path: '/collections',
+          // NOTE: must NOT be '/collections' — Payload reserves /admin/collections/* for
+          // built-in database-collection admin routes, which shadow a custom view there
+          // (Payload 3.85 resolves the built-in routing first → "Nothing found").
+          path: '/collections-queue',
         },
         pendingDisbursements: {
           Component:

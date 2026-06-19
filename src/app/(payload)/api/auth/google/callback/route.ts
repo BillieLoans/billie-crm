@@ -162,7 +162,22 @@ export async function GET(request: NextRequest) {
       payload.secret,
     )
 
-    const response = NextResponse.redirect(new URL('/admin/dashboard', APP_URL))
+    // Return a same-origin interstitial that performs the navigation to the
+    // admin client-side, rather than a 307 redirect. A server redirect here is
+    // the tail of a cross-site chain (accounts.google.com → callback → admin),
+    // so the freshly-set SameSite=Lax `payload-token` cookie is NOT sent on the
+    // resulting top-level navigation — Payload's server-rendered admin then sees
+    // no user and bounces to /admin/login, creating a login loop. A client-side
+    // navigation from this same-origin page IS same-site, so the Lax cookie is
+    // sent and SSR auth succeeds. (Payload's own login is unaffected — it sets
+    // the cookie via a same-origin XHR.)
+    const dashboardUrl = new URL('/admin/dashboard', APP_URL).toString()
+    const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=${dashboardUrl}"><title>Signing in…</title></head><body style="font-family:system-ui,sans-serif;padding:2rem">Signing you in…<script>window.location.replace(${JSON.stringify(dashboardUrl)})</script></body></html>`
+
+    const response = new NextResponse(html, {
+      status: 200,
+      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+    })
 
     response.cookies.set('payload-token', payloadToken, {
       httpOnly: true,

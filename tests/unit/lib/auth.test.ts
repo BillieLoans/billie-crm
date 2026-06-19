@@ -3,9 +3,9 @@ import { getPayload } from 'payload'
 import { requireAuth } from '@/lib/auth'
 
 vi.mock('next/headers', () => ({
-  headers: vi.fn().mockResolvedValue({
-    get: vi.fn().mockReturnValue('payload-token=test'),
-  }),
+  // Return a real Headers object so it behaves like Next's ReadonlyHeaders
+  // (requireAuth now forwards the full headers via forEach/entries, not just .get('cookie')).
+  headers: vi.fn().mockResolvedValue(new Headers({ cookie: 'payload-token=test' })),
 }))
 
 vi.mock('payload', () => ({

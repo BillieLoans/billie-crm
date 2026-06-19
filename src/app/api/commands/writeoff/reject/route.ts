@@ -22,10 +22,9 @@ export async function POST(request: NextRequest) {
     // 1. Authenticate user
     const payload = await getPayload({ config: configPromise })
     const headersList = await headers()
-    const cookieHeader = headersList.get('cookie') || ''
 
     const { user } = await payload.auth({
-      headers: new Headers({ cookie: cookieHeader }),
+      headers: new Headers(Array.from(headersList.entries())),
     })
 
     if (!user) {
