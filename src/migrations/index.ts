@@ -3,6 +3,7 @@ import * as migration_20260518_232948_drop_loan_account_customer_name from './20
 import * as migration_20260607_132326 from './20260607_132326';
 import * as migration_20260610_114936_reapplication_block_identity_verification from './20260610_114936_reapplication_block_identity_verification';
 import * as migration_20260618_065013_reapplication_block_recognition from './20260618_065013_reapplication_block_recognition';
+import * as migration_20260619_011621 from './20260619_011621';
 
 export const migrations = [
   {
@@ -28,6 +29,11 @@ export const migrations = [
   {
     up: migration_20260618_065013_reapplication_block_recognition.up,
     down: migration_20260618_065013_reapplication_block_recognition.down,
-    name: '20260618_065013_reapplication_block_recognition'
+    name: '20260618_065013_reapplication_block_recognition',
+  },
+  {
+    up: migration_20260619_011621.up,
+    down: migration_20260619_011621.down,
+    name: '20260619_011621'
   },
 ];
