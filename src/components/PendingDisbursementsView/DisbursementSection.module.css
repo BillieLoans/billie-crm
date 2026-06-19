@@ -1,18 +1,29 @@
+/* Local accent var for the scheduled (blue) bucket — no Payload token exists for blue */
 .section {
-  border: 1px solid #2a2f3a;
+  --sched-accent: #60a5fa;
+
+  border: 1px solid var(--theme-elevation-200);
   border-radius: 10px;
   margin-bottom: 14px;
   overflow: hidden;
 }
+
+:global([data-theme='light']) .section {
+  --sched-accent: #2563eb;
+}
+
 .overdue {
-  border-color: rgba(239, 68, 68, 0.5);
+  border-color: var(--theme-error-500);
 }
+
 .today {
-  border-color: rgba(245, 158, 11, 0.6);
+  border-color: var(--theme-warning-500);
 }
+
 .scheduled {
-  border-color: rgba(96, 165, 250, 0.45);
+  border-color: var(--sched-accent);
 }
+
 .head {
   width: 100%;
   display: flex;
@@ -23,52 +34,65 @@
   cursor: pointer;
   text-align: left;
 }
+
 .overdue .head {
   background: rgba(239, 68, 68, 0.12);
 }
+
 .today .head {
   background: rgba(245, 158, 11, 0.14);
 }
+
 .scheduled .head {
   background: rgba(96, 165, 250, 0.1);
 }
+
 .headTitle {
   font-weight: 700;
   font-size: 13px;
 }
+
 .overdue .headTitle {
-  color: #f87171;
+  color: var(--theme-error-500);
 }
+
 .today .headTitle {
-  color: #fbbf24;
+  color: var(--theme-warning-500);
 }
+
 .scheduled .headTitle {
-  color: #93c5fd;
+  color: var(--sched-accent);
 }
+
 .headCount {
   font-size: 12px;
-  color: #cbd2e0;
+  color: var(--theme-elevation-600);
 }
+
 .table {
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
-  color: #cbd2e0;
+  color: var(--theme-elevation-800);
 }
+
 .table thead th {
   text-align: left;
   font-weight: 600;
-  color: #7e8aa0;
+  color: var(--theme-elevation-500);
   padding: 8px 14px;
 }
+
 .table tbody td {
-  border-top: 1px solid #1c2230;
+  border-top: 1px solid var(--theme-elevation-150);
   padding: 9px 14px;
 }
+
 .actions {
   text-align: right;
   white-space: nowrap;
 }
+
 .disburseBtn {
   background: #f59e0b;
   border: none;
@@ -79,28 +103,32 @@
   cursor: pointer;
   margin-right: 8px;
 }
+
 .overdue .disburseBtn {
   background: #ef4444;
   color: #fff;
 }
+
 .earlyBtn {
   background: transparent;
-  border: 1px solid #3a4150;
-  color: #9aa3b5;
+  border: 1px solid var(--theme-elevation-300);
+  color: var(--theme-elevation-500);
   padding: 4px 10px;
   border-radius: 6px;
   cursor: pointer;
   font-size: 11px;
   margin-right: 8px;
 }
+
 .viewBtn {
   background: transparent;
   border: none;
-  color: #6b7280;
+  color: var(--theme-elevation-500);
   cursor: pointer;
 }
+
 .empty {
   padding: 14px;
   text-align: center;
-  color: #6b7280;
+  color: var(--theme-elevation-500);
 }
