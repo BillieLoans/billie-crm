@@ -44,7 +44,7 @@ export function DisbursementTriagePanel() {
           className={`${styles.cell} ${styles.overdue}`}
           data-testid="bucket-overdue"
         >
-          <span className={styles.cellLabel}>⚠ OVERDUE</span>
+          <span className={styles.cellLabel}>⚠ MISSED</span>
           <span className={styles.cellValue}>{overdue}</span>
           <span className={styles.cellSub}>
             {overdue === 0 ? 'none ✓' : `${b?.overdue.totalAmountFormatted} · schedule at risk`}
