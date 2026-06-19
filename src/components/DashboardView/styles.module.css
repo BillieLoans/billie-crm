@@ -41,7 +41,11 @@
 /* Hero tile row */
 .heroRow {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  /* Two tiles now (Overdue Accounts + Approvals) — the Disbursements tile moved
+     into the full-width triage band above. Keep two fixed columns so each tile
+     holds its position regardless of role-gating (Approvals is admin/supervisor
+     only). */
+  grid-template-columns: repeat(2, 1fr);
   gap: 16px;
 }
 
