@@ -27,7 +27,7 @@ interface Props {
 
 const META = {
   overdue: {
-    title: '⚠ OVERDUE — schedule already at risk',
+    title: '⚠ MISSED — past start date, schedule at risk',
     cls: 'overdue',
     dateHead: 'Should have disbursed',
     cta: 'Disburse now',

@@ -28,6 +28,16 @@
   font-size: 22px;
 }
 
+/* Zone heading (Act now / Today's flows) */
+.zoneHeading {
+  color: var(--theme-elevation-500);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin: 8px 0 0;
+}
+
 /* Hero tile row */
 .heroRow {
   display: grid;

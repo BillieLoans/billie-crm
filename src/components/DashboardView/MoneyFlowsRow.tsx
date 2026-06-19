@@ -58,7 +58,7 @@ export function MoneyFlowsRow() {
         testId="money-flows-received"
       />
       <FlowTile
-        label="Disbursed today"
+        label="Cash disbursed today"
         metric={flows?.disbursed}
         isLoading={isLoading}
         testId="money-flows-disbursed"

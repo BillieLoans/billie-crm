@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useDashboard } from '@/hooks/queries/useDashboard'
-import { useOverdueAccounts } from '@/hooks/queries/useOverdueAccounts'
 import { useRecentCustomersStore } from '@/stores/recentCustomers'
 import { useFailedActionsStore } from '@/stores/failed-actions'
 import { formatRelativeTime } from '@/lib/formatters'
@@ -32,19 +31,17 @@ function getShortcutLabel(): string {
 /**
  * Dashboard home page view.
  *
- * Operational triage screen for ops staff. Top-to-bottom narrative:
+ * Operational triage screen for ops staff. Four-zone layout (top→bottom):
  *   1. System health strip (only visible when degraded)
- *   2. Personalised one-line summary
- *   3. Full-width Disbursement triage band (Overdue / Today / Scheduled buckets)
- *   3a. Hero row: Overdue / Approvals
- *   4. Money flows today (placeholder until Phase 2)
- *   5. Recent customers
- *   6. Upcoming payments (grouped by due date)
- *   7. Portfolio Health & Risk (demoted financial KPIs)
+ *   2. Personalised greeting header
+ *   3. Failed-actions alert banner (only when count > 0)
+ *   4. Zone "Act now": Disbursement triage + Overdue / Approvals hero tiles
+ *   5. Zone "Today's flows": Money flows
+ *   6. Recent customers
+ *   7. Portfolio Health & Risk (ECL — demoted financial KPIs)
  */
 export function DashboardView() {
   const { data, isLoading, error } = useDashboard()
-  const { totalCount: overdueCount } = useOverdueAccounts({ pageSize: 1 })
   const recentCustomers = useRecentCustomersStore((s) => s.customers)
   const failedActionsCount = useFailedActionsStore((s) => s.getActiveCount())
   const [shortcutLabel, setShortcutLabel] = useState('⌘K')
@@ -59,27 +56,11 @@ export function DashboardView() {
 
   const greeting = getGreeting()
   const firstName = data?.user?.firstName ?? 'there'
-  const pendingApprovals = data?.actionItems?.pendingApprovalsCount ?? 0
-  const pendingDisbursements = data?.pendingDisbursementsCount ?? 0
   const canSeeApprovals = data?.user?.role === 'admin' || data?.user?.role === 'supervisor'
 
   const customerSummaryMap = new Map(
     data?.recentCustomersSummary?.map((c) => [c.customerId, c]) ?? [],
   )
-
-  const summaryParts: string[] = []
-  if (pendingDisbursements > 0) {
-    summaryParts.push(
-      `${pendingDisbursements} disbursement${pendingDisbursements === 1 ? '' : 's'} ready`,
-    )
-  }
-  if (overdueCount > 0) {
-    summaryParts.push(`${overdueCount} overdue`)
-  }
-  if (canSeeApprovals && pendingApprovals > 0) {
-    summaryParts.push(`${pendingApprovals} approval${pendingApprovals === 1 ? '' : 's'} waiting`)
-  }
-  const summarySuffix = summaryParts.length > 0 ? ' — ' + summaryParts.join(', ') : ''
 
   if (isLoading) {
     return (
@@ -112,21 +93,11 @@ export function DashboardView() {
     <div className={styles.container} data-testid="dashboard-view">
       <SystemHealthStrip />
 
-      <DisbursementTriagePanel />
-
       <div className={styles.header}>
         <h1 className={styles.greeting} data-testid="dashboard-greeting">
           {greeting}, {firstName}!
-          {summarySuffix && <span className={styles.greetingSummary}>{summarySuffix}</span>}
         </h1>
       </div>
-
-      <div className={styles.heroRow} data-testid="hero-tiles">
-        <OverdueHeroTile />
-        {canSeeApprovals && <ApprovalsHeroTile />}
-      </div>
-
-      <MoneyFlowsRow />
 
       {failedActionsCount > 0 && (
         <button
@@ -144,6 +115,19 @@ export function DashboardView() {
           </span>
         </button>
       )}
+
+      <h2 className={styles.zoneHeading}>Act now</h2>
+
+      <DisbursementTriagePanel />
+
+      <div className={styles.heroRow} data-testid="hero-tiles">
+        <OverdueHeroTile />
+        {canSeeApprovals && <ApprovalsHeroTile />}
+      </div>
+
+      <h2 className={styles.zoneHeading}>Today&apos;s flows</h2>
+
+      <MoneyFlowsRow />
 
       <div className={styles.card} data-testid="recent-customers-card">
         <h2 className={styles.cardTitle}>Recent Customers</h2>
