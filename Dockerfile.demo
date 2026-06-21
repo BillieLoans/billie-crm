@@ -117,6 +117,12 @@ COPY --from=pydeps /pip-packages /pip-packages
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+# gRPC clients read proto/*.proto at runtime (resolved as __dirname/../../proto
+# → /app/proto). Next's standalone output trace no longer bundles these under the
+# Next 16 Turbopack build (it did under the Next 15 webpack build), so copy the
+# proto dir explicitly — covers both accounting_ledger and notification_dispatcher.
+COPY --from=builder --chown=nextjs:nodejs /app/proto ./proto
+
 # Copy event processor source
 COPY --chown=nextjs:nodejs event-processor/src ./event-processor/src
 
