@@ -36,7 +36,8 @@ function verifyCloudflareOrigin(request: NextRequest): NextResponse | null {
 }
 
 /**
- * Middleware to handle:
+ * Proxy (the Next.js `middleware` file convention, renamed to `proxy` in Next 16)
+ * to handle:
  * 1. Cloudflare origin verification (all routes except health check)
  * 2. Admin route redirects to break Payload 3.45.0 redirect loop
  *
@@ -154,7 +155,7 @@ function setSecurityHeaders(response: NextResponse): NextResponse {
 const hasPayloadSecret =
   !!process.env.PAYLOAD_SECRET && process.env.PAYLOAD_SECRET !== 'build-placeholder-not-for-production'
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // --- Runtime env validation ---
