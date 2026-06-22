@@ -12,10 +12,11 @@ const WAIVABLE_FEE_TYPES = ['LATE_FEE', 'DISHONOUR_FEE'] as const
  */
 export function useFeesCount(loanAccountId: string | null): number {
   const { data } = useTransactions(loanAccountId, { limit: 100 })
+  const transactions = data?.transactions
 
   const feesCount = useMemo(() => {
-    if (!data?.transactions) return 0
-    return data.transactions.filter((tx) => {
+    if (!transactions) return 0
+    return transactions.filter((tx) => {
       const feeAmount = parseFloat(tx.feeDelta || '0')
       return (
         WAIVABLE_FEE_TYPES.includes(tx.type as (typeof WAIVABLE_FEE_TYPES)[number]) &&

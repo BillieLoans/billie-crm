@@ -188,7 +188,7 @@ export const PeriodCloseWizard: React.FC<PeriodCloseWizardProps> = ({
         // Error handled by mutation
       }
     },
-    [preview?.previewId, acknowledgeAnomaly, userId, userName]
+    [preview, acknowledgeAnomaly, userId, userName]
   )
 
   const handleFinalize = useCallback(async () => {
@@ -213,7 +213,7 @@ export const PeriodCloseWizard: React.FC<PeriodCloseWizardProps> = ({
     } catch {
       // Error handled by mutation
     }
-  }, [preview?.previewId, confirmText, expectedConfirmText, finalizePeriodClose, userId])
+  }, [preview, confirmText, expectedConfirmText, finalizePeriodClose, userId])
 
   const handleStartNew = useCallback(() => {
     setCurrentStep('select')

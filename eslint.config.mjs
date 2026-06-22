@@ -6,14 +6,14 @@ const eslintConfig = [
   ...nextTypescript,
   {
     rules: {
-      // React Compiler lint rules (eslint-plugin-react-hooks v6) are newly enabled as
-      // errors by eslint-config-next 16. Demoted to warnings here to keep the security
-      // upgrade non-breaking — adopting/fixing them is tracked as separate follow-up work.
+      // React Compiler lint rules (eslint-plugin-react-hooks v6, newly enabled by
+      // eslint-config-next 16). purity / use-memo / immutability /
+      // preserve-manual-memoization are enforced as errors (inherited default — all
+      // violations fixed). set-state-in-effect stays a warning: its current ~26 hits
+      // are legitimate patterns (SSR-safe client-only values, form-reset-on-open) where
+      // "fixing" means risky refactors; revisit deliberately. refs/globals kept as warn
+      // alongside it to avoid blocking on the same conservative-pattern family.
       'react-hooks/set-state-in-effect': 'warn',
-      'react-hooks/preserve-manual-memoization': 'warn',
-      'react-hooks/purity': 'warn',
-      'react-hooks/use-memo': 'warn',
-      'react-hooks/immutability': 'warn',
       'react-hooks/refs': 'warn',
       'react-hooks/globals': 'warn',
       '@typescript-eslint/ban-ts-comment': 'warn',

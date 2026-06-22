@@ -114,10 +114,11 @@ export const FeeList: React.FC<FeeListProps> = ({ loanAccountId, onBulkWaive }) 
   const { data, isLoading, isError } = useTransactions(loanAccountId, { limit: 100 })
 
   // Filter to waivable fees
+  const transactions = data?.transactions
   const waivableFees = useMemo(() => {
-    if (!data?.transactions) return []
-    return data.transactions.filter(isWaivableFee)
-  }, [data?.transactions])
+    if (!transactions) return []
+    return transactions.filter(isWaivableFee)
+  }, [transactions])
 
   // Calculate selected fees and total
   const selectedFees = useMemo(() => {
