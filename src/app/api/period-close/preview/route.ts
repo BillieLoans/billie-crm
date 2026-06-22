@@ -13,6 +13,7 @@ import { getLedgerClient } from '@/server/grpc-client'
 import { requireAuth } from '@/lib/auth'
 import { canService } from '@/lib/access'
 import { PeriodClosePreviewSchema } from '@/lib/schemas/api'
+import { mapPreviewResponse } from '@/server/period-close-mapper'
 
 export async function POST(request: NextRequest) {
   try {
@@ -37,7 +38,7 @@ export async function POST(request: NextRequest) {
       requestedBy: String(user.id),
     })
 
-    return NextResponse.json(response)
+    return NextResponse.json(mapPreviewResponse(response))
   } catch (error) {
     console.error('Error generating period close preview:', error)
     return NextResponse.json(
