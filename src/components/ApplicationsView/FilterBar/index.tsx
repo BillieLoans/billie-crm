@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useRef, useEffect } from 'react'
+import React, { useCallback, useMemo, useRef, useEffect } from 'react'
 import { useConversationFiltersStore } from '@/stores/conversationFilters'
 import styles from './styles.module.css'
 
@@ -45,10 +45,9 @@ export function FilterBar() {
     return () => document.removeEventListener('keydown', handler)
   }, [])
 
-  // Debounced search (300ms)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const debouncedSetSearch = useCallback(
-    debounce((value: string) => setFilter('q', value), 300),
+  // Debounced search (300ms) — useMemo so the debounced fn is created once per setFilter
+  const debouncedSetSearch = useMemo(
+    () => debounce((value: string) => setFilter('q', value), 300),
     [setFilter],
   )
 

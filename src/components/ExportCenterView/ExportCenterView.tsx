@@ -101,6 +101,8 @@ export const ExportCenterView: React.FC<ExportCenterViewProps> = ({ userId = 'un
     setWizardOpen(true)
   }, [])
 
+  const [createError, setCreateError] = useState<string | null>(null)
+
   const closeWizard = useCallback(() => {
     setWizardOpen(false)
     setWizardStep('type')
@@ -113,8 +115,6 @@ export const ExportCenterView: React.FC<ExportCenterViewProps> = ({ userId = 'un
       includeCalculationBreakdown: true,
     })
   }, [])
-
-  const [createError, setCreateError] = useState<string | null>(null)
 
   const handleCreateExport = useCallback(async () => {
     if (!wizardState.type) return

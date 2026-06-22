@@ -48,6 +48,9 @@ export function ConversationCard({ conversation }: ConversationCardProps) {
   const isPausedAlert =
     status === 'paused' &&
     updatedAt != null &&
+    // Display-only staleness heuristic; the intentional Date.now() in render is
+    // re-evaluated on each render, which is acceptable for a styling accent.
+    // eslint-disable-next-line react-hooks/purity
     Date.now() - new Date(updatedAt).getTime() > 5 * 60 * 1000
 
   const loanAmountFormatted =
