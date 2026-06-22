@@ -10,6 +10,7 @@ export interface PeriodCloseAnomaly {
   anomalyType: string
   severity: string
   accountId: string
+  customerIdString?: string
   accountNumber?: string
   description: string
   acknowledged: boolean
