@@ -4,9 +4,11 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
  * Anomaly detected during period close preview
  */
 export interface PeriodCloseAnomaly {
-  id: string
-  type: 'BALANCE_DISCREPANCY' | 'MISSING_ACCRUAL' | 'STALE_ECL' | 'UNPROCESSED_EVENT' | 'OTHER'
-  severity: 'low' | 'medium' | 'high' | 'critical'
+  // gRPC (previewPeriodClose) returns these as camelCase of the proto fields
+  // anomaly_id / anomaly_type (keepCase:false) — NOT `id` / `type`.
+  anomalyId: string
+  anomalyType: string
+  severity: string
   accountId: string
   accountNumber?: string
   description: string
