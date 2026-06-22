@@ -13,6 +13,7 @@ import { getLedgerClient } from '@/server/grpc-client'
 import { requireAuth } from '@/lib/auth'
 import { hasApprovalAuthority } from '@/lib/access'
 import { FinalizePeriodCloseSchema } from '@/lib/schemas/api'
+import { mapFinalizeResponse } from '@/server/period-close-mapper'
 
 export async function POST(request: NextRequest) {
   try {
@@ -37,7 +38,7 @@ export async function POST(request: NextRequest) {
       finalizedBy: String(user.id),
     })
 
-    return NextResponse.json(response)
+    return NextResponse.json(mapFinalizeResponse(response))
   } catch (error) {
     console.error('Error finalizing period close:', error)
     return NextResponse.json(

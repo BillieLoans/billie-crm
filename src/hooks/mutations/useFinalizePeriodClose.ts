@@ -5,7 +5,7 @@ interface FinalizeRequest {
   finalizedBy: string
 }
 
-interface GeneratedJournalEntry {
+export interface GeneratedJournalEntry {
   id: string
   type: string
   description: string
@@ -15,7 +15,7 @@ interface GeneratedJournalEntry {
   createdAt: string
 }
 
-interface FinalizeResponse {
+export interface FinalizeResponse {
   success: boolean
   periodDate: string
   finalizedAt: string
