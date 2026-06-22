@@ -179,7 +179,7 @@ export const PeriodCloseWizard: React.FC<PeriodCloseWizardProps> = ({
         // Optimistically update local state
         setLocalAnomalies((prev) =>
           prev.map((a) =>
-            a.id === anomalyId
+            a.anomalyId === anomalyId
               ? { ...a, acknowledged: true, acknowledgedBy: userName, acknowledgedAt: new Date().toISOString() }
               : a
           )
@@ -540,12 +540,12 @@ export const PeriodCloseWizard: React.FC<PeriodCloseWizardProps> = ({
             ) : (
               <div className={styles.anomalyList}>
                 {localAnomalies.map((anomaly) => (
-                  <div key={anomaly.id} className={`${styles.anomalyCard} ${styles[`severity${anomaly.severity}`]}`}>
+                  <div key={anomaly.anomalyId} className={`${styles.anomalyCard} ${styles[`severity${anomaly.severity}`]}`}>
                     <div className={styles.anomalyMeta}>
                       <span className={`${styles.severityBadge} ${styles[anomaly.severity]}`}>
                         {anomaly.severity.toUpperCase()}
                       </span>
-                      <span className={styles.anomalyType}>{anomaly.type.replace(/_/g, ' ')}</span>
+                      <span className={styles.anomalyType}>{(anomaly.anomalyType ?? '').replace(/_/g, ' ')}</span>
                     </div>
                     <p className={styles.anomalyDescription}>{anomaly.description}</p>
                     {anomaly.accountId && (
@@ -567,9 +567,9 @@ export const PeriodCloseWizard: React.FC<PeriodCloseWizardProps> = ({
                         <button
                           type="button"
                           className={styles.acknowledgeBtn}
-                          onClick={() => handleAcknowledge(anomaly.id)}
+                          onClick={() => handleAcknowledge(anomaly.anomalyId)}
                           disabled={isAcknowledging}
-                          data-testid={`acknowledge-${anomaly.id}`}
+                          data-testid={`acknowledge-${anomaly.anomalyId}`}
                         >
                           {isAcknowledging ? 'Acknowledging...' : 'Acknowledge'}
                         </button>
