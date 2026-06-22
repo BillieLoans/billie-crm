@@ -1,3 +1,4 @@
+import type { Payload } from 'payload'
 import type { PeriodClosePreview } from '@/hooks/mutations/usePeriodClosePreview'
 import type { FinalizeResponse } from '@/hooks/mutations/useFinalizePeriodClose'
 
@@ -12,9 +13,32 @@ const num = (v: unknown): number => {
  * camelCased by proto-loader, money/rates as Decimal strings, movement nested under
  * `eclMovement`) into the CRM's flat PeriodClosePreview shape.
  */
-export function mapPreviewResponse(r: any): PeriodClosePreview {
+export async function mapPreviewResponse(r: any, payload: Payload): Promise<PeriodClosePreview> {
   const m = r?.eclMovement
   const anomalies = Array.isArray(r?.anomalies) ? r.anomalies : []
+
+  // Enrich each anomaly with its account's customerIdString so the UI can link to the
+  // customer-keyed servicing route (anomaly.accountId is a loan-account id, not a customer id).
+  const accountIds = [...new Set(anomalies.map((a: any) => a?.accountId).filter(Boolean))]
+  let customerByAccount: Record<string, string> = {}
+  if (accountIds.length > 0) {
+    const accts = await payload.find({
+      collection: 'loan-accounts',
+      where: { loanAccountId: { in: accountIds } },
+      limit: accountIds.length,
+      depth: 0,
+      pagination: false,
+      overrideAccess: true,
+    })
+    customerByAccount = Object.fromEntries(
+      accts.docs.map((d: any) => [d.loanAccountId, d.customerIdString]).filter(([, c]) => c),
+    )
+  }
+  const enrichedAnomalies = anomalies.map((a: any) => ({
+    ...a,
+    customerIdString: customerByAccount[a?.accountId] ?? undefined,
+  }))
+
   return {
     previewId: r?.previewId ?? '',
     periodDate: r?.periodDate ?? '',
@@ -45,7 +69,7 @@ export function mapPreviewResponse(r: any): PeriodClosePreview {
       outCount: b?.accountsExited ?? 0,
       netChange: num(b?.netChange),
     })),
-    anomalies, // gRPC anomaly objects already use anomalyId/anomalyType (matches PeriodCloseAnomaly)
+    anomalies: enrichedAnomalies, // gRPC anomaly objects already use anomalyId/anomalyType (matches PeriodCloseAnomaly)
     anomalyCount: anomalies.length,
     acknowledgedCount: anomalies.filter((a: any) => a?.acknowledged).length,
     reconciled: r?.reconciliation?.isReconciled ?? false,

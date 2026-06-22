@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useCallback, useMemo, useEffect } from 'react'
+import { toast } from 'sonner'
 import { formatCurrency } from '@/lib/formatters'
 import { useClosedPeriods } from '@/hooks/queries/useClosedPeriods'
 import {
@@ -184,8 +185,8 @@ export const PeriodCloseWizard: React.FC<PeriodCloseWizardProps> = ({
               : a
           )
         )
-      } catch {
-        // Error handled by mutation
+      } catch (err) {
+        toast.error('Could not acknowledge anomaly. Please try again or contact support.')
       }
     },
     [preview, acknowledgeAnomaly, userId, userName]
@@ -548,9 +549,9 @@ export const PeriodCloseWizard: React.FC<PeriodCloseWizardProps> = ({
                       <span className={styles.anomalyType}>{(anomaly.anomalyType ?? '').replace(/_/g, ' ')}</span>
                     </div>
                     <p className={styles.anomalyDescription}>{anomaly.description}</p>
-                    {anomaly.accountId && (
+                    {anomaly.customerIdString && (
                       <a
-                        href={`/admin/servicing/${anomaly.accountId}`}
+                        href={`/admin/servicing/${anomaly.customerIdString}?accountId=${encodeURIComponent(anomaly.accountId)}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className={styles.viewAccountLink}

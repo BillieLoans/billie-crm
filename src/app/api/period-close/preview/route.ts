@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
       requestedBy: String(user.id),
     })
 
-    return NextResponse.json(mapPreviewResponse(response))
+    return NextResponse.json(await mapPreviewResponse(response, auth.payload))
   } catch (error) {
     console.error('Error generating period close preview:', error)
     return NextResponse.json(
