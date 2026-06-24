@@ -89,7 +89,7 @@ Same as the cutover flow — see [Laptop prerequisites](#laptop-prerequisites-on
 2. Create role `billie_crm` with a strong password.
 3. Create database `billie_crm` owned by that role.
 4. Copy the **pooled** connection string (host has `-pooler` in it).
-5. Append `?sslmode=require` if not present. Production refuses to start without TLS.
+5. Append `?sslmode=verify-full` if not present. Production refuses to start without TLS. Use `verify-full` (not `require`) so the cert chain and hostname are validated — Neon serves a publicly-trusted cert, so no extra CA config is needed. It also pins the behaviour before `pg` v9 changes what bare `require` means.
 
 ### G2. Provision Redis
 
@@ -104,7 +104,7 @@ $EDITOR infra/fly/env/.env.<env>
 Required keys:
 
 ```
-DATABASE_URI=postgresql://billie_crm:<pwd>@ep-xxx-pooler.<region>.aws.neon.tech/billie_crm?sslmode=require
+DATABASE_URI=postgresql://billie_crm:<pwd>@ep-xxx-pooler.<region>.aws.neon.tech/billie_crm?sslmode=verify-full
 REDIS_URL=rediss://<user>:<pwd>@<host>:<port>
 PAYLOAD_SECRET=<32-byte hex; openssl rand -hex 32>
 # plus the env-specific values your other .env.<env> files have
@@ -231,13 +231,13 @@ Use the Neon UI:
 2. Create role `billie_crm` with a password.
 3. Create database `billie_crm` owned by that role.
 4. Copy the **pooled** connection string (host has `-pooler` in it).
-5. Append `?sslmode=require` if not already present. The processor refuses to start in production without TLS.
+5. Append `?sslmode=verify-full` if not already present. The processor refuses to start in production without TLS. `verify-full` validates the cert chain and hostname (asyncpg honours libpq semantics, where bare `require` would skip verification).
 
 ### 0b. Write the new DSN into the Fly secrets template
 
 ```bash
 $EDITOR infra/fly/env/.env.<env>
-#   DATABASE_URI=postgresql://billie_crm:<pwd>@ep-xxx-pooler.<region>.aws.neon.tech/billie_crm?sslmode=require
+#   DATABASE_URI=postgresql://billie_crm:<pwd>@ep-xxx-pooler.<region>.aws.neon.tech/billie_crm?sslmode=verify-full
 ```
 
 `make pg-migrate` and `make verify-cutover` read `DATABASE_URI` directly from this file — you don't need to export it in your shell.
