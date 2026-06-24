@@ -58,6 +58,13 @@ from .handlers import (
     handle_statement_generated,
     # Aging handler (platform → CRM read-only projection of arrears state)
     handle_loan_aging_updated,
+    # Collection case handlers (platform → CRM read-only projection — BTB-199)
+    handle_collection_case_opened,
+    handle_collection_case_exhausted,
+    handle_collection_case_cured,
+    handle_collection_case_hardship_paused,
+    handle_collection_case_resumed,
+    handle_collection_case_stop_contact_applied,
 )
 from .processor import EventProcessor
 
@@ -192,6 +199,22 @@ def setup_handlers(processor: EventProcessor) -> None:
         "notification.suppression.changed.v1", handle_notification_suppression_changed
     )
     processor.register_handler("statement.generated.v1", handle_statement_generated)
+
+    # =========================================================================
+    # Collection case events (platform → CRM, billie_collection_events SDK).
+    # Emitted by the headless collectionsService (BTB-166) to ChatLedger; project
+    # into the collection_cases read model (BTB-199).
+    # =========================================================================
+    processor.register_handler("collection.case.opened.v1", handle_collection_case_opened)
+    processor.register_handler("collection.case.exhausted.v1", handle_collection_case_exhausted)
+    processor.register_handler("collection.case.cured.v1", handle_collection_case_cured)
+    processor.register_handler(
+        "collection.case.hardship_paused.v1", handle_collection_case_hardship_paused
+    )
+    processor.register_handler("collection.case.resumed.v1", handle_collection_case_resumed)
+    processor.register_handler(
+        "collection.case.stop_contact_applied.v1", handle_collection_case_stop_contact_applied
+    )
 
 
 async def run() -> None:

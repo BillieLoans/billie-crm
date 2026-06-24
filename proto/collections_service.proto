@@ -1,0 +1,129 @@
+syntax = "proto3";
+
+// Canonical contract for the headless collections engine's command + read API,
+// consumed by the Collections CRM (Stream D). Provider: collectionsService
+// (billie-platform-services). Consumer: billie-crm (vendors a copy of this file,
+// same convention as proto/accounting_ledger.proto + proto/notification_dispatcher.proto).
+//
+// Design basis (agreed): operator actions are SYNCHRONOUS gRPC commands, not
+// command-events — the CRM operator needs immediate validation + a verdict. The
+// commands STILL emit the collection.case.* events to ChatLedger (the gRPC is the
+// command *ingress*; the events remain the source of truth for case state and keep
+// the CRM's own projection converging). System-driven transitions (instalment.overdue,
+// payment.received, notification.sent, loan.aging.updated) continue to arrive as
+// events on inbox:collectionsService — both paths funnel into the same pg-atomic FSM
+// (SELECT ... FOR UPDATE), so they serialise safely per account.
+//
+// Conventions:
+//   - Money fields are decimal strings (e.g. "1234.56") — matches the ledger gRPC.
+//   - Timestamps are google.protobuf.Timestamp (UTC) — matches the dispatcher proto.
+//   - Every command carries operator_id (for the contact/audit log) and
+//     idempotency_key (CRM-generated; replay returns the original result, no re-apply).
+//   - The engine resolves customer_id from the accounts read-client (BTB-154); the
+//     CRM does NOT pass it on commands.
+//
+// gRPC status codes the CRM surfaces (message carries a stable, human-readable reason):
+//   NOT_FOUND            unknown account_id
+//   FAILED_PRECONDITION  command invalid for the case's current state (reason set)
+//   INVALID_ARGUMENT     missing/blank required field
+//   OK (idempotent)      idempotency_key replay → original CaseActionResponse, no-op apply
+//
+// ── Build phasing (see docs/superpowers/specs/2026-06-24-collections-grpc-provider.md) ──
+//   PHASE 1 (buildable now): FlagHardship, ResumeFromHardship, ApplyStopContact,
+//                            GetContactLog. AdvanceToNextStep with state preconditions
+//                            only (economic gate deferred).
+//   PHASE 2 (BLOCKED on the cost-of-recovery engine, which is unspecified):
+//                            GetCaseEconomics, ListCaseEconomics, and the economic-gate
+//                            enforcement inside AdvanceToNextStep.
+
+package billie.collections.v1;
+
+import "google/protobuf/timestamp.proto";
+
+service CollectionsService {
+  // ── Commands (operator actions) — sync; apply FSM txn → emit collection.case.* → return ──
+  rpc FlagHardship(FlagHardshipRequest)      returns (CaseActionResponse);
+  rpc ResumeFromHardship(ResumeRequest)      returns (CaseActionResponse);
+  rpc ApplyStopContact(StopContactRequest)   returns (CaseActionResponse);
+  // AdvanceToNextStep — the human escalation gate. Phase 1: enforces state
+  // preconditions (rejects on terminal/exhausted/cured/stopped_contact) and advances
+  // the rung + commands the next send. Phase 2: also enforces the cost-of-recovery
+  // gate (rejects FAILED_PRECONDITION when GetCaseEconomics.gate_result != PASS).
+  rpc AdvanceToNextStep(AdvanceRequest)      returns (CaseActionResponse);
+
+  // ── Reads ──
+  // Phase 1 — backed by collections.send_log (+ the count(*) cap windows).
+  rpc GetContactLog(CaseRef)                 returns (ContactLog);
+
+  // Phase 2 — BLOCKED on the cost-of-recovery engine (unspecified). Defined here so the
+  // CRM can code against the contract; until the engine lands the provider returns
+  // gate_result = NOT_APPLICABLE and empty economics (never errors — see consumer doc).
+  rpc GetCaseEconomics(CaseRef)              returns (CaseEconomics);
+  rpc ListCaseEconomics(CaseRefs)            returns (CaseEconomicsList);
+
+  // Future, pending product confirmation (do they affect cadence? → engine commands):
+  //   rpc RecordArrangement(ArrangementRequest) returns (CaseActionResponse);
+  //   rpc Park(ParkRequest)                     returns (CaseActionResponse);
+}
+
+message CaseRef  { string account_id = 1; }
+message CaseRefs { repeated string account_ids = 1; }
+
+// ── Command requests ──
+message FlagHardshipRequest { string account_id = 1; string operator_id = 2; string reason = 3; string idempotency_key = 4; }
+message ResumeRequest       { string account_id = 1; string operator_id = 2; string idempotency_key = 3; }
+message StopContactRequest  { string account_id = 1; string operator_id = 2; string reason = 3; string idempotency_key = 4; }
+message AdvanceRequest      { string account_id = 1; string operator_id = 2; string idempotency_key = 3; }
+
+message CaseActionResponse {
+  string account_id = 1;
+  string new_state = 2;        // e.g. "paused_hardship" | "active" | "stopped_contact"
+  string emitted_event_id = 3; // the collection.case.* event_id, for trace/dedup
+}
+
+// ── Economics (Phase 2 — cost-of-recovery engine) ──
+enum GateStatus { GATE_UNSPECIFIED = 0; PASS = 1; FAIL = 2; NOT_APPLICABLE = 3; }
+message GateResult { GateStatus status = 1; string reason = 2; }
+
+message CostLedgerEntry {
+  string label = 1;
+  string amount = 2;    // decimal string
+  string category = 3;  // "production" | "hard"
+  bool recoverable = 4;
+}
+
+message NextStepPreview {
+  int32 rung = 1;
+  string channel = 2;   // "sms" | "email"
+  string template = 3;
+  string subject = 4;
+  string body = 5;      // rendered — what the customer would see
+}
+
+message CaseEconomics {
+  string account_id = 1;
+  string amount_owed = 2;            // frozen A (principal + original fee − payments)
+  string cost_of_next_step = 3;
+  string expected_net_recovery = 4;
+  GateResult gate_result = 5;
+  repeated CostLedgerEntry cost_ledger = 6;
+  NextStepPreview next_step_preview = 7;
+}
+message CaseEconomicsList { repeated CaseEconomics items = 1; }
+
+// ── Contact log (Phase 1 — collections.send_log) ──
+message ContactCapStatus {
+  int32 sent_7d = 1;  int32 cap_7d = 2;      // e.g. 2 / 3
+  int32 sent_month = 3; int32 cap_month = 4; // e.g. 6 / 10
+}
+message ContactLogEntry {
+  google.protobuf.Timestamp sent_at = 1;
+  string channel = 2;
+  string template = 3;
+  string outcome = 4;   // "sent" | "failed" | "skipped" (+ reason)
+}
+message ContactLog {
+  string account_id = 1;
+  repeated ContactLogEntry entries = 2;
+  ContactCapStatus contact_cap_status = 3;
+}

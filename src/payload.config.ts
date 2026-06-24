@@ -18,6 +18,7 @@ import { LoanAccounts } from './collections/LoanAccounts'
 import { WriteOffRequests } from './collections/WriteOffRequests'
 import { ContactNotes } from './collections/ContactNotes'
 import { Notifications } from './collections/Notifications'
+import { CollectionsCases } from './collections/CollectionsCases'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -127,7 +128,7 @@ export default buildConfig({
       },
     },
   },
-  collections: [Users, Media, Customers, Conversations, Applications, LoanAccounts, WriteOffRequests, ContactNotes, Notifications],
+  collections: [Users, Media, Customers, Conversations, Applications, LoanAccounts, WriteOffRequests, ContactNotes, Notifications, CollectionsCases],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || 'build-placeholder-not-for-production',
   typescript: {
@@ -182,6 +183,28 @@ export default buildConfig({
               ),
               conversationsByCustomerIdx: index('conversations_by_customer_idx').on(
                 t.customerIdString,
+                desc(t.updatedAt),
+              ),
+            }),
+          })
+        }
+
+        // Compound indexes for the collections worklist grid (BTB-199). Single
+        // `index: true` on the collection can't express these; mirror the
+        // conversations monitor-grid pattern above.
+        const collectionCases = (schema.tables as Record<string, unknown>).collection_cases as
+          | Parameters<typeof extendTable>[0]['table']
+          | undefined
+        if (collectionCases) {
+          extendTable({
+            table: collectionCases,
+            extraConfig: (t) => ({
+              collectionCasesWorklistIdx: index('collection_cases_worklist_idx').on(
+                t.state,
+                desc(t.updatedAt),
+              ),
+              collectionCasesByCustomerIdx: index('collection_cases_by_customer_idx').on(
+                t.customerId,
                 desc(t.updatedAt),
               ),
             }),

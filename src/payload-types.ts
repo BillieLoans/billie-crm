@@ -76,6 +76,7 @@ export interface Config {
     'write-off-requests': WriteOffRequest;
     'contact-notes': ContactNote;
     notifications: Notification;
+    'collection-cases': CollectionCase;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -92,6 +93,7 @@ export interface Config {
     'write-off-requests': WriteOffRequestsSelect<false> | WriteOffRequestsSelect<true>;
     'contact-notes': ContactNotesSelect<false> | ContactNotesSelect<true>;
     notifications: NotificationsSelect<false> | NotificationsSelect<true>;
+    'collection-cases': CollectionCasesSelect<false> | CollectionCasesSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -1354,6 +1356,50 @@ export interface Notification {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "collection-cases".
+ */
+export interface CollectionCase {
+  id: string;
+  /**
+   * Ledger account_id — one case per advance (natural key)
+   */
+  accountId: string;
+  /**
+   * Resolved customer link (may be null if customer not yet projected)
+   */
+  customerRef?: (string | null) | Customer;
+  /**
+   * Customer ID string from the event (BTB-154 provenance)
+   */
+  customerId?: string | null;
+  /**
+   * Base lifecycle state. Cross-cutting hardship / stop-contact are flags.
+   */
+  state?: ('open' | 'awaiting_human' | 'cured') | null;
+  hardshipPaused?: boolean | null;
+  stoppedContact?: boolean | null;
+  /**
+   * Snapshot from the event; live amount comes from the ledger
+   */
+  overdueAmount?: number | null;
+  daysOverdue?: number | null;
+  /**
+   * Last automated reminder step sent (max 5); set on exhaustion
+   */
+  lastStep?: number | null;
+  dueDate?: string | null;
+  openedAt?: string | null;
+  curedAt?: string | null;
+  exhaustedAt?: string | null;
+  pausedAt?: string | null;
+  resumedAt?: string | null;
+  stopContactAt?: string | null;
+  correlationId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
 export interface PayloadKv {
@@ -1411,6 +1457,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'notifications';
         value: string | Notification;
+      } | null)
+    | ({
+        relationTo: 'collection-cases';
+        value: string | CollectionCase;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -1988,6 +2038,31 @@ export interface NotificationsSelect<T extends boolean = true> {
         setAt?: T;
         expiresAt?: T;
       };
+  createdAt?: T;
+  updatedAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "collection-cases_select".
+ */
+export interface CollectionCasesSelect<T extends boolean = true> {
+  accountId?: T;
+  customerRef?: T;
+  customerId?: T;
+  state?: T;
+  hardshipPaused?: T;
+  stoppedContact?: T;
+  overdueAmount?: T;
+  daysOverdue?: T;
+  lastStep?: T;
+  dueDate?: T;
+  openedAt?: T;
+  curedAt?: T;
+  exhaustedAt?: T;
+  pausedAt?: T;
+  resumedAt?: T;
+  stopContactAt?: T;
+  correlationId?: T;
   createdAt?: T;
   updatedAt?: T;
 }

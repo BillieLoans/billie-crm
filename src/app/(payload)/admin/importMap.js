@@ -3,6 +3,7 @@ import { NotificationAction as NotificationAction_ff7594e27eaf34e7ce9acae213b054
 import { GoogleLoginButton as GoogleLoginButton_f8eb56cd8fd98e23e8bcaf648a37c729 } from '@/components/Auth/GoogleLoginButton'
 import { NavSearchTrigger as NavSearchTrigger_aef8b4b7b9afc7097ff45e7590131c08 } from '@/components/navigation/NavSearchTrigger'
 import { NavDashboardLink as NavDashboardLink_8ed26f5dfcf4b8f60da98c3488976ae8 } from '@/components/navigation/NavDashboardLink'
+import { NavApplicationsLink as NavApplicationsLink_554f3cd5ec77593b1109c73a71b4e7f2 } from '@/components/navigation/NavApplicationsLink'
 import { NavAccountsLink as NavAccountsLink_f9e90e2a5a25699ab203b1e93b9f79d6 } from '@/components/navigation/NavAccountsLink'
 import { NavCollectionsLink as NavCollectionsLink_cace573cc395aa45fa1be624b4874bcd } from '@/components/navigation/NavCollectionsLink'
 import { NavApprovalsLink as NavApprovalsLink_432895ce587e4825ef60ac4a4de8aa43 } from '@/components/navigation/NavApprovalsLink'
@@ -10,7 +11,6 @@ import { NavPeriodCloseLink as NavPeriodCloseLink_b876b3abd416c3d860c4802b5c1185
 import { NavECLConfigLink as NavECLConfigLink_3ff0f20809012ed106da89f9feaf716c } from '@/components/navigation/NavECLConfigLink'
 import { NavExportsLink as NavExportsLink_30210b8f1b8d6622c22618d359a47328 } from '@/components/navigation/NavExportsLink'
 import { NavInvestigationLink as NavInvestigationLink_25d4a0e46dfdaebb4b30fe5c09ac4503 } from '@/components/navigation/NavInvestigationLink'
-import { NavApplicationsLink as NavApplicationsLink_554f3cd5ec77593b1109c73a71b4e7f2 } from '@/components/navigation/NavApplicationsLink'
 import { default as default_2aef381f6a0e89088ab303e1162933ca } from '@/providers'
 import { DashboardViewWithTemplate as DashboardViewWithTemplate_aa38ffaef1440457ff25f89c94f88b6b } from '@/components/DashboardView/DashboardViewWithTemplate'
 import { ServicingViewWithTemplate as ServicingViewWithTemplate_04dbd51012de8c56c1deb3ec9516015c } from '@/components/ServicingView/ServicingViewWithTemplate'
@@ -25,13 +25,16 @@ import { ECLConfigViewWithTemplate as ECLConfigViewWithTemplate_da54698be16fc6d4
 import { ExportCenterViewWithTemplate as ExportCenterViewWithTemplate_df012e52e067a6044c3439dd142ed735 } from '@/components/ExportCenterView/ExportCenterViewWithTemplate'
 import { InvestigationViewWithTemplate as InvestigationViewWithTemplate_da95a625101a2d97fc47681066b86998 } from '@/components/InvestigationView/InvestigationViewWithTemplate'
 import { ApplicationsViewWithTemplate as ApplicationsViewWithTemplate_d004262689768525c348b9fc1d1da517 } from '@/components/ApplicationsView/ApplicationsViewWithTemplate'
+import { CollectionCards as CollectionCards_f9c02e79a4aed9a3924487c0cd4cafb1 } from '@payloadcms/next/rsc'
 
+/** @type import('payload').ImportMap */
 export const importMap = {
   "@/components/LoanAccountServicing#LoanAccountServicing": LoanAccountServicing_ddd43f8b2788d92f39012f5e3f407ad6,
   "@/components/Notifications/NotificationAction#NotificationAction": NotificationAction_ff7594e27eaf34e7ce9acae213b05415,
   "@/components/Auth/GoogleLoginButton#GoogleLoginButton": GoogleLoginButton_f8eb56cd8fd98e23e8bcaf648a37c729,
   "@/components/navigation/NavSearchTrigger#NavSearchTrigger": NavSearchTrigger_aef8b4b7b9afc7097ff45e7590131c08,
   "@/components/navigation/NavDashboardLink#NavDashboardLink": NavDashboardLink_8ed26f5dfcf4b8f60da98c3488976ae8,
+  "@/components/navigation/NavApplicationsLink#NavApplicationsLink": NavApplicationsLink_554f3cd5ec77593b1109c73a71b4e7f2,
   "@/components/navigation/NavAccountsLink#NavAccountsLink": NavAccountsLink_f9e90e2a5a25699ab203b1e93b9f79d6,
   "@/components/navigation/NavCollectionsLink#NavCollectionsLink": NavCollectionsLink_cace573cc395aa45fa1be624b4874bcd,
   "@/components/navigation/NavApprovalsLink#NavApprovalsLink": NavApprovalsLink_432895ce587e4825ef60ac4a4de8aa43,
@@ -39,7 +42,6 @@ export const importMap = {
   "@/components/navigation/NavECLConfigLink#NavECLConfigLink": NavECLConfigLink_3ff0f20809012ed106da89f9feaf716c,
   "@/components/navigation/NavExportsLink#NavExportsLink": NavExportsLink_30210b8f1b8d6622c22618d359a47328,
   "@/components/navigation/NavInvestigationLink#NavInvestigationLink": NavInvestigationLink_25d4a0e46dfdaebb4b30fe5c09ac4503,
-  "@/components/navigation/NavApplicationsLink#NavApplicationsLink": NavApplicationsLink_554f3cd5ec77593b1109c73a71b4e7f2,
   "@/providers#default": default_2aef381f6a0e89088ab303e1162933ca,
   "@/components/DashboardView/DashboardViewWithTemplate#DashboardViewWithTemplate": DashboardViewWithTemplate_aa38ffaef1440457ff25f89c94f88b6b,
   "@/components/ServicingView/ServicingViewWithTemplate#ServicingViewWithTemplate": ServicingViewWithTemplate_04dbd51012de8c56c1deb3ec9516015c,
@@ -53,5 +55,6 @@ export const importMap = {
   "@/components/ECLConfigView/ECLConfigViewWithTemplate#ECLConfigViewWithTemplate": ECLConfigViewWithTemplate_da54698be16fc6d457187852eba8f854,
   "@/components/ExportCenterView/ExportCenterViewWithTemplate#ExportCenterViewWithTemplate": ExportCenterViewWithTemplate_df012e52e067a6044c3439dd142ed735,
   "@/components/InvestigationView/InvestigationViewWithTemplate#InvestigationViewWithTemplate": InvestigationViewWithTemplate_da95a625101a2d97fc47681066b86998,
-  "@/components/ApplicationsView/ApplicationsViewWithTemplate#ApplicationsViewWithTemplate": ApplicationsViewWithTemplate_d004262689768525c348b9fc1d1da517
+  "@/components/ApplicationsView/ApplicationsViewWithTemplate#ApplicationsViewWithTemplate": ApplicationsViewWithTemplate_d004262689768525c348b9fc1d1da517,
+  "@payloadcms/next/rsc#CollectionCards": CollectionCards_f9c02e79a4aed9a3924487c0cd4cafb1
 }
