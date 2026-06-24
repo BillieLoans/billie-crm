@@ -25,6 +25,38 @@ from .config import settings
 logger = structlog.get_logger()
 
 
+# collection.case.* event-type → billie_collection_events model class name.
+# The collection SDK ships flat pydantic models but no parser (unlike the other
+# SDKs), so the processor maps type → model itself.
+_COLLECTION_EVENT_MODELS = {
+    "collection.case.opened.v1": "CollectionCaseOpenedV1",
+    "collection.case.exhausted.v1": "CollectionCaseExhaustedV1",
+    "collection.case.cured.v1": "CollectionCaseCuredV1",
+    "collection.case.hardship_paused.v1": "CollectionCaseHardshipPausedV1",
+    "collection.case.resumed.v1": "CollectionCaseResumedV1",
+    "collection.case.stop_contact_applied.v1": "CollectionCaseStopContactAppliedV1",
+}
+
+
+def _parse_collection_event(event_type: str, env: dict[str, Any]) -> Any:
+    """Validate a collection.case.* payload into its billie_collection_events model.
+
+    The SDK is imported lazily so this module still loads where the SDK isn't
+    installed (dev venv / unrelated test paths). Unknown ``collection.*`` types
+    fall back to the envelope dict.
+    """
+    model_name = _COLLECTION_EVENT_MODELS.get(event_type)
+    if model_name is None:
+        return env
+    import billie_collection_events.models as collection_models
+
+    model_cls = getattr(collection_models, model_name)
+    payload = env.get("payload") or env.get("dat") or {}
+    if isinstance(payload, str):
+        payload = json.loads(payload)
+    return model_cls.model_validate(payload)
+
+
 def _check_tls_urls(redis_url: str, database_uri: str) -> None:
     """Fail fast in production if connection URLs are misconfigured.
 
@@ -660,6 +692,12 @@ class EventProcessor:
             # customers) correctly type `rec` as a list, so this is aging-only.
             aging_data = {k: v for k, v in sdk_data.items() if k != "rec"}
             return parse_aging_event(aging_data)
+
+        elif event_type.startswith("collection.case."):
+            # collectionsService (BTB-166) platform events → CRM collection_cases
+            # read model. Map type → billie_collection_events model and validate
+            # the payload (the SDK has no parser). Handlers receive the flat model.
+            return _parse_collection_event(event_type, sanitize_envelope(sanitized))
 
         else:
             # Chat/conversation events — sanitize envelope so payload JSON string

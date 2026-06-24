@@ -56,6 +56,14 @@ from .notification import (
 from .aging import (
     handle_loan_aging_updated,
 )
+from .collections import (
+    handle_collection_case_opened,
+    handle_collection_case_exhausted,
+    handle_collection_case_cured,
+    handle_collection_case_hardship_paused,
+    handle_collection_case_resumed,
+    handle_collection_case_stop_contact_applied,
+)
 
 __all__ = [
     # Account handlers
@@ -106,4 +114,11 @@ __all__ = [
     "handle_statement_generated",
     # Aging handler (platform → CRM read-only projection of arrears state)
     "handle_loan_aging_updated",
+    # Collection case handlers (platform → CRM read-only projection — BTB-199)
+    "handle_collection_case_opened",
+    "handle_collection_case_exhausted",
+    "handle_collection_case_cured",
+    "handle_collection_case_hardship_paused",
+    "handle_collection_case_resumed",
+    "handle_collection_case_stop_contact_applied",
 ]
