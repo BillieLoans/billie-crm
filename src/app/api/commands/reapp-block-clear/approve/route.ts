@@ -26,7 +26,7 @@ import { hasApprovalAuthority } from '@/lib/access'
 import { BlockClearApproveCommandSchema } from '@/lib/events/schemas'
 import { createAndPublishEvent, EventPublishError } from '@/server/event-publisher'
 import { publishClearAuthorized } from '@/server/chatledger-publisher'
-import { EVENT_TYPE_BLOCK_CLEAR_APPROVAL_APPROVED } from '@/lib/events/config'
+import { EVENT_TYPE_BLOCK_CLEAR_APPROVAL_APPROVED, type ClearableReason } from '@/lib/events/config'
 import type { BlockClearApprovalApprovedPayload } from '@/lib/events/types'
 
 export async function POST(request: NextRequest) {
@@ -111,6 +111,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // 5b. Data-integrity guard — these fields are always set by the request route;
+    //     guard both narrows the types and protects against a corrupt row.
+    if (
+      !doc.canonicalCustomerId ||
+      !doc.justification ||
+      !doc.requestNumber ||
+      !Array.isArray(doc.reasons)
+    ) {
+      return NextResponse.json(
+        { error: { code: 'DATA_INTEGRITY', message: 'Stored block-clear request is incomplete.' } },
+        { status: 500 },
+      )
+    }
+
     const approverName = user.firstName
       ? `${user.firstName}${user.lastName ? ` ${user.lastName}` : ''}`
       : user.email || 'Unknown User'
@@ -125,7 +139,7 @@ export async function POST(request: NextRequest) {
     // leaves the CRM request row in `pending` (ops-visible) — future outbox/saga work.
     await publishClearAuthorized({
       canonical_customer_id: doc.canonicalCustomerId,
-      reasons: doc.reasons,
+      reasons: doc.reasons as ClearableReason[],
       operator_id: String(doc.requestedBy),
       justification: doc.justification,
       request_id: cmd.requestId,
