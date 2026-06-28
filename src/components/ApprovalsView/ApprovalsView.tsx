@@ -4,6 +4,7 @@ import React, { useState, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { stringify } from 'qs-esm'
 import { ApprovalsList } from './ApprovalsList'
+import { BlockClearList } from './BlockClearList'
 import { HistoryTab } from './HistoryTab'
 import { Breadcrumb } from '@/components/Breadcrumb'
 import styles from './styles.module.css'
@@ -50,7 +51,7 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
     queryFn: async () => {
       const queryString = stringify(
         { where: { status: { equals: 'pending' } }, limit: 0 },
-        { addQueryPrefix: true }
+        { addQueryPrefix: true },
       )
       const res = await fetch(`/api/write-off-requests${queryString}`)
       if (!res.ok) return 0
@@ -68,8 +69,8 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
           <span className={styles.accessDeniedIcon}>🔒</span>
           <h2 className={styles.accessDeniedTitle}>Access Denied</h2>
           <p className={styles.accessDeniedText}>
-            You don&apos;t have permission to view the approvals queue.
-            This area is restricted to supervisors and administrators.
+            You don&apos;t have permission to view the approvals queue. This area is restricted to
+            supervisors and administrators.
           </p>
         </div>
       </div>
@@ -83,9 +84,7 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
 
       {/* Header */}
       <div className={styles.approvalsHeader}>
-        <h1 className={styles.approvalsTitle}>
-          Write-Off Approvals
-        </h1>
+        <h1 className={styles.approvalsTitle}>Write-Off Approvals</h1>
       </div>
 
       {/* Tab Navigation */}
@@ -125,6 +124,28 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
       {activeTab === 'pending' && (
         <div role="tabpanel" id="panel-pending" aria-labelledby="tab-pending">
           <ApprovalsList currentUserId={userId} currentUserName={userName} />
+
+          {/* Block-clear requests queue — additive section, parallel to write-offs */}
+          <div
+            style={{
+              marginTop: '2.5rem',
+              borderTop: '1px solid var(--border)',
+              paddingTop: '1.5rem',
+            }}
+            data-testid="block-clears-section"
+          >
+            <h2
+              style={{
+                fontSize: '1.125rem',
+                fontWeight: 600,
+                margin: '0 0 1rem 0',
+                color: 'inherit',
+              }}
+            >
+              Block Clear Requests
+            </h2>
+            <BlockClearList currentUserId={userId} currentUserName={userName} />
+          </div>
         </div>
       )}
       {activeTab === 'history' && (
