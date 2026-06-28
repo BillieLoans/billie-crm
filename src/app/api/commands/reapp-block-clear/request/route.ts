@@ -96,6 +96,7 @@ export async function POST(request: NextRequest) {
       { status: 202 },
     )
   } catch (error) {
+    console.error('[BlockClear Request] Error:', error)
     if (error instanceof EventPublishError) {
       return NextResponse.json(
         {
@@ -107,7 +108,6 @@ export async function POST(request: NextRequest) {
         { status: 503 },
       )
     }
-    console.error('[BlockClear Request] Error:', error)
     return NextResponse.json(
       { error: { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred.' } },
       { status: 500 },

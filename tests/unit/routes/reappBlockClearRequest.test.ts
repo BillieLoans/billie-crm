@@ -115,6 +115,26 @@ describe('POST /api/commands/reapp-block-clear/request', () => {
 
     const arg = vi.mocked(createAndPublishEvent).mock.calls[0][0]
     expect(arg.typ).toBe('block_clear_approval.requested.v1')
+    expect(arg.payload.requestedBy).toBe('ops-1')
+    expect(arg.payload.reasons).toEqual(['PRIOR_DEFAULT'])
+    expect(arg.payload.justification).toBe('credit remediation complete')
+  })
+
+  it('(b2) PRIOR_SERIOUS_ARREARS (maker-checker) → createAndPublishEvent called; publishClearAuthorized NOT called; 202', async () => {
+    const res = await POST(
+      makeRequest({
+        canonicalCustomerId: 'c123',
+        reasons: ['PRIOR_SERIOUS_ARREARS'],
+        justification: 'arrears resolved',
+      }) as any,
+    )
+
+    expect(res.status).toBe(202)
+    expect(vi.mocked(createAndPublishEvent)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(publishClearAuthorized)).not.toHaveBeenCalled()
+
+    const arg = vi.mocked(createAndPublishEvent).mock.calls[0][0]
+    expect(arg.typ).toBe('block_clear_approval.requested.v1')
   })
 
   it('(c) invalid body (empty reasons array) → 400; no publish calls', async () => {

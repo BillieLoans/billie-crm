@@ -48,20 +48,24 @@ export async function POST(request: NextRequest) {
       limit: 1,
     })
 
-    if (existingRequest.docs.length > 0) {
-      const originalRequest = existingRequest.docs[0]
-      const isOriginalRequester = String(originalRequest.requestedBy) === String(user.id)
-      if (!isOriginalRequester && !hasApprovalAuthority(user)) {
-        return NextResponse.json(
-          {
-            error: {
-              code: 'FORBIDDEN',
-              message: 'Only the original requester or a supervisor can cancel this request.',
-            },
+    if (existingRequest.docs.length === 0) {
+      return NextResponse.json(
+        { error: { code: 'NOT_FOUND', message: 'Block clear request not found.' } },
+        { status: 404 },
+      )
+    }
+    const originalRequest = existingRequest.docs[0]
+    const isOriginalRequester = String(originalRequest.requestedBy) === String(user.id)
+    if (!isOriginalRequester && !hasApprovalAuthority(user)) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'FORBIDDEN',
+            message: 'Only the original requester or a supervisor can cancel this request.',
           },
-          { status: 403 },
-        )
-      }
+        },
+        { status: 403 },
+      )
     }
 
     // 4. Build event payload

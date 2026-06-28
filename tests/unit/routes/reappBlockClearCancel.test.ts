@@ -83,6 +83,8 @@ describe('POST /api/commands/reapp-block-clear/cancel', () => {
 
     const arg = vi.mocked(createAndPublishEvent).mock.calls[0][0]
     expect(arg.typ).toBe('block_clear_approval.cancelled.v1')
+    expect(arg.payload.cancelledBy).toBe('ops-1')
+    expect(arg.payload.requestId).toBe('req-abc')
   })
 
   it('invalid body (missing requestNumber) → 400', async () => {
@@ -94,6 +96,72 @@ describe('POST /api/commands/reapp-block-clear/cancel', () => {
     )
 
     expect(res.status).toBe(400)
+    expect(vi.mocked(createAndPublishEvent)).not.toHaveBeenCalled()
+  })
+
+  it('different user without approval authority → 403, event NOT published', async () => {
+    // requester is 'other-user', auth user is 'ops-2' with role 'operations' (no approval authority)
+    mockFind.mockResolvedValueOnce({ docs: [{ requestedBy: 'other-user' }] })
+    const { requireAuth } = await import('@/lib/auth')
+    vi.mocked(requireAuth).mockResolvedValueOnce({
+      user: {
+        id: 'ops-2',
+        firstName: 'Other',
+        lastName: undefined,
+        role: 'operations',
+        email: 'other@x',
+      },
+      payload: { find: mockFind },
+    } as any)
+
+    const res = await POST(
+      makeRequest({
+        requestId: 'req-abc',
+        requestNumber: 'RBC-123',
+      }) as any,
+    )
+
+    expect(res.status).toBe(403)
+    expect(vi.mocked(createAndPublishEvent)).not.toHaveBeenCalled()
+  })
+
+  it("supervisor (approval authority) cancelling someone else's request → 202, event published", async () => {
+    // requester is 'other-user', auth user is a supervisor
+    mockFind.mockResolvedValueOnce({ docs: [{ requestedBy: 'other-user' }] })
+    const { requireAuth } = await import('@/lib/auth')
+    vi.mocked(requireAuth).mockResolvedValueOnce({
+      user: {
+        id: 'sup-1',
+        firstName: 'Sup',
+        lastName: undefined,
+        role: 'supervisor',
+        email: 'sup@x',
+      },
+      payload: { find: mockFind },
+    } as any)
+
+    const res = await POST(
+      makeRequest({
+        requestId: 'req-xyz',
+        requestNumber: 'RBC-456',
+      }) as any,
+    )
+
+    expect(res.status).toBe(202)
+    expect(vi.mocked(createAndPublishEvent)).toHaveBeenCalledTimes(1)
+  })
+
+  it('not found (payload.find returns empty docs) → 404, event NOT published', async () => {
+    mockFind.mockResolvedValueOnce({ docs: [] })
+
+    const res = await POST(
+      makeRequest({
+        requestId: 'req-missing',
+        requestNumber: 'RBC-999',
+      }) as any,
+    )
+
+    expect(res.status).toBe(404)
     expect(vi.mocked(createAndPublishEvent)).not.toHaveBeenCalled()
   })
 })
