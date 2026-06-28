@@ -1,0 +1,265 @@
+/* BlockClear — ClearBlockModal + ClearBlockButton styles */
+
+/* ===== Modal Overlay ===== */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+
+.modalContent {
+  background: var(--theme-elevation-50, #1a1a1a);
+  border: 1px solid var(--theme-elevation-200, #333);
+  border-radius: 12px;
+  max-width: 520px;
+  width: 100%;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+}
+
+.modalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--theme-elevation-200, #333);
+}
+
+.modalTitle {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--theme-text, #fff);
+}
+
+.modalCloseBtn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--theme-elevation-500, #888);
+  font-size: 16px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.modalCloseBtn:hover:not(:disabled) {
+  background: var(--theme-elevation-100, #2a2a2a);
+}
+
+.modalCloseBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.modalBody {
+  padding: 20px;
+}
+
+.modalFooter {
+  display: flex;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--theme-elevation-200, #333);
+}
+
+/* ===== Approval Notice ===== */
+.approvalNotice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 6px;
+  font-size: 13px;
+  color: #f59e0b;
+  margin-bottom: 16px;
+}
+
+/* ===== Form Fields ===== */
+.fieldGroup {
+  margin-bottom: 16px;
+}
+
+.fieldLabel {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--theme-text, #fff);
+}
+
+.checkboxList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.checkboxLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--theme-text, #fff);
+  cursor: pointer;
+}
+
+.checkboxLabel input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.checkboxLabel input[type='checkbox']:disabled {
+  cursor: not-allowed;
+}
+
+.approvalBadge {
+  display: inline-block;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 4px;
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-left: 4px;
+}
+
+.textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--theme-elevation-200, #444);
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 100px;
+  outline: none;
+  background: var(--theme-elevation-100, #2a2a2a);
+  color: var(--theme-text, #fff);
+  box-sizing: border-box;
+}
+
+.textarea:focus {
+  box-shadow: 0 0 0 2px #3b82f6;
+  border-color: #3b82f6;
+}
+
+.textarea:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.charCount {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--theme-elevation-500, #888);
+}
+
+/* ===== Modal Buttons ===== */
+.cancelBtn {
+  flex: 1;
+  padding: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  border: 1px solid var(--theme-elevation-200, #444);
+  border-radius: 6px;
+  background: var(--theme-elevation-100, #2a2a2a);
+  color: var(--theme-text, #fff);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.cancelBtn:hover:not(:disabled) {
+  background: var(--theme-elevation-150, #333);
+}
+
+.cancelBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.submitBtn {
+  flex: 1;
+  padding: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  border: none;
+  border-radius: 6px;
+  background: #3b82f6;
+  color: #fff;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.submitBtn:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+.submitBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ===== ClearBlockButton (inline trigger) ===== */
+.clearBlockContainer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.clearBlockBtn {
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  border-radius: 6px;
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.clearBlockBtn:hover {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.6);
+}
+
+.clearBlockBtnDisabled {
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid var(--theme-elevation-200, #444);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--theme-elevation-400, #666);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.clearStatusPending {
+  font-size: 12px;
+  color: #f59e0b;
+}
+
+.clearStatusRejected {
+  font-size: 12px;
+  color: #ef4444;
+}
