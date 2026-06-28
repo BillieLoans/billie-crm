@@ -47,6 +47,12 @@ from .writeoff import (
     handle_writeoff_rejected,
     handle_writeoff_cancelled,
 )
+from .block_clear_approval import (
+    handle_block_clear_approval_requested,
+    handle_block_clear_approval_approved,
+    handle_block_clear_approval_rejected,
+    handle_block_clear_approval_cancelled,
+)
 from .notification import (
     handle_notification_sent,
     handle_notification_delivery_failed,
@@ -107,6 +113,11 @@ __all__ = [
     "handle_writeoff_approved",
     "handle_writeoff_rejected",
     "handle_writeoff_cancelled",
+    # Block-clear approval handlers (CRM-originated events)
+    "handle_block_clear_approval_requested",
+    "handle_block_clear_approval_approved",
+    "handle_block_clear_approval_rejected",
+    "handle_block_clear_approval_cancelled",
     # Notification handlers (platform → CRM read-only projections)
     "handle_notification_sent",
     "handle_notification_delivery_failed",

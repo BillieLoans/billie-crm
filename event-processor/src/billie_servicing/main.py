@@ -51,6 +51,11 @@ from .handlers import (
     handle_writeoff_approved,
     handle_writeoff_rejected,
     handle_writeoff_cancelled,
+    # Block-clear approval handlers (CRM-originated events)
+    handle_block_clear_approval_requested,
+    handle_block_clear_approval_approved,
+    handle_block_clear_approval_rejected,
+    handle_block_clear_approval_cancelled,
     # Notification handlers (platform → CRM read-only projections)
     handle_notification_sent,
     handle_notification_delivery_failed,
@@ -187,6 +192,22 @@ def setup_handlers(processor: EventProcessor) -> None:
     processor.register_handler("writeoff.approved.v1", handle_writeoff_approved)
     processor.register_handler("writeoff.rejected.v1", handle_writeoff_rejected)
     processor.register_handler("writeoff.cancelled.v1", handle_writeoff_cancelled)
+
+    # =========================================================================
+    # Block-clear approval events (CRM-originated, manual parsing)
+    # =========================================================================
+    processor.register_handler(
+        "block_clear_approval.requested.v1", handle_block_clear_approval_requested
+    )
+    processor.register_handler(
+        "block_clear_approval.approved.v1", handle_block_clear_approval_approved
+    )
+    processor.register_handler(
+        "block_clear_approval.rejected.v1", handle_block_clear_approval_rejected
+    )
+    processor.register_handler(
+        "block_clear_approval.cancelled.v1", handle_block_clear_approval_cancelled
+    )
 
     # =========================================================================
     # Notification events (platform → CRM, billie_notifications_events SDK)
