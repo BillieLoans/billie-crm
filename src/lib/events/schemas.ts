@@ -6,6 +6,7 @@
  */
 
 import { z } from 'zod'
+import { CLEARABLE_REASONS } from '../events/config'
 
 // =============================================================================
 // Write-Off Request Schema
@@ -100,11 +101,7 @@ export type WriteOffCancelCommand = z.infer<typeof WriteOffCancelCommandSchema>
  * Suppression mode the CRM is allowed to set.
  * (No `off` — clearing is a separate DELETE / clearSuppression call.)
  */
-export const NotificationSuppressionModeSchema = z.enum([
-  'all',
-  'non_essential',
-  'marketing_only',
-])
+export const NotificationSuppressionModeSchema = z.enum(['all', 'non_essential', 'marketing_only'])
 
 /**
  * Schema for setting a per-customer notification kill switch.
@@ -114,14 +111,64 @@ export const NotificationSuppressionCommandSchema = z.object({
   customerId: z.string().min(1, 'Customer ID is required'),
   mode: NotificationSuppressionModeSchema,
   reason: z.string().min(1, 'Reason is required').max(500),
-  expiresAt: z
-    .string()
-    .datetime({ message: 'expiresAt must be an ISO 8601 timestamp' })
-    .nullish(),
+  expiresAt: z.string().datetime({ message: 'expiresAt must be an ISO 8601 timestamp' }).nullish(),
   correlationId: z.string().optional(),
 })
 
 export type NotificationSuppressionCommand = z.infer<typeof NotificationSuppressionCommandSchema>
+
+// =============================================================================
+// Block Clear Schemas
+// =============================================================================
+
+/**
+ * Valid clearable reasons.
+ */
+const ClearableReasonSchema = z.enum(CLEARABLE_REASONS)
+
+/**
+ * Schema for the block clear request command (input from client).
+ */
+export const BlockClearRequestCommandSchema = z.object({
+  canonicalCustomerId: z.string().min(1, 'Canonical customer ID is required'),
+  conversationId: z.string().optional(),
+  reasons: z.array(ClearableReasonSchema).min(1, 'At least one reason is required'),
+  justification: z.string().min(1, 'Justification is required'),
+})
+
+export type BlockClearRequestCommand = z.infer<typeof BlockClearRequestCommandSchema>
+
+/**
+ * Schema for the block clear approval command (input from client).
+ */
+export const BlockClearApproveCommandSchema = z.object({
+  requestId: z.string().min(1, 'Request ID is required'),
+  requestNumber: z.string().min(1, 'Request number is required'),
+  comment: z.string().min(10, 'Approval comment must be at least 10 characters'),
+})
+
+export type BlockClearApproveCommand = z.infer<typeof BlockClearApproveCommandSchema>
+
+/**
+ * Schema for the block clear rejection command (input from client).
+ */
+export const BlockClearRejectCommandSchema = z.object({
+  requestId: z.string().min(1, 'Request ID is required'),
+  requestNumber: z.string().min(1, 'Request number is required'),
+  reason: z.string().min(10, 'Rejection reason must be at least 10 characters'),
+})
+
+export type BlockClearRejectCommand = z.infer<typeof BlockClearRejectCommandSchema>
+
+/**
+ * Schema for the block clear cancellation command (input from client).
+ */
+export const BlockClearCancelCommandSchema = z.object({
+  requestId: z.string().min(1, 'Request ID is required'),
+  requestNumber: z.string().min(1, 'Request number is required'),
+})
+
+export type BlockClearCancelCommand = z.infer<typeof BlockClearCancelCommandSchema>
 
 // =============================================================================
 // Response Schemas

@@ -5,6 +5,8 @@
  * These follow the LedgerMessage format for consistency with the event ecosystem.
  */
 
+import type { ClearableReason } from './config'
+
 // =============================================================================
 // CRM Event Envelope
 // =============================================================================
@@ -193,5 +195,72 @@ export interface PublishEventError {
   error: {
     code: string
     message: string
+  }
+}
+
+// =============================================================================
+// Block Clear Payloads
+// =============================================================================
+
+/**
+ * Payload for block_clear_approval.requested.v1 event.
+ */
+export interface BlockClearApprovalRequestedPayload {
+  canonicalCustomerId: string
+  conversationId?: string
+  reasons: ClearableReason[]
+  justification: string
+  requestedBy: string
+  requestedByName: string
+}
+
+/**
+ * Payload for block_clear_approval.approved.v1 event.
+ */
+export interface BlockClearApprovalApprovedPayload {
+  requestId: string
+  requestNumber: string
+  comment: string
+  approvedBy: string
+  approvedByName: string
+}
+
+/**
+ * Payload for block_clear_approval.rejected.v1 event.
+ */
+export interface BlockClearApprovalRejectedPayload {
+  requestId: string
+  requestNumber: string
+  reason: string
+  rejectedBy: string
+  rejectedByName: string
+}
+
+/**
+ * Payload for block_clear_approval.cancelled.v1 event.
+ */
+export interface BlockClearApprovalCancelledPayload {
+  requestId: string
+  requestNumber: string
+  cancelledBy: string
+  cancelledByName: string
+}
+
+/**
+ * The authoritative command billieChat consumes off chatLedger (spec §7.1).
+ */
+export interface ReapplicationBlockClearAuthorizedPayload {
+  canonical_customer_id: string
+  reasons: ClearableReason[] | 'ALL_CLEARABLE'
+  operator_id: string
+  justification: string
+  request_id: string
+  requested_at: string
+  approval?: {
+    approval_request_id: string
+    approved_by: string
+    approved_by_name: string
+    approved_at: string
+    comment: string
   }
 }
