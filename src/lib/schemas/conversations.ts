@@ -37,17 +37,21 @@ export type ConversationsQuery = z.infer<typeof ConversationsQuerySchema>
 
 export const ConversationSummarySchema = z.object({
   conversationId: z.string(),
-  customer: z.object({
-    fullName: z.string().nullable().optional(),
-    customerId: z.string().nullable().optional(),
-  }).optional(),
+  customer: z
+    .object({
+      fullName: z.string().nullable().optional(),
+      customerId: z.string().nullable().optional(),
+    })
+    .optional(),
   applicationNumber: z.string().nullable().optional(),
   status: z.string().nullable().optional(),
   decisionStatus: z.string().nullable().optional(),
-  application: z.object({
-    loanAmount: z.number().nullable().optional(),
-    purpose: z.string().nullable().optional(),
-  }).optional(),
+  application: z
+    .object({
+      loanAmount: z.number().nullable().optional(),
+      purpose: z.string().nullable().optional(),
+    })
+    .optional(),
   messageCount: z.number().default(0),
   lastMessageAt: z.string().nullable().optional(),
   updatedAt: z.string().nullable().optional(),
@@ -155,6 +159,11 @@ export const ReapplicationBlockSchema = z.object({
   dispositionKind: z.enum(['review', 'block']).nullable().optional(),
   manualReviewCandidate: z.boolean().nullable().optional(),
   recognition: RecognitionSchema.nullable().optional(),
+  clearStatus: z.string().nullish(),
+  clearedAt: z.string().nullish(),
+  clearedBy: z.string().nullish(),
+  clearJustification: z.string().nullish(),
+  clearRequestId: z.string().nullish(),
 })
 
 /** Archived KYC artifact availability (S3 locations stay server-side). */
@@ -182,24 +191,30 @@ export const ConversationDetailSchema = z.object({
   startedAt: z.union([z.string(), z.date()]).nullable().optional(),
   updatedAt: z.union([z.string(), z.date()]).nullable().optional(),
   lastMessageAt: z.union([z.string(), z.date()]).nullable().optional(),
-  customer: z.object({
-    fullName: z.string().nullable().optional(),
-    customerId: z.string().nullable().optional(),
-    payloadId: z.string().nullable().optional(),
-  }).optional(),
-  application: z.object({
-    loanAmount: z.number().nullable().optional(),
-    purpose: z.string().nullable().optional(),
-    term: z.number().nullable().optional(),
-  }).optional(),
+  customer: z
+    .object({
+      fullName: z.string().nullable().optional(),
+      customerId: z.string().nullable().optional(),
+      payloadId: z.string().nullable().optional(),
+    })
+    .optional(),
+  application: z
+    .object({
+      loanAmount: z.number().nullable().optional(),
+      purpose: z.string().nullable().optional(),
+      term: z.number().nullable().optional(),
+    })
+    .optional(),
   utterances: z.array(UtteranceSchema).default([]),
   assessments: z.record(z.string(), z.unknown()).optional(),
   statementCapture: z.unknown().optional(),
   noticeboard: z.array(NoticeboardEntrySchema).default([]),
-  summary: z.object({
-    purpose: z.string().nullable().optional(),
-    facts: z.array(z.object({ fact: z.string() })).optional(),
-  }).optional(),
+  summary: z
+    .object({
+      purpose: z.string().nullable().optional(),
+      facts: z.array(z.object({ fact: z.string() })).optional(),
+    })
+    .optional(),
   messageCount: z.number().default(0),
 })
 

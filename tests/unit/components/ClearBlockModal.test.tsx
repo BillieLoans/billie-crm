@@ -192,7 +192,7 @@ describe('ClearBlockModal', () => {
 
   describe('Pre-selection', () => {
     it('pre-selects current reason when it is clearable', () => {
-      const clearableReason = CLEARABLE_REASONS[2] // 'ID_VERIFICATION'
+      const clearableReason = 'ID_VERIFICATION'
       renderWithProviders(<ClearBlockModal {...defaultProps} currentReason={clearableReason} />)
 
       expect(screen.getByTestId(`reason-checkbox-${clearableReason}`)).toBeChecked()

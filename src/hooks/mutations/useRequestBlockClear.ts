@@ -90,6 +90,7 @@ export function useRequestBlockClear() {
         description: 'Your request has been submitted for processing.',
       })
       queryClient.invalidateQueries({ queryKey: ['pending-block-clears'] })
+      queryClient.invalidateQueries({ queryKey: ['conversation'] })
     },
 
     onError: (error) => {
