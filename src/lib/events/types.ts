@@ -207,6 +207,7 @@ export interface PublishEventError {
  */
 export interface BlockClearApprovalRequestedPayload {
   canonicalCustomerId: string
+  customerName: string
   conversationId?: string
   reasons: ClearableReason[]
   justification: string

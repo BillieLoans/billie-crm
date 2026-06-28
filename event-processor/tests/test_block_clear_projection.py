@@ -109,7 +109,13 @@ async def test_cleared_flips_request_row_to_approved(mock_pool):
 
 
 async def test_cleared_stamps_conversation_audit_when_present(mock_pool):
-    """conversation_id in payload → operator/justification fields land on conversations."""
+    """Conversations updated via update_by_key on reapplication_block_canonical_customer_id.
+
+    The handler no longer keys by conversation_id from the payload (billieChat sets
+    conv = "ops:block-clear:..." which is a synthetic ops key, not a real conv row).
+    Instead it UPDATE-by-canonical so all blocked conversations for the canonical
+    receive the audit fields.
+    """
     event = {
         "typ": "reapplication_block.cleared.v1",
         "usr": "c4",
@@ -125,7 +131,7 @@ async def test_cleared_stamps_conversation_audit_when_present(mock_pool):
         },
     }
     await handle_reapplication_block_cleared(mock_pool, event)
-    conv = mock_pool.last_upsert("conversations")
+    conv = mock_pool.last_update("conversations")
     assert conv is not None
     assert conv["reapplication_block_clear_status"] == "cleared"
     assert conv["reapplication_block_cleared_by"] == "ops-3"
@@ -134,7 +140,7 @@ async def test_cleared_stamps_conversation_audit_when_present(mock_pool):
 
 
 async def test_cleared_no_conversation_id_updates_customer_only(mock_pool):
-    """No conversation_id → customer mirror updated, no conversations write."""
+    """No conversation_id → customer mirror updated; conversations updated by canonical (no INSERT)."""
     event = {
         "typ": "reapplication_block.cleared.v1",
         "usr": "c5",
@@ -148,7 +154,10 @@ async def test_cleared_no_conversation_id_updates_customer_only(mock_pool):
         },
     }
     await handle_reapplication_block_cleared(mock_pool, event)
+    # No INSERT (no phantom conversation row for the ops:block-clear:... conv key).
     assert not mock_pool.inserts_into("conversations")
+    # An UPDATE by canonical IS issued (harmless 0-match if no blocked convs yet).
+    assert mock_pool.last_update("conversations") is not None
     assert mock_pool.last_upsert("customers") is not None
 
 
@@ -228,3 +237,59 @@ async def test_rejected_stores_detail_on_request_row(mock_pool):
     await handle_reapplication_block_clear_rejected(mock_pool, event)
     req = mock_pool.last_update("reapplication_block_clear_requests")
     assert req["approval_details_reason"] == "manager declined"
+
+
+async def test_cleared_realistic_ops_conv_no_phantom_insert(mock_pool):
+    """ops:block-clear:... synthetic conv MUST NOT create a phantom conversations row.
+
+    billieChat emits cleared events with conv = "ops:block-clear:{request_id}"
+    (not a real conversation id).  The handler must stamp conversations via
+    UPDATE-by-canonical only — never INSERT a phantom row keyed by the ops conv.
+    """
+    event = {
+        "typ": "reapplication_block.cleared.v1",
+        "usr": "c1",
+        "conv": "ops:block-clear:req-1",
+        "payload": {
+            "canonical_customer_id": "c1",
+            "request_id": "req-1",
+            "cleared_reasons": ["SERVICEABILITY"],
+            "cleared_at": "2026-06-28T01:00:00+00:00",
+            "operator_id": "ops-1",
+            "justification": "x",
+            "prior_block_reason": "SERVICEABILITY",
+        },
+    }
+    await handle_reapplication_block_cleared(mock_pool, event)
+    # No phantom INSERT into conversations.
+    assert mock_pool.inserts_into("conversations") == []
+    # An UPDATE by canonical IS issued.
+    conv = mock_pool.last_update("conversations")
+    assert conv is not None
+    assert conv["reapplication_block_clear_status"] == "cleared"
+    assert conv["reapplication_block_reason"] is None
+
+
+async def test_rejected_updates_conversations_by_canonical_with_rejection_code(mock_pool):
+    """Rejected handler updates conversations by canonical and stores rejection_code in request row."""
+    event = {
+        "typ": "reapplication_block.clear_rejected.v1",
+        "usr": "c9",
+        "conv": "ops:block-clear:req-9",
+        "payload": {
+            "canonical_customer_id": "c9",
+            "request_id": "req-9",
+            "rejection_code": "APPROVAL_REQUIRED",
+            "detail": "single operator attempt",
+        },
+    }
+    await handle_reapplication_block_clear_rejected(mock_pool, event)
+    # No phantom INSERT into conversations.
+    assert mock_pool.inserts_into("conversations") == []
+    # Conversations UPDATE by canonical with rejected status.
+    conv = mock_pool.last_update("conversations")
+    assert conv is not None
+    assert conv["reapplication_block_clear_status"] == "rejected"
+    # Request row has both machine code and human detail.
+    req = mock_pool.last_update("reapplication_block_clear_requests")
+    assert req["approval_details_reason"] == "APPROVAL_REQUIRED: single operator attempt"

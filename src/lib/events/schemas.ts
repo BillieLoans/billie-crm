@@ -6,7 +6,7 @@
  */
 
 import { z } from 'zod'
-import { CLEARABLE_REASONS } from '../events/config'
+import { CLEARABLE_REASONS } from './config'
 
 // =============================================================================
 // Write-Off Request Schema

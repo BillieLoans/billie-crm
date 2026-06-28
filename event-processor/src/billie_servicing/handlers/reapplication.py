@@ -200,16 +200,16 @@ async def handle_reapplication_block_cleared(
     blocking reason is confirmed gone (``prior_block_reason`` is absent OR in
     ``cleared_reasons``).  When a higher-precedence reason still blocks, stamp
     the audit fields but leave the reason column untouched.
+
+    Conversations are stamped by canonical customer id (not by conversation_id),
+    because billieChat sets ``conv = "ops:block-clear:{request_id}"`` on these
+    events — a synthetic ops key, not a real conversation id.  Using
+    ``update_by_key`` on ``reapplication_block_canonical_customer_id`` clears
+    all blocked conversations for the canonical in one pass; 0 matches is
+    harmless (no phantom INSERT).
     """
     payload = parse_payload(event)
     request_id = safe_str(payload.get("request_id"), "request_id")
-    conversation_id = (
-        safe_str(
-            payload.get("conversation_id") or event.get("cid") or event.get("conv"),
-            "conversation_id",
-        )
-        or None
-    )
 
     customer_id = (
         safe_str(
@@ -258,27 +258,30 @@ async def handle_reapplication_block_cleared(
             values=customer_values,
             insert_only_columns=["created_at"],
         )
-    else:
-        log.warning("Cleared event without resolvable customer id — no customer mirror")
 
-    # Conversation audit trail.
-    if conversation_id:
+        # Conversation audit trail — update all blocked conversations for this
+        # canonical (keyed by reapplication_block_canonical_customer_id, which
+        # handle_reapplication_blocked populates). UPDATE not upsert: 0 matches
+        # is harmless; no phantom row is inserted for the ops:block-clear:… conv.
         conv_values: dict[str, Any] = {
             "reapplication_block_clear_status": "cleared",
             "reapplication_block_cleared_at": cleared_at,
             "reapplication_block_cleared_by": operator_id,
             "reapplication_block_clear_justification": justification,
-            "reapplication_block_clear_request_id": request_id or None,
+            "reapplication_block_clear_request_id": request_id,
+            "updated_at": now,
         }
         if reason_is_gone:
             conv_values["reapplication_block_reason"] = None
-        await upsert_conversation(
+        await update_by_key(
             pool,
-            conversation_id=conversation_id,
-            set_values=conv_values,
+            "conversations",
+            key_column="reapplication_block_canonical_customer_id",
+            key_value=canonical,
+            values=conv_values,
         )
     else:
-        log.info("Cleared event has no conversation_id — customer mirror only")
+        log.warning("Cleared event without resolvable customer id — no customer mirror")
 
     # Flip the queue row to "approved" so the operator sees it was applied.
     if request_id:
@@ -306,16 +309,13 @@ async def handle_reapplication_block_clear_rejected(
     explicit rejection by the approver).  Stamps a "rejected" status so the
     operator can see the failure in the queue and on the customer / conversation
     views.
+
+    Like ``handle_reapplication_block_cleared``, conversations are stamped by
+    canonical customer id (not conversation_id) because billieChat sets
+    ``conv = "ops:block-clear:{request_id}"`` on these events.
     """
     payload = parse_payload(event)
     request_id = safe_str(payload.get("request_id"), "request_id")
-    conversation_id = (
-        safe_str(
-            payload.get("conversation_id") or event.get("cid") or event.get("conv"),
-            "conversation_id",
-        )
-        or None
-    )
 
     customer_id = (
         safe_str(
@@ -331,6 +331,14 @@ async def handle_reapplication_block_clear_rejected(
 
     now = datetime.now(UTC)
 
+    # Combine rejection_code + detail so operators see both the machine code
+    # and the human-readable explanation in the request row.
+    rejection_code = payload.get("rejection_code")
+    detail = payload.get("detail")
+    approval_reason = (
+        f"{rejection_code}: {detail or ''}" if rejection_code else detail
+    )
+
     # Flip the queue row to "rejected" and record the reason.
     if request_id:
         await update_by_key(
@@ -340,7 +348,7 @@ async def handle_reapplication_block_clear_rejected(
             key_value=request_id,
             values={
                 "status": "rejected",
-                "approval_details_reason": payload.get("detail"),
+                "approval_details_reason": approval_reason,
                 "updated_at": now,
             },
         )
@@ -359,17 +367,17 @@ async def handle_reapplication_block_clear_rejected(
             },
             insert_only_columns=["created_at"],
         )
+
+        # Update all blocked conversations for this canonical — same pattern as
+        # the cleared handler; UPDATE not upsert to avoid phantom rows.
+        await update_by_key(
+            pool,
+            "conversations",
+            key_column="reapplication_block_canonical_customer_id",
+            key_value=canonical,
+            values={"reapplication_block_clear_status": "rejected", "updated_at": now},
+        )
     else:
         log.warning("Rejected event without resolvable customer id — no customer mirror")
-
-    # Mirror onto conversation if present.
-    if conversation_id:
-        await upsert_conversation(
-            pool,
-            conversation_id=conversation_id,
-            set_values={
-                "reapplication_block_clear_status": "rejected",
-            },
-        )
 
     log.info("Re-application block clear rejected")

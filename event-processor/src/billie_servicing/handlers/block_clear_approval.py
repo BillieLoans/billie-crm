@@ -93,6 +93,7 @@ async def handle_block_clear_approval_requested(
             "reasons": reasons_json,
             "justification": payload.get("justification"),
             "status": "pending",
+            "requested_by_id": payload.get("requestedBy"),
             "requested_by_name": payload.get("requestedByName", ""),
             "requested_at": now,
             "created_at": now,
