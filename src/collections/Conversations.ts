@@ -322,6 +322,32 @@ export const Conversations: CollectionConfig = {
               'Identity-recognition match context for a review halt (band, posterior, case_id, candidates with per-signal evidence). Stored verbatim from the event.',
           },
         },
+        // BTB-202: manual block-clear audit fields
+        {
+          name: 'clearStatus',
+          type: 'text',
+          admin: { description: 'Status of the most recent block-clear request (e.g. approved, rejected)' },
+        },
+        {
+          name: 'clearedAt',
+          type: 'date',
+          admin: { description: 'When the block was cleared' },
+        },
+        {
+          name: 'clearedBy',
+          type: 'text',
+          admin: { description: 'User ID who cleared the block' },
+        },
+        {
+          name: 'clearJustification',
+          type: 'text',
+          admin: { description: 'Justification provided for the clear' },
+        },
+        {
+          name: 'clearRequestId',
+          type: 'text',
+          admin: { description: 'ID of the ReapplicationBlockClearRequest that cleared this block' },
+        },
       ],
     },
     {

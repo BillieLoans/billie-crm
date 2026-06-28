@@ -74,6 +74,7 @@ export interface Config {
     applications: Application;
     'loan-accounts': LoanAccount;
     'write-off-requests': WriteOffRequest;
+    'reapplication-block-clear-requests': ReapplicationBlockClearRequest;
     'contact-notes': ContactNote;
     notifications: Notification;
     'collection-cases': CollectionCase;
@@ -91,6 +92,7 @@ export interface Config {
     applications: ApplicationsSelect<false> | ApplicationsSelect<true>;
     'loan-accounts': LoanAccountsSelect<false> | LoanAccountsSelect<true>;
     'write-off-requests': WriteOffRequestsSelect<false> | WriteOffRequestsSelect<true>;
+    'reapplication-block-clear-requests': ReapplicationBlockClearRequestsSelect<false> | ReapplicationBlockClearRequestsSelect<true>;
     'contact-notes': ContactNotesSelect<false> | ContactNotesSelect<true>;
     notifications: NotificationsSelect<false> | NotificationsSelect<true>;
     'collection-cases': CollectionCasesSelect<false> | CollectionCasesSelect<true>;
@@ -312,6 +314,14 @@ export interface Customer {
      * Application that was halted by the block
      */
     applicationNumber?: string | null;
+    /**
+     * Status of the most recent block-clear request (e.g. approved, rejected)
+     */
+    clearStatus?: string | null;
+    /**
+     * When the block was cleared
+     */
+    clearedAt?: string | null;
   };
   /**
    * Latest LAB EVS identity verification result
@@ -705,6 +715,26 @@ export interface Conversation {
       | number
       | boolean
       | null;
+    /**
+     * Status of the most recent block-clear request (e.g. approved, rejected)
+     */
+    clearStatus?: string | null;
+    /**
+     * When the block was cleared
+     */
+    clearedAt?: string | null;
+    /**
+     * User ID who cleared the block
+     */
+    clearedBy?: string | null;
+    /**
+     * Justification provided for the clear
+     */
+    clearJustification?: string | null;
+    /**
+     * ID of the ReapplicationBlockClearRequest that cleared this block
+     */
+    clearRequestId?: string | null;
   };
   /**
    * Archived identity verification artifacts (S3)
@@ -1197,6 +1227,103 @@ export interface WriteOffRequest {
   createdAt: string;
 }
 /**
+ * Reapplication block clear requests requiring approval
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "reapplication-block-clear-requests".
+ */
+export interface ReapplicationBlockClearRequest {
+  id: string;
+  /**
+   * Event correlation ID (conv field). Groups related events in a workflow.
+   */
+  requestId: string;
+  /**
+   * Event ID for polling lookup (cause field). Used by client to find projection after command.
+   */
+  eventId?: string | null;
+  /**
+   * Human-readable request reference number (e.g., RBC-20241211...). Auto-generated if not provided.
+   */
+  requestNumber?: string | null;
+  /**
+   * The canonical customer ID whose reapplication block is being cleared
+   */
+  canonicalCustomerId: string;
+  /**
+   * The conversation (application) ID associated with the block
+   */
+  conversationId?: string | null;
+  /**
+   * Customer name for display purposes
+   */
+  customerName?: string | null;
+  /**
+   * List of reasons for the clear request (e.g. ["SERVICEABILITY"])
+   */
+  reasons?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Supporting justification for the clear request
+   */
+  justification?: string | null;
+  /**
+   * Current status of the clear request
+   */
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  /**
+   * User who submitted the request
+   */
+  requestedBy?: (string | null) | User;
+  /**
+   * Requestor name for audit purposes
+   */
+  requestedByName?: string | null;
+  approvalDetails?: {
+    /**
+     * User ID who approved (from event)
+     */
+    approvedBy?: string | null;
+    approvedByName?: string | null;
+    approvedAt?: string | null;
+    /**
+     * Approval or rejection comment
+     */
+    comment?: string | null;
+    /**
+     * User ID who rejected (from event)
+     */
+    rejectedBy?: string | null;
+    rejectedByName?: string | null;
+    rejectedAt?: string | null;
+    /**
+     * Rejection reason (from event)
+     */
+    reason?: string | null;
+  };
+  cancellationDetails?: {
+    /**
+     * User ID who cancelled (from event)
+     */
+    cancelledBy?: string | null;
+    cancelledByName?: string | null;
+    cancelledAt?: string | null;
+  };
+  /**
+   * Timestamp when request was submitted
+   */
+  requestedAt?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * Customer interaction notes — immutable audit trail
  *
  * This interface was referenced by `Config`'s JSON-Schema
@@ -1451,6 +1578,10 @@ export interface PayloadLockedDocument {
         value: string | WriteOffRequest;
       } | null)
     | ({
+        relationTo: 'reapplication-block-clear-requests';
+        value: string | ReapplicationBlockClearRequest;
+      } | null)
+    | ({
         relationTo: 'contact-notes';
         value: string | ContactNote;
       } | null)
@@ -1606,6 +1737,8 @@ export interface CustomersSelect<T extends boolean = true> {
         blockedUntil?: T;
         blockedAt?: T;
         applicationNumber?: T;
+        clearStatus?: T;
+        clearedAt?: T;
       };
   identityVerification?:
     | T
@@ -1696,6 +1829,11 @@ export interface ConversationsSelect<T extends boolean = true> {
         dispositionKind?: T;
         manualReviewCandidate?: T;
         recognition?: T;
+        clearStatus?: T;
+        clearedAt?: T;
+        clearedBy?: T;
+        clearJustification?: T;
+        clearRequestId?: T;
       };
   identityVerificationReport?:
     | T
@@ -1946,6 +2084,45 @@ export interface WriteOffRequestsSelect<T extends boolean = true> {
         approvedBy?: T;
         approvedByName?: T;
         approvedAt?: T;
+        rejectedBy?: T;
+        rejectedByName?: T;
+        rejectedAt?: T;
+        reason?: T;
+      };
+  cancellationDetails?:
+    | T
+    | {
+        cancelledBy?: T;
+        cancelledByName?: T;
+        cancelledAt?: T;
+      };
+  requestedAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "reapplication-block-clear-requests_select".
+ */
+export interface ReapplicationBlockClearRequestsSelect<T extends boolean = true> {
+  requestId?: T;
+  eventId?: T;
+  requestNumber?: T;
+  canonicalCustomerId?: T;
+  conversationId?: T;
+  customerName?: T;
+  reasons?: T;
+  justification?: T;
+  status?: T;
+  requestedBy?: T;
+  requestedByName?: T;
+  approvalDetails?:
+    | T
+    | {
+        approvedBy?: T;
+        approvedByName?: T;
+        approvedAt?: T;
+        comment?: T;
         rejectedBy?: T;
         rejectedByName?: T;
         rejectedAt?: T;

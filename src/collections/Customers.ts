@@ -316,6 +316,17 @@ export const Customers: CollectionConfig = {
           type: 'text',
           admin: { description: 'Application that was halted by the block' },
         },
+        // BTB-202: manual block-clear audit fields
+        {
+          name: 'clearStatus',
+          type: 'text',
+          admin: { description: 'Status of the most recent block-clear request (e.g. approved, rejected)' },
+        },
+        {
+          name: 'clearedAt',
+          type: 'date',
+          admin: { description: 'When the block was cleared' },
+        },
       ],
     },
     {
