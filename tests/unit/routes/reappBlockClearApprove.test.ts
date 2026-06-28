@@ -153,6 +153,9 @@ describe('POST /api/commands/reapp-block-clear/approve', () => {
 
     expect(res.status).toBe(202)
 
+    // payload.find must be called with depth: 0 to enforce scalar IDs
+    expect(mockFind).toHaveBeenCalledWith(expect.objectContaining({ depth: 0 }))
+
     // publishClearAuthorized must be called with maker as operator_id and checker as approved_by
     expect(vi.mocked(publishClearAuthorized)).toHaveBeenCalledTimes(1)
     const clearArg = vi.mocked(publishClearAuthorized).mock.calls[0][0]
@@ -162,6 +165,10 @@ describe('POST /api/commands/reapp-block-clear/approve', () => {
     expect(clearArg.operator_id).not.toBe(clearArg.approval?.approved_by)
     expect(clearArg.request_id).toBe('req-abc')
     expect(clearArg.canonical_customer_id).toBe('c123')
+    expect(clearArg.reasons).toEqual(['PRIOR_DEFAULT'])
+    expect(clearArg.justification).toBe('credit remediation complete')
+    expect(clearArg.approval?.approved_by_name).toBe('Sup User')
+    expect(clearArg.approval?.approval_request_id).toBe('RBC-001') // doc.requestNumber
 
     // createAndPublishEvent must be called with approved event type
     expect(vi.mocked(createAndPublishEvent)).toHaveBeenCalledTimes(1)

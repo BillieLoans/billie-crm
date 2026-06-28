@@ -77,6 +77,7 @@ export async function POST(request: NextRequest) {
     // 4. Look up the pending request (404 if absent, 400 if not pending)
     const found = await payload.find({
       collection: 'reapplication-block-clear-requests',
+      depth: 0, // enforce scalar relationship IDs — the maker≠checker comparison depends on it
       where: {
         or: [{ requestId: { equals: cmd.requestId } }, { id: { equals: cmd.requestId } }],
       },
@@ -117,13 +118,18 @@ export async function POST(request: NextRequest) {
     // 6. Emit the authoritative clear onto chatLedger with the approval attestation.
     //    operator_id  = MAKER (doc.requestedBy)
     //    approved_by  = CHECKER (user.id) — guaranteed ≠ operator_id by guard above
+    //
+    // NOTE: the two publishes below (publishClearAuthorized + createAndPublishEvent) are NOT
+    // atomic. request_id is billieChat's idempotency key, so a retry will not double-apply
+    // the clear on billieChat's side. A partial failure (chatLedger ok, CRM stream fails)
+    // leaves the CRM request row in `pending` (ops-visible) — future outbox/saga work.
     await publishClearAuthorized({
       canonical_customer_id: doc.canonicalCustomerId,
       reasons: doc.reasons,
       operator_id: String(doc.requestedBy),
       justification: doc.justification,
       request_id: cmd.requestId,
-      requested_at: (doc.requestedAt ?? doc.createdAt) as string,
+      requested_at: doc.requestedAt ?? doc.createdAt ?? new Date().toISOString(),
       approval: {
         approval_request_id: doc.requestNumber,
         approved_by: String(user.id),
@@ -136,7 +142,7 @@ export async function POST(request: NextRequest) {
     // 7. Publish the CRM-internal approval event (updates the projection row).
     const eventPayload: BlockClearApprovalApprovedPayload = {
       requestId: cmd.requestId,
-      requestNumber: cmd.requestNumber,
+      requestNumber: doc.requestNumber, // use server-derived value, not client-supplied
       comment: cmd.comment,
       approvedBy: String(user.id),
       approvedByName: approverName,

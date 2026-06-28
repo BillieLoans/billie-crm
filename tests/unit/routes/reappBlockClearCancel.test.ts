@@ -79,6 +79,10 @@ describe('POST /api/commands/reapp-block-clear/cancel', () => {
     )
 
     expect(res.status).toBe(202)
+
+    // payload.find must be called with depth: 0 to enforce scalar relationship IDs
+    expect(mockFind).toHaveBeenCalledWith(expect.objectContaining({ depth: 0 }))
+
     expect(vi.mocked(createAndPublishEvent)).toHaveBeenCalledTimes(1)
 
     const arg = vi.mocked(createAndPublishEvent).mock.calls[0][0]

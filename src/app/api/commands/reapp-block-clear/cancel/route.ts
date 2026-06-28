@@ -44,6 +44,7 @@ export async function POST(request: NextRequest) {
     // 3. Authorization: only the original requester or a supervisor/admin can cancel
     const existingRequest = await payload.find({
       collection: 'reapplication-block-clear-requests',
+      depth: 0, // enforce scalar relationship IDs — the requester comparison depends on it
       where: { requestId: { equals: command.requestId } },
       limit: 1,
     })
