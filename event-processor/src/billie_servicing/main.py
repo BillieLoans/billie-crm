@@ -24,8 +24,10 @@ from .handlers import (
     handle_customer_identity_merged,
     # Identity verification archival (PR #67)
     handle_identity_report_archived,
-    # Re-application block (BTB-135)
+    # Re-application block (BTB-135) + cleared/rejected projection (Task 6)
     handle_reapplication_blocked,
+    handle_reapplication_block_cleared,
+    handle_reapplication_block_clear_rejected,
     # Conversation handlers
     handle_conversation_started,
     handle_utterance,
@@ -160,6 +162,16 @@ def setup_handlers(processor: EventProcessor) -> None:
     # arrives before the final_credit_decision for the same application.
     processor.register_handler(
         "application.reapplication_blocked.v1", handle_reapplication_blocked
+    )
+
+    # Block-clear outcome events (Task 6) — emitted by billieChat after an
+    # operator-authorised clear is applied or rejected; projected back into the
+    # CRM's customers / conversations / reapplication_block_clear_requests tables.
+    processor.register_handler(
+        "reapplication_block.cleared.v1", handle_reapplication_block_cleared
+    )
+    processor.register_handler(
+        "reapplication_block.clear_rejected.v1", handle_reapplication_block_clear_rejected
     )
 
     # Identity verification report archival (PR #67)

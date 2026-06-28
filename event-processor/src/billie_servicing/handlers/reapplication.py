@@ -24,7 +24,7 @@ from typing import Any
 import asyncpg
 import structlog
 
-from ..db import coerce_date, upsert, upsert_conversation
+from ..db import coerce_date, update_by_key, upsert, upsert_conversation
 from .identity import _merge_identity, resolve_canonical_customer_id
 from .sanitize import parse_payload, safe_str
 
@@ -182,3 +182,194 @@ async def handle_reapplication_blocked(pool: asyncpg.Pool, event: dict[str, Any]
         log.debug("Block reason not in re-attribution allowlist — block recorded only")
 
     log.info("Re-application block recorded")
+
+
+async def handle_reapplication_block_cleared(
+    pool: asyncpg.Pool, event: dict[str, Any]
+) -> None:
+    """Handle ``reapplication_block.cleared.v1``.
+
+    Emitted by billieChat's customerLiaisonAgent after an operator-authorised
+    clear is applied.  Projects the outcome back into three CRM tables:
+
+    * ``customers`` — compact mirror so the servicing view stops showing "blocked".
+    * ``conversations`` — operator audit trail (who cleared, why, request id).
+    * ``reapplication_block_clear_requests`` — flips the queue row to "approved".
+
+    §14 nuance: only NULL ``reapplication_block_reason`` when the previously-
+    blocking reason is confirmed gone (``prior_block_reason`` is absent OR in
+    ``cleared_reasons``).  When a higher-precedence reason still blocks, stamp
+    the audit fields but leave the reason column untouched.
+    """
+    payload = parse_payload(event)
+    request_id = safe_str(payload.get("request_id"), "request_id")
+    conversation_id = (
+        safe_str(
+            payload.get("conversation_id") or event.get("cid") or event.get("conv"),
+            "conversation_id",
+        )
+        or None
+    )
+
+    customer_id = (
+        safe_str(
+            payload.get("canonical_customer_id") or event.get("usr"),
+            "customer_id",
+        )
+        or None
+    )
+    canonical = await resolve_canonical_customer_id(pool, customer_id)
+
+    # §14: is the previously-blocking reason now gone?
+    cleared_reasons: list[str] = payload.get("cleared_reasons") or []
+    prior = payload.get("prior_block_reason")
+    reason_is_gone = prior is None or prior in cleared_reasons
+
+    cleared_at = coerce_date(payload.get("cleared_at"))
+    operator_id = payload.get("operator_id")
+    justification = payload.get("justification")
+
+    log = logger.bind(
+        canonical_customer_id=canonical,
+        request_id=request_id,
+        prior_block_reason=prior,
+        reason_is_gone=reason_is_gone,
+    )
+    log.info("Processing reapplication_block.cleared.v1")
+
+    now = datetime.now(UTC)
+
+    # Customer-level mirror.
+    if canonical:
+        customer_values: dict[str, Any] = {
+            "customer_id": canonical,
+            "reapplication_block_clear_status": "cleared",
+            "reapplication_block_cleared_at": cleared_at,
+            "updated_at": now,
+            "created_at": now,
+        }
+        if reason_is_gone:
+            # NULL the reason so the servicing view stops showing "blocked".
+            customer_values["reapplication_block_reason"] = None
+        await upsert(
+            pool,
+            "customers",
+            conflict_columns=["customer_id"],
+            values=customer_values,
+            insert_only_columns=["created_at"],
+        )
+    else:
+        log.warning("Cleared event without resolvable customer id — no customer mirror")
+
+    # Conversation audit trail.
+    if conversation_id:
+        conv_values: dict[str, Any] = {
+            "reapplication_block_clear_status": "cleared",
+            "reapplication_block_cleared_at": cleared_at,
+            "reapplication_block_cleared_by": operator_id,
+            "reapplication_block_clear_justification": justification,
+            "reapplication_block_clear_request_id": request_id or None,
+        }
+        if reason_is_gone:
+            conv_values["reapplication_block_reason"] = None
+        await upsert_conversation(
+            pool,
+            conversation_id=conversation_id,
+            set_values=conv_values,
+        )
+    else:
+        log.info("Cleared event has no conversation_id — customer mirror only")
+
+    # Flip the queue row to "approved" so the operator sees it was applied.
+    if request_id:
+        await update_by_key(
+            pool,
+            "reapplication_block_clear_requests",
+            key_column="request_id",
+            key_value=request_id,
+            values={
+                "status": "approved",
+                "updated_at": now,
+            },
+        )
+
+    log.info("Re-application block cleared")
+
+
+async def handle_reapplication_block_clear_rejected(
+    pool: asyncpg.Pool, event: dict[str, Any]
+) -> None:
+    """Handle ``reapplication_block.clear_rejected.v1``.
+
+    Emitted by billieChat when the clear was not authorised (e.g. a
+    single-operator attempt for a reason that requires maker-checker, or an
+    explicit rejection by the approver).  Stamps a "rejected" status so the
+    operator can see the failure in the queue and on the customer / conversation
+    views.
+    """
+    payload = parse_payload(event)
+    request_id = safe_str(payload.get("request_id"), "request_id")
+    conversation_id = (
+        safe_str(
+            payload.get("conversation_id") or event.get("cid") or event.get("conv"),
+            "conversation_id",
+        )
+        or None
+    )
+
+    customer_id = (
+        safe_str(
+            payload.get("canonical_customer_id") or event.get("usr"),
+            "customer_id",
+        )
+        or None
+    )
+    canonical = await resolve_canonical_customer_id(pool, customer_id)
+
+    log = logger.bind(canonical_customer_id=canonical, request_id=request_id)
+    log.info("Processing reapplication_block.clear_rejected.v1")
+
+    now = datetime.now(UTC)
+
+    # Flip the queue row to "rejected" and record the reason.
+    if request_id:
+        await update_by_key(
+            pool,
+            "reapplication_block_clear_requests",
+            key_column="request_id",
+            key_value=request_id,
+            values={
+                "status": "rejected",
+                "approval_details_reason": payload.get("detail"),
+                "updated_at": now,
+            },
+        )
+
+    # Stamp clear_status on the customer row so the servicing view shows it.
+    if canonical:
+        await upsert(
+            pool,
+            "customers",
+            conflict_columns=["customer_id"],
+            values={
+                "customer_id": canonical,
+                "reapplication_block_clear_status": "rejected",
+                "updated_at": now,
+                "created_at": now,
+            },
+            insert_only_columns=["created_at"],
+        )
+    else:
+        log.warning("Rejected event without resolvable customer id — no customer mirror")
+
+    # Mirror onto conversation if present.
+    if conversation_id:
+        await upsert_conversation(
+            pool,
+            conversation_id=conversation_id,
+            set_values={
+                "reapplication_block_clear_status": "rejected",
+            },
+        )
+
+    log.info("Re-application block clear rejected")

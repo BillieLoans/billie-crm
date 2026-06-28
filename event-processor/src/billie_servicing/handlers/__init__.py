@@ -21,6 +21,8 @@ from .identity_verification import (
 )
 from .reapplication import (
     handle_reapplication_blocked,
+    handle_reapplication_block_cleared,
+    handle_reapplication_block_clear_rejected,
 )
 from .conversation import (
     handle_conversation_started,
@@ -84,8 +86,10 @@ __all__ = [
     "handle_customer_verified",
     "handle_customer_identity_linked",
     "handle_customer_identity_merged",
-    # Re-application block (BTB-135)
+    # Re-application block (BTB-135) + cleared/rejected projection (Task 6)
     "handle_reapplication_blocked",
+    "handle_reapplication_block_cleared",
+    "handle_reapplication_block_clear_rejected",
     # Identity verification archival (PR #67)
     "handle_identity_report_archived",
     # Conversation handlers
