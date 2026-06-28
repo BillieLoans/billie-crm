@@ -33,6 +33,8 @@ export async function up({ db }: MigrateUpArgs): Promise<void> {
     );
     CREATE UNIQUE INDEX "rbcr_request_id_idx" ON "reapplication_block_clear_requests" ("request_id");
     CREATE INDEX "rbcr_status_created_idx" ON "reapplication_block_clear_requests" ("status","created_at");
+    CREATE INDEX "rbcr_event_id_idx" ON "reapplication_block_clear_requests" ("event_id");
+    CREATE INDEX "rbcr_request_number_idx" ON "reapplication_block_clear_requests" ("request_number");
     ALTER TABLE "reapplication_block_clear_requests" ADD CONSTRAINT "rbcr_requested_by_fk" FOREIGN KEY ("requested_by_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;
 
     ALTER TABLE "conversations" ADD COLUMN "reapplication_block_clear_status" varchar;
