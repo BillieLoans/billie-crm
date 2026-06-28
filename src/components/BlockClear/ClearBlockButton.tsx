@@ -48,12 +48,22 @@ export function ClearBlockButton({ block, conversationId, customerName }: ClearB
   return (
     <>
       <div className={styles.clearBlockContainer}>
-        {isClearable ? (
+        {isClearable && canonicalCustomerId ? (
           <button
             type="button"
             className={styles.clearBlockBtn}
             onClick={() => setModalOpen(true)}
             data-testid="clear-block-btn"
+          >
+            Clear block
+          </button>
+        ) : isClearable && !canonicalCustomerId ? (
+          <button
+            type="button"
+            className={styles.clearBlockBtnDisabled}
+            disabled
+            title="Customer identity not yet resolved — can't clear here."
+            data-testid="clear-block-btn-disabled"
           >
             Clear block
           </button>

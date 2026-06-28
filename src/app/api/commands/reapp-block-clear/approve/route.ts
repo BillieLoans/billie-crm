@@ -117,6 +117,7 @@ export async function POST(request: NextRequest) {
       !doc.canonicalCustomerId ||
       !doc.justification ||
       !doc.requestNumber ||
+      !doc.requestedBy ||
       !Array.isArray(doc.reasons)
     ) {
       return NextResponse.json(

@@ -315,4 +315,34 @@ describe('POST /api/commands/reapp-block-clear/approve', () => {
     expect(vi.mocked(publishClearAuthorized)).not.toHaveBeenCalled()
     expect(vi.mocked(createAndPublishEvent)).not.toHaveBeenCalled()
   })
+
+  it('(h) null requestedBy on stored doc → 500 DATA_INTEGRITY; no publish', async () => {
+    mockFind.mockResolvedValueOnce({
+      docs: [
+        {
+          requestedBy: null, // corrupt row
+          status: 'pending',
+          canonicalCustomerId: 'c123',
+          reasons: ['PRIOR_DEFAULT'],
+          justification: 'credit remediation complete',
+          requestNumber: 'RBC-001',
+          requestedAt: '2026-01-01T00:00:00.000Z',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    })
+
+    const res = await POST(
+      makeRequest({
+        requestId: 'req-abc',
+        requestNumber: 'RBC-001',
+        comment: 'Reviewed and approved after verification',
+      }) as any,
+    )
+
+    expect(res.status).toBe(500)
+    expect(res.body.error.code).toBe('DATA_INTEGRITY')
+    expect(vi.mocked(publishClearAuthorized)).not.toHaveBeenCalled()
+    expect(vi.mocked(createAndPublishEvent)).not.toHaveBeenCalled()
+  })
 })
