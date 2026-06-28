@@ -112,6 +112,10 @@ export async function closeRedisClient(): Promise<void> {
     await redisClient.quit()
     redisClient = null
   }
+  if (chatLedgerClient) {
+    await chatLedgerClient.quit()
+    chatLedgerClient = null
+  }
 }
 
 /**

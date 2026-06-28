@@ -36,5 +36,7 @@ describe('publishClearAuthorized', () => {
     expect(fields.usr).toBe('c123')
     expect(fields.cls).toBe('cmd')
     expect(JSON.parse(fields.payload).request_id).toBe('req-1')
+    expect(fields.seq).toBe('1')
+    expect(fields.cause).toBeTruthy()
   })
 })
