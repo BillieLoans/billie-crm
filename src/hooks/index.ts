@@ -40,12 +40,19 @@ export { useTriggerPortfolioRecalc } from './mutations/useTriggerPortfolioRecalc
 
 // Export Center mutations (E5)
 export { useCreateExportJob } from './mutations/useCreateExportJob'
-export type { CreateExportJobRequest, CreateExportJobResponse } from './mutations/useCreateExportJob'
+export type {
+  CreateExportJobRequest,
+  CreateExportJobResponse,
+} from './mutations/useCreateExportJob'
 export { useRetryExport } from './mutations/useRetryExport'
 
 // Investigation mutations (E6)
 export { useBatchQuery } from './mutations/useBatchQuery'
-export type { BatchQueryRequest, BatchQueryAccountResult, BatchQueryResponse } from './mutations/useBatchQuery'
+export type {
+  BatchQueryRequest,
+  BatchQueryAccountResult,
+  BatchQueryResponse,
+} from './mutations/useBatchQuery'
 export { useRandomSample } from './mutations/useRandomSample'
 export type { RandomSampleRequest, RandomSampleResponse } from './mutations/useRandomSample'
 
@@ -58,11 +65,7 @@ export {
   usePostIdentityRiskAssessment,
 } from './queries/useAssessments'
 export { useStatementFile, rawStatementFileUrl } from './queries/useStatementFile'
-export type {
-  StatementSlot,
-  StatementFileContent,
-  CsvData,
-} from './queries/useStatementFile'
+export type { StatementSlot, StatementFileContent, CsvData } from './queries/useStatementFile'
 
 // Notifications (E-notifications)
 export { useNotifications } from './queries/useNotifications'
@@ -78,6 +81,29 @@ export type { NotificationBodyData } from './queries/useNotificationBody'
 export { useSetNotificationSuppression } from './mutations/useSetNotificationSuppression'
 export type { SetSuppressionParams } from './mutations/useSetNotificationSuppression'
 export { useClearNotificationSuppression } from './mutations/useClearNotificationSuppression'
+
+// Block-Clear mutations (B3)
+export { useRequestBlockClear } from './mutations/useRequestBlockClear'
+export type { RequestBlockClearParams } from './mutations/useRequestBlockClear'
+export { useApproveBlockClear } from './mutations/useApproveBlockClear'
+export type {
+  ApproveBlockClearParams,
+  ApproveBlockClearResult,
+} from './mutations/useApproveBlockClear'
+export { useRejectBlockClear } from './mutations/useRejectBlockClear'
+export type {
+  RejectBlockClearParams,
+  RejectBlockClearResult,
+} from './mutations/useRejectBlockClear'
+export { useCancelBlockClear } from './mutations/useCancelBlockClear'
+export type {
+  CancelBlockClearParams,
+  CancelBlockClearResult,
+} from './mutations/useCancelBlockClear'
+
+// Block-Clear queries (B3)
+export { usePendingBlockClears } from './queries/usePendingBlockClears'
+export type { BlockClearRequest, PendingBlockClearsOptions } from './queries/usePendingBlockClears'
 
 // Re-export types from canonical location
 export type {
