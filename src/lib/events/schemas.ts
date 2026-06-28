@@ -132,6 +132,7 @@ const ClearableReasonSchema = z.enum(CLEARABLE_REASONS)
 export const BlockClearRequestCommandSchema = z.object({
   canonicalCustomerId: z.string().min(1, 'Canonical customer ID is required'),
   conversationId: z.string().optional(),
+  customerName: z.string().optional(),
   reasons: z.array(ClearableReasonSchema).min(1, 'At least one reason is required'),
   justification: z.string().min(1, 'Justification is required'),
 })
