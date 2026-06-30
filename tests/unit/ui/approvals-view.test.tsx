@@ -7,6 +7,30 @@ import { ApprovalsView } from '@/components/ApprovalsView'
 const mockFetch = vi.fn()
 global.fetch = mockFetch
 
+// ApprovalsView also renders <BlockClearList>, which fetches via
+// usePendingBlockClears. These tests cover only the write-off approvals queue,
+// so stub the block-clears hook to "no pending requests" — otherwise it shares
+// the fetch mock above and renders a duplicate table (duplicate text breaks the
+// queries below).
+vi.mock('@/hooks/queries/usePendingBlockClears', () => ({
+  usePendingBlockClears: () => ({
+    data: {
+      docs: [],
+      totalDocs: 0,
+      limit: 20,
+      page: 1,
+      totalPages: 0,
+      hasNextPage: false,
+      hasPrevPage: false,
+    },
+    isLoading: false,
+    isError: false,
+    error: null,
+    refetch: vi.fn(),
+    isFetching: false,
+  }),
+}))
+
 // Create a fresh QueryClient for each test
 function createTestQueryClient() {
   return new QueryClient({

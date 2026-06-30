@@ -35,6 +35,10 @@ export const BlockClearList: React.FC<BlockClearListProps> = ({
   const [selectedRequest, setSelectedRequest] = useState<BlockClearRequest | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  // Capture "now" once at mount (lazy initializer) rather than calling the impure
+  // Date.now() during render — row ages are relative to this reference. Day-grain
+  // ageing doesn't need to tick live; a remount/refetch re-reads it.
+  const [nowMs] = useState(() => Date.now())
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -170,7 +174,7 @@ export const BlockClearList: React.FC<BlockClearListProps> = ({
           {data.docs.map((request) => {
             const requestDate = new Date(request.requestedAt || request.createdAt)
             const isSelected = selectedRequest?.id === request.id && drawerOpen
-            const ageDays = Math.floor((Date.now() - requestDate.getTime()) / (1000 * 60 * 60 * 24))
+            const ageDays = Math.floor((nowMs - requestDate.getTime()) / (1000 * 60 * 60 * 24))
 
             return (
               <tr
@@ -192,7 +196,7 @@ export const BlockClearList: React.FC<BlockClearListProps> = ({
                 <td className={styles.cellCustomer}>
                   {request.customerName || 'Unknown Customer'}
                 </td>
-                <td className={styles.cellRequestor}>{request.reasons.join(', ')}</td>
+                <td className={styles.cellRequestor}>{(request.reasons ?? []).join(', ') || '—'}</td>
                 <td className={styles.cellRequestor}>{request.requestedByName || 'Unknown'}</td>
                 <td className={styles.cellDate}>
                   {ageDays === 0 ? formatDateShort(requestDate) : `${ageDays}d`}
