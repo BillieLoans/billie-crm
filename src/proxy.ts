@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { verifyAuthToken } from '@/lib/verifyAuthToken'
 
 /**
  * Cloudflare origin verification.
@@ -56,26 +57,6 @@ function verifyCloudflareOrigin(request: NextRequest): NextResponse | null {
  * TODO: Remove the admin redirect workaround when upgrading to a Payload version
  * that fixes the built-in route authentication issue.
  */
-/**
- * Check if a JWT is structurally valid and not expired.
- *
- * This does NOT verify the signature (we don't have PAYLOAD_SECRET in edge
- * runtime for crypto). It only decodes the payload and checks the `exp` claim.
- * Full signature verification happens later in `payload.auth()` at the route level.
- */
-function isJwtNotExpired(token: string | undefined): boolean {
-  if (!token) return false
-  try {
-    const parts = token.split('.')
-    if (parts.length !== 3) return false
-    const payload = JSON.parse(atob(parts[1]))
-    if (typeof payload.exp !== 'number') return false
-    return payload.exp > Math.floor(Date.now() / 1000)
-  } catch {
-    return false
-  }
-}
-
 /**
  * CSRF protection via Origin header validation.
  *
@@ -155,7 +136,7 @@ function setSecurityHeaders(response: NextResponse): NextResponse {
 const hasPayloadSecret =
   !!process.env.PAYLOAD_SECRET && process.env.PAYLOAD_SECRET !== 'build-placeholder-not-for-production'
 
-export function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // --- Runtime env validation ---
@@ -183,7 +164,7 @@ export function proxy(request: NextRequest) {
   // schema disclosure and unauthenticated mutations (C3, H1).
   if (pathname === '/api/graphql' || pathname === '/api/access') {
     const payloadTokenForApi = request.cookies.get('payload-token')
-    if (!isJwtNotExpired(payloadTokenForApi?.value)) {
+    if (!(await verifyAuthToken(payloadTokenForApi?.value, process.env.PAYLOAD_SECRET))) {
       return NextResponse.json(
         { error: { code: 'UNAUTHENTICATED', message: 'Please log in to continue.' } },
         { status: 401 },
@@ -192,30 +173,37 @@ export function proxy(request: NextRequest) {
   }
 
   // --- Admin route redirect workaround ---
-  const payloadToken = request.cookies.get('payload-token')
-  const hasValidToken = isJwtNotExpired(payloadToken?.value)
+  // Only /admin and /admin/login are intercepted, so verify the token (signature
+  // + expiry) only for those. Using the SAME verification as payload.auth() keeps
+  // this routing decision in agreement with the view/API auth gate — a token that
+  // is unexpired but unverifiable (stale/rotated secret) is no longer treated as
+  // "logged in" here, which is what previously bounced such sessions to the
+  // dashboard while every view 403'd.
+  const isAdminRoot = pathname === '/admin' || pathname === '/admin/'
+  const isAdminLogin = pathname === '/admin/login' || pathname === '/admin/login/'
 
-  if (pathname === '/admin' || pathname === '/admin/') {
-    if (hasValidToken) {
-      return setSecurityHeaders(NextResponse.redirect(new URL('/admin/dashboard', request.url)))
-    } else {
-      return setSecurityHeaders(NextResponse.redirect(new URL('/admin/login', request.url)))
-    }
-  }
-
-  if (pathname === '/admin/login' || pathname === '/admin/login/') {
-    // If a protected view rejected the token (Payload auth failed despite valid JWT structure),
-    // clear the stale cookie to break the login ↔ dashboard redirect loop.
-    if (request.nextUrl.searchParams.has('invalidate')) {
+  if (isAdminRoot || isAdminLogin) {
+    // If a protected view rejected the token, it redirects here with ?invalidate.
+    // Clear the stale cookie to break the login ↔ dashboard redirect loop —
+    // independent of token validity.
+    if (isAdminLogin && request.nextUrl.searchParams.has('invalidate')) {
       const loginUrl = new URL('/admin/login', request.url)
       loginUrl.searchParams.delete('invalidate')
       const response = NextResponse.redirect(loginUrl)
       response.cookies.delete('payload-token')
       return setSecurityHeaders(response)
     }
+
+    const payloadToken = request.cookies.get('payload-token')
+    const hasValidToken = await verifyAuthToken(payloadToken?.value, process.env.PAYLOAD_SECRET)
+
     if (hasValidToken) {
       return setSecurityHeaders(NextResponse.redirect(new URL('/admin/dashboard', request.url)))
     }
+    if (isAdminRoot) {
+      return setSecurityHeaders(NextResponse.redirect(new URL('/admin/login', request.url)))
+    }
+    // /admin/login without a valid token → fall through and render the login page.
   }
 
   return setSecurityHeaders(NextResponse.next())
