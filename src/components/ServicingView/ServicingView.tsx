@@ -23,6 +23,7 @@ import type { SelectedFee } from './FeeList'
 import { AccountRail } from './AccountRail'
 import { AttentionStrip } from './AttentionStrip'
 import { ContextPane } from './ContextPane'
+import { ClearBlockButton } from '@/components/BlockClear'
 import { getAttentionItems, sortAccountsForRail } from '@/lib/accountTriage'
 import { usePendingWriteOff } from '@/hooks/queries/usePendingWriteOff'
 import { useTrackCustomerView } from '@/hooks/useTrackCustomerView'
@@ -104,7 +105,8 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
   const feesCount = useFeesCount(selectedAccountId)
 
   // Check for pending write-off (fail open: allow action if query errors)
-  const { data: pendingWriteOff, isError: pendingWriteOffError } = usePendingWriteOff(selectedAccountId)
+  const { data: pendingWriteOff, isError: pendingWriteOffError } =
+    usePendingWriteOff(selectedAccountId)
   // Only block if we have confirmed pending data; allow if error/loading (fail open for UX)
   const hasPendingWriteOff = !pendingWriteOffError && !!pendingWriteOff
 
@@ -117,10 +119,17 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
         // NOTE: pending-write-off detection is intentionally scoped to the SELECTED account because
         // `usePendingWriteOff` is a per-account query and the design avoids firing extra fetches for
         // every account on the rail. A customer-level pending-write-off query would be a follow-up.
-        pendingWriteOffAccountIds: selectedAccountId && hasPendingWriteOff ? [selectedAccountId] : [],
+        pendingWriteOffAccountIds:
+          selectedAccountId && hasPendingWriteOff ? [selectedAccountId] : [],
         reapplicationBlock: customer?.reapplicationBlock ?? null,
       }),
-    [customer?.vulnerableFlag, customer?.reapplicationBlock, accounts, selectedAccountId, hasPendingWriteOff]
+    [
+      customer?.vulnerableFlag,
+      customer?.reapplicationBlock,
+      accounts,
+      selectedAccountId,
+      hasPendingWriteOff,
+    ],
   )
 
   // Auto-select runs ONCE per mount (the component fully remounts on customer
@@ -306,12 +315,7 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
     return (
       <div className={styles.container}>
         {/* Breadcrumb navigation (Story 6.3) */}
-        <Breadcrumb
-          items={[
-            { label: `Customer ${customerId}` },
-            { label: 'Loading...' },
-          ]}
-        />
+        <Breadcrumb items={[{ label: `Customer ${customerId}` }, { label: 'Loading...' }]} />
         <div className={styles.header}>
           <h1 className={styles.headerTitle}>Customer Servicing</h1>
         </div>
@@ -334,10 +338,7 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
     <div className={styles.container}>
       {/* Breadcrumb navigation (Story 6.3) */}
       <Breadcrumb
-        items={[
-          { label: `Customer ${customerId}` },
-          { label: customer?.fullName || 'Loading...' },
-        ]}
+        items={[{ label: `Customer ${customerId}` }, { label: customer?.fullName || 'Loading...' }]}
       />
       <div className={styles.header}>
         <h1 className={styles.headerTitle}>Customer Servicing</h1>
@@ -348,6 +349,21 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
 
       {/* Customer-level attention chips (replaces the vulnerable banner) */}
       <AttentionStrip items={attentionItems} onSelectAccount={handleSwitchAccount} />
+
+      {/* Customer-level block-clear action (BTB-202). No conversationId — resolution
+          is a new application, not scoped to a single conversation. Self-gating:
+          only canService roles see this; disabled for non-clearable reasons (e.g.
+          ACTIVE_LOAN). canonicalCustomerId is the business key on the customer row. */}
+      {customer && (
+        <ClearBlockButton
+          block={
+            customer.reapplicationBlock
+              ? { ...customer.reapplicationBlock, canonicalCustomerId: customer.customerId }
+              : null
+          }
+          customerName={customer.fullName ?? undefined}
+        />
+      )}
 
       {/* Three-pane cockpit: triaged rail · account work-surface · customer context */}
       <div className={styles.cockpit}>

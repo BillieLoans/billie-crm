@@ -40,7 +40,12 @@ export async function POST(request: NextRequest) {
     // 2. Check authorization - only supervisors/admins can approve
     if (!hasApprovalAuthority(user)) {
       return NextResponse.json(
-        { error: { code: 'FORBIDDEN', message: 'You do not have permission to approve write-offs.' } },
+        {
+          error: {
+            code: 'FORBIDDEN',
+            message: 'You do not have permission to approve write-offs.',
+          },
+        },
         { status: 403 },
       )
     }
@@ -65,15 +70,16 @@ export async function POST(request: NextRequest) {
     const command = parseResult.data
 
     // 4. Look up the write-off request to get account details
+    // depth: 0 is REQUIRED — without it Payload populates relationships (default depth 2),
+    // so writeOffDoc.requestedBy would be an object and String() would yield '[object Object]',
+    // silently bypassing the maker≠checker guard below.
     const writeOffRequest = await payload.find({
       collection: 'write-off-requests',
       where: {
-        or: [
-          { requestId: { equals: command.requestId } },
-          { id: { equals: command.requestId } },
-        ],
+        or: [{ requestId: { equals: command.requestId } }, { id: { equals: command.requestId } }],
       },
       limit: 1,
+      depth: 0,
     })
 
     if (writeOffRequest.docs.length === 0) {
@@ -90,6 +96,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: { code: 'INVALID_STATE', message: `Request is already ${writeOffDoc.status}.` } },
         { status: 400 },
+      )
+    }
+
+    // Segregation of duties: the approver must differ from the requester.
+    if (String(writeOffDoc.requestedBy) === String(user.id)) {
+      return NextResponse.json(
+        { error: { code: 'SELF_APPROVAL', message: 'You cannot approve your own request.' } },
+        { status: 403 },
       )
     }
 

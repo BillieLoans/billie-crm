@@ -23,8 +23,7 @@ export const REDIS_PUBLISH_STREAM =
  * This is configured here for reference but consumed by the Python service.
  * Default: 'inbox:billie-servicing'
  */
-export const REDIS_EXTERNAL_STREAM =
-  process.env.REDIS_EXTERNAL_STREAM ?? 'inbox:billie-servicing'
+export const REDIS_EXTERNAL_STREAM = process.env.REDIS_EXTERNAL_STREAM ?? 'inbox:billie-servicing'
 
 // =============================================================================
 // Event Types (Write-Off)
@@ -99,3 +98,65 @@ export const ALL_CRM_EVENT_TYPES = [
   EVENT_TYPE_WRITEOFF_REJECTED,
   EVENT_TYPE_WRITEOFF_CANCELLED,
 ] as const
+
+// =============================================================================
+// Event Types (Block Clear)
+// =============================================================================
+
+/**
+ * The chatLedger stream that billieChat consumes.
+ * Default: 'chatLedger'
+ */
+export const CHATLEDGER_STREAM = process.env.CHATLEDGER_STREAM ?? 'chatLedger'
+
+/**
+ * Event type for block clear approval request.
+ */
+export const EVENT_TYPE_BLOCK_CLEAR_APPROVAL_REQUESTED =
+  process.env.EVENT_TYPE_BLOCK_CLEAR_APPROVAL_REQUESTED ?? 'block_clear_approval.requested.v1'
+
+/**
+ * Event type for block clear approval approved.
+ */
+export const EVENT_TYPE_BLOCK_CLEAR_APPROVAL_APPROVED =
+  process.env.EVENT_TYPE_BLOCK_CLEAR_APPROVAL_APPROVED ?? 'block_clear_approval.approved.v1'
+
+/**
+ * Event type for block clear approval rejected.
+ */
+export const EVENT_TYPE_BLOCK_CLEAR_APPROVAL_REJECTED =
+  process.env.EVENT_TYPE_BLOCK_CLEAR_APPROVAL_REJECTED ?? 'block_clear_approval.rejected.v1'
+
+/**
+ * Event type for block clear approval cancelled.
+ */
+export const EVENT_TYPE_BLOCK_CLEAR_APPROVAL_CANCELLED =
+  process.env.EVENT_TYPE_BLOCK_CLEAR_APPROVAL_CANCELLED ?? 'block_clear_approval.cancelled.v1'
+
+/**
+ * Event type for reapplication block clear authorized (posted to chatLedger).
+ */
+export const EVENT_TYPE_REAPPLICATION_BLOCK_CLEAR_AUTHORIZED =
+  process.env.EVENT_TYPE_REAPPLICATION_BLOCK_CLEAR_AUTHORIZED ??
+  'reapplication_block.clear_authorized.v1'
+
+/**
+ * Single source of truth for the clear vocabulary (mirrors billieChat enums).
+ */
+export const CLEARABLE_REASONS = [
+  'PRIOR_DEFAULT',
+  'PRIOR_SERIOUS_ARREARS',
+  'ID_VERIFICATION',
+  'SERVICEABILITY',
+  'ACCOUNT_CONDUCT',
+] as const
+
+/**
+ * Reasons that require approval before clearing.
+ */
+export const REASONS_REQUIRING_APPROVAL = ['PRIOR_DEFAULT', 'PRIOR_SERIOUS_ARREARS'] as const
+
+/**
+ * Type alias for clearable reason.
+ */
+export type ClearableReason = (typeof CLEARABLE_REASONS)[number]

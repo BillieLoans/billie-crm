@@ -24,8 +24,10 @@ from .handlers import (
     handle_customer_identity_merged,
     # Identity verification archival (PR #67)
     handle_identity_report_archived,
-    # Re-application block (BTB-135)
+    # Re-application block (BTB-135) + cleared/rejected projection (Task 6)
     handle_reapplication_blocked,
+    handle_reapplication_block_cleared,
+    handle_reapplication_block_clear_rejected,
     # Conversation handlers
     handle_conversation_started,
     handle_utterance,
@@ -51,6 +53,11 @@ from .handlers import (
     handle_writeoff_approved,
     handle_writeoff_rejected,
     handle_writeoff_cancelled,
+    # Block-clear approval handlers (CRM-originated events)
+    handle_block_clear_approval_requested,
+    handle_block_clear_approval_approved,
+    handle_block_clear_approval_rejected,
+    handle_block_clear_approval_cancelled,
     # Notification handlers (platform → CRM read-only projections)
     handle_notification_sent,
     handle_notification_delivery_failed,
@@ -157,6 +164,16 @@ def setup_handlers(processor: EventProcessor) -> None:
         "application.reapplication_blocked.v1", handle_reapplication_blocked
     )
 
+    # Block-clear outcome events (Task 6) — emitted by billieChat after an
+    # operator-authorised clear is applied or rejected; projected back into the
+    # CRM's customers / conversations / reapplication_block_clear_requests tables.
+    processor.register_handler(
+        "reapplication_block.cleared.v1", handle_reapplication_block_cleared
+    )
+    processor.register_handler(
+        "reapplication_block.clear_rejected.v1", handle_reapplication_block_clear_rejected
+    )
+
     # Identity verification report archival (PR #67)
     processor.register_handler(
         "identity_verification.report.archived.v1", handle_identity_report_archived
@@ -187,6 +204,22 @@ def setup_handlers(processor: EventProcessor) -> None:
     processor.register_handler("writeoff.approved.v1", handle_writeoff_approved)
     processor.register_handler("writeoff.rejected.v1", handle_writeoff_rejected)
     processor.register_handler("writeoff.cancelled.v1", handle_writeoff_cancelled)
+
+    # =========================================================================
+    # Block-clear approval events (CRM-originated, manual parsing)
+    # =========================================================================
+    processor.register_handler(
+        "block_clear_approval.requested.v1", handle_block_clear_approval_requested
+    )
+    processor.register_handler(
+        "block_clear_approval.approved.v1", handle_block_clear_approval_approved
+    )
+    processor.register_handler(
+        "block_clear_approval.rejected.v1", handle_block_clear_approval_rejected
+    )
+    processor.register_handler(
+        "block_clear_approval.cancelled.v1", handle_block_clear_approval_cancelled
+    )
 
     # =========================================================================
     # Notification events (platform → CRM, billie_notifications_events SDK)

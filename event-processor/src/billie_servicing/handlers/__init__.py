@@ -21,6 +21,8 @@ from .identity_verification import (
 )
 from .reapplication import (
     handle_reapplication_blocked,
+    handle_reapplication_block_cleared,
+    handle_reapplication_block_clear_rejected,
 )
 from .conversation import (
     handle_conversation_started,
@@ -46,6 +48,12 @@ from .writeoff import (
     handle_writeoff_approved,
     handle_writeoff_rejected,
     handle_writeoff_cancelled,
+)
+from .block_clear_approval import (
+    handle_block_clear_approval_requested,
+    handle_block_clear_approval_approved,
+    handle_block_clear_approval_rejected,
+    handle_block_clear_approval_cancelled,
 )
 from .notification import (
     handle_notification_sent,
@@ -78,8 +86,10 @@ __all__ = [
     "handle_customer_verified",
     "handle_customer_identity_linked",
     "handle_customer_identity_merged",
-    # Re-application block (BTB-135)
+    # Re-application block (BTB-135) + cleared/rejected projection (Task 6)
     "handle_reapplication_blocked",
+    "handle_reapplication_block_cleared",
+    "handle_reapplication_block_clear_rejected",
     # Identity verification archival (PR #67)
     "handle_identity_report_archived",
     # Conversation handlers
@@ -107,6 +117,11 @@ __all__ = [
     "handle_writeoff_approved",
     "handle_writeoff_rejected",
     "handle_writeoff_cancelled",
+    # Block-clear approval handlers (CRM-originated events)
+    "handle_block_clear_approval_requested",
+    "handle_block_clear_approval_approved",
+    "handle_block_clear_approval_rejected",
+    "handle_block_clear_approval_cancelled",
     # Notification handlers (platform → CRM read-only projections)
     "handle_notification_sent",
     "handle_notification_delivery_failed",

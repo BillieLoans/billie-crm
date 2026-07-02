@@ -110,6 +110,10 @@ export interface CustomerData {
     blockedUntil?: string | null
     blockedAt?: string | null
     applicationNumber?: string | null
+    /** BTB-202: status of the most recent block-clear request (e.g. 'pending', 'approved', 'rejected'). */
+    clearStatus?: string | null
+    /** BTB-202: ISO timestamp when the block was cleared. Guard used by ClearBlockButton. */
+    clearedAt?: string | null
   } | null
   /** Latest LAB EVS identity verification result (PR #67). */
   identityVerification?: {
@@ -136,16 +140,16 @@ interface CustomerApiResponse {
 
 async function fetchCustomer(customerId: string): Promise<CustomerData> {
   const res = await fetch(`/api/customer/${customerId}`)
-  
+
   if (!res.ok) {
     if (res.status === 404) {
       throw new Error('Customer not found')
     }
     throw new Error('Failed to fetch customer')
   }
-  
+
   const data: CustomerApiResponse = await res.json()
-  
+
   // Merge customer and accounts into CustomerData shape
   return {
     ...data.customer,
@@ -155,11 +159,11 @@ async function fetchCustomer(customerId: string): Promise<CustomerData> {
 
 /**
  * Hook to fetch a single customer by customerId.
- * 
+ *
  * Automatically tracks loan account versions for conflict detection.
  * When customer data is loaded, each loan account's version (updatedAt)
  * is stored in the version store for later comparison during mutations.
- * 
+ *
  * @param customerId - The customer's unique ID
  * @returns TanStack Query result with customer data
  */

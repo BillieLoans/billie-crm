@@ -71,6 +71,38 @@ export function getRedisClient(): Redis {
   return redisClient
 }
 
+// =============================================================================
+// ChatLedger Redis Singleton
+// =============================================================================
+
+let chatLedgerClient: Redis | null = null
+
+/**
+ * Get the chatLedger Redis client singleton.
+ *
+ * In production both Redis clients resolve to the same instance (shared Redis).
+ * In development with a split-Redis setup (e.g. billieChat on port 6382 vs
+ * billie-crm on port 6383) set CHATLEDGER_REDIS_URL to point at the chatLedger
+ * instance. Falls back to REDIS_URL when the override is not set.
+ *
+ * @returns Redis client instance for the shared chatLedger stream
+ */
+export function getChatLedgerRedisClient(): Redis {
+  if (!chatLedgerClient) {
+    const url = process.env.CHATLEDGER_REDIS_URL ?? REDIS_URL
+    chatLedgerClient = new Redis(url, {
+      retryStrategy: (times) => Math.min(times * 100, 30000),
+      maxRetriesPerRequest: 3,
+      connectTimeout: 10000,
+      keepAlive: 10000,
+      enableOfflineQueue: false,
+      lazyConnect: true,
+    })
+    chatLedgerClient.on('error', (e) => console.error('[ChatLedger Redis] error:', e.message))
+  }
+  return chatLedgerClient
+}
+
 /**
  * Close the Redis connection.
  * Call this during graceful shutdown.
@@ -79,6 +111,10 @@ export async function closeRedisClient(): Promise<void> {
   if (redisClient) {
     await redisClient.quit()
     redisClient = null
+  }
+  if (chatLedgerClient) {
+    await chatLedgerClient.quit()
+    chatLedgerClient = null
   }
 }
 

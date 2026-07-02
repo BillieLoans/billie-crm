@@ -15,6 +15,7 @@ import {
   signalLabel,
 } from '@/lib/recognition'
 import { formatDateOnly } from '@/lib/formatters'
+import { ClearBlockButton } from '@/components/BlockClear'
 import styles from './styles.module.css'
 
 type ReapplicationBlock = NonNullable<ConversationDetail['reapplicationBlock']>
@@ -163,6 +164,13 @@ export function DecisionBanner({ conversation }: DecisionBannerProps) {
             </div>
           )}
         </div>
+      )}
+      {isBlockDecline && (
+        <ClearBlockButton
+          block={block}
+          conversationId={conversation.conversationId}
+          customerName={conversation.customer?.fullName ?? undefined}
+        />
       )}
     </div>
   )

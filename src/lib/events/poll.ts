@@ -69,7 +69,7 @@ function sleep(ms: number): Promise<void> {
  */
 export async function pollForWriteOffRequest<T = unknown>(
   eventId: string,
-  options?: PollOptions
+  options?: PollOptions,
 ): Promise<T> {
   const { maxAttempts = 10, intervalMs = 500, initialDelayMs = 100 } = options ?? {}
 
@@ -121,7 +121,7 @@ export async function pollForWriteOffRequest<T = unknown>(
 export async function pollForWriteOffUpdate<T = unknown>(
   requestId: string,
   expectedStatus: 'approved' | 'rejected' | 'cancelled',
-  options?: PollOptions
+  options?: PollOptions,
 ): Promise<T> {
   const { maxAttempts = 10, intervalMs = 500, initialDelayMs = 100 } = options ?? {}
 
@@ -160,6 +160,59 @@ export async function pollForWriteOffUpdate<T = unknown>(
 }
 
 /**
+ * Poll for a reapplication block-clear request update by requestId and expected status.
+ *
+ * Used for approve/reject/cancel operations where we're updating
+ * an existing request and waiting for the status change.
+ *
+ * @param requestId - The request ID to look for
+ * @param expectedStatus - The status we're waiting for
+ * @param options - Polling configuration
+ * @returns The updated block-clear request document
+ * @throws PollTimeoutError if not found within max attempts
+ */
+export async function pollForBlockClearUpdate<T = unknown>(
+  requestId: string,
+  expectedStatus: 'approved' | 'rejected' | 'cancelled',
+  options?: PollOptions,
+): Promise<T> {
+  const { maxAttempts = 10, intervalMs = 500, initialDelayMs = 100 } = options ?? {}
+
+  // Initial delay to give the event processor time to start
+  await sleep(initialDelayMs)
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const query = stringify({
+        where: {
+          requestId: { equals: requestId },
+          status: { equals: expectedStatus },
+        },
+        limit: 1,
+      })
+
+      const res = await fetch(`/api/reapplication-block-clear-requests?${query}`)
+
+      if (res.ok) {
+        const data = await res.json()
+        if (data.docs && data.docs.length > 0) {
+          return data.docs[0] as T
+        }
+      }
+    } catch {
+      // Ignore fetch errors and continue polling
+    }
+
+    // Don't sleep after the last attempt
+    if (attempt < maxAttempts) {
+      await sleep(intervalMs)
+    }
+  }
+
+  throw new PollTimeoutError(requestId, maxAttempts)
+}
+
+/**
  * Generic polling function for any projection.
  *
  * @param fetchFn - Function that fetches and checks for the projection
@@ -169,10 +222,14 @@ export async function pollForWriteOffUpdate<T = unknown>(
  */
 export async function pollUntil<T>(
   fetchFn: () => Promise<T | null | undefined>,
-  options?: PollOptions & { label?: string }
+  options?: PollOptions & { label?: string },
 ): Promise<T> {
-  const { maxAttempts = 10, intervalMs = 500, initialDelayMs = 100, label = 'projection' } =
-    options ?? {}
+  const {
+    maxAttempts = 10,
+    intervalMs = 500,
+    initialDelayMs = 100,
+    label = 'projection',
+  } = options ?? {}
 
   // Initial delay
   await sleep(initialDelayMs)
