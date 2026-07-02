@@ -70,6 +70,12 @@ export const CollectionsCases: CollectionConfig = {
       admin: { readOnly: true, description: 'Base lifecycle state. Cross-cutting hardship / stop-contact are flags.' },
     },
     {
+      name: 'rung',
+      type: 'number',
+      index: true,
+      admin: { readOnly: true, description: 'Current reminder step from collection.case.step_advanced.v1' },
+    },
+    {
       name: 'hardshipPaused',
       type: 'checkbox',
       index: true,

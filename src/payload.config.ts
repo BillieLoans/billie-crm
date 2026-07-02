@@ -209,6 +209,7 @@ export default buildConfig({
             extraConfig: (t) => ({
               collectionCasesWorklistIdx: index('collection_cases_worklist_idx').on(
                 t.state,
+                t.rung,
                 desc(t.updatedAt),
               ),
               collectionCasesByCustomerIdx: index('collection_cases_by_customer_idx').on(
