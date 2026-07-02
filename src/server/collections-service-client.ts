@@ -198,9 +198,13 @@ export function decodeCaseEconomics(raw: any): CaseEconomics {
 }
 
 function decodeContactCapStatus(raw: any): ContactCapStatus {
+  // NOTE: @grpc/proto-loader with keepCase:false does NOT camelCase an
+  // underscore followed by a digit, so the wire object arrives as
+  // `sent_7d` / `cap_7d` (not `sent7d` / `cap7d`) while `sent_month` /
+  // `cap_month` DO camelCase normally to `sentMonth` / `capMonth`.
   return {
-    sent7d: raw?.sent7d ?? 0,
-    cap7d: raw?.cap7d ?? 0,
+    sent7d: raw?.sent_7d ?? 0,
+    cap7d: raw?.cap_7d ?? 0,
     sentMonth: raw?.sentMonth ?? 0,
     capMonth: raw?.capMonth ?? 0,
   }

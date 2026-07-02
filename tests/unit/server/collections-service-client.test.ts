@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import * as grpc from '@grpc/grpc-js'
+import * as protoLoader from '@grpc/proto-loader'
+import path from 'path'
+import { fileURLToPath } from 'url'
 import {
   decodeCaseActionResponse,
   decodeCaseEconomics,
@@ -9,6 +12,10 @@ import {
   isFailedPrecondition,
   isResourceExhausted,
 } from '@/server/collections-service-client'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const PROTO_PATH = path.resolve(__dirname, '../../../proto/collections_service.proto')
 
 describe('collections-service-client mappers', () => {
   describe('decodeCaseActionResponse', () => {
@@ -148,7 +155,10 @@ describe('collections-service-client mappers', () => {
           },
           { sentAt: null, channel: 'email', template: 'rung2_email', outcome: 'skipped' },
         ],
-        contactCapStatus: { sent7d: 2, cap7d: 3, sentMonth: 6, capMonth: 10 },
+        // Wire keys as they actually arrive from @grpc/proto-loader (keepCase:false does
+        // NOT camelCase an underscore followed by a digit): sent_7d / cap_7d, but
+        // sent_month / cap_month DO camelCase normally.
+        contactCapStatus: { sent_7d: 2, cap_7d: 3, sentMonth: 6, capMonth: 10 },
       }
       const result = decodeContactLog(raw)
       expect(result.accountId).toBe('acc_1')
@@ -168,6 +178,51 @@ describe('collections-service-client mappers', () => {
       const result = decodeContactLog({ accountId: 'acc_2' })
       expect(result.entries).toEqual([])
       expect(result.contactCapStatus).toEqual({ sent7d: 0, cap7d: 0, sentMonth: 0, capMonth: 0 })
+    })
+
+    it('round-trips a real ContactLog through the actual proto wire encoding (catches proto-loader camelCase surprises like sent_7d/cap_7d)', () => {
+      // Load the real .proto with the exact options the client uses, so this test
+      // fails the moment the wire shape and decodeContactCapStatus's key names diverge —
+      // rather than relying on hand-built fixtures that can silently encode the same bug.
+      const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
+        keepCase: false,
+        longs: String,
+        enums: String,
+        defaults: true,
+        oneofs: true,
+      })
+      const protoDescriptor = grpc.loadPackageDefinition(packageDefinition) as any
+      const ContactLogType = protoDescriptor.billie.collections.v1.ContactLog
+
+      // Sanity check on the descriptor itself: sent_7d/cap_7d must NOT have been
+      // camelCased away by proto-loader (unlike sent_month/cap_month, which do).
+      const capStatusFields = protoDescriptor.billie.collections.v1.ContactCapStatus.type.field.map(
+        (f: { name: string }) => f.name,
+      )
+      expect(capStatusFields).toEqual(['sent_7d', 'cap_7d', 'sentMonth', 'capMonth'])
+
+      const input = {
+        accountId: 'acc_1',
+        entries: [
+          {
+            sentAt: { seconds: '1735689600', nanos: 0 },
+            channel: 'sms',
+            template: 'rung1_sms',
+            outcome: 'sent',
+          },
+        ],
+        contactCapStatus: { sent_7d: 2, cap_7d: 3, sentMonth: 6, capMonth: 10 },
+      }
+
+      // Serialize to real protobuf wire bytes and deserialize back — this is the exact
+      // shape a gRPC client callback receives, wire keys and all.
+      const wireBytes = ContactLogType.serialize(input)
+      const wireObject = ContactLogType.deserialize(wireBytes)
+
+      const result = decodeContactLog(wireObject)
+      expect(result.contactCapStatus).toEqual({ sent7d: 2, cap7d: 3, sentMonth: 6, capMonth: 10 })
+      expect(result.entries).toHaveLength(1)
+      expect(result.entries[0].sentAt).toBe('2025-01-01T00:00:00.000Z')
     })
   })
 
