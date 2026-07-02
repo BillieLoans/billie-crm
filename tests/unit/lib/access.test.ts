@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, test, expect } from 'vitest'
 import {
   getUserRole,
   isAdmin,
@@ -6,6 +6,8 @@ import {
   canService,
   hasAnyRole,
   hideFromNonAdmins,
+  canMarketing,
+  canReadMarketing,
 } from '@/lib/access'
 
 describe('Access Control Helpers', () => {
@@ -178,5 +180,27 @@ describe('Access Control - Role Matrix (AC1, AC2)', () => {
     ])('canService for %s role should return %s', (role, expected) => {
       expect(canService({ role })).toBe(expected)
     })
+  })
+})
+
+const user = (role: string) => ({ role }) as unknown
+
+describe('marketing role wall', () => {
+  test('marketing is a valid role', () => {
+    expect(getUserRole(user('marketing'))).toBe('marketing')
+  })
+  test('canMarketing: admin and marketing only', () => {
+    expect(canMarketing(user('admin'))).toBe(true)
+    expect(canMarketing(user('marketing'))).toBe(true)
+    expect(canMarketing(user('supervisor'))).toBe(false)
+    expect(canMarketing(user('operations'))).toBe(false)
+  })
+  test('canReadMarketing: everything except service', () => {
+    for (const r of ['admin', 'marketing', 'supervisor', 'operations', 'readonly'])
+      expect(canReadMarketing(user(r))).toBe(true)
+    expect(canReadMarketing(user('service'))).toBe(false)
+  })
+  test('LENDING WALL: hasAnyRole must NOT admit marketing', () => {
+    expect(hasAnyRole(user('marketing'))).toBe(false)
   })
 })

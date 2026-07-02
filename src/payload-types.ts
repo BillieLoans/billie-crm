@@ -141,7 +141,7 @@ export interface UserAuthOperations {
  */
 export interface User {
   id: string;
-  role: 'admin' | 'supervisor' | 'operations' | 'readonly' | 'service';
+  role: 'admin' | 'supervisor' | 'operations' | 'readonly' | 'service' | 'marketing';
   firstName: string;
   lastName: string;
   avatar?: (string | null) | Media;
