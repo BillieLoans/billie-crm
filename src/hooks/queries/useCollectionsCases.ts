@@ -66,10 +66,13 @@ export function useCollectionsCases(filters: CollectionsCasesFilters) {
   const cases = pages.flatMap((p) => p.cases)
   const lastPage = pages[pages.length - 1]
 
+  // Any fetched page degraded → flag, since its rows remain in the list (flatMap above).
+  const agingUnavailable = pages.some((p) => p.agingUnavailable)
+
   return {
     cases,
     totalDocs: lastPage?.totalDocs ?? 0,
-    agingUnavailable: lastPage?.agingUnavailable ?? false,
+    agingUnavailable,
     fetchNextPage: query.fetchNextPage,
     hasNextPage: query.hasNextPage,
     isLoading: query.isLoading,

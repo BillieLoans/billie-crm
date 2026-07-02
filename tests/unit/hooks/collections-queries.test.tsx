@@ -232,6 +232,55 @@ describe('useCollectionsCases', () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false))
     expect(result.current.cases).toEqual([])
   })
+
+  it('keeps agingUnavailable true even when a later page succeeds (C4 review)', async () => {
+    const page1Cases = [makeCase({ accountId: 'acc-1' })]
+    const page2Cases = [makeCase({ accountId: 'acc-2' })]
+
+    const fetchMock = global.fetch as ReturnType<typeof vi.fn>
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () =>
+          pageResponse({
+            cases: page1Cases,
+            page: 1,
+            totalPages: 2,
+            hasNextPage: true,
+            totalDocs: 2,
+            agingUnavailable: true,
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () =>
+          pageResponse({
+            cases: page2Cases,
+            page: 2,
+            totalPages: 2,
+            hasNextPage: false,
+            totalDocs: 2,
+            agingUnavailable: false,
+          }),
+      })
+
+    const { result } = renderHook(() => useCollectionsCases({}), { wrapper: createWrapper() })
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    expect(result.current.agingUnavailable).toBe(true)
+
+    await act(async () => {
+      await result.current.fetchNextPage()
+    })
+
+    await waitFor(() => expect(result.current.hasNextPage).toBe(false))
+
+    // Page 1's degraded aging outcome must not be masked by page 2 succeeding —
+    // page 1's rows are still shown via flatMap.
+    expect(result.current.cases.map((c) => c.accountId)).toEqual(['acc-1', 'acc-2'])
+    expect(result.current.agingUnavailable).toBe(true)
+  })
 })
 
 describe('useCollectionsCase', () => {
