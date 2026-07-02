@@ -6,6 +6,7 @@ import {
   getAttentionItems,
 } from '@/lib/accountTriage'
 import type { LoanAccountData, ScheduledPayment } from '@/hooks/queries/useCustomer'
+import type { CollectionsCaseRow } from '@/types/collections'
 
 const TODAY = new Date('2026-06-09T12:00:00Z')
 
@@ -152,6 +153,104 @@ describe('getAttentionItems', () => {
       vulnerable: false,
       accounts: [],
       reapplicationBlock: { reason: 'SERVICEABILITY', blockedUntil: '2026-01-01T00:00:00+00:00', blockedAt: null, applicationNumber: null },
+      today: TODAY,
+    })
+    expect(items).toEqual([])
+  })
+
+  // ─── Collections (BTB-197 WS4) ──────────────────────────────────────────────
+
+  const collectionsCase = (o: Partial<CollectionsCaseRow> & { accountId: string }): CollectionsCaseRow => ({
+    accountId: o.accountId,
+    customerId: 'cust-1',
+    customerName: 'Test Customer',
+    accountNumber: o.accountId,
+    state: 'open',
+    rung: 2,
+    hardshipPaused: false,
+    stoppedContact: false,
+    overdueAmount: 100,
+    daysOverdue: 10,
+    lastStep: 2,
+    openedAt: '2026-06-01T00:00:00.000Z',
+    curedAt: null,
+    exhaustedAt: null,
+    pausedAt: null,
+    resumedAt: null,
+    stopContactAt: null,
+    updatedAt: '2026-06-20T00:00:00.000Z',
+    aging: null,
+    ...o,
+  })
+
+  it('default-param call sites (no collectionsCases arg) are unaffected', () => {
+    const accounts = [acc({ loanAccountId: 'ok', repaymentSchedule: { scheduleId: 's', numberOfPayments: 1, paymentFrequency: 'fortnightly', createdDate: null, payments: [pay(1, '2026-06-20', 'scheduled')] } })]
+    expect(getAttentionItems({ vulnerable: false, accounts, today: TODAY })).toEqual([])
+  })
+
+  it('emits a collections chip per open case, targeting that account', () => {
+    const items = getAttentionItems({
+      vulnerable: false,
+      accounts: [],
+      collectionsCases: [collectionsCase({ accountId: 'LOAN-1', state: 'open' })],
+      today: TODAY,
+    })
+    expect(items).toEqual([
+      { kind: 'collections', label: 'In collections', accountId: 'LOAN-1', severity: 'high' },
+    ])
+  })
+
+  it('uses the "Awaiting human" label variant for awaiting_human cases', () => {
+    const items = getAttentionItems({
+      vulnerable: false,
+      accounts: [],
+      collectionsCases: [collectionsCase({ accountId: 'LOAN-2', state: 'awaiting_human' })],
+      today: TODAY,
+    })
+    expect(items).toEqual([
+      { kind: 'collections', label: 'Awaiting human', accountId: 'LOAN-2', severity: 'high' },
+    ])
+  })
+
+  it('emits an additional hardship chip for a hardship-paused case, scoped to that account', () => {
+    const items = getAttentionItems({
+      vulnerable: false,
+      accounts: [],
+      collectionsCases: [collectionsCase({ accountId: 'LOAN-3', state: 'open', hardshipPaused: true })],
+      today: TODAY,
+    })
+    expect(items.map((i) => i.kind)).toEqual(['collections', 'hardship'])
+    expect(items[1].accountId).toBe('LOAN-3')
+    expect(items[1].severity).toBe('medium')
+  })
+
+  it('emits a single customer-level stop_contact chip (accountId null) when any case has stoppedContact, even across multiple cases', () => {
+    const items = getAttentionItems({
+      vulnerable: false,
+      accounts: [],
+      collectionsCases: [
+        collectionsCase({ accountId: 'LOAN-4', state: 'open', stoppedContact: true }),
+        collectionsCase({ accountId: 'LOAN-5', state: 'awaiting_human', stoppedContact: true }),
+      ],
+      today: TODAY,
+    })
+    const stopContactItems = items.filter((i) => i.kind === 'stop_contact')
+    expect(stopContactItems).toHaveLength(1)
+    expect(stopContactItems[0]).toEqual({
+      kind: 'stop_contact',
+      label: 'Contact stopped',
+      accountId: null,
+      severity: 'high',
+    })
+  })
+
+  it('emits no items for cured-only cases, even if hardshipPaused/stoppedContact are set', () => {
+    const items = getAttentionItems({
+      vulnerable: false,
+      accounts: [],
+      collectionsCases: [
+        collectionsCase({ accountId: 'LOAN-6', state: 'cured', hardshipPaused: true, stoppedContact: true }),
+      ],
       today: TODAY,
     })
     expect(items).toEqual([])

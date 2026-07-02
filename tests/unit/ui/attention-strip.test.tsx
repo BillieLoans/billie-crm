@@ -36,4 +36,25 @@ describe('AttentionStrip', () => {
     fireEvent.click(screen.getByText('Vulnerable customer'))
     expect(onSelectAccount).not.toHaveBeenCalled()
   })
+
+  test('renders the collections/hardship/stop_contact chips (BTB-197 WS4)', () => {
+    const collectionsItems: AttentionItem[] = [
+      { kind: 'collections', label: 'In collections', accountId: 'LOAN-1', severity: 'high' },
+      { kind: 'hardship', label: 'Hardship paused', accountId: 'LOAN-1', severity: 'medium' },
+      { kind: 'stop_contact', label: 'Contact stopped', accountId: null, severity: 'high' },
+    ]
+    const onSelectAccount = vi.fn()
+    render(<AttentionStrip items={collectionsItems} onSelectAccount={onSelectAccount} />)
+
+    expect(screen.getByText('In collections')).toBeInTheDocument()
+    expect(screen.getByText('Hardship paused')).toBeInTheDocument()
+    expect(screen.getByText('Contact stopped')).toBeInTheDocument()
+
+    // Per-account kinds select that account; the customer-level stop_contact chip does not.
+    fireEvent.click(screen.getByText('In collections'))
+    expect(onSelectAccount).toHaveBeenCalledWith('LOAN-1')
+    onSelectAccount.mockClear()
+    fireEvent.click(screen.getByText('Contact stopped'))
+    expect(onSelectAccount).not.toHaveBeenCalled()
+  })
 })

@@ -16,6 +16,9 @@ const ICON: Record<AttentionItem['kind'], string> = {
   pending_disbursement: '⏳',
   writeoff_pending: '📝',
   reapplication_blocked: '⛔',
+  collections: '☎',
+  hardship: '🛡',
+  stop_contact: '🔕',
 }
 
 export const AttentionStrip: React.FC<AttentionStripProps> = ({

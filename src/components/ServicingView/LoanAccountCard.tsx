@@ -1,6 +1,8 @@
 'use client'
 
+import Link from 'next/link'
 import type { LoanAccountData } from '@/hooks/queries/useCustomer'
+import type { CollectionsCaseRow } from '@/types/collections'
 import { getAccountSignal, type AccountSignal } from '@/lib/accountTriage'
 import styles from './LoanAccountCard.module.css'
 
@@ -10,6 +12,17 @@ export interface LoanAccountCardProps {
   onSelect: (account: LoanAccountData) => void
   /** Injectable for deterministic tests; defaults to now. */
   today?: Date
+  /**
+   * The account's collections case (BTB-197 WS4), if any. The badge + deep
+   * link only render when a non-cured case is passed — cured cases carry no
+   * signal here (mirrors the attention-strip nuance in accountTriage.ts).
+   */
+  collectionsCase?: CollectionsCaseRow | null
+}
+
+const COLLECTIONS_STATE_LABEL: Record<'open' | 'awaiting_human', string> = {
+  open: 'Open',
+  awaiting_human: 'Awaiting human',
 }
 
 const currencyFormatter = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' })
@@ -39,28 +52,67 @@ function statusLine(account: LoanAccountData, signal: AccountSignal): string {
 /**
  * Compact account row for the triaged rail. One line of status, one balance.
  */
-export const LoanAccountCard: React.FC<LoanAccountCardProps> = ({ account, isSelected = false, onSelect, today }) => {
+export const LoanAccountCard: React.FC<LoanAccountCardProps> = ({
+  account,
+  isSelected = false,
+  onSelect,
+  today,
+  collectionsCase = null,
+}) => {
   const signal = getAccountSignal(account, today)
   const outstanding = account.liveBalance?.totalOutstanding ?? account.balances?.totalOutstanding ?? 0
+  const showCollections = !!collectionsCase && collectionsCase.state !== 'cured'
 
   return (
-    <button
-      type="button"
-      className={`${styles.row} ${isSelected ? styles.rowSelected : ''} ${signal.tier === 'closed' ? styles.rowClosed : ''}`}
-      onClick={() => onSelect(account)}
-      aria-pressed={isSelected}
-      data-testid={`loan-account-card-${account.loanAccountId}`}
-    >
-      <div className={styles.rowTop}>
-        <span className={`${styles.dot} ${DOT_CLASS[signal.tier]}`} aria-hidden />
-        <span className={styles.accountNumber}>{account.accountNumber}</span>
-      </div>
-      <div className={styles.rowBottom}>
-        <span className={`${styles.statusLine} ${styles[`status_${signal.tier}`] ?? ''}`}>
-          {statusLine(account, signal)}
-        </span>
-        <span className={styles.balance}>{currencyFormatter.format(outstanding)}</span>
-      </div>
-    </button>
+    <div className={styles.cardWrap}>
+      <button
+        type="button"
+        className={`${styles.row} ${isSelected ? styles.rowSelected : ''} ${signal.tier === 'closed' ? styles.rowClosed : ''}`}
+        onClick={() => onSelect(account)}
+        aria-pressed={isSelected}
+        data-testid={`loan-account-card-${account.loanAccountId}`}
+      >
+        <div className={styles.rowTop}>
+          <span className={`${styles.dot} ${DOT_CLASS[signal.tier]}`} aria-hidden />
+          <span className={styles.accountNumber}>{account.accountNumber}</span>
+        </div>
+        <div className={styles.rowBottom}>
+          <span className={`${styles.statusLine} ${styles[`status_${signal.tier}`] ?? ''}`}>
+            {statusLine(account, signal)}
+          </span>
+          <span className={styles.balance}>{currencyFormatter.format(outstanding)}</span>
+        </div>
+
+        {showCollections && collectionsCase && (
+          <div className={styles.collectionsBadge} data-testid={`collections-badge-${account.loanAccountId}`}>
+            <span className={styles.collectionsBadgeText}>
+              Collections · Step {collectionsCase.rung ?? '?'}/5 ·{' '}
+              {COLLECTIONS_STATE_LABEL[collectionsCase.state as 'open' | 'awaiting_human']}
+            </span>
+            {(collectionsCase.hardshipPaused || collectionsCase.stoppedContact) && (
+              <span className={styles.collectionsFlags}>
+                {collectionsCase.hardshipPaused && (
+                  <span className={styles.flagChip}>Hardship</span>
+                )}
+                {collectionsCase.stoppedContact && (
+                  <span className={`${styles.flagChip} ${styles.flagChipStop}`}>Stop contact</span>
+                )}
+              </span>
+            )}
+          </div>
+        )}
+      </button>
+
+      {showCollections && (
+        <Link
+          href={`/admin/collections-queue/${account.loanAccountId}`}
+          className={styles.collectionsLink}
+          onClick={(e) => e.stopPropagation()}
+          data-testid={`collections-link-${account.loanAccountId}`}
+        >
+          View collections case →
+        </Link>
+      )}
+    </div>
   )
 }
