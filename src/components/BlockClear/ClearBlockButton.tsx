@@ -39,8 +39,11 @@ export function ClearBlockButton({ block, conversationId, customerName }: ClearB
   // Role gate — only canService roles (admin, supervisor, operations)
   if (!canService(user)) return null
 
-  // Only render when there is a live block (has a reason and hasn't been cleared)
-  if (!block?.reason || block.clearedAt) return null
+  // Only render while a block reason stands. reason=NULL is the authoritative
+  // "unblocked" signal. clearedAt alone must NOT hide the button: a partial
+  // clear that didn't lift the currently-blocking reason (spec §14) stamps
+  // clearedAt while the block remains — the retry path has to stay available.
+  if (!block?.reason) return null
 
   const isClearable = CLEARABLE_REASONS.includes(block.reason as ClearableReason)
   const canonicalCustomerId = block.canonicalCustomerId
@@ -84,6 +87,11 @@ export function ClearBlockButton({ block, conversationId, customerName }: ClearB
         )}
         {block.clearStatus === 'rejected' && (
           <span className={styles.clearStatusRejected}>(Previously rejected)</span>
+        )}
+        {block.clearStatus === 'cleared' && (
+          <span className={styles.clearStatusRejected}>
+            (A previous clear didn&apos;t lift this reason)
+          </span>
         )}
       </div>
 

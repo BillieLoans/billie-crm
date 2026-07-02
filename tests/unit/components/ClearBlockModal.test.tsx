@@ -214,4 +214,19 @@ describe('ClearBlockModal', () => {
       }
     })
   })
+  describe('current-reason warning', () => {
+    it('warns when the currently-blocking reason is deselected', () => {
+      renderWithProviders(<ClearBlockModal {...defaultProps} currentReason="PRIOR_DEFAULT" />)
+      // Pre-selected on open; no warning yet
+      expect(screen.queryByTestId('current-reason-warning')).not.toBeInTheDocument()
+      // Deselect the blocking reason, select a different one
+      fireEvent.click(screen.getByTestId('reason-checkbox-PRIOR_DEFAULT'))
+      fireEvent.click(screen.getByTestId('reason-checkbox-SERVICEABILITY'))
+      expect(screen.getByTestId('current-reason-warning')).toBeInTheDocument()
+      expect(screen.getByTestId('current-reason-warning').textContent).toMatch(/will NOT unblock/)
+      // Re-selecting the blocking reason removes the warning
+      fireEvent.click(screen.getByTestId('reason-checkbox-PRIOR_DEFAULT'))
+      expect(screen.queryByTestId('current-reason-warning')).not.toBeInTheDocument()
+    })
+  })
 })

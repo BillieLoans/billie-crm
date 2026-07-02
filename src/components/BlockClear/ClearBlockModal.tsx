@@ -149,6 +149,17 @@ export function ClearBlockModal({
               </div>
             )}
 
+            {currentReason != null &&
+              CLEARABLE_REASONS.includes(currentReason as ClearableReason) &&
+              selectedReasons.length > 0 &&
+              !selectedReasons.includes(currentReason) && (
+                <div className={styles.approvalNotice} data-testid="current-reason-warning">
+                  Warning — the customer is currently blocked by{' '}
+                  <strong>{formatBlockReason(currentReason)}</strong>, which is not selected. This
+                  clear will NOT unblock the customer.
+                </div>
+              )}
+
             <div className={styles.fieldGroup}>
               <label className={styles.fieldLabel}>Reasons for clearing *</label>
               <div className={styles.checkboxList}>

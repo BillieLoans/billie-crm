@@ -75,4 +75,34 @@ describe('ClearBlockButton', () => {
       expect(screen.queryByTestId('clear-block-modal-stub')).not.toBeInTheDocument()
     })
   })
+  describe('partial clear (spec §14) retry path', () => {
+    it('still renders the button when clearedAt is set but the reason stands', () => {
+      render(
+        <ClearBlockButton
+          block={{
+            reason: CLEARABLE,
+            canonicalCustomerId: 'cust-123',
+            clearedAt: '2026-07-02T04:20:50Z',
+            clearStatus: 'cleared',
+          }}
+        />,
+      )
+      expect(screen.getByTestId('clear-block-btn')).toBeInTheDocument()
+      expect(screen.getByText(/didn.t lift this reason/)).toBeInTheDocument()
+    })
+
+    it('renders nothing once the reason is null (authoritative unblocked)', () => {
+      render(
+        <ClearBlockButton
+          block={{
+            reason: null,
+            canonicalCustomerId: 'cust-123',
+            clearedAt: '2026-07-02T04:20:50Z',
+          }}
+        />,
+      )
+      expect(screen.queryByTestId('clear-block-btn')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('clear-block-btn-disabled')).not.toBeInTheDocument()
+    })
+  })
 })
