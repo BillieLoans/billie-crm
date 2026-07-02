@@ -115,6 +115,26 @@ async def test_contact_unlinked_clears_customer_link(mock_pool):
     assert updated["linked_at"] is None
 
 
+async def test_contact_observed_with_consent_upserts_marketing_consent_snapshot(mock_pool):
+    """`contact.observed.v1` carrying a `consent` capture (ConsentCapture:
+    granted/channels/method) must serialize into the `contacts.consent`
+    jsonb column under the `marketing` key. Exercises the
+    `p.consent.model_dump()` -> `json.dumps` path, which the other
+    `contact.observed.v1` tests (using a payload with no `consent` field)
+    never touch."""
+    await handle_contact_observed(mock_pool, _parsed("contact.observed.v1", {
+        "contact_id": "c-1", "mobile_e164": "+61400000001", "source": "campus",
+        "observed_at": "2026-07-02T00:00:00+00:00",
+        "consent": {"granted": True, "channels": ["sms", "email"], "method": "waitlist_form"},
+    }))
+
+    contact_row = mock_pool.last_upsert("contacts")
+    consent = json.loads(contact_row["consent"])
+    assert consent == {
+        "marketing": {"granted": True, "channels": ["sms", "email"], "method": "waitlist_form"}
+    }
+
+
 async def test_consent_granted_merges_marketing_consent_jsonb(mock_pool):
     await handle_contact_consent_granted(mock_pool, _parsed("contact.consent.granted.v1", {
         "contact_id": "c-1", "channels": ["sms", "whatsapp"], "method": "waitlist_form",

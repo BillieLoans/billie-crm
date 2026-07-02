@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import asyncpg
@@ -31,7 +31,7 @@ logger = structlog.get_logger()
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 async def _audit(
@@ -102,7 +102,7 @@ async def handle_contact_updated(pool: asyncpg.Pool, event: Any) -> None:
         "channel_preference": p.channel_preference,
     }
     changed = {k: v for k, v in candidate.items() if v is not None}
-    if p.attributes:
+    if p.attributes is not None:
         changed["attributes"] = json.dumps(p.attributes)
 
     values = {"contact_id": p.contact_id, **changed, "updated_at": _now()}
