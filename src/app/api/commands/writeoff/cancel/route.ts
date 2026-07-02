@@ -43,27 +43,37 @@ export async function POST(request: NextRequest) {
 
     const command = parseResult.data
 
-    // Authorization: only the original requester or a supervisor/admin can cancel
+    // Authorization: only the original requester or a supervisor/admin can cancel.
+    // depth: 0 keeps requestedBy a scalar id — populated relationships stringify
+    // to '[object Object]' and silently defeat the comparison.
     const existingRequest = await payload.find({
       collection: 'write-off-requests',
+      depth: 0,
       where: { requestId: { equals: command.requestId } },
       limit: 1,
     })
 
-    if (existingRequest.docs.length > 0) {
-      const originalRequest = existingRequest.docs[0]
-      const isOriginalRequester = String(originalRequest.requestedBy) === String(user.id)
-      if (!isOriginalRequester && !hasApprovalAuthority(user)) {
-        return NextResponse.json(
-          {
-            error: {
-              code: 'FORBIDDEN',
-              message: 'Only the original requester or a supervisor can cancel this request.',
-            },
+    // A missing request must 404, never fall through to publish — otherwise the
+    // authz gate is silently skipped for unknown/deleted requestIds.
+    if (existingRequest.docs.length === 0) {
+      return NextResponse.json(
+        { error: { code: 'NOT_FOUND', message: 'Write-off request not found.' } },
+        { status: 404 },
+      )
+    }
+
+    const originalRequest = existingRequest.docs[0]
+    const isOriginalRequester = String(originalRequest.requestedBy) === String(user.id)
+    if (!isOriginalRequester && !hasApprovalAuthority(user)) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'FORBIDDEN',
+            message: 'Only the original requester or a supervisor can cancel this request.',
           },
-          { status: 403 },
-        )
-      }
+        },
+        { status: 403 },
+      )
     }
 
     // 3. Build event payload with user info
