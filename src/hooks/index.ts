@@ -21,6 +21,16 @@ export type {
   RepaymentAllocation,
 } from './mutations/useRecordRepayment'
 
+// Collections operator action mutations (BTB-198 WS5)
+export { useFlagHardship } from './mutations/useFlagHardship'
+export type { FlagHardshipParams } from './mutations/useFlagHardship'
+export { useResumeHardship } from './mutations/useResumeHardship'
+export type { ResumeHardshipParams } from './mutations/useResumeHardship'
+export { useApplyStopContact } from './mutations/useApplyStopContact'
+export type { ApplyStopContactParams } from './mutations/useApplyStopContact'
+export { useAdvanceToNextStep } from './mutations/useAdvanceToNextStep'
+export type { AdvanceToNextStepParams } from './mutations/useAdvanceToNextStep'
+
 // Period Close mutations (E3)
 export { usePeriodClosePreview } from './mutations/usePeriodClosePreview'
 export type {

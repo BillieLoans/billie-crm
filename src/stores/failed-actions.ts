@@ -10,8 +10,24 @@ import {
 
 /**
  * Types of actions that can fail and be retried.
+ *
+ * The four `collections/*` entries are the Collections operator actions
+ * (BTB-198 WS5: flag-hardship, resume-hardship, stop-contact,
+ * advance-step) — added here so `addFailedAction` type-checks for them.
+ * As with `write-off-request`, none of them registers a
+ * `billie-retry-action` window-event listener (see useFlagHardship.ts for
+ * why); they still land in this queue via the same `isSystemError()` path
+ * as every other action, so the panel lists/dismisses them normally — only
+ * the "Retry" button is a no-op until a listener is wired.
  */
-export type FailedActionType = 'waive-fee' | 'record-repayment' | 'write-off-request'
+export type FailedActionType =
+  | 'waive-fee'
+  | 'record-repayment'
+  | 'write-off-request'
+  | 'flag-hardship'
+  | 'resume-hardship'
+  | 'stop-contact'
+  | 'advance-step'
 
 /**
  * A failed action that can be retried later.

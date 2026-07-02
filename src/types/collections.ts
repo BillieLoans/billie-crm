@@ -40,3 +40,16 @@ export interface CollectionsCasesListResponse {
 export interface CollectionsCaseDetailResponse {
   case: CollectionsCaseRow
 }
+
+/**
+ * Result of a Collections operator action (flag-hardship, resume-hardship,
+ * stop-contact, advance) — mirrors `CaseActionResponse` from the
+ * server-only gRPC client (`src/server/collections-service-client.ts`),
+ * redeclared here so client-side mutation hooks (BTB-198 WS5) don't pull
+ * in that file's node-only (`@grpc/grpc-js`, `path`) imports.
+ */
+export interface CollectionsActionResult {
+  accountId: string
+  newState: string
+  emittedEventId: string
+}
