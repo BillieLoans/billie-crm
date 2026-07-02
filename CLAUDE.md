@@ -87,6 +87,8 @@ Payload's pg adapter generates child tables for `type: 'array'` fields and flatt
 
 ### Server-side clients (`src/server/`)
 - `grpc-client.ts` — gRPC client for the external AccountingLedgerService. Proto definition at `proto/accounting_ledger.proto`.
+- `notification-dispatcher-client.ts` — gRPC client for the NotificationDispatcher service.
+- `collections-service-client.ts` — gRPC client for the CollectionsService.
 - `redis-client.ts` — Redis connection for event publishing
 - `event-publisher.ts` — Publishes commands/events to Redis with retry + exponential backoff
 - `s3-client.ts` — AWS S3 client for document storage
@@ -110,5 +112,10 @@ Ledger operations live under `api/ledger/` (repayment, waive-fee, write-off, lat
 ## Environment
 
 Requires Postgres (Neon in prod, local Docker container in dev), Redis, and optionally the gRPC ledger service running locally. `DATABASE_URI` uses the standard libpq URL format (`postgresql://user:pass@host:port/db?sslmode=verify-full`) — same string works for both the Payload pg adapter and the Python `asyncpg.create_pool`. Prefer `verify-full` over `require`: it validates the cert chain and hostname (works out of the box against Neon's public cert) and avoids the `pg` v9 change where bare `require` will silently stop verifying. For a non-TLS local Postgres, drop the param (or use `sslmode=disable`). When running in Docker, use `host.docker.internal` instead of `localhost`. The `NEXT_PUBLIC_APP_URL` env var must match the server URL for Payload cookie/auth to work correctly.
+
+Key service URLs:
+- `LEDGER_SERVICE_URL` — AccountingLedgerService gRPC endpoint (default: `localhost:50051`)
+- `NOTIFICATION_DISPATCHER_GRPC_URL` — NotificationDispatcher gRPC endpoint (default: `localhost:50052`)
+- `COLLECTIONS_SERVICE_GRPC_URL` — CollectionsService gRPC endpoint (default: `localhost:50053`)
 
 The event-processor's `db.py` exposes shared helpers (`upsert`, `update_by_key`, `upsert_conversation`, `merge_jsonb`, `coerce_date`) used by every handler — when writing new handlers, prefer these over raw SQL to keep upsert semantics, version-increment, and date coercion consistent.

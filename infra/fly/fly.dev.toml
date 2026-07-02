@@ -34,6 +34,7 @@ primary_region = "syd"
   LEDGER_SERVICE_URL = "billie-platform-services-dev.internal:50051"
   # TODO(platform): confirm dispatcher hostname for dev — placeholder pending platform team handover
   NOTIFICATION_DISPATCHER_GRPC_URL = "billie-platform-services-dev.internal:50052"
+  COLLECTIONS_SERVICE_GRPC_URL = "billie-platform-services-dev.internal:50053"
 
 # =============================================================================
 # HTTP service configuration
