@@ -126,6 +126,13 @@ export async function publishEvent<T>(event: CRMEvent<T>): Promise<PublishEventR
 
   for (let attempt = 0; attempt < PUBLISH_MAX_RETRIES; attempt++) {
     try {
+      // The client is lazyConnect + enableOfflineQueue:false, so a command
+      // issued before the connection is ready is rejected immediately. On a
+      // TLS Redis (rediss://) the handshake can outlast the whole retry
+      // budget, so await the connection explicitly on first use.
+      if (redis.status === 'wait') {
+        await redis.connect()
+      }
       // XADD stream * field1 value1 field2 value2 ...
       // The '*' tells Redis to auto-generate the message ID
       const fieldArray = Object.entries(fields).flat()
