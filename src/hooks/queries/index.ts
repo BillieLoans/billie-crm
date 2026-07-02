@@ -100,6 +100,15 @@ export type { AccrualTraceResult, AccrualSourceEvent } from './useTraceAccrual'
 export { useContactNotes, contactNotesQueryKey } from './useContactNotes'
 export type { ContactNoteData, ContactNotesFilters, ContactNotesResult } from './useContactNotes'
 
+// Collections case hooks (BTB-200 WS2)
+export { useCollectionsCases, collectionsCasesQueryKey } from './useCollectionsCases'
+export type { CollectionsCasesFilters } from './useCollectionsCases'
+export { useCollectionsCase, collectionsCaseQueryKey } from './useCollectionsCase'
+export {
+  useCollectionsCasesByCustomer,
+  collectionsCasesByCustomerQueryKey,
+} from './useCollectionsCasesByCustomer'
+
 // Re-export types from canonical location
 export type {
   CustomerSearchResult,
