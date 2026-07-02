@@ -215,6 +215,7 @@ class TestStepAdvanced:
         assert mock_pool.calls_against(TABLE)[0].conflict_columns == ["account_id"]
         assert call["rung"] == 3
         assert call["last_step"] == 3
+        assert call["correlation_id"] == "corr_1"
         # Flag-style upsert must NOT write `state` (would clobber the lifecycle).
         assert "state" not in call
 

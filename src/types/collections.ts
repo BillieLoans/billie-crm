@@ -16,7 +16,16 @@ export interface CollectionsCaseRow {
   customerId: string | null
   customerName: string | null
   accountNumber: string | null
-  state: 'open' | 'awaiting_human' | 'cured'
+  /**
+   * `collection_cases.state` is nullable in Postgres: the
+   * hardship_paused/resumed/stop_contact_applied/step_advanced event
+   * handlers legitimately upsert a row without `state` when they're the
+   * first event seen for an account (out-of-order delivery, no prior
+   * `opened`). `null` here means "case row exists, lifecycle state
+   * unknown" — callers must not assume one of the three known states
+   * (final-review Fix 1, BTB-200/196/197).
+   */
+  state: 'open' | 'awaiting_human' | 'cured' | null
   rung: number | null
   hardshipPaused: boolean
   stoppedContact: boolean

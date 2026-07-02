@@ -123,7 +123,19 @@ export function useCollectionsAction<TParams extends { accountId: string }>(
       const { title, description } = config.buildSuccessToast(params, data)
       toast.success(title, { description })
 
+      // Invalidate the worklist plus every per-account/derived read the
+      // case-detail view depends on. Previously only ['collections-cases']
+      // was invalidated, so a successful action (e.g. advance) left the
+      // case view's economics/contact-log queries stale — showing the
+      // pre-action "next step preview" and contact-cap counts, which could
+      // lead an operator to double-advance off a stale preview (final-review
+      // Fix 2).
       queryClient.invalidateQueries({ queryKey: ['collections-cases'] })
+      queryClient.invalidateQueries({ queryKey: ['collections-economics', context.accountId] })
+      queryClient.invalidateQueries({ queryKey: ['collections-contact-log', context.accountId] })
+      // Prefix match: invalidates every ['collections-economics-sort', accountIdsKey]
+      // entry regardless of the batch's accountIds key.
+      queryClient.invalidateQueries({ queryKey: ['collections-economics-sort'] })
 
       setTimeout(() => {
         clearPending(context.accountId, context.mutationId)

@@ -22,11 +22,34 @@ const BUCKET_CONFIG: Record<string, { label: string; className: string }> = {
  * Exported so `CollectionsCaseView` (BTB-197 WS4) reuses the same
  * label/className mapping and `.stateBadge*` css-module classes instead of
  * duplicating them.
+ *
+ * Keyed on the non-null states only — `state` is nullable on the row (rows
+ * projected from an out-of-order flag event with no prior `opened`), so
+ * lookups must go through `stateInfoFor` below rather than indexing this
+ * map directly (final-review Fix 1).
  */
-export const STATE_CONFIG: Record<CollectionsCaseRow['state'], { label: string; className: string }> = {
+export const STATE_CONFIG: Record<
+  Exclude<CollectionsCaseRow['state'], null>,
+  { label: string; className: string }
+> = {
   open: { label: 'Open', className: styles.stateBadgeOpen },
   awaiting_human: { label: 'Awaiting human', className: styles.stateBadgeAwaitingHuman },
   cured: { label: 'Cured', className: styles.stateBadgeCured },
+}
+
+/**
+ * Null-safe `STATE_CONFIG` lookup. `row.state` can be `null` for cases
+ * projected from an out-of-order flag event (hardship_paused/resumed/
+ * stop_contact_applied/step_advanced with no prior `opened`) — those rows
+ * still need to render in the worklist/case view rather than throwing on
+ * `STATE_CONFIG[null].className` (final-review Fix 1, was blanking the
+ * whole worklist).
+ */
+export function stateInfoFor(state: CollectionsCaseRow['state']): { label: string; className: string } {
+  if (state && state in STATE_CONFIG) {
+    return STATE_CONFIG[state as keyof typeof STATE_CONFIG]
+  }
+  return { label: state ?? 'Unknown', className: '' }
 }
 
 type SortMode = 'updated' | 'enr'
@@ -71,7 +94,15 @@ function useEconomicsSort(accountIds: string[], enabled: boolean, accountIdsKey:
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accountIds }),
+        // `/api/collections/economics` caps the batch at 200 (zod
+        // `.max(200)`) and 400s above that — a loaded worklist past
+        // "page 5" (multiple "Load more" clicks, ~400 rows) would blow
+        // that cap and surface as the "pending platform deploy" note,
+        // which is misleading since the real cause is the request-size
+        // cap, not BTB-194 being undeployed. Cap client-side so ENR sort
+        // degrades to "first 200 by Updated order" instead (final-review
+        // Fix 6 / Minor #6).
+        body: JSON.stringify({ accountIds: accountIds.slice(0, 200) }),
       })
       if (!res.ok) {
         const err = await res.json().catch(() => null)
@@ -387,7 +418,7 @@ export function CollectionsView() {
                   const bucketInfo = row.aging
                     ? BUCKET_CONFIG[row.aging.bucket] || { label: row.aging.bucket, className: '' }
                     : null
-                  const stateInfo = STATE_CONFIG[row.state]
+                  const stateInfo = stateInfoFor(row.state)
                   const displayAccountId = row.accountNumber || row.accountId
                   const customerName = row.customerName || '—'
 

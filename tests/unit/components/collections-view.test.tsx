@@ -328,4 +328,19 @@ describe('CollectionsView (BTB-196 WS3)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
     expect(fetchNextPage).toHaveBeenCalled()
   })
+
+  it('a null-state row renders without crashing, with an "Unknown" state badge (final-review Fix 1)', () => {
+    // `state` is nullable on the projection — a row from an out-of-order
+    // flag event (hardship_paused/resumed/stop_contact_applied/step_advanced
+    // with no prior `opened`) has no state yet. Before this fix,
+    // `STATE_CONFIG[row.state]` was `undefined` and `.className` on it threw,
+    // blanking the whole worklist.
+    const rows = [makeCase({ accountId: 'acc-null-state', accountNumber: 'ACC-NULL', state: null })]
+    mockUseCollectionsCases.mockReturnValue(mockHookReturn({ cases: rows }))
+
+    renderView()
+
+    expect(screen.getByText('ACC-NULL')).toBeInTheDocument()
+    expect(screen.getByText('Unknown')).toBeInTheDocument()
+  })
 })

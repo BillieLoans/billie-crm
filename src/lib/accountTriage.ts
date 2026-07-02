@@ -158,9 +158,15 @@ export function getAttentionItems(opts: {
   // (accountId set, one chip per open/awaiting_human case). Contact suppression
   // is a CUSTOMER-LEVEL signal — a single chip with accountId null, since it
   // applies across the whole customer relationship rather than one loan.
-  // Cured cases carry no attention signal.
+  // Cured cases carry no per-account attention signal.
+  //
+  // stop_contact is durable across cure (final-review Fix 4): a stop-contact
+  // instruction (dispute/deceased/legal) is a standing suppression on the
+  // customer relationship, not tied to any one case's lifecycle — a case
+  // curing must not silently drop the contact ban. So this is computed over
+  // ALL collectionsCases, not just activeCases.
   const activeCases = collectionsCases.filter((c) => c.state !== 'cured')
-  let anyStoppedContact = false
+  const anyStoppedContact = collectionsCases.some((c) => c.stoppedContact)
   for (const c of activeCases) {
     items.push({
       kind: 'collections',
@@ -175,9 +181,6 @@ export function getAttentionItems(opts: {
         accountId: c.accountId,
         severity: 'medium',
       })
-    }
-    if (c.stoppedContact) {
-      anyStoppedContact = true
     }
   }
   if (anyStoppedContact) {

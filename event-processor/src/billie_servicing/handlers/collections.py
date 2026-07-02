@@ -201,11 +201,19 @@ async def handle_collection_case_stop_contact_applied(pool: asyncpg.Pool, event:
 
 
 async def handle_collection_case_step_advanced(pool: asyncpg.Pool, event: Any) -> None:
-    """collection.case.step_advanced.v1 -> current rung (reminder step just sent)."""
+    """Project collection.case.step_advanced.v1 — current rung (reminder step just sent),
+    flag only, state untouched."""
+    log = logger.bind(account_id=event.account_id, customer_id=event.customer_id)
+    log.info("Processing collection.case.step_advanced.v1")
     step = int(event.step)
     await _upsert_case(
         pool,
         account_id=event.account_id,
-        customer_id=getattr(event, "customer_id", None),
-        extra={"rung": step, "last_step": step},
+        customer_id=event.customer_id,
+        extra={
+            "rung": step,
+            "last_step": step,
+            "correlation_id": event.correlation_id,
+        },
     )
+    log.info("Collection case step advance projected")

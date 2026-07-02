@@ -373,6 +373,34 @@ describe('CollectionsCaseView (BTB-197 WS4)', () => {
     expect(screen.queryByTestId('advance-confirm-modal')).not.toBeInTheDocument()
   })
 
+  it('readonly user → Flag hardship/Resume/Stop contact are disabled with a role-reason title (final-review Fix 3)', async () => {
+    renderView({ userRole: 'readonly' })
+
+    await waitFor(() => expect(screen.getByTestId('gate-badge')).toBeInTheDocument())
+
+    const flagButton = screen.getByTestId('flag-hardship-button')
+    const resumeButton = screen.getByTestId('resume-button')
+    const stopButton = screen.getByTestId('stop-contact-button')
+
+    for (const button of [flagButton, resumeButton, stopButton]) {
+      expect(button).toBeDisabled()
+      expect(button).toHaveAttribute('title', 'Requires operations role')
+    }
+
+    fireEvent.click(flagButton)
+    expect(screen.queryByTestId('flag-hardship-dialog')).not.toBeInTheDocument()
+  })
+
+  it('operations user → Flag hardship/Resume/Stop contact remain actionable (canService, not gated like Advance)', async () => {
+    renderView({ userRole: 'operations' })
+
+    await waitFor(() => expect(screen.getByTestId('gate-badge')).toBeInTheDocument())
+
+    expect(screen.getByTestId('flag-hardship-button')).not.toBeDisabled()
+    expect(screen.getByTestId('resume-button')).not.toBeDisabled()
+    expect(screen.getByTestId('stop-contact-button')).not.toBeDisabled()
+  })
+
   it('case null (404) → not-found state with a back-to-queue link', () => {
     mockUseCollectionsCase.mockReturnValue({ data: null, isLoading: false })
 
@@ -390,5 +418,19 @@ describe('CollectionsCaseView (BTB-197 WS4)', () => {
 
     expect(screen.getByText('Loading case...')).toBeInTheDocument()
     expect(screen.queryByText('No collections case for this account')).not.toBeInTheDocument()
+  })
+
+  it('a null-state case renders without crashing, with an "Unknown" state badge (final-review Fix 1)', async () => {
+    // `state` is nullable on the projection — a case row from an
+    // out-of-order flag event (hardship_paused/resumed/stop_contact_applied/
+    // step_advanced with no prior `opened`) has no state yet. Before this
+    // fix, `STATE_CONFIG[caseRow.state]` was `undefined` and `.className`
+    // on it threw, blanking the whole case view.
+    mockUseCollectionsCase.mockReturnValue({ data: makeCase({ state: null }), isLoading: false })
+
+    renderView()
+
+    expect(screen.getByText('ACC-0001')).toBeInTheDocument()
+    expect(screen.getByText('Unknown')).toBeInTheDocument()
   })
 })

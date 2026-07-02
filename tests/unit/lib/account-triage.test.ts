@@ -244,15 +244,48 @@ describe('getAttentionItems', () => {
     })
   })
 
-  it('emits no items for cured-only cases, even if hardshipPaused/stoppedContact are set', () => {
+  it('emits no per-account items for cured-only cases (collections/hardship chips excluded)', () => {
     const items = getAttentionItems({
       vulnerable: false,
       accounts: [],
       collectionsCases: [
-        collectionsCase({ accountId: 'LOAN-6', state: 'cured', hardshipPaused: true, stoppedContact: true }),
+        collectionsCase({ accountId: 'LOAN-6', state: 'cured', hardshipPaused: true, stoppedContact: false }),
       ],
       today: TODAY,
     })
     expect(items).toEqual([])
+  })
+
+  it('a cured case with stoppedContact still yields the customer-level stop_contact item (final-review Fix 4: suppression is durable across cure)', () => {
+    const items = getAttentionItems({
+      vulnerable: false,
+      accounts: [],
+      collectionsCases: [
+        collectionsCase({ accountId: 'LOAN-7', state: 'cured', hardshipPaused: true, stoppedContact: true }),
+      ],
+      today: TODAY,
+    })
+    // hardship is per-account/active-only and excluded for a cured case, but
+    // stop_contact must still surface — the customer-level suppression
+    // doesn't lapse just because this particular case cured.
+    expect(items).toEqual([
+      { kind: 'stop_contact', label: 'Contact stopped', accountId: null, severity: 'high' },
+    ])
+  })
+
+  it('stop_contact survives cure even when mixed with an active case that has no stop-contact of its own', () => {
+    const items = getAttentionItems({
+      vulnerable: false,
+      accounts: [],
+      collectionsCases: [
+        collectionsCase({ accountId: 'LOAN-8', state: 'open', stoppedContact: false }),
+        collectionsCase({ accountId: 'LOAN-9', state: 'cured', stoppedContact: true }),
+      ],
+      today: TODAY,
+    })
+    expect(items).toEqual([
+      { kind: 'collections', label: 'In collections', accountId: 'LOAN-8', severity: 'high' },
+      { kind: 'stop_contact', label: 'Contact stopped', accountId: null, severity: 'high' },
+    ])
   })
 })

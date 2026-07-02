@@ -28,7 +28,11 @@ export function buildCollectionsCaseRow(
     customerId: doc.customerId ?? loanAccount?.customerIdString ?? null,
     customerName: loanAccount?.customerName ?? null,
     accountNumber: loanAccount?.accountNumber ?? null,
-    state: doc.state,
+    // `state` is nullable on the projection (out-of-order flag-event rows
+    // with no prior `opened`) — normalise `undefined` to `null` so callers
+    // get the documented `'open' | 'awaiting_human' | 'cured' | null` shape
+    // rather than leaking Mongo/Payload's `undefined` (final-review Fix 1).
+    state: doc.state ?? null,
     rung: doc.rung ?? null,
     hardshipPaused: Boolean(doc.hardshipPaused),
     stoppedContact: Boolean(doc.stoppedContact),

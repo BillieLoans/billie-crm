@@ -11,7 +11,7 @@ import { useApplyStopContact } from '@/hooks/mutations/useApplyStopContact'
 import { useAdvanceToNextStep } from '@/hooks/mutations/useAdvanceToNextStep'
 import { ContactNotesPanel } from '@/components/ServicingView/ContactNotes'
 import type { CollectionsCaseRow } from '@/types/collections'
-import { STATE_CONFIG } from './CollectionsView'
+import { stateInfoFor } from './CollectionsView'
 import styles from './styles.module.css'
 
 // =============================================================================
@@ -460,6 +460,12 @@ export function CollectionsCaseView({ accountId, userRole }: CollectionsCaseView
   const [advanceModalOpen, setAdvanceModalOpen] = useState(false)
 
   const isSupervisor = userRole === 'admin' || userRole === 'supervisor'
+  // Flag hardship / Resume / Stop contact are gated the same way the server
+  // route gates them (`canService` in src/lib/access.ts — admin/supervisor/
+  // operations only): a readonly user could otherwise fire the mutation and
+  // just get a 403 back (final-review Fix 3). Mirrors how Advance is gated
+  // for non-supervisors above.
+  const serviceActionDisabledReason = userRole === 'readonly' ? 'Requires operations role' : null
 
   if (isCaseLoading && !caseRow) {
     return (
@@ -511,7 +517,7 @@ export function CollectionsCaseView({ accountId, userRole }: CollectionsCaseView
     advanceDisabledReason = 'Advancing…'
   }
 
-  const stateInfo = STATE_CONFIG[caseRow.state]
+  const stateInfo = stateInfoFor(caseRow.state)
   const contactLog = contactLogQuery.data?.contactLog ?? null
   const contactLogUnavailable = !!contactLogQuery.data?.unavailable || (!contactLogQuery.isLoading && !contactLog)
 
@@ -673,7 +679,8 @@ export function CollectionsCaseView({ accountId, userRole }: CollectionsCaseView
               type="button"
               className={styles.actionButton}
               onClick={() => setHardshipDialogOpen(true)}
-              disabled={isFlagging}
+              disabled={isFlagging || !!serviceActionDisabledReason}
+              title={serviceActionDisabledReason ?? undefined}
               data-testid="flag-hardship-button"
             >
               Flag hardship
@@ -682,7 +689,8 @@ export function CollectionsCaseView({ accountId, userRole }: CollectionsCaseView
               type="button"
               className={styles.actionButton}
               onClick={() => resumeHardship({ accountId })}
-              disabled={isResuming}
+              disabled={isResuming || !!serviceActionDisabledReason}
+              title={serviceActionDisabledReason ?? undefined}
               data-testid="resume-button"
             >
               Resume
@@ -691,7 +699,8 @@ export function CollectionsCaseView({ accountId, userRole }: CollectionsCaseView
               type="button"
               className={styles.actionButton}
               onClick={() => setStopContactDialogOpen(true)}
-              disabled={isStopping}
+              disabled={isStopping || !!serviceActionDisabledReason}
+              title={serviceActionDisabledReason ?? undefined}
               data-testid="stop-contact-button"
             >
               Stop contact

@@ -42,6 +42,11 @@ export async function up({ db, payload, req }: MigrateUpArgs): Promise<void> {
 }
 
 export async function down({ db, payload, req }: MigrateDownArgs): Promise<void> {
+  // KNOWN BUG (do not fix retroactively): DROP TABLE ... CASCADE already
+  // removes payload_locked_documents_rels' FK, so the subsequent explicit
+  // DROP CONSTRAINT fails — a full batch rollback past this migration
+  // aborts here (discovered 2026-07-02 during the rung migration work).
+  // Fix forward in a new migration if rollback support is ever needed.
   await db.execute(sql`
    ALTER TABLE "collection_cases" DISABLE ROW LEVEL SECURITY;
   DROP TABLE "collection_cases" CASCADE;

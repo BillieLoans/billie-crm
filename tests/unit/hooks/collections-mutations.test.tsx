@@ -70,7 +70,7 @@ afterEach(() => {
 })
 
 describe('useFlagHardship', () => {
-  it('POSTs accountId, reason and idempotencyKey, then invalidates collections-cases', async () => {
+  it('POSTs accountId, reason and idempotencyKey, then invalidates collections-cases plus the per-account economics/contact-log/ENR-sort reads (final-review Fix 2)', async () => {
     fetchMock().mockResolvedValueOnce(
       jsonResponse(200, {
         result: { accountId: 'acc-1', newState: 'hardship_paused', emittedEventId: 'evt-1' },
@@ -96,6 +96,14 @@ describe('useFlagHardship', () => {
     expect(body.idempotencyKey.length).toBeGreaterThan(0)
 
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['collections-cases'] })
+    // Final-review Fix 2: a successful action must also invalidate the
+    // per-account economics/contact-log reads and the ENR sort batch —
+    // otherwise the case view's "next step preview" and contact-cap counts
+    // go stale after the action that was supposed to change them (double-
+    // advance hazard).
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['collections-economics', 'acc-1'] })
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['collections-contact-log', 'acc-1'] })
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['collections-economics-sort'] })
 
     const { toast } = await import('sonner')
     expect(toast.success).toHaveBeenCalled()
