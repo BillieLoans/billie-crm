@@ -253,3 +253,83 @@ def test_collection_step_advanced_routes_to_its_model(make_processor, monkeypatc
     assert parsed["__model__"] == "CollectionCaseStepAdvancedV1"
     assert parsed["account_id"] == "acc_1"
     assert parsed["step"] == 3
+
+
+# ---------------------------------------------------------------------------
+# Marketing (contact.*) events (Task C3) — marketingService → ChatLedger.
+# `contact.` shares no prefix with `customer.`/`application.`/`customer.identity.`
+# so the new branch must not disturb their precedence (added just before the
+# final envelope-dict fallback in `_parse_event`).
+# ---------------------------------------------------------------------------
+
+MARKETING_EVENT_TYPES = [
+    "contact.observed.v1",
+    "contact.updated.v1",
+    "contact.linked.v1",
+    "contact.unlinked.v1",
+    "contact.consent.granted.v1",
+    "contact.consent.withdrawn.v1",
+    "contact.interaction.logged.v1",
+    "contact.stage.changed.v1",
+    "contact.erased.v1",
+]
+
+
+def test_marketing_handlers_registered(make_processor):
+    """setup_handlers wires a handler for each of the nine contact.* types."""
+    from billie_servicing.main import setup_handlers
+
+    proc = make_processor
+    setup_handlers(proc)
+    for event_type in MARKETING_EVENT_TYPES:
+        assert event_type in proc.handlers, f"{event_type} not registered"
+
+
+def test_contact_event_routes_to_marketing_parser(make_processor):
+    from billie_marketing_events import ParsedMarketingEvent
+
+    proc = make_processor
+    sanitized = {
+        "conv": "conv-1",
+        "agt": "marketingService",
+        "usr": "c-1",
+        "seq": 1,
+        "cls": "msg",
+        "typ": "contact.observed.v1",
+        "payload": json.dumps(
+            {
+                "contact_id": "c-1",
+                "mobile_e164": "+61400000001",
+                "source": "campus",
+                "observed_at": "2026-07-02T00:00:00+00:00",
+            }
+        ),
+    }
+
+    parsed = proc._parse_event("contact.observed.v1", sanitized)
+
+    assert isinstance(parsed, ParsedMarketingEvent)
+    assert parsed.payload.contact_id == "c-1"
+
+
+def test_customer_and_application_events_unaffected_by_marketing_branch(make_processor):
+    """Precedence guard: `customer.identity.*` and the reapplication_blocked
+    exact-match must still resolve via their own branches, not the new
+    `contact.`/`referral.`/`batch.`/`feedback.` branch (which they don't match
+    anyway — this locks that in as a regression test)."""
+    proc = make_processor
+
+    identity_parsed = proc._parse_event(
+        "customer.identity.linked.v1",
+        {"typ": "customer.identity.linked.v1", "payload": json.dumps({"journey_id": "j1"})},
+    )
+    assert isinstance(identity_parsed, dict)
+
+    reapplication_parsed = proc._parse_event(
+        "application.reapplication_blocked.v1",
+        {
+            "typ": "application.reapplication_blocked.v1",
+            "payload": json.dumps({"application_number": "A1"}),
+        },
+    )
+    assert isinstance(reapplication_parsed, dict)

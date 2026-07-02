@@ -19,6 +19,7 @@ from billie_accounts_events.parser import parse_account_message
 from billie_customers_events.parser import parse_customer_message
 from billie_notifications_events.parser import parse_notification_event
 from billie_aging_events import parse_aging_event
+from billie_marketing_events import parse_marketing_message
 
 from .config import settings
 
@@ -699,6 +700,13 @@ class EventProcessor:
             # read model. Map type → billie_collection_events model and validate
             # the payload (the SDK has no parser). Handlers receive the flat model.
             return _parse_collection_event(event_type, sanitize_envelope(sanitized))
+
+        elif event_type.startswith(("contact.", "referral.", "batch.", "feedback.")):
+            # marketingService (Task C3) — contact/referral/batch/feedback facet
+            # events, typed via the billie_marketing_events SDK. Shares no
+            # prefix with the customer/application/identity branches above, so
+            # this is safe to add without reordering them.
+            return parse_marketing_message(sdk_data)
 
         else:
             # Chat/conversation events — sanitize envelope so payload JSON string

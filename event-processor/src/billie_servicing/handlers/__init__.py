@@ -73,6 +73,17 @@ from .collections import (
     handle_collection_case_stop_contact_applied,
     handle_collection_case_step_advanced,
 )
+from .marketing import (
+    handle_contact_observed,
+    handle_contact_updated,
+    handle_contact_linked,
+    handle_contact_unlinked,
+    handle_contact_consent_granted,
+    handle_contact_consent_withdrawn,
+    handle_contact_interaction_logged,
+    handle_contact_stage_changed,
+    handle_contact_erased,
+)
 
 __all__ = [
     # Account handlers
@@ -138,4 +149,15 @@ __all__ = [
     "handle_collection_case_resumed",
     "handle_collection_case_stop_contact_applied",
     "handle_collection_case_step_advanced",
+    # Marketing (contact.*) handlers — project into contacts/interactions/
+    # contact_audit_log (Task C3)
+    "handle_contact_observed",
+    "handle_contact_updated",
+    "handle_contact_linked",
+    "handle_contact_unlinked",
+    "handle_contact_consent_granted",
+    "handle_contact_consent_withdrawn",
+    "handle_contact_interaction_logged",
+    "handle_contact_stage_changed",
+    "handle_contact_erased",
 ]
