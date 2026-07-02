@@ -21,7 +21,17 @@ export async function POST(
   const { user } = auth
   const { contactId } = await params
 
-  const parsed = LogInteractionSchema.safeParse(await request.json())
+  let body: unknown
+  try {
+    body = await request.json()
+  } catch {
+    return NextResponse.json(
+      { error: { code: 'VALIDATION_ERROR', message: 'Body must be valid JSON' } },
+      { status: 400 },
+    )
+  }
+
+  const parsed = LogInteractionSchema.safeParse(body)
   if (!parsed.success) {
     return NextResponse.json(
       {

@@ -23,7 +23,7 @@ export async function POST(
 
   try {
     const result = await eraseContact({
-      idempotencyKey: `erase:${contactId}:${Date.now()}`,
+      idempotencyKey: `erase:${contactId}`,
       contactId,
       actor: String(user.id),
     })

@@ -54,7 +54,17 @@ export async function POST(request: NextRequest) {
   if ('error' in auth) return auth.error
   const { user } = auth
 
-  const parsed = CreateContactSchema.safeParse(await request.json())
+  let body: unknown
+  try {
+    body = await request.json()
+  } catch {
+    return NextResponse.json(
+      { error: { code: 'VALIDATION_ERROR', message: 'Body must be valid JSON' } },
+      { status: 400 },
+    )
+  }
+
+  const parsed = CreateContactSchema.safeParse(body)
   if (!parsed.success) {
     return NextResponse.json(
       {
