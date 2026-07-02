@@ -12,12 +12,19 @@
 
 import { nanoid } from 'nanoid'
 import { getChatLedgerRedisClient } from './redis-client'
+import { EventPublishError } from './event-publisher'
 import {
   CHATLEDGER_STREAM,
   CRM_AGENT_ID,
   EVENT_TYPE_REAPPLICATION_BLOCK_CLEAR_AUTHORIZED,
+  PUBLISH_MAX_RETRIES,
+  PUBLISH_BACKOFF_MS,
 } from '@/lib/events/config'
 import type { ReapplicationBlockClearAuthorizedPayload } from '@/lib/events/types'
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
 
 /**
  * Publish a reapplication_block.clear_authorized.v1 command to chatLedger.
@@ -43,6 +50,32 @@ export async function publishClearAuthorized(
     payload: JSON.stringify(payload),
   }
   const redis = getChatLedgerRedisClient()
-  await redis.xadd(CHATLEDGER_STREAM, '*', ...Object.entries(fields).flat())
-  return { eventId }
+
+  // The client is lazyConnect + enableOfflineQueue:false, so a command issued
+  // before the connection is up is rejected immediately ("Stream isn't
+  // writeable..."). Connect explicitly on first use, then retry transient
+  // failures with the same backoff the internal event publisher uses.
+  let lastError: Error | undefined
+  for (let attempt = 0; attempt < PUBLISH_MAX_RETRIES; attempt++) {
+    try {
+      if (redis.status === 'wait') {
+        await redis.connect()
+      }
+      await redis.xadd(CHATLEDGER_STREAM, '*', ...Object.entries(fields).flat())
+      return { eventId }
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error))
+      console.warn(
+        `[ChatLedgerPublisher] Attempt ${attempt + 1}/${PUBLISH_MAX_RETRIES} failed:`,
+        lastError.message,
+      )
+      if (attempt < PUBLISH_MAX_RETRIES - 1) {
+        await sleep(PUBLISH_BACKOFF_MS[attempt] ?? 400)
+      }
+    }
+  }
+  throw new EventPublishError('Failed to publish clear_authorized to chatLedger after retries', {
+    attempts: PUBLISH_MAX_RETRIES,
+    cause: lastError,
+  })
 }
