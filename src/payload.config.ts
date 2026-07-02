@@ -96,7 +96,9 @@ export default buildConfig({
           // NOTE: must NOT be '/collections' — Payload reserves /admin/collections/* for
           // built-in database-collection admin routes, which shadow a custom view there
           // (Payload 3.85 resolves the built-in routing first → "Nothing found").
-          path: '/collections-queue',
+          // Catch-all suffix (mirrors the servicing view above) so the case-detail
+          // sub-route (/collections-queue/:accountId, BTB-196 WS4) renders here too.
+          path: '/collections-queue/:segments*',
         },
         pendingDisbursements: {
           Component:

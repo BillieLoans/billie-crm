@@ -229,6 +229,105 @@
   color: white;
 }
 
+/* State Badge */
+.stateBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--theme-elevation-100);
+  color: var(--theme-elevation-600);
+}
+
+.stateBadgeOpen {
+  background: var(--theme-warning-100);
+  color: var(--theme-warning-600);
+}
+
+.stateBadgeAwaitingHuman {
+  background: var(--theme-error-100);
+  color: var(--theme-error-500);
+}
+
+.stateBadgeCured {
+  background: var(--theme-success-100);
+  color: var(--theme-success-600);
+}
+
+/* Flags */
+.flagsCell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.flagChip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--theme-elevation-100);
+  color: var(--theme-elevation-600);
+  white-space: nowrap;
+}
+
+/* Quick filter chip (e.g. "Awaiting human") */
+.quickChip {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-end;
+  height: 37px;
+  padding: 0 14px;
+  border: 1px solid var(--theme-elevation-200);
+  border-radius: 18px;
+  background: var(--theme-elevation-0);
+  color: var(--theme-elevation-600);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.quickChip:hover {
+  border-color: var(--theme-elevation-400);
+  color: var(--theme-text);
+}
+
+.quickChipActive {
+  background: var(--theme-error-100);
+  border-color: var(--theme-error-500);
+  color: var(--theme-error-500);
+}
+
+/* Checkbox filter group (Hardship / Stop contact) */
+.checkboxGroup {
+  display: flex;
+  align-items: center;
+  align-self: flex-end;
+  height: 37px;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--theme-text);
+  cursor: pointer;
+}
+
+/* Sort control */
+.sortGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pendingNote {
+  font-size: 12px;
+  color: var(--theme-warning-600);
+  max-width: 220px;
+}
+
 /* Amount */
 .amount {
   font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
