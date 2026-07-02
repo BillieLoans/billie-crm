@@ -36,6 +36,11 @@ export function buildCollectionsCaseRow(
     daysOverdue: doc.daysOverdue ?? null,
     lastStep: doc.lastStep ?? null,
     openedAt: doc.openedAt ?? null,
+    curedAt: doc.curedAt ?? null,
+    exhaustedAt: doc.exhaustedAt ?? null,
+    pausedAt: doc.pausedAt ?? null,
+    resumedAt: doc.resumedAt ?? null,
+    stopContactAt: doc.stopContactAt ?? null,
     updatedAt: doc.updatedAt,
     aging: aging ?? null,
   }

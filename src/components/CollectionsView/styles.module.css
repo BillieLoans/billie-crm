@@ -513,3 +513,452 @@
     display: none;
   }
 }
+
+/* ===========================================================================
+ * Case Detail View (BTB-197 WS4)
+ * =========================================================================== */
+
+.caseHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 14px;
+  color: var(--theme-elevation-500);
+  text-decoration: none;
+  margin-bottom: 12px;
+}
+
+.backLink:hover {
+  color: var(--theme-text);
+  text-decoration: underline;
+}
+
+.caseTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.panelGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 20px;
+  align-items: start;
+}
+
+.panel {
+  background: var(--theme-elevation-0);
+  border: 1px solid var(--theme-elevation-100);
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.panelTitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--theme-text);
+  margin: 0 0 16px 0;
+}
+
+/* Rung ladder */
+.rungLadder {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  list-style: none;
+  margin: 0 0 16px 0;
+  padding: 0;
+}
+
+.rungStep {
+  flex: 1 1 90px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 6px;
+  border-radius: 8px;
+  background: var(--theme-elevation-50);
+  border: 1px solid var(--theme-elevation-100);
+  text-align: center;
+  position: relative;
+}
+
+.rungDot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--theme-elevation-300);
+}
+
+.rungLabel {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--theme-elevation-500);
+}
+
+.rungStepDone .rungDot {
+  background: var(--theme-success-500);
+}
+
+.rungStepDone .rungLabel {
+  color: var(--theme-elevation-700);
+}
+
+.rungStepCurrent {
+  background: var(--theme-warning-100);
+  border-color: var(--theme-warning-500);
+}
+
+.rungStepCurrent .rungDot {
+  background: var(--theme-warning-600);
+}
+
+.rungStepCurrent .rungLabel {
+  color: var(--theme-warning-600);
+  font-weight: 600;
+}
+
+.rungTag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  background: var(--theme-error-500);
+  color: white;
+}
+
+.rungCuredNote {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--theme-success-600);
+  font-weight: 500;
+}
+
+/* Lifecycle timestamps */
+.lifecycleList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+  margin: 0 0 16px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lifecycleItem {
+  font-size: 12px;
+}
+
+.lifecycleLabel {
+  display: block;
+  color: var(--theme-elevation-500);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-size: 11px;
+  margin-bottom: 2px;
+}
+
+.lifecycleValue {
+  color: var(--theme-text);
+  font-weight: 500;
+}
+
+.flagsRow {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* Economics panel */
+.economicsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.economicsItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.economicsLabel {
+  font-size: 12px;
+  color: var(--theme-elevation-500);
+}
+
+.economicsValue {
+  font-size: 16px;
+  font-weight: 600;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+  color: var(--theme-text);
+}
+
+.gateBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.gatePass {
+  background: var(--theme-success-100);
+  color: var(--theme-success-600);
+}
+
+.gateFail {
+  background: var(--theme-error-100);
+  color: var(--theme-error-500);
+}
+
+.gateReason {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--theme-elevation-500);
+}
+
+.pendingPlaceholder {
+  padding: 24px;
+  text-align: center;
+  color: var(--theme-elevation-500);
+  font-size: 14px;
+  background: var(--theme-elevation-50);
+  border-radius: 8px;
+}
+
+/* Contact log + cap line */
+.capLine {
+  font-size: 13px;
+  color: var(--theme-elevation-600);
+  margin: 0 0 12px 0;
+}
+
+/* Actions */
+.actionsRow {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.actionButton {
+  padding: 8px 14px;
+  border: 1px solid var(--theme-elevation-200);
+  border-radius: 6px;
+  background: var(--theme-elevation-0);
+  color: var(--theme-text);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.actionButton:hover:not(:disabled) {
+  border-color: var(--theme-elevation-400);
+  background: var(--theme-elevation-50);
+}
+
+.actionButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.actionButtonPrimary {
+  background: var(--theme-success-500);
+  border-color: var(--theme-success-500);
+  color: white;
+}
+
+.actionButtonPrimary:hover:not(:disabled) {
+  background: var(--theme-success-600);
+}
+
+.actionButtonDanger {
+  background: var(--theme-error-500);
+  border-color: var(--theme-error-500);
+  color: white;
+}
+
+.actionButtonDanger:hover:not(:disabled) {
+  background: var(--theme-error-600);
+}
+
+.contactNotesWrapper {
+  margin-top: 20px;
+  border-top: 1px solid var(--theme-elevation-100);
+  padding-top: 16px;
+}
+
+/* Not-found state */
+.notFound {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 64px;
+  gap: 12px;
+  text-align: center;
+}
+
+/* ---------------------------------------------------------------------------
+ * Modal / dialog (mirrors src/components/LoanAccountServicing/styles.module.css)
+ * ------------------------------------------------------------------------- */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: var(--theme-elevation-0);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 520px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+}
+
+.modalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--theme-elevation-100);
+}
+
+.modalTitle {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.closeBtn {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: var(--theme-elevation-500);
+  line-height: 1;
+}
+
+.closeBtn:hover {
+  color: var(--theme-elevation-800);
+}
+
+.modalBody {
+  padding: 1.5rem;
+}
+
+.formGroup {
+  margin-bottom: 1rem;
+}
+
+.formLabel {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin-bottom: 0.375rem;
+  color: var(--theme-elevation-700);
+}
+
+.formTextarea {
+  width: 100%;
+  min-height: 80px;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--theme-elevation-200);
+  border-radius: 6px;
+  font-size: 0.875rem;
+  resize: vertical;
+}
+
+.formTextarea:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.modalFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--theme-elevation-100);
+}
+
+.btnCancel {
+  padding: 0.625rem 1.25rem;
+  background: var(--theme-elevation-100);
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.btnCancel:hover:not(:disabled) {
+  background: var(--theme-elevation-200);
+}
+
+.btnSubmit {
+  padding: 0.625rem 1.25rem;
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.btnSubmit:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.btnSubmit:disabled,
+.btnCancel:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.previewCard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--theme-elevation-50);
+  border: 1px solid var(--theme-elevation-100);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.previewBody {
+  white-space: pre-wrap;
+  padding: 10px;
+  background: var(--theme-elevation-0);
+  border: 1px solid var(--theme-elevation-100);
+  border-radius: 6px;
+  color: var(--theme-elevation-700);
+}

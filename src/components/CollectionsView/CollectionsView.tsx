@@ -18,9 +18,12 @@ const BUCKET_CONFIG: Record<string, { label: string; className: string }> = {
 }
 
 /**
- * Case-state badge display configuration
+ * Case-state badge display configuration.
+ * Exported so `CollectionsCaseView` (BTB-197 WS4) reuses the same
+ * label/className mapping and `.stateBadge*` css-module classes instead of
+ * duplicating them.
  */
-const STATE_CONFIG: Record<CollectionsCaseRow['state'], { label: string; className: string }> = {
+export const STATE_CONFIG: Record<CollectionsCaseRow['state'], { label: string; className: string }> = {
   open: { label: 'Open', className: styles.stateBadgeOpen },
   awaiting_human: { label: 'Awaiting human', className: styles.stateBadgeAwaitingHuman },
   cured: { label: 'Cured', className: styles.stateBadgeCured },
