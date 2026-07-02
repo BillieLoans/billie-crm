@@ -264,6 +264,33 @@ describe('CollectionsView (BTB-196 WS3)', () => {
     expect(cells[1]).toHaveTextContent('BBB')
   })
 
+  it('shows the pending note and preserves order when the economics fetch fails with 502', async () => {
+    const rows = [
+      makeCase({ accountId: 'acc-a', accountNumber: 'AAA' }),
+      makeCase({ accountId: 'acc-b', accountNumber: 'BBB' }),
+    ]
+    mockUseCollectionsCases.mockReturnValue(mockHookReturn({ cases: rows }))
+
+    const fetchMock = global.fetch as ReturnType<typeof vi.fn>
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 502,
+      json: async () => ({ error: { message: 'Bad Gateway' } }),
+    })
+
+    renderView()
+
+    fireEvent.change(screen.getByLabelText('Sort'), { target: { value: 'enr' } })
+
+    await waitFor(() =>
+      expect(screen.getByText(/Net-recovery sort pending platform deploy \(BTB-194\)/)).toBeInTheDocument(),
+    )
+
+    const cells = screen.getAllByText(/^(AAA|BBB)$/)
+    expect(cells[0]).toHaveTextContent('AAA')
+    expect(cells[1]).toHaveTextContent('BBB')
+  })
+
   it('renders the agingUnavailable degrade banner and still renders cases', () => {
     const rows = [makeCase({ accountId: 'acc-1' })]
     mockUseCollectionsCases.mockReturnValue(mockHookReturn({ cases: rows, agingUnavailable: true }))

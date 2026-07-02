@@ -60,9 +60,9 @@ interface EconomicsSortResponse {
  * `gateResult.status === 'NOT_APPLICABLE'`. Both cases fall back to
  * Updated-order in the component below.
  */
-function useEconomicsSort(accountIds: string[], enabled: boolean) {
+function useEconomicsSort(accountIds: string[], enabled: boolean, accountIdsKey: string[]) {
   return useQuery({
-    queryKey: ['collections-economics-sort', accountIds],
+    queryKey: ['collections-economics-sort', accountIdsKey],
     queryFn: async (): Promise<EconomicsSortResponse> => {
       const res = await fetch('/api/collections/economics', {
         method: 'POST',
@@ -147,12 +147,13 @@ export function CollectionsView() {
 
   // Expected-net-recovery sort: batch economics lookup over the loaded rows
   const accountIds = useMemo(() => cases.map((c) => c.accountId), [cases])
-  const economicsQuery = useEconomicsSort(accountIds, sortMode === 'enr')
+  const accountIdsKey = useMemo(() => [...accountIds].sort(), [accountIds])
+  const economicsQuery = useEconomicsSort(accountIds, sortMode === 'enr', accountIdsKey)
 
   const enrData = economicsQuery.data
   const enrUnavailable =
     !!enrData && (enrData.unavailable === true || enrData.items.every((item) => item.gateResult.status === 'NOT_APPLICABLE'))
-  const enrPending = sortMode === 'enr' && !!enrData && (enrUnavailable || economicsQuery.isError)
+  const enrPending = sortMode === 'enr' && (economicsQuery.isError || (!!enrData && enrUnavailable))
 
   const displayedCases = useMemo(() => {
     if (sortMode !== 'enr' || !enrData || economicsQuery.isError || enrUnavailable) {
