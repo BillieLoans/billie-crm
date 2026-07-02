@@ -282,3 +282,44 @@ describe.each(ROUTES)('POST /api/collections/actions/$name', (route) => {
     expect(res.body.error.code).toBe('INTERNAL_ERROR')
   })
 })
+
+// ---------------------------------------------------------------------------
+// Operations-role positive path (C6 review): the advance-403 test above
+// proves `operations` is rejected by `hasApprovalAuthority`, but nothing
+// previously proved `operations` is *accepted* by `canService` on the
+// servicing routes it's meant to use. Cover that here with flag-hardship.
+// ---------------------------------------------------------------------------
+describe('POST /api/collections/actions/flag-hardship (operations role)', () => {
+  beforeEach(() => {
+    mockCurrentUser.current = null
+    mockGetClient.mockReset()
+    mockFlagHardship.mockReset()
+    mockGetClient.mockReturnValue({ flagHardship: mockFlagHardship })
+  })
+
+  it('200: operations token can flag-hardship (canService accepts operations)', async () => {
+    mockCurrentUser.current = OPS_USER
+    mockFlagHardship.mockResolvedValue({
+      accountId: 'acc-1',
+      newState: 'active',
+      emittedEventId: 'evt-1',
+    })
+
+    const res: any = await flagHardshipPOST(
+      makeRequest({ accountId: 'acc-1', reason: 'lost job', idempotencyKey: 'idem-12345678' }),
+    )
+
+    expect(res.status).toBe(200)
+    expect(res.body.result).toEqual({
+      accountId: 'acc-1',
+      newState: 'active',
+      emittedEventId: 'evt-1',
+    })
+    expect(mockFlagHardship).toHaveBeenCalledWith({
+      accountId: 'acc-1',
+      operatorId: `agent:${OPS_USER.email}`,
+      reason: 'lost job',
+      idempotencyKey: 'idem-12345678',
+    })
+  })
+})

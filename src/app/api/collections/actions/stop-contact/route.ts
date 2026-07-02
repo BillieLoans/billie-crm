@@ -16,13 +16,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth'
 import { canService } from '@/lib/access'
+import { mapCollectionsActionError } from '@/lib/collections/action-error'
 import type { User } from '@/payload-types'
-import {
-  getCollectionsServiceClient,
-  isFailedPrecondition,
-  isNotFound,
-  isResourceExhausted,
-} from '@/server/collections-service-client'
+import { getCollectionsServiceClient } from '@/server/collections-service-client'
 
 const Body = z.object({
   accountId: z.string().min(1),
@@ -67,22 +63,7 @@ export async function POST(req: NextRequest) {
       idempotencyKey: parsed.data.idempotencyKey,
     })
     return NextResponse.json({ result })
-  } catch (err: any) {
-    if (isNotFound(err))
-      return NextResponse.json({ error: { code: 'NOT_FOUND', message: 'unknown account' } }, { status: 404 })
-    if (isFailedPrecondition(err))
-      return NextResponse.json(
-        { error: { code: 'FAILED_PRECONDITION', message: err?.details ?? 'precondition failed' } },
-        { status: 409 },
-      )
-    if (isResourceExhausted(err))
-      return NextResponse.json(
-        { error: { code: 'CONTACT_CAP', message: err?.details ?? 'contact cap reached' } },
-        { status: 429 },
-      )
-    return NextResponse.json(
-      { error: { code: 'INTERNAL_ERROR', message: 'collections service error' } },
-      { status: 502 },
-    )
+  } catch (err: unknown) {
+    return mapCollectionsActionError(err)
   }
 }
