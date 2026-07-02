@@ -3,7 +3,7 @@ import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/re
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import React from 'react'
 import { ClearBlockModal } from '@/components/BlockClear/ClearBlockModal'
-import { CLEARABLE_REASONS, REASONS_REQUIRING_APPROVAL } from '@/lib/events/config'
+import { MIN_APPROVAL_COMMENT_LENGTH } from '@/lib/constants'
 
 // Mock sonner
 vi.mock('sonner', () => ({
@@ -33,16 +33,20 @@ const renderWithProviders = (ui: React.ReactElement) => {
   return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>)
 }
 
+const VALID_JUSTIFICATION = 'x'.repeat(MIN_APPROVAL_COMMENT_LENGTH)
+
+// The modal has no reason picker: it clears exactly the block's current reason.
 const defaultProps = {
   isOpen: true,
   onClose: vi.fn(),
   canonicalCustomerId: 'cust-abc-123',
-  currentReason: null as string | null,
+  currentReason: 'SERVICEABILITY' as string | null,
 }
 
 describe('ClearBlockModal', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockRequestAsync.mockResolvedValue({ requestId: 'req-1', status: 'accepted' })
   })
 
   afterEach(() => {
@@ -50,7 +54,7 @@ describe('ClearBlockModal', () => {
   })
 
   describe('Rendering', () => {
-    it('renders when isOpen=true', () => {
+    it('renders when isOpen=true with a clearable reason', () => {
       renderWithProviders(<ClearBlockModal {...defaultProps} />)
       expect(screen.getByTestId('clear-block-modal')).toBeInTheDocument()
       expect(screen.getByText('Clear Re-application Block')).toBeInTheDocument()
@@ -61,172 +65,105 @@ describe('ClearBlockModal', () => {
       expect(screen.queryByTestId('clear-block-modal')).not.toBeInTheDocument()
     })
 
-    it('renders all clearable reasons as checkboxes', () => {
+    it('does not render for a missing or non-clearable reason (defensive)', () => {
+      renderWithProviders(<ClearBlockModal {...defaultProps} currentReason={null} />)
+      expect(screen.queryByTestId('clear-block-modal')).not.toBeInTheDocument()
+      cleanup()
+      renderWithProviders(<ClearBlockModal {...defaultProps} currentReason="ACTIVE_LOAN" />)
+      expect(screen.queryByTestId('clear-block-modal')).not.toBeInTheDocument()
+    })
+
+    it('states the fixed reason it will clear — no picker rendered', () => {
       renderWithProviders(<ClearBlockModal {...defaultProps} />)
-      for (const reason of CLEARABLE_REASONS) {
-        expect(screen.getByTestId(`reason-checkbox-${reason}`)).toBeInTheDocument()
-      }
+      expect(screen.getByTestId('reason-to-clear')).toBeInTheDocument()
+      expect(screen.queryAllByRole('checkbox')).toHaveLength(0)
     })
   })
 
-  describe('Submit guard', () => {
-    it('submit is disabled with no reasons selected and no justification', () => {
-      renderWithProviders(<ClearBlockModal {...defaultProps} />)
-      expect(screen.getByTestId('submit-button')).toBeDisabled()
+  describe('Approval tiering', () => {
+    it('shows no approval notice and a "Clear block" submit for a single-operator reason', () => {
+      renderWithProviders(<ClearBlockModal {...defaultProps} currentReason="SERVICEABILITY" />)
+      expect(screen.queryByTestId('approval-notice')).not.toBeInTheDocument()
+      expect(screen.getByTestId('submit-button').textContent).toBe('Clear block')
     })
 
-    it('submit is disabled with a reason but short justification (< 10 chars)', () => {
-      renderWithProviders(<ClearBlockModal {...defaultProps} />)
-
-      fireEvent.click(screen.getByTestId(`reason-checkbox-${CLEARABLE_REASONS[0]}`))
-      fireEvent.change(screen.getByTestId('justification-input'), {
-        target: { value: 'Short' },
-      })
-
-      expect(screen.getByTestId('submit-button')).toBeDisabled()
+    it('shows the approval notice and a "Request approval" submit for a default-class reason', () => {
+      renderWithProviders(<ClearBlockModal {...defaultProps} currentReason="PRIOR_DEFAULT" />)
+      expect(screen.getByTestId('approval-notice')).toBeInTheDocument()
+      expect(screen.getByTestId('submit-button').textContent).toBe('Request approval')
     })
+  })
 
-    it('submit is disabled with valid justification but no reason selected', () => {
+  describe('Validation', () => {
+    it('disables submit until the justification meets the minimum length', () => {
       renderWithProviders(<ClearBlockModal {...defaultProps} />)
-
+      const submit = screen.getByTestId('submit-button')
+      expect(submit).toBeDisabled()
       fireEvent.change(screen.getByTestId('justification-input'), {
-        target: { value: 'This is a valid justification text' },
+        target: { value: 'short' },
       })
-
-      expect(screen.getByTestId('submit-button')).toBeDisabled()
-    })
-
-    it('submit is enabled with a reason and justification >= 10 chars', () => {
-      renderWithProviders(<ClearBlockModal {...defaultProps} />)
-
-      fireEvent.click(screen.getByTestId(`reason-checkbox-${CLEARABLE_REASONS[0]}`))
+      expect(submit).toBeDisabled()
       fireEvent.change(screen.getByTestId('justification-input'), {
-        target: { value: 'This is a valid justification' },
+        target: { value: VALID_JUSTIFICATION },
       })
-
-      expect(screen.getByTestId('submit-button')).not.toBeDisabled()
+      expect(submit).not.toBeDisabled()
     })
   })
 
   describe('Submission', () => {
-    it('calls requestAsync with canonicalCustomerId, reasons, and justification on submit', async () => {
-      mockRequestAsync.mockResolvedValueOnce({ status: 'accepted' })
-      const onClose = vi.fn()
-
+    it('submits exactly the current block reason', async () => {
       renderWithProviders(
         <ClearBlockModal
           {...defaultProps}
-          onClose={onClose}
-          canonicalCustomerId="cust-test-456"
-          conversationId="conv-xyz"
-          customerName="Jane Doe"
+          currentReason="PRIOR_DEFAULT"
+          conversationId="conv-1"
+          customerName="Test Person"
         />,
       )
-
-      fireEvent.click(screen.getByTestId(`reason-checkbox-${CLEARABLE_REASONS[0]}`))
       fireEvent.change(screen.getByTestId('justification-input'), {
-        target: { value: 'Customer situation has improved sufficiently' },
+        target: { value: VALID_JUSTIFICATION },
       })
-      fireEvent.submit(screen.getByTestId('submit-button').closest('form')!)
-
-      await waitFor(() => {
-        expect(mockRequestAsync).toHaveBeenCalledWith({
-          canonicalCustomerId: 'cust-test-456',
-          reasons: [CLEARABLE_REASONS[0]],
-          justification: 'Customer situation has improved sufficiently',
-          conversationId: 'conv-xyz',
-          customerName: 'Jane Doe',
-        })
+      fireEvent.click(screen.getByTestId('submit-button'))
+      await waitFor(() => expect(mockRequestAsync).toHaveBeenCalledTimes(1))
+      expect(mockRequestAsync).toHaveBeenCalledWith({
+        canonicalCustomerId: 'cust-abc-123',
+        reasons: ['PRIOR_DEFAULT'],
+        justification: VALID_JUSTIFICATION,
+        conversationId: 'conv-1',
+        customerName: 'Test Person',
       })
     })
 
-    it('calls onClose after successful submission', async () => {
-      mockRequestAsync.mockResolvedValueOnce({ status: 'accepted' })
+    it('closes on success', async () => {
       const onClose = vi.fn()
-
-      renderWithProviders(
-        <ClearBlockModal
-          {...defaultProps}
-          onClose={onClose}
-          canonicalCustomerId="cust-close-test"
-        />,
-      )
-
-      fireEvent.click(screen.getByTestId(`reason-checkbox-${CLEARABLE_REASONS[0]}`))
+      renderWithProviders(<ClearBlockModal {...defaultProps} onClose={onClose} />)
       fireEvent.change(screen.getByTestId('justification-input'), {
-        target: { value: 'Sufficient justification text here' },
+        target: { value: VALID_JUSTIFICATION },
       })
-      fireEvent.submit(screen.getByTestId('submit-button').closest('form')!)
+      fireEvent.click(screen.getByTestId('submit-button'))
+      await waitFor(() => expect(onClose).toHaveBeenCalled())
+    })
 
-      await waitFor(() => {
-        expect(onClose).toHaveBeenCalled()
+    it('stays open when the request fails', async () => {
+      mockRequestAsync.mockRejectedValueOnce(new Error('boom'))
+      const onClose = vi.fn()
+      renderWithProviders(<ClearBlockModal {...defaultProps} onClose={onClose} />)
+      fireEvent.change(screen.getByTestId('justification-input'), {
+        target: { value: VALID_JUSTIFICATION },
       })
+      fireEvent.click(screen.getByTestId('submit-button'))
+      await waitFor(() => expect(mockRequestAsync).toHaveBeenCalled())
+      expect(onClose).not.toHaveBeenCalled()
+      expect(screen.getByTestId('clear-block-modal')).toBeInTheDocument()
     })
   })
 
-  describe('Approval notice', () => {
-    it('does not show approval notice initially', () => {
-      renderWithProviders(<ClearBlockModal {...defaultProps} />)
-      expect(screen.queryByTestId('approval-notice')).not.toBeInTheDocument()
-    })
-
-    it('shows approval notice when a REASONS_REQUIRING_APPROVAL reason is selected', () => {
-      renderWithProviders(<ClearBlockModal {...defaultProps} />)
-
-      fireEvent.click(screen.getByTestId(`reason-checkbox-${REASONS_REQUIRING_APPROVAL[0]}`))
-
-      expect(screen.getByTestId('approval-notice')).toBeInTheDocument()
-    })
-
-    it('hides approval notice when approval-required reason is deselected', () => {
-      renderWithProviders(<ClearBlockModal {...defaultProps} />)
-
-      // Select then deselect
-      fireEvent.click(screen.getByTestId(`reason-checkbox-${REASONS_REQUIRING_APPROVAL[0]}`))
-      expect(screen.getByTestId('approval-notice')).toBeInTheDocument()
-
-      fireEvent.click(screen.getByTestId(`reason-checkbox-${REASONS_REQUIRING_APPROVAL[0]}`))
-      expect(screen.queryByTestId('approval-notice')).not.toBeInTheDocument()
-    })
-  })
-
-  describe('Pre-selection', () => {
-    it('pre-selects current reason when it is clearable', () => {
-      const clearableReason = 'ID_VERIFICATION'
-      renderWithProviders(<ClearBlockModal {...defaultProps} currentReason={clearableReason} />)
-
-      expect(screen.getByTestId(`reason-checkbox-${clearableReason}`)).toBeChecked()
-    })
-
-    it('does not pre-select when current reason is not clearable', () => {
-      renderWithProviders(<ClearBlockModal {...defaultProps} currentReason="ACTIVE_LOAN" />)
-
-      for (const reason of CLEARABLE_REASONS) {
-        expect(screen.getByTestId(`reason-checkbox-${reason}`)).not.toBeChecked()
-      }
-    })
-
-    it('does not pre-select when currentReason is null', () => {
-      renderWithProviders(<ClearBlockModal {...defaultProps} currentReason={null} />)
-
-      for (const reason of CLEARABLE_REASONS) {
-        expect(screen.getByTestId(`reason-checkbox-${reason}`)).not.toBeChecked()
-      }
-    })
-  })
-  describe('current-reason warning', () => {
-    it('warns when the currently-blocking reason is deselected', () => {
-      renderWithProviders(<ClearBlockModal {...defaultProps} currentReason="PRIOR_DEFAULT" />)
-      // Pre-selected on open; no warning yet
-      expect(screen.queryByTestId('current-reason-warning')).not.toBeInTheDocument()
-      // Deselect the blocking reason, select a different one
-      fireEvent.click(screen.getByTestId('reason-checkbox-PRIOR_DEFAULT'))
-      fireEvent.click(screen.getByTestId('reason-checkbox-SERVICEABILITY'))
-      expect(screen.getByTestId('current-reason-warning')).toBeInTheDocument()
-      expect(screen.getByTestId('current-reason-warning').textContent).toMatch(/will NOT unblock/)
-      // Re-selecting the blocking reason removes the warning
-      fireEvent.click(screen.getByTestId('reason-checkbox-PRIOR_DEFAULT'))
-      expect(screen.queryByTestId('current-reason-warning')).not.toBeInTheDocument()
+  describe('Dismissal', () => {
+    it('calls onClose when the cancel button is clicked', () => {
+      const onClose = vi.fn()
+      renderWithProviders(<ClearBlockModal {...defaultProps} onClose={onClose} />)
+      fireEvent.click(screen.getByText('Cancel'))
+      expect(onClose).toHaveBeenCalled()
     })
   })
 })

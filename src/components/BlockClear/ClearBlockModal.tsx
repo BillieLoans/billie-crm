@@ -20,13 +20,15 @@ export interface ClearBlockModalProps {
 /**
  * Modal for submitting a reapplication block-clear request.
  *
- * Presents a multi-select of clearable reasons (CLEARABLE_REASONS) and a
- * mandatory justification field. When the operator selects a reason in
- * REASONS_REQUIRING_APPROVAL, the modal shows an approval notice and labels
- * the submit button "Request approval" (maker-checker path). Otherwise it
- * goes direct (single-operator path).
+ * The reason to clear is NOT a choice: the system already knows what is
+ * blocking the customer (`currentReason`), so the modal states it read-only
+ * and submits exactly that reason. (The wire protocol still accepts multiple
+ * reasons — that flexibility is for API callers, not operators; a picker here
+ * caused wrong-reason clears in testing.)
  *
- * Pre-selects the block's current reason when it is clearable.
+ * When the reason is in REASONS_REQUIRING_APPROVAL the modal shows an approval
+ * notice and labels the submit button "Request approval" (maker-checker path).
+ * Otherwise it goes direct (single-operator path).
  */
 export function ClearBlockModal({
   isOpen,
@@ -40,19 +42,15 @@ export function ClearBlockModal({
   const modalRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  const [selectedReasons, setSelectedReasons] = useState<string[]>([])
   const [justification, setJustification] = useState('')
 
-  // Reset form state when modal opens; pre-select current reason if clearable.
+  // Reset form state when the modal opens.
   useEffect(() => {
     if (isOpen) {
-      const isClearable =
-        currentReason != null && CLEARABLE_REASONS.includes(currentReason as ClearableReason)
-      setSelectedReasons(isClearable ? [currentReason!] : [])
       setJustification('')
       setTimeout(() => textareaRef.current?.focus(), 0)
     }
-  }, [isOpen, currentReason])
+  }, [isOpen])
 
   // Keyboard handler: Escape closes the modal (unless a submission is in-flight).
   const handleKeyDown = useCallback(
@@ -64,28 +62,30 @@ export function ClearBlockModal({
     [isPending, onClose],
   )
 
-  const toggleReason = useCallback((reason: string) => {
-    setSelectedReasons((prev) =>
-      prev.includes(reason) ? prev.filter((r) => r !== reason) : [...prev, reason],
-    )
-  }, [])
+  // The button only mounts this modal for a clearable reason; guard defensively anyway.
+  const reasonToClear =
+    currentReason != null && CLEARABLE_REASONS.includes(currentReason as ClearableReason)
+      ? currentReason
+      : null
 
-  const requiresApproval = selectedReasons.some((r) =>
-    REASONS_REQUIRING_APPROVAL.includes(r as (typeof REASONS_REQUIRING_APPROVAL)[number]),
-  )
+  const requiresApproval =
+    reasonToClear != null &&
+    REASONS_REQUIRING_APPROVAL.includes(
+      reasonToClear as (typeof REASONS_REQUIRING_APPROVAL)[number],
+    )
 
   const charCount = justification.trim().length
-  const isValid = selectedReasons.length > 0 && charCount >= MIN_APPROVAL_COMMENT_LENGTH
+  const isValid = reasonToClear != null && charCount >= MIN_APPROVAL_COMMENT_LENGTH
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault()
-      if (!isValid) return
+      if (!isValid || reasonToClear == null) return
 
       try {
         await requestAsync({
           canonicalCustomerId,
-          reasons: selectedReasons,
+          reasons: [reasonToClear],
           justification: justification.trim(),
           conversationId,
           customerName,
@@ -99,7 +99,7 @@ export function ClearBlockModal({
       isValid,
       requestAsync,
       canonicalCustomerId,
-      selectedReasons,
+      reasonToClear,
       justification,
       conversationId,
       customerName,
@@ -107,7 +107,7 @@ export function ClearBlockModal({
     ],
   )
 
-  if (!isOpen) return null
+  if (!isOpen || reasonToClear == null) return null
 
   return (
     <div
@@ -149,35 +149,15 @@ export function ClearBlockModal({
               </div>
             )}
 
-            {currentReason != null &&
-              CLEARABLE_REASONS.includes(currentReason as ClearableReason) &&
-              selectedReasons.length > 0 &&
-              !selectedReasons.includes(currentReason) && (
-                <div className={styles.approvalNotice} data-testid="current-reason-warning">
-                  Warning — the customer is currently blocked by{' '}
-                  <strong>{formatBlockReason(currentReason)}</strong>, which is not selected. This
-                  clear will NOT unblock the customer.
-                </div>
-              )}
-
             <div className={styles.fieldGroup}>
-              <label className={styles.fieldLabel}>Reasons for clearing *</label>
-              <div className={styles.checkboxList}>
-                {CLEARABLE_REASONS.map((reason) => (
-                  <label key={reason} className={styles.checkboxLabel}>
-                    <input
-                      type="checkbox"
-                      checked={selectedReasons.includes(reason)}
-                      onChange={() => toggleReason(reason)}
-                      disabled={isPending}
-                      data-testid={`reason-checkbox-${reason}`}
-                    />
-                    <span>{formatBlockReason(reason)}</span>
-                    {REASONS_REQUIRING_APPROVAL.includes(
-                      reason as (typeof REASONS_REQUIRING_APPROVAL)[number],
-                    ) && <span className={styles.approvalBadge}>Approval required</span>}
-                  </label>
-                ))}
+              <label className={styles.fieldLabel}>This will clear</label>
+              <div className={styles.checkboxList} data-testid="reason-to-clear">
+                <span>
+                  <strong>{formatBlockReason(reasonToClear)}</strong>
+                  {requiresApproval && (
+                    <span className={styles.approvalBadge}>Approval required</span>
+                  )}
+                </span>
               </div>
             </div>
 
