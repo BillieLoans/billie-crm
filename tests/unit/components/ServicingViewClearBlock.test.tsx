@@ -23,6 +23,10 @@ vi.mock('@/hooks/queries/usePendingWriteOff', () => ({
   usePendingWriteOff: vi.fn(() => ({ data: null, isError: false })),
 }))
 
+vi.mock('@/hooks/queries/useCollectionsCasesByCustomer', () => ({
+  useCollectionsCasesByCustomer: vi.fn(() => ({ cases: [], isLoading: false })),
+}))
+
 vi.mock('@/hooks/queries/useTransactions', () => ({
   transactionsQueryKey: vi.fn(() => ['transactions']),
 }))
@@ -87,7 +91,14 @@ vi.mock('@/components/ServicingView/AccountPanel', () => ({
 }))
 
 vi.mock('@/components/ServicingView/AccountRail', () => ({
-  AccountRail: () => <div data-testid="stub-account-rail" />,
+  AccountRail: vi.fn(
+    ({ collectionsCases }: { collectionsCases?: Array<{ accountId: string }> }) => (
+      <div
+        data-testid="stub-account-rail"
+        data-collections-case-ids={(collectionsCases ?? []).map((c) => c.accountId).join(',')}
+      />
+    ),
+  ),
 }))
 
 vi.mock('@/components/ServicingView/AttentionStrip', () => ({
@@ -224,5 +235,58 @@ describe('ServicingView — ClearBlockButton wiring (BTB-202)', () => {
     // Stub still renders (ClearBlockButton self-gates, not ServicingView)
     const stub = screen.getByTestId('clear-block-btn-stub')
     expect(stub).toHaveAttribute('data-canonical-id', 'none')
+  })
+})
+
+describe('ServicingView — collections surfacing wiring (BTB-197 WS4)', () => {
+  it('passes collectionsCases from useCollectionsCasesByCustomer into getAttentionItems and AccountRail', async () => {
+    const ServicingView = await getServicingView()
+    const useCustomerMock = await getUseCustomerMock()
+    useCustomerMock.mockReturnValue({
+      data: makeCustomer(null),
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as ReturnType<typeof useCustomerMock>)
+
+    const collectionsMod = await import('@/hooks/queries/useCollectionsCasesByCustomer')
+    const triageMod = await import('@/lib/accountTriage')
+    const cases = [
+      {
+        accountId: 'LOAN-1',
+        customerId: CANONICAL_ID,
+        customerName: 'Alex Testerton',
+        accountNumber: 'LOAN-1',
+        state: 'open' as const,
+        rung: 1,
+        hardshipPaused: false,
+        stoppedContact: false,
+        overdueAmount: 100,
+        daysOverdue: 5,
+        lastStep: 1,
+        openedAt: '2026-06-01T00:00:00.000Z',
+        curedAt: null,
+        exhaustedAt: null,
+        pausedAt: null,
+        resumedAt: null,
+        stopContactAt: null,
+        updatedAt: '2026-06-05T00:00:00.000Z',
+        aging: null,
+      },
+    ]
+    vi.mocked(collectionsMod.useCollectionsCasesByCustomer).mockReturnValue({
+      cases,
+      isLoading: false,
+    })
+
+    render(<ServicingView customerId={CANONICAL_ID} />)
+
+    expect(vi.mocked(triageMod.getAttentionItems)).toHaveBeenCalledWith(
+      expect.objectContaining({ collectionsCases: cases }),
+    )
+    expect(screen.getByTestId('stub-account-rail')).toHaveAttribute(
+      'data-collections-case-ids',
+      'LOAN-1',
+    )
   })
 })

@@ -35,6 +35,7 @@ _COLLECTION_EVENT_MODELS = {
     "collection.case.hardship_paused.v1": "CollectionCaseHardshipPausedV1",
     "collection.case.resumed.v1": "CollectionCaseResumedV1",
     "collection.case.stop_contact_applied.v1": "CollectionCaseStopContactAppliedV1",
+    "collection.case.step_advanced.v1": "CollectionCaseStepAdvancedV1",
 }
 
 

@@ -1503,6 +1503,10 @@ export interface CollectionCase {
    * Base lifecycle state. Cross-cutting hardship / stop-contact are flags.
    */
   state?: ('open' | 'awaiting_human' | 'cured') | null;
+  /**
+   * Current reminder step from collection.case.step_advanced.v1
+   */
+  rung?: number | null;
   hardshipPaused?: boolean | null;
   stoppedContact?: boolean | null;
   /**
@@ -2227,6 +2231,7 @@ export interface CollectionCasesSelect<T extends boolean = true> {
   customerRef?: T;
   customerId?: T;
   state?: T;
+  rung?: T;
   hardshipPaused?: T;
   stoppedContact?: T;
   overdueAmount?: T;

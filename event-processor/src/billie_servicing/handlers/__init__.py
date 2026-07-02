@@ -71,6 +71,7 @@ from .collections import (
     handle_collection_case_hardship_paused,
     handle_collection_case_resumed,
     handle_collection_case_stop_contact_applied,
+    handle_collection_case_step_advanced,
 )
 
 __all__ = [
@@ -136,4 +137,5 @@ __all__ = [
     "handle_collection_case_hardship_paused",
     "handle_collection_case_resumed",
     "handle_collection_case_stop_contact_applied",
+    "handle_collection_case_step_advanced",
 ]

@@ -1,6 +1,7 @@
 // src/lib/accountTriage.ts
 import type { CustomerData, LoanAccountData } from '@/hooks/queries/useCustomer'
 import { formatBlockReason, formatBlockedUntil, isBlockActive } from '@/lib/reapplicationBlock'
+import type { CollectionsCaseRow } from '@/types/collections'
 
 export type AccountTier = 'overdue' | 'pending' | 'active' | 'closed'
 
@@ -19,6 +20,9 @@ export interface AttentionItem {
     | 'pending_disbursement'
     | 'writeoff_pending'
     | 'reapplication_blocked'
+    | 'collections'
+    | 'hardship'
+    | 'stop_contact'
   label: string
   accountId: string | null
   severity: 'high' | 'medium'
@@ -90,6 +94,7 @@ export function getAttentionItems(opts: {
   accounts: LoanAccountData[]
   pendingWriteOffAccountIds?: string[]
   reapplicationBlock?: CustomerData['reapplicationBlock']
+  collectionsCases?: CollectionsCaseRow[]
   today?: Date
 }): AttentionItem[] {
   const {
@@ -97,6 +102,7 @@ export function getAttentionItems(opts: {
     accounts,
     pendingWriteOffAccountIds = [],
     reapplicationBlock = null,
+    collectionsCases = [],
     today = new Date(),
   } = opts
   const items: AttentionItem[] = []
@@ -145,6 +151,44 @@ export function getAttentionItems(opts: {
       label: wo.length === 1 ? '1 write-off pending' : `${wo.length} write-offs pending`,
       accountId: wo[0].loanAccountId,
       severity: 'medium',
+    })
+  }
+
+  // Collections (BTB-197 WS4) — a case + hardship pause are PER-ACCOUNT signals
+  // (accountId set, one chip per open/awaiting_human case). Contact suppression
+  // is a CUSTOMER-LEVEL signal — a single chip with accountId null, since it
+  // applies across the whole customer relationship rather than one loan.
+  // Cured cases carry no per-account attention signal.
+  //
+  // stop_contact is durable across cure (final-review Fix 4): a stop-contact
+  // instruction (dispute/deceased/legal) is a standing suppression on the
+  // customer relationship, not tied to any one case's lifecycle — a case
+  // curing must not silently drop the contact ban. So this is computed over
+  // ALL collectionsCases, not just activeCases.
+  const activeCases = collectionsCases.filter((c) => c.state !== 'cured')
+  const anyStoppedContact = collectionsCases.some((c) => c.stoppedContact)
+  for (const c of activeCases) {
+    items.push({
+      kind: 'collections',
+      label: c.state === 'awaiting_human' ? 'Awaiting human' : 'In collections',
+      accountId: c.accountId,
+      severity: 'high',
+    })
+    if (c.hardshipPaused) {
+      items.push({
+        kind: 'hardship',
+        label: 'Hardship paused',
+        accountId: c.accountId,
+        severity: 'medium',
+      })
+    }
+  }
+  if (anyStoppedContact) {
+    items.push({
+      kind: 'stop_contact',
+      label: 'Contact stopped',
+      accountId: null,
+      severity: 'high',
     })
   }
 

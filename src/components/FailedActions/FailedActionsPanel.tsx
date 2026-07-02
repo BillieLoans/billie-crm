@@ -23,6 +23,14 @@ function getActionLabel(type: FailedActionType): string {
       return 'Record Repayment'
     case 'write-off-request':
       return 'Write-Off Request'
+    case 'flag-hardship':
+      return 'Flag hardship'
+    case 'resume-hardship':
+      return 'Resume from hardship'
+    case 'stop-contact':
+      return 'Stop contact'
+    case 'advance-step':
+      return 'Advance step'
     default:
       return 'Action'
   }
@@ -39,6 +47,14 @@ function getActionIcon(type: FailedActionType): string {
       return '💳'
     case 'write-off-request':
       return '❌'
+    case 'flag-hardship':
+      return '⏸️'
+    case 'resume-hardship':
+      return '▶️'
+    case 'stop-contact':
+      return '🛑'
+    case 'advance-step':
+      return '⏭️'
     default:
       return '⚡'
   }

@@ -72,6 +72,7 @@ from .handlers import (
     handle_collection_case_hardship_paused,
     handle_collection_case_resumed,
     handle_collection_case_stop_contact_applied,
+    handle_collection_case_step_advanced,
 )
 from .processor import EventProcessor
 
@@ -247,6 +248,9 @@ def setup_handlers(processor: EventProcessor) -> None:
     processor.register_handler("collection.case.resumed.v1", handle_collection_case_resumed)
     processor.register_handler(
         "collection.case.stop_contact_applied.v1", handle_collection_case_stop_contact_applied
+    )
+    processor.register_handler(
+        "collection.case.step_advanced.v1", handle_collection_case_step_advanced
     )
 
 

@@ -19,7 +19,5 @@ git+https://x-access-token:${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-s
 git+https://x-access-token:${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@ledger-v1.1.0#subdirectory=packages/ledger
 git+https://x-access-token:${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@notifications-v1.1.1#subdirectory=packages/notifications
 git+https://x-access-token:${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@aging-v1.1.0#subdirectory=packages/aging
-# Collection case events (BTB-199 consumer side). TODO: confirm the published tag
-# in billie-event-sdks — BTB-166 bumped billie-collection-events to 0.2.0 (adds
-# customer_id to the operator events), so the tag is expected to be collection-v0.2.0.
-git+https://x-access-token:${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@collection-v0.2.0#subdirectory=packages/collection
+# Collection case events (BTB-199 consumer side).
+git+https://x-access-token:${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@collection-v0.3.0#subdirectory=packages/collection

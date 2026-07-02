@@ -1,3 +1,4 @@
+.cardWrap { margin-bottom: 7px; }
 .row {
   display: block;
   width: 100%;
@@ -6,7 +7,7 @@
   border-radius: 7px;
   background: var(--theme-elevation-0, #fff);
   padding: 8px;
-  margin-bottom: 7px;
+  margin-bottom: 0;
   cursor: pointer;
 }
 .rowSelected { border: 2px solid var(--theme-success-400, #4ade80); background: var(--theme-success-50, #f0fdf4); box-shadow: 0 0 0 2px var(--theme-success-200, #bbf7d0); padding: 7px; }
@@ -26,3 +27,10 @@
 .status_closed { color: var(--theme-elevation-500, #8a93a0); font-weight: 400; }
 .balance { font-size: 13px; font-weight: 700; color: var(--theme-text, #1f2733); }
 .rowClosed .balance { color: var(--theme-elevation-500, #8a93a0); font-weight: 600; }
+.collectionsBadge { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--theme-elevation-150, #e3e6eb); display: flex; flex-direction: column; gap: 3px; }
+.collectionsBadgeText { font-size: 10px; font-weight: 600; color: var(--theme-elevation-650, #5b6472); text-transform: uppercase; letter-spacing: 0.02em; }
+.collectionsFlags { display: flex; gap: 4px; }
+.flagChip { font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 8px; background: var(--theme-warning-100, #fdf3e0); color: var(--theme-warning-700, #b7791f); text-transform: uppercase; }
+.flagChipStop { background: var(--theme-error-100, #fbeceb); color: var(--theme-error-500, #c0362c); }
+.collectionsLink { display: block; font-size: 11px; font-weight: 600; color: var(--theme-elevation-650, #2f5bb0); text-decoration: none; padding: 3px 8px 0; }
+.collectionsLink:hover { text-decoration: underline; }

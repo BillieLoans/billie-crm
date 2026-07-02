@@ -7,6 +7,7 @@ import * as migration_20260619_011621 from './20260619_011621';
 import * as migration_20260619_061320_payload_385_upgrade from './20260619_061320_payload_385_upgrade';
 import * as migration_20260624_094132 from './20260624_094132';
 import * as migration_20260628_120000_reapplication_block_clear_requests from './20260628_120000_reapplication_block_clear_requests';
+import * as migration_20260702_052932 from './20260702_052932';
 
 export const migrations = [
   {
@@ -53,5 +54,10 @@ export const migrations = [
     up: migration_20260628_120000_reapplication_block_clear_requests.up,
     down: migration_20260628_120000_reapplication_block_clear_requests.down,
     name: '20260628_120000_reapplication_block_clear_requests',
+  },
+  {
+    up: migration_20260702_052932.up,
+    down: migration_20260702_052932.down,
+    name: '20260702_052932',
   },
 ];

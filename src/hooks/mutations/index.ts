@@ -15,3 +15,13 @@ export type {
   RecordRepaymentResponse,
   RepaymentAllocation,
 } from './useRecordRepayment'
+
+// Collections operator action hooks (BTB-198 WS5)
+export { useFlagHardship } from './useFlagHardship'
+export type { FlagHardshipParams } from './useFlagHardship'
+export { useResumeHardship } from './useResumeHardship'
+export type { ResumeHardshipParams } from './useResumeHardship'
+export { useApplyStopContact } from './useApplyStopContact'
+export type { ApplyStopContactParams } from './useApplyStopContact'
+export { useAdvanceToNextStep } from './useAdvanceToNextStep'
+export type { AdvanceToNextStepParams } from './useAdvanceToNextStep'

@@ -27,6 +27,7 @@ from billie_servicing.handlers.collections import (
     handle_collection_case_hardship_paused,
     handle_collection_case_opened,
     handle_collection_case_resumed,
+    handle_collection_case_step_advanced,
     handle_collection_case_stop_contact_applied,
 )
 
@@ -196,3 +197,39 @@ class TestStopContact:
         assert doc["stopped_contact"] is True
         assert doc["stop_contact_at"] == coerce_date("2026-06-15T11:00:00Z")
         assert "state" not in doc
+
+
+class TestStepAdvanced:
+    @pytest.mark.asyncio
+    async def test_step_advanced_sets_rung_and_last_step(self, mock_pool):
+        event = MagicMock()
+        event.account_id = "acc_1"
+        event.customer_id = "cus_1"
+        event.step = 3
+        event.correlation_id = "corr_1"
+
+        await handle_collection_case_step_advanced(mock_pool, event)
+
+        call = mock_pool.last_upsert(TABLE)
+        assert call is not None
+        assert mock_pool.calls_against(TABLE)[0].conflict_columns == ["account_id"]
+        assert call["rung"] == 3
+        assert call["last_step"] == 3
+        assert call["correlation_id"] == "corr_1"
+        # Flag-style upsert must NOT write `state` (would clobber the lifecycle).
+        assert "state" not in call
+
+    @pytest.mark.asyncio
+    async def test_step_advanced_resolves_customer_link(self, mock_pool):
+        mock_pool.set_fetchval("pg-customer-uuid")
+        event = MagicMock()
+        event.account_id = "acc_2"
+        event.customer_id = "cus_2"
+        event.step = 1
+        event.correlation_id = "corr_2"
+
+        await handle_collection_case_step_advanced(mock_pool, event)
+
+        doc = mock_pool.last_insert(TABLE)
+        assert doc["customer_ref_id"] == "pg-customer-uuid"
+        assert doc["customer_id"] == "cus_2"

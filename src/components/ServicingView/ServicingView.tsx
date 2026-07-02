@@ -26,6 +26,7 @@ import { ContextPane } from './ContextPane'
 import { ClearBlockButton } from '@/components/BlockClear'
 import { getAttentionItems, sortAccountsForRail } from '@/lib/accountTriage'
 import { usePendingWriteOff } from '@/hooks/queries/usePendingWriteOff'
+import { useCollectionsCasesByCustomer } from '@/hooks/queries/useCollectionsCasesByCustomer'
 import { useTrackCustomerView } from '@/hooks/useTrackCustomerView'
 import { Breadcrumb } from '@/components/Breadcrumb'
 import styles from './styles.module.css'
@@ -72,6 +73,10 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
   const queryClient = useQueryClient()
   const { data: customer, isLoading, isError, refetch: refetchCustomer } = useCustomer(customerId)
   const [isRefreshing, setIsRefreshing] = useState(false)
+
+  // Collections cases for this customer (BTB-197 WS4) — surfaced as attention
+  // chips + per-account badges on the rail. accountId on a case === loanAccountId.
+  const { cases: collectionsCases } = useCollectionsCasesByCustomer(customerId)
 
   // Track this customer view for "Recent Customers" feature
   // Only track after successful customer data load (Task 3.2 requirement)
@@ -122,6 +127,7 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
         pendingWriteOffAccountIds:
           selectedAccountId && hasPendingWriteOff ? [selectedAccountId] : [],
         reapplicationBlock: customer?.reapplicationBlock ?? null,
+        collectionsCases,
       }),
     [
       customer?.vulnerableFlag,
@@ -129,6 +135,7 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
       accounts,
       selectedAccountId,
       hasPendingWriteOff,
+      collectionsCases,
     ],
   )
 
@@ -379,6 +386,7 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
             accounts={accounts}
             selectedAccountId={selectedAccountId}
             onSelectAccount={handleSelectAccount}
+            collectionsCases={collectionsCases}
           />
         </div>
 

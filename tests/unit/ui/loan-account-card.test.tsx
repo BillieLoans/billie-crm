@@ -2,6 +2,18 @@ import { describe, test, expect, vi, afterEach } from 'vitest'
 import { render, screen, cleanup, fireEvent } from '@testing-library/react'
 import { LoanAccountCard } from '@/components/ServicingView/LoanAccountCard'
 import type { LoanAccountData } from '@/hooks/queries/useCustomer'
+import type { CollectionsCaseRow } from '@/types/collections'
+
+// jsdom doesn't implement navigation — mock next/link to a plain anchor
+// (matching the pattern used elsewhere, e.g. tests/unit/ui/breadcrumb.test.tsx)
+// so clicking the deep link doesn't emit "Not implemented: navigation" noise.
+vi.mock('next/link', () => ({
+  default: ({ children, href, ...props }: { children: React.ReactNode; href: string }) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
+}))
 
 const TODAY = new Date('2026-06-09T12:00:00Z')
 
@@ -20,6 +32,29 @@ const createMockAccount = (overrides: Partial<LoanAccountData> = {}): LoanAccoun
     updatedAt: '2024-01-15T00:00:00Z',
     ...overrides,
   }) as LoanAccountData
+
+const createMockCase = (overrides: Partial<CollectionsCaseRow> = {}): CollectionsCaseRow => ({
+  accountId: 'LOAN-001',
+  customerId: 'cust-1',
+  customerName: 'Test Customer',
+  accountNumber: 'ACC-12345',
+  state: 'open',
+  rung: 2,
+  hardshipPaused: false,
+  stoppedContact: false,
+  overdueAmount: 100,
+  daysOverdue: 10,
+  lastStep: 2,
+  openedAt: '2026-06-01T00:00:00.000Z',
+  curedAt: null,
+  exhaustedAt: null,
+  pausedAt: null,
+  resumedAt: null,
+  stopContactAt: null,
+  updatedAt: '2026-06-20T00:00:00.000Z',
+  aging: null,
+  ...overrides,
+})
 
 describe('LoanAccountCard (compact rail row)', () => {
   afterEach(() => cleanup())
@@ -60,5 +95,80 @@ describe('LoanAccountCard (compact rail row)', () => {
     render(<LoanAccountCard account={account} onSelect={onSelect} today={TODAY} />)
     fireEvent.click(screen.getByTestId('loan-account-card-LOAN-001'))
     expect(onSelect).toHaveBeenCalledWith(account)
+  })
+
+  // ─── Collections badge + deep link (BTB-197 WS4) ───────────────────────────
+
+  test('renders no collections badge/link when collectionsCase is null', () => {
+    render(<LoanAccountCard account={createMockAccount()} onSelect={vi.fn()} today={TODAY} collectionsCase={null} />)
+    expect(screen.queryByTestId('collections-badge-LOAN-001')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('collections-link-LOAN-001')).not.toBeInTheDocument()
+  })
+
+  test('renders no collections badge/link when the case is cured', () => {
+    render(
+      <LoanAccountCard
+        account={createMockAccount()}
+        onSelect={vi.fn()}
+        today={TODAY}
+        collectionsCase={createMockCase({ state: 'cured' })}
+      />,
+    )
+    expect(screen.queryByTestId('collections-badge-LOAN-001')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('collections-link-LOAN-001')).not.toBeInTheDocument()
+  })
+
+  test('renders the badge and deep link for a non-cured case', () => {
+    render(
+      <LoanAccountCard
+        account={createMockAccount()}
+        onSelect={vi.fn()}
+        today={TODAY}
+        collectionsCase={createMockCase({ state: 'open', rung: 3 })}
+      />,
+    )
+    expect(screen.getByTestId('collections-badge-LOAN-001')).toHaveTextContent('Collections · Step 3/5 · Open')
+    const link = screen.getByTestId('collections-link-LOAN-001')
+    expect(link).toHaveTextContent('View collections case →')
+    expect(link).toHaveAttribute('href', '/admin/collections-queue/LOAN-001')
+  })
+
+  test('shows an "Awaiting human" state label and falls back to "?" when rung is null', () => {
+    render(
+      <LoanAccountCard
+        account={createMockAccount()}
+        onSelect={vi.fn()}
+        today={TODAY}
+        collectionsCase={createMockCase({ state: 'awaiting_human', rung: null })}
+      />,
+    )
+    expect(screen.getByTestId('collections-badge-LOAN-001')).toHaveTextContent('Collections · Step ?/5 · Awaiting human')
+  })
+
+  test('renders Hardship and Stop contact flag chips when set', () => {
+    render(
+      <LoanAccountCard
+        account={createMockAccount()}
+        onSelect={vi.fn()}
+        today={TODAY}
+        collectionsCase={createMockCase({ hardshipPaused: true, stoppedContact: true })}
+      />,
+    )
+    expect(screen.getByText('Hardship')).toBeInTheDocument()
+    expect(screen.getByText('Stop contact')).toBeInTheDocument()
+  })
+
+  test('clicking the deep link does not trigger onSelect', () => {
+    const onSelect = vi.fn()
+    render(
+      <LoanAccountCard
+        account={createMockAccount()}
+        onSelect={onSelect}
+        today={TODAY}
+        collectionsCase={createMockCase()}
+      />,
+    )
+    fireEvent.click(screen.getByTestId('collections-link-LOAN-001'))
+    expect(onSelect).not.toHaveBeenCalled()
   })
 })
