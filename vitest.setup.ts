@@ -17,8 +17,12 @@ global.ResizeObserver = class ResizeObserver {
 }
 
 // Mock scrollIntoView for tests (not available in JSDOM)
-// Required by cmdk for keyboard navigation
-Element.prototype.scrollIntoView = function () {}
+// Required by cmdk for keyboard navigation.
+// Guarded so node-environment test files (`// @vitest-environment node`) that
+// have no DOM can share this setup without throwing on the missing `Element`.
+if (typeof Element !== 'undefined') {
+  Element.prototype.scrollIntoView = function () {}
+}
 
 // Mock next/navigation
 vi.mock('next/navigation', () => ({

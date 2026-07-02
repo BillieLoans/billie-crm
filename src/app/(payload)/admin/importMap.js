@@ -1,4 +1,5 @@
 import { LoanAccountServicing as LoanAccountServicing_ddd43f8b2788d92f39012f5e3f407ad6 } from '@/components/LoanAccountServicing'
+import { LogoutButton as LogoutButton_81f5d08e777904dedf54cf0c6c30c1a5 } from '@/components/Auth/LogoutButton'
 import { NotificationAction as NotificationAction_ff7594e27eaf34e7ce9acae213b05415 } from '@/components/Notifications/NotificationAction'
 import { GoogleLoginButton as GoogleLoginButton_f8eb56cd8fd98e23e8bcaf648a37c729 } from '@/components/Auth/GoogleLoginButton'
 import { NavSearchTrigger as NavSearchTrigger_aef8b4b7b9afc7097ff45e7590131c08 } from '@/components/navigation/NavSearchTrigger'
@@ -30,6 +31,7 @@ import { CollectionCards as CollectionCards_f9c02e79a4aed9a3924487c0cd4cafb1 } f
 /** @type import('payload').ImportMap */
 export const importMap = {
   "@/components/LoanAccountServicing#LoanAccountServicing": LoanAccountServicing_ddd43f8b2788d92f39012f5e3f407ad6,
+  "@/components/Auth/LogoutButton#LogoutButton": LogoutButton_81f5d08e777904dedf54cf0c6c30c1a5,
   "@/components/Notifications/NotificationAction#NotificationAction": NotificationAction_ff7594e27eaf34e7ce9acae213b05415,
   "@/components/Auth/GoogleLoginButton#GoogleLoginButton": GoogleLoginButton_f8eb56cd8fd98e23e8bcaf648a37c729,
   "@/components/navigation/NavSearchTrigger#NavSearchTrigger": NavSearchTrigger_aef8b4b7b9afc7097ff45e7590131c08,

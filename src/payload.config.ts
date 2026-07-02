@@ -37,6 +37,13 @@ export default buildConfig({
     },
     components: {
       providers: ['@/providers'],
+      // Replace Payload's built-in logout button with one that points at our
+      // custom /api/auth/logout route, which deterministically clears the
+      // custom (Google OAuth) `payload-token` cookie. Payload's built-in client
+      // logout swallows POST failures and can leave the session alive.
+      logout: {
+        Button: '@/components/Auth/LogoutButton#LogoutButton',
+      },
       // Custom navigation items (Story 6.1)
       beforeNavLinks: [
         '@/components/navigation/NavSearchTrigger#NavSearchTrigger',

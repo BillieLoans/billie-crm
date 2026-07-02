@@ -141,68 +141,18 @@ describe('Middleware Cloudflare Origin Check (H9 Remediation)', () => {
   })
 })
 
-describe('Middleware JWT Expiry Check (M4 Remediation)', () => {
-  /**
-   * Mirrors the isJwtNotExpired logic from src/middleware.ts.
-   * Decodes JWT payload and checks `exp` claim without signature verification.
-   */
-  const isJwtNotExpired = (token: string | undefined): boolean => {
-    if (!token) return false
-    try {
-      const parts = token.split('.')
-      if (parts.length !== 3) return false
-      const payload = JSON.parse(atob(parts[1]))
-      if (typeof payload.exp !== 'number') return false
-      return payload.exp > Math.floor(Date.now() / 1000)
-    } catch {
-      return false
-    }
-  }
-
-  /** Helper to create a JWT-shaped token with a given exp */
-  const makeToken = (exp: number): string => {
-    const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
-    const payload = btoa(JSON.stringify({ id: 'user-1', email: 'test@test.com', exp }))
-    return `${header}.${payload}.fake-signature`
-  }
-
-  test('should return false for undefined token', () => {
-    expect(isJwtNotExpired(undefined)).toBe(false)
-  })
-
-  test('should return false for empty string', () => {
-    expect(isJwtNotExpired('')).toBe(false)
-  })
-
-  test('should return false for garbage string', () => {
-    expect(isJwtNotExpired('not-a-jwt')).toBe(false)
-  })
-
-  test('should return false for token with only 2 parts', () => {
-    expect(isJwtNotExpired('header.payload')).toBe(false)
-  })
-
-  test('should return false for expired token', () => {
-    const expired = makeToken(Math.floor(Date.now() / 1000) - 3600) // 1 hour ago
-    expect(isJwtNotExpired(expired)).toBe(false)
-  })
-
-  test('should return true for valid non-expired token', () => {
-    const valid = makeToken(Math.floor(Date.now() / 1000) + 3600) // 1 hour from now
-    expect(isJwtNotExpired(valid)).toBe(true)
-  })
-
-  test('should return false for token with no exp claim', () => {
-    const header = btoa(JSON.stringify({ alg: 'HS256' }))
-    const payload = btoa(JSON.stringify({ id: 'user-1' })) // no exp
-    const token = `${header}.${payload}.sig`
-    expect(isJwtNotExpired(token)).toBe(false)
-  })
-
-  test('should return false for token with non-numeric exp', () => {
-    const header = btoa(JSON.stringify({ alg: 'HS256' }))
-    const payload = btoa(JSON.stringify({ id: 'user-1', exp: 'never' }))
-    const token = `${header}.${payload}.sig`
-    expect(isJwtNotExpired(token)).toBe(false)
-  })
-})
+/**
+ * Middleware JWT validation (formerly the unsigned "isJwtNotExpired" exp-only
+ * check) is now signature-verifying and lives in src/lib/verifyAuthToken.ts.
+ *
+ * The proxy previously decoded the JWT and checked only `exp` (no signature),
+ * while views/API used payload.auth() (full verification). A token that was
+ * unexpired but unverifiable made the two disagree — the proxy bounced the user
+ * to the dashboard while every view 403'd. proxy.ts now calls verifyAuthToken()
+ * so its routing decision matches payload.auth().
+ *
+ * That behaviour (valid signature + expiry → true; wrong-secret/expired/garbage
+ * → false; fail-closed on missing secret) is covered against the REAL function
+ * in tests/unit/security/verifyAuthToken.test.ts, so the old exp-only mirror has
+ * been removed rather than left here testing logic the proxy no longer contains.
+ */
