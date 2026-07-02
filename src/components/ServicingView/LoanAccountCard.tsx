@@ -87,7 +87,7 @@ export const LoanAccountCard: React.FC<LoanAccountCardProps> = ({
           <div className={styles.collectionsBadge} data-testid={`collections-badge-${account.loanAccountId}`}>
             <span className={styles.collectionsBadgeText}>
               Collections · Step {collectionsCase.rung ?? '?'}/5 ·{' '}
-              {COLLECTIONS_STATE_LABEL[collectionsCase.state as 'open' | 'awaiting_human']}
+              {(collectionsCase.state && COLLECTIONS_STATE_LABEL[collectionsCase.state as 'open' | 'awaiting_human']) ?? 'Unknown'}
             </span>
             {(collectionsCase.hardshipPaused || collectionsCase.stoppedContact) && (
               <span className={styles.collectionsFlags}>
