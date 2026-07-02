@@ -254,12 +254,22 @@ describe('GET /api/collections/cases', () => {
     expect(res.body.cases[0].aging).toBeNull()
   })
 
-  it('non-UNAVAILABLE ledger error propagates as 500', async () => {
+  it('non-UNAVAILABLE ledger error propagates as 500 with the standard error envelope', async () => {
     mockGetOverdueAccounts.mockRejectedValueOnce(new Error('boom'))
 
     const res: any = await GET(makeListRequest())
 
     expect(res.status).toBe(500)
+    expect(res.body).toEqual({
+      error: { code: 'INTERNAL_ERROR', message: 'Failed to fetch collection cases' },
+    })
+  })
+
+  it('filter mapping: an invalid ?rung= value is dropped (no where clause added)', async () => {
+    await GET(makeListRequest('?rung=abc'))
+
+    const casesCall = mockFind.mock.calls.find((c) => c[0].collection === 'collection-cases')
+    expect(casesCall![0].where).toBeUndefined()
   })
 })
 
@@ -366,5 +376,35 @@ describe('GET /api/collections/cases/[accountId]', () => {
 
     expect(res.status).toBe(200)
     expect(res.body.case.aging).toBeNull()
+  })
+
+  it('non-UNAVAILABLE ledger error propagates as 500 with the standard error envelope', async () => {
+    setFindImpl({
+      cases: {
+        docs: [
+          {
+            accountId: 'acc-1',
+            customerId: 'cust-1',
+            state: 'open',
+            rung: 1,
+            hardshipPaused: false,
+            stoppedContact: false,
+            overdueAmount: 100,
+            daysOverdue: 5,
+            lastStep: 2,
+            openedAt: null,
+            updatedAt: '2026-06-02T00:00:00.000Z',
+          },
+        ],
+      },
+    })
+    mockGetOverdueAccounts.mockRejectedValueOnce(new Error('boom'))
+
+    const res: any = await GET_DETAIL(makeDetailRequest(), makeParams('acc-1'))
+
+    expect(res.status).toBe(500)
+    expect(res.body).toEqual({
+      error: { code: 'INTERNAL_ERROR', message: 'An internal error occurred. Please try again.' },
+    })
   })
 })

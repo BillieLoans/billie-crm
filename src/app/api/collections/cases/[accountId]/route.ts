@@ -5,15 +5,16 @@
  * projection (BTB-199), with the same loan-account + ledger aging
  * enrichment as the list route (BTB-200 WS2).
  *
- * NOTE: kept self-contained — a later task adds sibling routes under this
- * `[accountId]` segment, so enrichment logic here is intentionally not
- * factored into a shared lib that those routes would need to depend on.
+ * Row mapping is shared with the list route via
+ * `@/lib/collections/case-row` (C3 review) — behaviour must stay identical
+ * between the two routes.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
 import { hasAnyRole } from '@/lib/access'
 import { getLedgerClient } from '@/server/grpc-client'
+import { buildCollectionsCaseRow } from '@/lib/collections/case-row'
 import type { CollectionsCaseAging, CollectionsCaseRow } from '@/types/collections'
 
 export async function GET(
@@ -73,28 +74,15 @@ export async function GET(
       }
     }
 
-    const row: CollectionsCaseRow = {
-      accountId: doc.accountId,
-      customerId: doc.customerId ?? la?.customerIdString ?? null,
-      customerName: la?.customerName ?? null,
-      accountNumber: la?.accountNumber ?? null,
-      state: doc.state,
-      rung: doc.rung ?? null,
-      hardshipPaused: Boolean(doc.hardshipPaused),
-      stoppedContact: Boolean(doc.stoppedContact),
-      overdueAmount: doc.overdueAmount ?? null,
-      daysOverdue: doc.daysOverdue ?? null,
-      lastStep: doc.lastStep ?? null,
-      openedAt: doc.openedAt ?? null,
-      updatedAt: doc.updatedAt,
-      aging,
-    }
+    const row: CollectionsCaseRow = buildCollectionsCaseRow(doc, la, aging)
 
     return NextResponse.json({ case: row })
   } catch (error) {
     console.error('Error fetching collection case detail:', error)
     return NextResponse.json(
-      { error: { code: 'INTERNAL', message: 'An internal error occurred. Please try again.' } },
+      {
+        error: { code: 'INTERNAL_ERROR', message: 'An internal error occurred. Please try again.' },
+      },
       { status: 500 },
     )
   }

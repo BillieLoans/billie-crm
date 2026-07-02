@@ -20,6 +20,7 @@ import type { Where } from 'payload'
 import { requireAuth } from '@/lib/auth'
 import { hasAnyRole } from '@/lib/access'
 import { getLedgerClient } from '@/server/grpc-client'
+import { buildCollectionsCaseRow } from '@/lib/collections/case-row'
 import type { CollectionsCaseAging, CollectionsCaseRow } from '@/types/collections'
 
 export async function GET(req: NextRequest) {
@@ -35,8 +36,9 @@ export async function GET(req: NextRequest) {
     const where: Where[] = []
     const state = sp.get('state')
     if (state) where.push({ state: { equals: state } })
-    const rung = sp.get('rung')
-    if (rung) where.push({ rung: { equals: Number(rung) } })
+    const rungRaw = sp.get('rung')
+    const rung = rungRaw === null ? null : Number(rungRaw)
+    if (rung !== null && Number.isFinite(rung)) where.push({ rung: { equals: rung } })
     if (sp.get('hardshipPaused') === 'true') where.push({ hardshipPaused: { equals: true } })
     if (sp.get('stoppedContact') === 'true') where.push({ stoppedContact: { equals: true } })
     if (sp.get('customerId')) where.push({ customerId: { equals: sp.get('customerId') } })
@@ -90,22 +92,7 @@ export async function GET(req: NextRequest) {
 
     const cases: CollectionsCaseRow[] = result.docs.map((doc: any) => {
       const la = byAccountId.get(doc.accountId)
-      return {
-        accountId: doc.accountId,
-        customerId: doc.customerId ?? la?.customerIdString ?? null,
-        customerName: la?.customerName ?? null,
-        accountNumber: la?.accountNumber ?? null,
-        state: doc.state,
-        rung: doc.rung ?? null,
-        hardshipPaused: Boolean(doc.hardshipPaused),
-        stoppedContact: Boolean(doc.stoppedContact),
-        overdueAmount: doc.overdueAmount ?? null,
-        daysOverdue: doc.daysOverdue ?? null,
-        lastStep: doc.lastStep ?? null,
-        openedAt: doc.openedAt ?? null,
-        updatedAt: doc.updatedAt,
-        aging: agingByAccount.get(doc.accountId) ?? null,
-      }
+      return buildCollectionsCaseRow(doc, la, agingByAccount.get(doc.accountId) ?? null)
     })
 
     return NextResponse.json({
@@ -120,8 +107,7 @@ export async function GET(req: NextRequest) {
     console.error('Error fetching collection cases:', error)
     return NextResponse.json(
       {
-        error: 'Failed to fetch collection cases',
-        details: 'An internal error occurred. Please try again.',
+        error: { code: 'INTERNAL_ERROR', message: 'Failed to fetch collection cases' },
       },
       { status: 500 },
     )
