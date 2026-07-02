@@ -127,6 +127,7 @@ COLLECTION_EVENT_TYPES = [
     "collection.case.hardship_paused.v1",
     "collection.case.resumed.v1",
     "collection.case.stop_contact_applied.v1",
+    "collection.case.step_advanced.v1",
 ]
 
 
@@ -166,6 +167,7 @@ def _stub_collection_models(monkeypatch):
         "CollectionCaseHardshipPausedV1",
         "CollectionCaseResumedV1",
         "CollectionCaseStopContactAppliedV1",
+        "CollectionCaseStepAdvancedV1",
     ]:
         setattr(models, cls_name, _make(cls_name))
 
@@ -223,3 +225,31 @@ def test_collection_exhausted_routes_to_its_model(make_processor, monkeypatch):
 
     assert parsed["__model__"] == "CollectionCaseExhaustedV1"
     assert parsed["days_overdue"] == 45
+
+
+def test_collection_step_advanced_routes_to_its_model(make_processor, monkeypatch):
+    """collection.case.step_advanced.v1 (SDK 0.3.0) -> CollectionCaseStepAdvancedV1."""
+    _stub_collection_models(monkeypatch)
+    proc = make_processor
+    sanitized = {
+        "typ": "collection.case.step_advanced.v1",
+        "payload": json.dumps(
+            {
+                "event_id": "evt_3",
+                "timestamp": "2026-06-20T00:00:00Z",
+                "account_id": "acc_1",
+                "correlation_id": "corr_1",
+                "customer_id": "cust_1",
+                "step": 3,
+                "channel": "sms",
+                "template": "reminder_3",
+                "advanced_at": "2026-06-20T00:00:00Z",
+            }
+        ),
+    }
+
+    parsed = proc._parse_event("collection.case.step_advanced.v1", sanitized)
+
+    assert parsed["__model__"] == "CollectionCaseStepAdvancedV1"
+    assert parsed["account_id"] == "acc_1"
+    assert parsed["step"] == 3

@@ -1,6 +1,6 @@
 """Collection case event handlers (read-only projection — Stream D / BTB-199).
 
-Consumes the six ``collection.case.*`` events the headless collectionsService
+Consumes the ``collection.case.*`` events the headless collectionsService
 (BTB-166) emits to ChatLedger and projects them into the ``collection_cases``
 table, keyed by ``account_id`` (one case per advance):
 
@@ -10,6 +10,7 @@ table, keyed by ``account_id`` (one case per advance):
 - collection.case.hardship_paused.v1       → hardship_paused = True  (flag only)
 - collection.case.resumed.v1               → hardship_paused = False (flag only)
 - collection.case.stop_contact_applied.v1  → stopped_contact = True  (flag only)
+- collection.case.step_advanced.v1         → rung = step (flag only, BTB-199 residual)
 
 Handlers receive the flat ``billie_collection_events`` pydantic model (the
 event *is* the payload — ``account_id``/``customer_id``/… are top-level
@@ -18,9 +19,9 @@ base). ``customer_id`` is the real id (BTB-154 provenance, sourced by the
 engine), so it is safe to resolve the customers relationship from it.
 
 The state events (opened/exhausted/cured) own ``state``; the flag events
-(hardship/resume/stop-contact) deliberately do NOT write ``state`` so a
-cross-cutting flag never clobbers the lifecycle. Every write is an idempotent
-upsert, so redelivery and out-of-order arrival converge.
+(hardship/resume/stop-contact/step-advanced) deliberately do NOT write
+``state`` so a cross-cutting flag never clobbers the lifecycle. Every write is
+an idempotent upsert, so redelivery and out-of-order arrival converge.
 """
 
 from __future__ import annotations
@@ -197,3 +198,14 @@ async def handle_collection_case_stop_contact_applied(pool: asyncpg.Pool, event:
         },
     )
     log.info("Collection case stop-contact projected")
+
+
+async def handle_collection_case_step_advanced(pool: asyncpg.Pool, event: Any) -> None:
+    """collection.case.step_advanced.v1 -> current rung (reminder step just sent)."""
+    step = int(event.step)
+    await _upsert_case(
+        pool,
+        account_id=event.account_id,
+        customer_id=getattr(event, "customer_id", None),
+        extra={"rung": step, "last_step": step},
+    )
