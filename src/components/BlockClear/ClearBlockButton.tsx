@@ -17,6 +17,8 @@ export interface ClearBlockButtonProps {
   } | null
   conversationId?: string
   customerName?: string
+  /** Compact pill styling for inline placement (e.g. in the attention strip). */
+  inline?: boolean
 }
 
 /**
@@ -32,7 +34,12 @@ export interface ClearBlockButtonProps {
  * If a clear request is already pending or was previously rejected, a status
  * label is shown alongside the button.
  */
-export function ClearBlockButton({ block, conversationId, customerName }: ClearBlockButtonProps) {
+export function ClearBlockButton({
+  block,
+  conversationId,
+  customerName,
+  inline = false,
+}: ClearBlockButtonProps) {
   const { user } = useAuth()
   const [modalOpen, setModalOpen] = useState(false)
 
@@ -47,14 +54,18 @@ export function ClearBlockButton({ block, conversationId, customerName }: ClearB
 
   const isClearable = CLEARABLE_REASONS.includes(block.reason as ClearableReason)
   const canonicalCustomerId = block.canonicalCustomerId
+  const containerCls = inline
+    ? `${styles.clearBlockContainer} ${styles.clearBlockContainerInline}`
+    : styles.clearBlockContainer
+  const btnCls = (base: string) => (inline ? `${base} ${styles.clearBlockBtnInline}` : base)
 
   return (
     <>
-      <div className={styles.clearBlockContainer}>
+      <div className={containerCls}>
         {isClearable && canonicalCustomerId ? (
           <button
             type="button"
-            className={styles.clearBlockBtn}
+            className={btnCls(styles.clearBlockBtn)}
             onClick={() => setModalOpen(true)}
             data-testid="clear-block-btn"
           >
@@ -63,7 +74,7 @@ export function ClearBlockButton({ block, conversationId, customerName }: ClearB
         ) : isClearable && !canonicalCustomerId ? (
           <button
             type="button"
-            className={styles.clearBlockBtnDisabled}
+            className={btnCls(styles.clearBlockBtnDisabled)}
             disabled
             title="Customer identity not yet resolved — can't clear here."
             data-testid="clear-block-btn-disabled"
@@ -73,7 +84,7 @@ export function ClearBlockButton({ block, conversationId, customerName }: ClearB
         ) : (
           <button
             type="button"
-            className={styles.clearBlockBtnDisabled}
+            className={btnCls(styles.clearBlockBtnDisabled)}
             disabled
             title="This block type can't be cleared here"
             data-testid="clear-block-btn-disabled"

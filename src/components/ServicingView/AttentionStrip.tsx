@@ -6,6 +6,8 @@ import styles from './AttentionStrip.module.css'
 export interface AttentionStripProps {
   items: AttentionItem[]
   onSelectAccount: (accountId: string) => void
+  /** Rendered inline after the chips — e.g. an action tied to a chip (Clear block). */
+  trailing?: React.ReactNode
 }
 
 const ICON: Record<AttentionItem['kind'], string> = {
@@ -16,7 +18,11 @@ const ICON: Record<AttentionItem['kind'], string> = {
   reapplication_blocked: '⛔',
 }
 
-export const AttentionStrip: React.FC<AttentionStripProps> = ({ items, onSelectAccount }) => {
+export const AttentionStrip: React.FC<AttentionStripProps> = ({
+  items,
+  onSelectAccount,
+  trailing,
+}) => {
   if (items.length === 0) return null
 
   return (
@@ -37,6 +43,7 @@ export const AttentionStrip: React.FC<AttentionStripProps> = ({ items, onSelectA
           </button>
         )
       })}
+      {trailing}
     </div>
   )
 }

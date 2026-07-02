@@ -91,7 +91,10 @@ vi.mock('@/components/ServicingView/AccountRail', () => ({
 }))
 
 vi.mock('@/components/ServicingView/AttentionStrip', () => ({
-  AttentionStrip: () => <div data-testid="stub-attention-strip" />,
+  // Render the trailing slot — the ClearBlockButton rides inline in the strip.
+  AttentionStrip: ({ trailing }: { trailing?: React.ReactNode }) => (
+    <div data-testid="stub-attention-strip">{trailing}</div>
+  ),
 }))
 
 vi.mock('@/components/ServicingView/ContextPane', () => ({

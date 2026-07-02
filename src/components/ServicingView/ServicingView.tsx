@@ -347,23 +347,30 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
       {/* Compact horizontal customer header */}
       {customer && <CustomerHeader customer={customer} />}
 
-      {/* Customer-level attention chips (replaces the vulnerable banner) */}
-      <AttentionStrip items={attentionItems} onSelectAccount={handleSwitchAccount} />
-
-      {/* Customer-level block-clear action (BTB-202). No conversationId — resolution
-          is a new application, not scoped to a single conversation. Self-gating:
-          only canService roles see this; disabled for non-clearable reasons (e.g.
-          ACTIVE_LOAN). canonicalCustomerId is the business key on the customer row. */}
-      {customer && (
-        <ClearBlockButton
-          block={
-            customer.reapplicationBlock
-              ? { ...customer.reapplicationBlock, canonicalCustomerId: customer.customerId }
-              : null
-          }
-          customerName={customer.fullName ?? undefined}
-        />
-      )}
+      {/* Customer-level attention chips (replaces the vulnerable banner).
+          The block-clear action (BTB-202) rides inline after the chips so the
+          action sits with the "Re-application blocked" chip it belongs to.
+          No conversationId — resolution is a new application, not scoped to a
+          single conversation. Self-gating: only canService roles see it;
+          disabled for non-clearable reasons (e.g. ACTIVE_LOAN).
+          canonicalCustomerId is the business key on the customer row. */}
+      <AttentionStrip
+        items={attentionItems}
+        onSelectAccount={handleSwitchAccount}
+        trailing={
+          customer ? (
+            <ClearBlockButton
+              inline
+              block={
+                customer.reapplicationBlock
+                  ? { ...customer.reapplicationBlock, canonicalCustomerId: customer.customerId }
+                  : null
+              }
+              customerName={customer.fullName ?? undefined}
+            />
+          ) : null
+        }
+      />
 
       {/* Three-pane cockpit: triaged rail · account work-surface · customer context */}
       <div className={styles.cockpit}>
