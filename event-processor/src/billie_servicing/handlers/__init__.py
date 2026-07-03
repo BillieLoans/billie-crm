@@ -23,6 +23,7 @@ from .reapplication import (
     handle_reapplication_blocked,
     handle_reapplication_block_cleared,
     handle_reapplication_block_clear_rejected,
+    handle_reapplication_block_auto_cleared,
 )
 from .conversation import (
     handle_conversation_started,
@@ -102,6 +103,7 @@ __all__ = [
     "handle_reapplication_blocked",
     "handle_reapplication_block_cleared",
     "handle_reapplication_block_clear_rejected",
+    "handle_reapplication_block_auto_cleared",
     # Identity verification archival (PR #67)
     "handle_identity_report_archived",
     # Conversation handlers
