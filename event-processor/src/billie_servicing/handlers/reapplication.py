@@ -381,3 +381,64 @@ async def handle_reapplication_block_clear_rejected(
         log.warning("Rejected event without resolvable customer id — no customer mirror")
 
     log.info("Re-application block clear rejected")
+
+
+async def handle_reapplication_block_auto_cleared(
+    pool: asyncpg.Pool, event: dict[str, Any]
+) -> None:
+    """Handle ``reapplication_block.auto_cleared.v1``.
+
+    Emitted by billieChat's reapplicationBlock service when a customer's LAST
+    open loan is repaid, so the ACTIVE_LOAN eligibility condition no longer
+    applies. Unlike the operator-driven ``cleared`` flow, this fires
+    automatically on repayment — for ANY customer closing a loan — so it must be
+    a precise no-op for anyone not currently shown as ACTIVE_LOAN blocked.
+
+    Only the CUSTOMER-level "currently blocked" mirror is touched:
+    * ``residual_block_reason`` is None → the person is no longer blocked at all;
+      NULL ``reapplication_block_reason`` so the servicing banner clears.
+    * a residual reason (e.g. PRIOR_DEFAULT still blocks) → correct the banner to
+      that reason instead of clearing.
+
+    The conversation-level "why was THIS application declined" record is left
+    untouched — that decline was correct at the time and is audit history.
+
+    Guarded ``WHERE reapplication_block_reason = 'ACTIVE_LOAN'`` so it never
+    inserts a phantom row, never stamps customers who were never blocked, and
+    never overrides a higher-precedence reason already shown.
+    """
+    payload = parse_payload(event)
+    customer_id = (
+        safe_str(
+            payload.get("canonical_customer_id") or event.get("usr"),
+            "customer_id",
+        )
+        or None
+    )
+    canonical = await resolve_canonical_customer_id(pool, customer_id)
+    residual = payload.get("residual_block_reason")  # None = fully unblocked
+    cleared_at = coerce_date(payload.get("cleared_at"))
+
+    log = logger.bind(canonical_customer_id=canonical, residual_block_reason=residual)
+    log.info("Processing reapplication_block.auto_cleared.v1")
+
+    if not canonical:
+        log.warning("auto_cleared event without resolvable customer id — no-op")
+        return
+
+    status = await pool.execute(
+        """
+        UPDATE customers
+        SET reapplication_block_reason = $2,
+            reapplication_block_clear_status = 'auto_cleared',
+            reapplication_block_cleared_at = $3,
+            updated_at = $4
+        WHERE customer_id = $1
+          AND reapplication_block_reason = 'ACTIVE_LOAN'
+        """,
+        canonical,
+        residual,
+        cleared_at,
+        datetime.now(UTC),
+    )
+    log.info("Re-application ACTIVE_LOAN block auto-cleared", update_status=status)
