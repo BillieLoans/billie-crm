@@ -1,0 +1,90 @@
+syntax = "proto3";
+
+package billie.marketing;
+
+service MarketingService {
+  rpc UpsertContact(UpsertContactRequest) returns (UpsertContactResponse);
+  rpc UpdateContact(UpdateContactRequest) returns (CommandResponse);
+  rpc SetConsent(SetConsentRequest) returns (CommandResponse);
+  rpc LogInteraction(LogInteractionRequest) returns (CommandResponse);
+  rpc EraseContact(EraseContactRequest) returns (CommandResponse);
+}
+
+message ConsentCapture {
+  bool granted = 1;
+  repeated string channels = 2;
+  string method = 3;
+}
+
+message UpsertContactRequest {
+  string idempotency_key = 1;
+  string first_name = 2;
+  string email = 3;
+  string mobile = 4;
+  string city = 5;
+  string postcode = 6;
+  string source = 7;
+  string utm_json = 8;              // JSON object as string
+  repeated string platforms = 9;
+  string channel_preference = 10;
+  string referred_by_code = 11;
+  bool waitlist = 12;
+  ConsentCapture consent = 13;
+  string actor = 14;
+}
+
+message UpsertContactResponse {
+  string contact_id = 1;
+  string event_id = 2;
+  bool created = 3;
+  bool idempotent_replay = 4;
+}
+
+message UpdateContactRequest {
+  string idempotency_key = 1;
+  string contact_id = 2;
+  string first_name = 3;
+  string email = 4;
+  string mobile = 5;
+  string city = 6;
+  string postcode = 7;
+  string channel_preference = 8;
+  string attributes_json = 9;
+  string actor = 10;
+}
+
+message SetConsentRequest {
+  string idempotency_key = 1;
+  string contact_id = 2;
+  bool granted = 3;
+  repeated string channels = 4;
+  string method = 5;
+  string evidence = 6;
+  string actor = 7;
+}
+
+message LogInteractionRequest {
+  string idempotency_key = 1;
+  string contact_id = 2;
+  string kind = 3;
+  string channel = 4;
+  string direction = 5;
+  string subject = 6;
+  string body = 7;
+  string source_system = 8;
+  string occurred_at = 9;           // ISO-8601; empty = now
+  string metadata_json = 10;
+  string actor = 11;
+}
+
+message EraseContactRequest {
+  string idempotency_key = 1;
+  string contact_id = 2;
+  string actor = 3;
+}
+
+message CommandResponse {
+  string contact_id = 1;
+  string event_id = 2;
+  bool idempotent_replay = 3;
+}

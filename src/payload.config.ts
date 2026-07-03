@@ -20,6 +20,9 @@ import { ReapplicationBlockClearRequests } from './collections/ReapplicationBloc
 import { ContactNotes } from './collections/ContactNotes'
 import { Notifications } from './collections/Notifications'
 import { CollectionsCases } from './collections/CollectionsCases'
+import { Contacts } from './collections/Contacts'
+import { Interactions } from './collections/Interactions'
+import { ContactAuditLog } from './collections/ContactAuditLog'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -56,6 +59,7 @@ export default buildConfig({
         '@/components/navigation/NavECLConfigLink#NavECLConfigLink',
         '@/components/navigation/NavExportsLink#NavExportsLink',
         '@/components/navigation/NavInvestigationLink#NavInvestigationLink',
+        '@/components/navigation/NavMarketingLink#NavMarketingLink',
       ],
       // Notification bell in header actions (next to user profile button)
       actions: ['@/components/Notifications/NotificationAction#NotificationAction'],
@@ -135,10 +139,15 @@ export default buildConfig({
           Component: '@/components/ApplicationsView/ApplicationsViewWithTemplate#ApplicationsViewWithTemplate',
           path: '/applications/:segments*',
         },
+        // Marketing view (Task C6) — catch-all for contact-detail sub-routes
+        marketing: {
+          Component: '@/components/MarketingView/MarketingViewWithTemplate#MarketingViewWithTemplate',
+          path: '/marketing/:segments*',
+        },
       },
     },
   },
-  collections: [Users, Media, Customers, Conversations, Applications, LoanAccounts, WriteOffRequests, ReapplicationBlockClearRequests, ContactNotes, Notifications, CollectionsCases],
+  collections: [Users, Media, Customers, Conversations, Applications, LoanAccounts, WriteOffRequests, ReapplicationBlockClearRequests, ContactNotes, Notifications, CollectionsCases, Contacts, Interactions, ContactAuditLog],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || 'build-placeholder-not-for-production',
   typescript: {

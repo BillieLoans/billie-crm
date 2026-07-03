@@ -109,6 +109,12 @@ export {
   collectionsCasesByCustomerQueryKey,
 } from './useCollectionsCasesByCustomer'
 
+// Marketing hooks (Task C6)
+export { useMarketingContacts, marketingContactsQueryKey } from './useMarketingContacts'
+export type { MarketingContactsFilters, MarketingContactsResponse } from './useMarketingContacts'
+export { useMarketingContact, marketingContactQueryKey } from './useMarketingContact'
+export type { MarketingContactDetailResponse } from './useMarketingContact'
+
 // Re-export types from canonical location
 export type {
   CustomerSearchResult,

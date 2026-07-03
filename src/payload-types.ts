@@ -78,6 +78,9 @@ export interface Config {
     'contact-notes': ContactNote;
     notifications: Notification;
     'collection-cases': CollectionCase;
+    contacts: Contact;
+    interactions: Interaction;
+    'contact-audit-log': ContactAuditLog;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -96,6 +99,9 @@ export interface Config {
     'contact-notes': ContactNotesSelect<false> | ContactNotesSelect<true>;
     notifications: NotificationsSelect<false> | NotificationsSelect<true>;
     'collection-cases': CollectionCasesSelect<false> | CollectionCasesSelect<true>;
+    contacts: ContactsSelect<false> | ContactsSelect<true>;
+    interactions: InteractionsSelect<false> | InteractionsSelect<true>;
+    'contact-audit-log': ContactAuditLogSelect<false> | ContactAuditLogSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -141,7 +147,7 @@ export interface UserAuthOperations {
  */
 export interface User {
   id: string;
-  role: 'admin' | 'supervisor' | 'operations' | 'readonly' | 'service';
+  role: 'admin' | 'supervisor' | 'operations' | 'readonly' | 'service' | 'marketing';
   firstName: string;
   lastName: string;
   avatar?: (string | null) | Media;
@@ -1530,6 +1536,142 @@ export interface CollectionCase {
   updatedAt: string;
 }
 /**
+ * Marketing contact facet — read-only projection of marketingService events
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "contacts".
+ */
+export interface Contact {
+  id: string;
+  contactId: string;
+  firstName?: string | null;
+  email?: string | null;
+  mobileE164?: string | null;
+  city?: string | null;
+  postcode?: string | null;
+  source?: ('meta' | 'google' | 'campus' | 'referral' | 'social_dm' | 'ai_search' | 'organic' | 'other') | null;
+  utm?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  platforms?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  channelPreference?: ('whatsapp' | 'sms') | null;
+  referralCode?: string | null;
+  referredByContactId?: string | null;
+  waitlistJoinedAt?: string | null;
+  waitlistPosition?: number | null;
+  batchId?: string | null;
+  panelMember?: boolean | null;
+  /**
+   * Canonical platform customer id once linked (one-way)
+   */
+  customerId?: string | null;
+  linkBasis?: string | null;
+  linkedAt?: string | null;
+  /**
+   * Derived by marketingService — never hand-edited
+   */
+  derivedStage?: ('lead' | 'waitlist' | 'invited' | 'applicant' | 'customer' | 'former_customer') | null;
+  /**
+   * Minimal mirror only — no financial detail, ever
+   */
+  loanStatus?: ('approved' | 'disbursed' | 'repaid') | null;
+  consent?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  attributes?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  erased?: boolean | null;
+  observedAt?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Marketing interaction timeline — read-only projection of marketingService events
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "interactions".
+ */
+export interface Interaction {
+  id: string;
+  interactionId: string;
+  contactIdString: string;
+  /**
+   * Set by the processor when the contact row exists
+   */
+  contact?: (string | null) | Contact;
+  occurredAt?: string | null;
+  kind?:
+    | ('signup' | 'message_out' | 'message_in' | 'feedback_prompt' | 'referral' | 'stage_change' | 'note' | 'import')
+    | null;
+  channel?: string | null;
+  direction?: ('inbound' | 'outbound') | null;
+  subject?: string | null;
+  body?: string | null;
+  sourceSystem?: string | null;
+  metadata?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Marketing contact audit trail — read-only projection of marketingService events
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "contact-audit-log".
+ */
+export interface ContactAuditLog {
+  id: string;
+  contactIdString: string;
+  eventType: string;
+  actor?: string | null;
+  occurredAt?: string | null;
+  detail?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
@@ -1596,6 +1738,18 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'collection-cases';
         value: string | CollectionCase;
+      } | null)
+    | ({
+        relationTo: 'contacts';
+        value: string | Contact;
+      } | null)
+    | ({
+        relationTo: 'interactions';
+        value: string | Interaction;
+      } | null)
+    | ({
+        relationTo: 'contact-audit-log';
+        value: string | ContactAuditLog;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -2247,6 +2401,71 @@ export interface CollectionCasesSelect<T extends boolean = true> {
   correlationId?: T;
   createdAt?: T;
   updatedAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "contacts_select".
+ */
+export interface ContactsSelect<T extends boolean = true> {
+  contactId?: T;
+  firstName?: T;
+  email?: T;
+  mobileE164?: T;
+  city?: T;
+  postcode?: T;
+  source?: T;
+  utm?: T;
+  platforms?: T;
+  channelPreference?: T;
+  referralCode?: T;
+  referredByContactId?: T;
+  waitlistJoinedAt?: T;
+  waitlistPosition?: T;
+  batchId?: T;
+  panelMember?: T;
+  customerId?: T;
+  linkBasis?: T;
+  linkedAt?: T;
+  derivedStage?: T;
+  loanStatus?: T;
+  consent?: T;
+  attributes?: T;
+  erased?: T;
+  observedAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "interactions_select".
+ */
+export interface InteractionsSelect<T extends boolean = true> {
+  interactionId?: T;
+  contactIdString?: T;
+  contact?: T;
+  occurredAt?: T;
+  kind?: T;
+  channel?: T;
+  direction?: T;
+  subject?: T;
+  body?: T;
+  sourceSystem?: T;
+  metadata?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "contact-audit-log_select".
+ */
+export interface ContactAuditLogSelect<T extends boolean = true> {
+  contactIdString?: T;
+  eventType?: T;
+  actor?: T;
+  occurredAt?: T;
+  detail?: T;
+  updatedAt?: T;
+  createdAt?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema

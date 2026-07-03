@@ -700,6 +700,23 @@ class EventProcessor:
             # the payload (the SDK has no parser). Handlers receive the flat model.
             return _parse_collection_event(event_type, sanitize_envelope(sanitized))
 
+        elif event_type.startswith(("contact.", "referral.", "batch.", "feedback.")):
+            # marketingService (Task C3) — contact/referral/batch/feedback facet
+            # events, typed via the billie_marketing_events SDK. Shares no
+            # prefix with the customer/application/identity branches above, so
+            # this is safe to add without reordering them.
+            #
+            # The SDK is imported lazily (same reasoning as
+            # _parse_collection_event's billie_collection_events import above)
+            # so this module still loads where the SDK isn't installed:
+            # requirements.txt's git+https line for billie_marketing_events is
+            # (correctly) commented out until Task D1 ships, and an
+            # unconditional top-level import would crash the ENTIRE processor
+            # at startup, not just marketing handling.
+            from billie_marketing_events import parse_marketing_message
+
+            return parse_marketing_message(sdk_data)
+
         else:
             # Chat/conversation events — sanitize envelope so payload JSON string
             # is parsed into a dict before handlers receive the event

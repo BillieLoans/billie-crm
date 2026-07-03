@@ -87,6 +87,7 @@ export const Users: CollectionConfig = {
         { label: 'Operations', value: 'operations' },
         { label: 'Read Only', value: 'readonly' },
         { label: 'Service', value: 'service' },
+        { label: 'Marketing', value: 'marketing' },
       ],
       defaultValue: 'readonly',
       required: true,

@@ -9,6 +9,8 @@ import type { User } from '@/payload-types'
  * - operations: Day-to-day servicing, no raw collection access
  * - readonly: View-only access, no raw collection access
  * - service: API-only account for inter-service auth (e.g. billie-realtime role lookups)
+ * - marketing: Marketing CRM access only — deliberately excluded from `hasAnyRole` so it
+ *   cannot see any lending collection (the "lending wall").
  */
 
 type UserRole = User['role']
@@ -17,7 +19,14 @@ type UserRole = User['role']
  * Safely extract the role from a user object.
  * Handles cases where user might be undefined or have an unexpected shape.
  */
-const VALID_ROLES: readonly string[] = ['admin', 'supervisor', 'operations', 'readonly', 'service']
+const VALID_ROLES: readonly string[] = [
+  'admin',
+  'supervisor',
+  'operations',
+  'readonly',
+  'service',
+  'marketing',
+]
 
 export function getUserRole(user: unknown): UserRole | undefined {
   if (user && typeof user === 'object' && 'role' in user) {
@@ -65,4 +74,23 @@ export function hasAnyRole(user: unknown): boolean {
  */
 export function hideFromNonAdmins({ user }: { user: unknown }): boolean {
   return !isAdmin(user)
+}
+
+/**
+ * Check if a user can perform marketing operations (admin or marketing).
+ */
+export function canMarketing(user: unknown): boolean {
+  const role = getUserRole(user)
+  return role === 'admin' || role === 'marketing'
+}
+
+/**
+ * Check if a user can read marketing content (everyone except service accounts).
+ */
+export function canReadMarketing(user: unknown): boolean {
+  const role = getUserRole(user)
+  return (
+    role !== undefined &&
+    ['admin', 'marketing', 'supervisor', 'operations', 'readonly'].includes(role)
+  )
 }

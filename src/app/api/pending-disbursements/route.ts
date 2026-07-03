@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { headers } from 'next/headers'
-import { getPayload } from 'payload'
-import configPromise from '@payload-config'
 import { classifyBucket, getCommencementDate } from '@/lib/disbursement-cutoff'
+import { requireAuth } from '@/lib/auth'
+import { hasAnyRole } from '@/lib/access'
 
 interface PendingDisbursementItem {
   loanAccountId: string
@@ -28,19 +27,9 @@ function formatCurrency(amount: number): string {
 
 export async function GET(request: NextRequest) {
   try {
-    const payload = await getPayload({ config: configPromise })
-    const headersList = await headers()
-
-    const { user } = await payload.auth({
-      headers: new Headers(Array.from(headersList.entries())),
-    })
-
-    if (!user) {
-      return NextResponse.json(
-        { error: { code: 'UNAUTHENTICATED', message: 'Please log in to continue.' } },
-        { status: 401 },
-      )
-    }
+    const auth = await requireAuth(hasAnyRole)
+    if ('error' in auth) return auth.error
+    const { user, payload } = auth
 
     const limitParam = request.nextUrl.searchParams.get('limit')
     const limit = limitParam ? Math.min(Math.max(parseInt(limitParam, 10) || 50, 1), 200) : 200
@@ -52,6 +41,8 @@ export async function GET(request: NextRequest) {
       },
       sort: '-createdAt',
       limit,
+      overrideAccess: false,
+      user,
     })
 
     const items: PendingDisbursementItem[] = pendingResult.docs.map((acc) => {

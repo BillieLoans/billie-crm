@@ -1,0 +1,198 @@
+import json
+
+import pytest
+
+from billie_marketing_events import parse_marketing_message
+from billie_servicing.handlers.marketing import (
+    handle_contact_consent_granted,
+    handle_contact_consent_withdrawn,
+    handle_contact_erased,
+    handle_contact_interaction_logged,
+    handle_contact_linked,
+    handle_contact_observed,
+    handle_contact_stage_changed,
+    handle_contact_unlinked,
+    handle_contact_updated,
+)
+
+
+class FakeConn:
+    def __init__(self):
+        self.executed = []
+    async def execute(self, sql, *args):
+        self.executed.append((sql, args))
+        return "UPDATE 1"
+    async def fetchval(self, sql, *args):
+        return None
+
+
+class FakePool(FakeConn):
+    def acquire(self):
+        return _Ctx(self)
+
+
+class _Ctx:
+    def __init__(self, conn):
+        self.conn = conn
+    async def __aenter__(self):
+        return self.conn
+    async def __aexit__(self, *a):
+        return False
+
+
+def _parsed(typ, payload):
+    return parse_marketing_message({
+        "conv": "conv-1", "agt": "marketingService", "usr": "c-1", "seq": 1,
+        "cls": "msg", "typ": typ, "event_id": "ev-1", "payload": json.dumps(payload),
+    })
+
+
+async def test_contact_observed_upserts_contact_and_audit():
+    pool = FakePool()
+    await handle_contact_observed(pool, _parsed("contact.observed.v1", {
+        "contact_id": "c-1", "mobile_e164": "+61400000001", "source": "campus",
+        "observed_at": "2026-07-02T00:00:00+00:00"}))
+    sql_all = " ".join(s for s, _ in pool.executed)
+    assert 'INSERT INTO "contacts"' in sql_all or "INSERT INTO contacts" in sql_all
+    assert "contact_audit_log" in sql_all
+
+
+async def test_interaction_logged_inserts_row():
+    pool = FakePool()
+    await handle_contact_interaction_logged(pool, _parsed("contact.interaction.logged.v1", {
+        "interaction_id": "i-1", "contact_id": "c-1", "kind": "signup",
+        "occurred_at": "2026-07-02T00:00:00+00:00", "source_system": "crm"}))
+    assert any("interactions" in s for s, _ in pool.executed)
+
+
+async def test_erased_redacts_pi():
+    pool = FakePool()
+    await handle_contact_erased(pool, _parsed("contact.erased.v1", {
+        "contact_id": "c-1", "erased_at": "2026-07-02T00:00:00+00:00", "actor": "admin"}))
+    sql_all = " ".join(s for s, _ in pool.executed)
+    assert "erased" in sql_all and "interactions" in sql_all
+
+
+# ---------------------------------------------------------------------------
+# Remaining handlers, using the richer `mock_pool` fixture (conftest.py) so we
+# can assert on the actual column values written, not just SQL substrings.
+# ---------------------------------------------------------------------------
+
+
+async def test_contact_updated_upserts_changed_fields_and_audit(mock_pool):
+    await handle_contact_updated(mock_pool, _parsed("contact.updated.v1", {
+        "contact_id": "c-1", "city": "Melbourne", "attributes": {"segment": "vip"},
+        "updated_at": "2026-07-02T00:00:00+00:00", "actor": "ops"}))
+
+    contact_row = mock_pool.last_upsert("contacts")
+    assert contact_row["contact_id"] == "c-1"
+    assert contact_row["city"] == "Melbourne"
+    assert json.loads(contact_row["attributes"]) == {"segment": "vip"}
+    audit_row = mock_pool.last_insert("contact_audit_log")
+    assert audit_row["contact_id_string"] == "c-1"
+    assert "city" in json.loads(audit_row["detail"])["changed_fields"]
+
+
+async def test_contact_linked_sets_customer_and_link_basis(mock_pool):
+    await handle_contact_linked(mock_pool, _parsed("contact.linked.v1", {
+        "contact_id": "c-1", "customer_id": "CUST-1", "match_basis": "mobile",
+        "linked_at": "2026-07-02T00:00:00+00:00"}))
+
+    updated = mock_pool.last_update("contacts")
+    assert updated["customer_id"] == "CUST-1"
+    assert updated["link_basis"] == "mobile"
+    assert mock_pool.has_call_against("contact_audit_log")
+
+
+async def test_contact_unlinked_clears_customer_link(mock_pool):
+    await handle_contact_unlinked(mock_pool, _parsed("contact.unlinked.v1", {
+        "contact_id": "c-1", "customer_id": "CUST-1", "reason": "duplicate",
+        "unlinked_at": "2026-07-02T00:00:00+00:00"}))
+
+    updated = mock_pool.last_update("contacts")
+    assert updated["customer_id"] is None
+    assert updated["link_basis"] is None
+    assert updated["linked_at"] is None
+
+
+async def test_contact_observed_with_consent_upserts_marketing_consent_snapshot(mock_pool):
+    """`contact.observed.v1` carrying a `consent` capture (ConsentCapture:
+    granted/channels/method) must serialize into the `contacts.consent`
+    jsonb column under the `marketing` key. Exercises the
+    `p.consent.model_dump()` -> `json.dumps` path, which the other
+    `contact.observed.v1` tests (using a payload with no `consent` field)
+    never touch."""
+    await handle_contact_observed(mock_pool, _parsed("contact.observed.v1", {
+        "contact_id": "c-1", "mobile_e164": "+61400000001", "source": "campus",
+        "observed_at": "2026-07-02T00:00:00+00:00",
+        "consent": {"granted": True, "channels": ["sms", "email"], "method": "waitlist_form"},
+    }))
+
+    contact_row = mock_pool.last_upsert("contacts")
+    consent = json.loads(contact_row["consent"])
+    assert consent == {
+        "marketing": {"granted": True, "channels": ["sms", "email"], "method": "waitlist_form"}
+    }
+
+
+async def test_consent_granted_merges_marketing_consent_jsonb(mock_pool):
+    await handle_contact_consent_granted(mock_pool, _parsed("contact.consent.granted.v1", {
+        "contact_id": "c-1", "channels": ["sms", "whatsapp"], "method": "waitlist_form",
+        "occurred_at": "2026-07-02T00:00:00+00:00", "actor": "c-1"}))
+
+    patch = mock_pool.last_jsonb_merge("contacts", "consent")
+    assert patch["marketing"]["granted"] is True
+    assert patch["marketing"]["channels"] == ["sms", "whatsapp"]
+    assert mock_pool.has_call_against("contact_audit_log")
+
+
+async def test_consent_withdrawn_merges_marketing_consent_jsonb(mock_pool):
+    await handle_contact_consent_withdrawn(mock_pool, _parsed("contact.consent.withdrawn.v1", {
+        "contact_id": "c-1", "channels": ["sms"], "method": "reply_stop",
+        "occurred_at": "2026-07-02T00:00:00+00:00", "actor": "c-1"}))
+
+    patch = mock_pool.last_jsonb_merge("contacts", "consent")
+    assert patch["marketing"]["granted"] is False
+
+
+async def test_stage_changed_updates_derived_stage(mock_pool):
+    await handle_contact_stage_changed(mock_pool, _parsed("contact.stage.changed.v1", {
+        "contact_id": "c-1", "previous_stage": "lead", "stage": "waitlist",
+        "changed_at": "2026-07-02T00:00:00+00:00"}))
+
+    updated = mock_pool.last_update("contacts")
+    assert updated["derived_stage"] == "waitlist"
+
+
+async def test_interaction_logged_resolves_contact_relationship_id(mock_pool):
+    """`interactions.contact_id` (uuid FK) must be resolved from the natural
+    key, alongside `contact_id_string` (the marketing SDK's text id) — per the
+    C2 migration these are two distinct columns, and the relationship column
+    is named `contact_id`, NOT `contact_id_id`."""
+    mock_pool.set_fetchval("11111111-1111-1111-1111-111111111111")
+
+    await handle_contact_interaction_logged(mock_pool, _parsed("contact.interaction.logged.v1", {
+        "interaction_id": "i-1", "contact_id": "c-1", "kind": "signup",
+        "occurred_at": "2026-07-02T00:00:00+00:00", "source_system": "crm"}))
+
+    row = mock_pool.last_upsert("interactions")
+    assert row["contact_id_string"] == "c-1"
+    assert row["contact_id"] == "11111111-1111-1111-1111-111111111111"
+
+
+async def test_erased_nulls_pi_columns_and_scrubs_interactions(mock_pool):
+    await handle_contact_erased(mock_pool, _parsed("contact.erased.v1", {
+        "contact_id": "c-1", "erased_at": "2026-07-02T00:00:00+00:00", "actor": "admin"}))
+
+    updated = mock_pool.last_update("contacts")
+    assert updated["first_name"] is None
+    assert updated["email"] is None
+    assert updated["mobile_e164"] is None
+    assert updated["erased"] is True
+    # Free-text consent.method and channel_preference are PI and must be cleared too.
+    assert json.loads(updated["consent"]) == {}
+    assert updated["channel_preference"] is None
+    interaction_scrub = [c for c in mock_pool.calls if c.table == "interactions"][0]
+    assert interaction_scrub.where.get("contact_id_string") == "c-1"
+    audit_row = mock_pool.last_insert("contact_audit_log")
+    assert json.loads(audit_row["detail"]) == {}

@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
+import { hasAnyRole } from '@/lib/access'
 import {
   getNotificationDispatcherClient,
   NotFoundError,
@@ -17,7 +18,7 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ notificationId: string }> },
 ) {
-  const auth = await requireAuth()
+  const auth = await requireAuth(hasAnyRole)
   if ('error' in auth) return auth.error
 
   const { notificationId } = await params

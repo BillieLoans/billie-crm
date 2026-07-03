@@ -74,6 +74,16 @@ from .handlers import (
     handle_collection_case_resumed,
     handle_collection_case_stop_contact_applied,
     handle_collection_case_step_advanced,
+    # Marketing events (billie_marketing_events SDK) — Task C3
+    handle_contact_observed,
+    handle_contact_updated,
+    handle_contact_linked,
+    handle_contact_unlinked,
+    handle_contact_consent_granted,
+    handle_contact_consent_withdrawn,
+    handle_contact_interaction_logged,
+    handle_contact_stage_changed,
+    handle_contact_erased,
 )
 from .processor import EventProcessor
 
@@ -259,6 +269,27 @@ def setup_handlers(processor: EventProcessor) -> None:
     processor.register_handler(
         "collection.case.step_advanced.v1", handle_collection_case_step_advanced
     )
+
+    # =========================================================================
+    # Marketing events (platform -> CRM, billie_marketing_events SDK).
+    # Emitted by marketingService for contact.* facet events; project into
+    # contacts / interactions / contact_audit_log (Task C3).
+    # =========================================================================
+    processor.register_handler("contact.observed.v1", handle_contact_observed)
+    processor.register_handler("contact.updated.v1", handle_contact_updated)
+    processor.register_handler("contact.linked.v1", handle_contact_linked)
+    processor.register_handler("contact.unlinked.v1", handle_contact_unlinked)
+    processor.register_handler(
+        "contact.consent.granted.v1", handle_contact_consent_granted
+    )
+    processor.register_handler(
+        "contact.consent.withdrawn.v1", handle_contact_consent_withdrawn
+    )
+    processor.register_handler(
+        "contact.interaction.logged.v1", handle_contact_interaction_logged
+    )
+    processor.register_handler("contact.stage.changed.v1", handle_contact_stage_changed)
+    processor.register_handler("contact.erased.v1", handle_contact_erased)
 
 
 async def run() -> None:

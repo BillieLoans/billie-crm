@@ -8,10 +8,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { headers } from 'next/headers'
-import configPromise from '@payload-config'
-import { getPayload } from 'payload'
 import { getObjectByUri } from '@/server/s3-client'
+import { requireAuth } from '@/lib/auth'
+import { hasAnyRole } from '@/lib/access'
 
 export async function GET(request: NextRequest) {
   try {
@@ -23,24 +22,16 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const payload = await getPayload({ config: configPromise })
-    const headersList = await headers()
-
-    const { user } = await payload.auth({
-      headers: new Headers(Array.from(headersList.entries())),
-    })
-
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
+    const auth = await requireAuth(hasAnyRole)
+    if ('error' in auth) return auth.error
+    const { user, payload } = auth
 
     const result = await payload.find({
       collection: 'loan-accounts',
       where: { loanAccountId: { equals: accountId.trim() } },
       limit: 1,
+      overrideAccess: false,
+      user,
     })
 
     const account = result.docs[0]
