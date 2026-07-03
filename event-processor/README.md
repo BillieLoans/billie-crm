@@ -121,6 +121,25 @@ poetry run mypy src
 poetry run ruff check src
 ```
 
+The suite is pure unit tests — handlers run against an in-memory `MockPool`
+(`tests/conftest.py`) that records SQL calls, so no Postgres or Redis is needed.
+
+### Continuous integration
+
+`.github/workflows/event-processor-tests.yml` runs `pytest` on every PR that touches
+`event-processor/**`.
+
+Because the automatic GitHub Actions `GITHUB_TOKEN` is scoped to this repo and cannot
+clone the separate `billie-event-sdks` repo, the job reads the SDK token from a repo
+(or org) secret named **`SDK_GITHUB_TOKEN`**. Create it once:
+
+```bash
+gh secret set SDK_GITHUB_TOKEN --repo BillieLoans/billie-crm   # paste a PAT / App token
+```
+
+The token needs read access to `BillieLoans/billie-event-sdks`. A fine-grained PAT
+(Contents: Read on that repo) or a GitHub App installation token both work.
+
 ## Architecture
 
 ```

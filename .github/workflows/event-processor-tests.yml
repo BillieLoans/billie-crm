@@ -1,0 +1,66 @@
+name: event-processor tests
+
+# Runs the Python event-processor test suite on PRs and pushes that touch it.
+# These are pure unit tests (handlers run against an in-memory MockPool — see
+# event-processor/tests/conftest.py), so no Postgres/Redis services are needed.
+
+on:
+  pull_request:
+    paths:
+      - 'event-processor/**'
+      - '.github/workflows/event-processor-tests.yml'
+
+# Cancel superseded runs on the same ref (e.g. a force-push to a PR branch).
+concurrency:
+  group: event-processor-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: pytest (python 3.11)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: event-processor
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: event-processor/requirements-dev.txt
+
+      # requirements.txt pulls the private Billie Event SDKs from
+      # github.com/BillieLoans/billie-event-sdks and expands ${GITHUB_TOKEN}
+      # in the git+https URLs. The workflow's automatic GITHUB_TOKEN is scoped
+      # to THIS repo and cannot clone that one, so a separate token is required
+      # (a PAT or GitHub App token with read access to the SDK repo, stored as
+      # the repo/org secret SDK_GITHUB_TOKEN — see event-processor/README).
+      - name: Check SDK token is configured
+        env:
+          SDK_GITHUB_TOKEN: ${{ secrets.SDK_GITHUB_TOKEN }}
+        run: |
+          if [ -z "$SDK_GITHUB_TOKEN" ]; then
+            echo "::error::secrets.SDK_GITHUB_TOKEN is not set. Add a token with read"
+            echo "::error::access to BillieLoans/billie-event-sdks (repo or org secret)."
+            exit 1
+          fi
+
+      - name: Install dependencies
+        env:
+          # requirements.txt expands ${GITHUB_TOKEN}; feed it from our SDK secret.
+          GITHUB_TOKEN: ${{ secrets.SDK_GITHUB_TOKEN }}
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run tests
+        env:
+          # Matches the Dockerfile (ENV PYTHONPATH=/app/src) — the billie_servicing
+          # package lives under src/ and is not pip-installed in this job.
+          PYTHONPATH: src
+        run: pytest
