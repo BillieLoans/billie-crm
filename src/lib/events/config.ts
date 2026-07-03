@@ -141,6 +141,15 @@ export const EVENT_TYPE_REAPPLICATION_BLOCK_CLEAR_AUTHORIZED =
   'reapplication_block.clear_authorized.v1'
 
 /**
+ * Event type for the public-intake contact command, published to chatLedger
+ * as the durable fallback when the primary gRPC UpsertContact fails. The
+ * Broker routes it to the marketingService inbox (see billieChat routes.json,
+ * `${agent_billie-crm}` → `contact.intake.requested.v1`).
+ */
+export const EVENT_TYPE_CONTACT_INTAKE_REQUESTED =
+  process.env.EVENT_TYPE_CONTACT_INTAKE_REQUESTED ?? 'contact.intake.requested.v1'
+
+/**
  * Single source of truth for the clear vocabulary (mirrors billieChat enums).
  */
 export const CLEARABLE_REASONS = [

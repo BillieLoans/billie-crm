@@ -5,24 +5,22 @@
  * site's waitlist form. Callers authenticate via a shared API key + HMAC
  * body signature (see @/lib/intake-auth) rather than a Payload session.
  *
- * gRPC-primary, Redis-fallback: the write goes straight to the platform's
+ * gRPC-primary, chatLedger-fallback: the write goes straight to the platform's
  * MarketingService.UpsertContact over gRPC. If that fails for any reason
  * (network blip, deploy, deadline exceeded), the request is never dropped —
- * it's queued as a `contact.intake.requested.v1` command onto the
- * `inbox:marketing` Redis stream, which the platform's event processor
- * consumes via `_handle_intake_command` / `build_contact_observed`. Both
+ * it's published as a `contact.intake.requested.v1` command onto `chatLedger`,
+ * and billieChat's Broker routes it to the marketingService inbox (which
+ * consumes it via `_handle_intake_command` / `build_contact_observed`). Both
  * paths carry the same idempotency_key, so a client retry (or the queued
  * command being processed later) can never create a duplicate contact.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { nanoid } from 'nanoid'
 import { WaitlistIntakeSchema, type WaitlistIntake } from '@/lib/schemas/intake'
 import { verifyIntakeAuth } from '@/lib/intake-auth'
 import { upsertContact } from '@/server/marketing-grpc-client'
-import { getRedisClient } from '@/server/redis-client'
-
-const MARKETING_INBOX_STREAM = process.env.MARKETING_INBOX_STREAM ?? 'inbox:marketing'
+import { publishContactIntakeRequested } from '@/server/chatledger-publisher'
+import type { ContactIntakeCommandPayload } from '@/lib/events/types'
 
 /**
  * Build the snake_case command payload for the Redis fallback. Keys
@@ -30,7 +28,10 @@ const MARKETING_INBOX_STREAM = process.env.MARKETING_INBOX_STREAM ?? 'inbox:mark
  * `build_contact_observed` cmd dict — do not rename without updating that
  * consumer in lockstep.
  */
-function intakeToCommandPayload(intake: WaitlistIntake, idempotencyKey: string) {
+function intakeToCommandPayload(
+  intake: WaitlistIntake,
+  idempotencyKey: string,
+): ContactIntakeCommandPayload {
   return {
     idempotency_key: idempotencyKey,
     // Optional fields are normalised to null rather than left undefined:
@@ -108,30 +109,19 @@ export async function POST(request: NextRequest) {
     })
     return NextResponse.json({ status: 'accepted', contactId: result.contactId }, { status: 200 })
   } catch (grpcError) {
-    // Never lose a signup: durable fallback onto the marketing inbox stream.
+    // Never lose a signup: durable fallback publishing the intake command onto
+    // chatLedger, which the Broker routes to the marketingService inbox.
     console.warn(
-      '[Intake] gRPC failed, queueing to Redis fallback:',
+      '[Intake] gRPC failed, publishing to chatLedger fallback:',
       grpcError instanceof Error ? grpcError.message : grpcError,
     )
     try {
-      const redis = getRedisClient()
-      if (redis.status === 'wait') await redis.connect()
-      const fields = {
-        conv: nanoid(),
-        agt: 'billie-crm',
-        usr: 'intake',
-        seq: '1',
-        cls: 'cmd',
-        typ: 'contact.intake.requested.v1',
-        cause: nanoid(),
-        payload: JSON.stringify(intakeToCommandPayload(intake, idempotencyKey)),
-      }
-      await redis.xadd(MARKETING_INBOX_STREAM, '*', ...Object.entries(fields).flat())
+      await publishContactIntakeRequested(intakeToCommandPayload(intake, idempotencyKey))
       return NextResponse.json({ status: 'queued' }, { status: 200 })
-    } catch (redisError) {
+    } catch (publishError) {
       console.error(
         '[Intake] BOTH paths failed — signup at risk:',
-        redisError instanceof Error ? redisError.message : redisError,
+        publishError instanceof Error ? publishError.message : publishError,
       )
       return NextResponse.json(
         { error: { code: 'INTAKE_UNAVAILABLE', message: 'Please retry' } },
