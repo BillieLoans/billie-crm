@@ -217,9 +217,12 @@ async def handle_contact_interaction_logged(pool: asyncpg.Pool, event: Any) -> N
 
     ``interactions`` carries both the marketing SDK's natural-key text id
     (``contact_id_string``) and the Payload relationship column
-    (``contact_id``, a uuid FK to ``contacts.id``). Resolve the relationship
-    id when the contact has already been projected; leave it NULL otherwise
-    (a later re-run of this handler, or a fixup, can backfill it).
+    (``contact_id``, a uuid FK to ``contacts.id``). The FK is resolved and set
+    only if the contact row already exists at first-delivery time; it is NOT
+    backfilled on replay, because the ``do_nothing_on_conflict=True`` upsert
+    below leaves an already-inserted interaction row untouched. This is
+    harmless: the detail route queries interactions by ``contact_id_string``,
+    not by the uuid FK.
     """
     p = event.payload
     contact_ref = await pool.fetchval("SELECT id FROM contacts WHERE contact_id = $1", p.contact_id)
@@ -279,7 +282,8 @@ async def handle_contact_stage_changed(pool: asyncpg.Pool, event: Any) -> None:
 async def handle_contact_erased(pool: asyncpg.Pool, event: Any) -> None:
     """Handle ``contact.erased.v1`` — redact PI from ``contacts`` + ``interactions``.
 
-    Nulls direct PI columns on the ``contacts`` row and clears the free-text
+    Nulls direct PI columns on the ``contacts`` row (including the free-text
+    ``consent.method`` and ``channel_preference``) and clears the free-text
     ``subject``/``body``/``metadata`` on every interaction for this contact.
     The audit row deliberately carries no PI in its ``detail`` (ids only).
     """
@@ -297,6 +301,8 @@ async def handle_contact_erased(pool: asyncpg.Pool, event: Any) -> None:
             "postcode": None,
             "utm": json.dumps({}),
             "attributes": json.dumps({}),
+            "consent": json.dumps({}),
+            "channel_preference": None,
             "erased": True,
             "updated_at": _now(),
         },

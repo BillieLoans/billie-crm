@@ -189,6 +189,9 @@ async def test_erased_nulls_pi_columns_and_scrubs_interactions(mock_pool):
     assert updated["email"] is None
     assert updated["mobile_e164"] is None
     assert updated["erased"] is True
+    # Free-text consent.method and channel_preference are PI and must be cleared too.
+    assert json.loads(updated["consent"]) == {}
+    assert updated["channel_preference"] is None
     interaction_scrub = [c for c in mock_pool.calls if c.table == "interactions"][0]
     assert interaction_scrub.where.get("contact_id_string") == "c-1"
     audit_row = mock_pool.last_insert("contact_audit_log")

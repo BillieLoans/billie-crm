@@ -8,10 +8,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { headers } from 'next/headers'
-import { getPayload } from 'payload'
-import configPromise from '@payload-config'
-import { hasApprovalAuthority } from '@/lib/access'
+import { requireAuth } from '@/lib/auth'
+import { hasApprovalAuthority, hasAnyRole } from '@/lib/access'
 import {
   DashboardResponseSchema,
   DashboardQuerySchema,
@@ -184,20 +182,10 @@ async function fetchLedgerHealth(
 
 export async function GET(request: NextRequest) {
   try {
-    const payload = await getPayload({ config: configPromise })
-    const headersList = await headers()
-
-    // 1. Authenticate user
-    const { user } = await payload.auth({
-      headers: new Headers(Array.from(headersList.entries())),
-    })
-
-    if (!user) {
-      return NextResponse.json(
-        { error: { code: 'UNAUTHENTICATED', message: 'Please log in to continue.' } },
-        { status: 401 },
-      )
-    }
+    // 1. Authenticate user and verify lending role (excludes marketing)
+    const auth = await requireAuth(hasAnyRole)
+    if ('error' in auth) return auth.error
+    const { user, payload } = auth
 
     // 2. Parse and validate query params
     const searchParams = Object.fromEntries(request.nextUrl.searchParams)

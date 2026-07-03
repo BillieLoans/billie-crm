@@ -15,7 +15,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
-import { canService } from '@/lib/access'
+import { canService, hasAnyRole } from '@/lib/access'
 import { NotificationSuppressionCommandSchema } from '@/lib/events/schemas'
 import {
   getNotificationDispatcherClient,
@@ -27,7 +27,7 @@ function agentIdentifier(user: { email?: string | null; id: string | number }): 
 }
 
 export async function GET(request: NextRequest) {
-  const auth = await requireAuth()
+  const auth = await requireAuth(hasAnyRole)
   if ('error' in auth) return auth.error
 
   const customerId = request.nextUrl.searchParams.get('customerId')
