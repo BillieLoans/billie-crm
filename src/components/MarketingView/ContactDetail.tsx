@@ -5,8 +5,9 @@ import Link from 'next/link'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { useMarketingContact, marketingContactQueryKey } from '@/hooks/queries/useMarketingContact'
-import type { Contact, ContactAuditLog, Interaction } from '@/payload-types'
+import type { ContactAuditLog, Interaction } from '@/payload-types'
 import { formatDateMedium } from '@/lib/formatters'
+import { getMarketingConsentGranted } from '@/lib/marketing'
 import styles from './styles.module.css'
 
 export interface ContactDetailProps {
@@ -31,18 +32,6 @@ const KIND_META: Record<string, { icon: string; label: string }> = {
   stage_change: { icon: '🔀', label: 'Stage change' },
   note: { icon: '🗒️', label: 'Note' },
   import: { icon: '📦', label: 'Import' },
-}
-
-/** Best-effort read of `consent.marketing.granted` from the untyped JSON column. */
-function getMarketingConsentGranted(consent: Contact['consent']): boolean | null {
-  if (consent && typeof consent === 'object' && !Array.isArray(consent)) {
-    const marketing = (consent as Record<string, unknown>).marketing
-    if (marketing && typeof marketing === 'object' && !Array.isArray(marketing)) {
-      const granted = (marketing as Record<string, unknown>).granted
-      if (typeof granted === 'boolean') return granted
-    }
-  }
-  return null
 }
 
 function sortByOccurredAtDesc<T extends { occurredAt?: string | null }>(items: T[]): T[] {
@@ -196,13 +185,15 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contactId }) => {
             <span className={`${styles.badge} ${styles.badgeConsentDeclined}`}>Consent declined</span>
           )}
           {consentGranted === null && <span className={styles.placeholder}>Consent —</span>}
-          {contact.customerId && (
+          {contact.customerId ? (
             <Link
               href={`/admin/servicing/${contact.customerId}`}
               className={`${styles.badge} ${styles.badgeLinked}`}
             >
               Linked customer: {contact.customerId}
             </Link>
+          ) : (
+            <span className={`${styles.badge} ${styles.badgeMuted}`}>Not linked</span>
           )}
         </div>
       </div>

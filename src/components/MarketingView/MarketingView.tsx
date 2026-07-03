@@ -7,6 +7,7 @@ import { useMarketingContacts } from '@/hooks/queries/useMarketingContacts'
 import type { MarketingContactsFilters } from '@/hooks/queries/useMarketingContacts'
 import type { Contact } from '@/payload-types'
 import { formatDateShort } from '@/lib/formatters'
+import { getMarketingConsentGranted } from '@/lib/marketing'
 import { ContactDetail } from './ContactDetail'
 import styles from './styles.module.css'
 
@@ -44,18 +45,6 @@ function stageLabel(stage: Contact['derivedStage']): string {
 
 function sourceLabel(source: Contact['source']): string {
   return SOURCE_OPTIONS.find((o) => o.value === source)?.label ?? source ?? '—'
-}
-
-/** Best-effort read of `consent.marketing.granted` from the untyped JSON column. */
-function getMarketingConsentGranted(consent: Contact['consent']): boolean | null {
-  if (consent && typeof consent === 'object' && !Array.isArray(consent)) {
-    const marketing = (consent as Record<string, unknown>).marketing
-    if (marketing && typeof marketing === 'object' && !Array.isArray(marketing)) {
-      const granted = (marketing as Record<string, unknown>).granted
-      if (typeof granted === 'boolean') return granted
-    }
-  }
-  return null
 }
 
 function ConsentBadge({ consent }: { consent: Contact['consent'] }) {
