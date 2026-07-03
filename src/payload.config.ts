@@ -59,6 +59,7 @@ export default buildConfig({
         '@/components/navigation/NavECLConfigLink#NavECLConfigLink',
         '@/components/navigation/NavExportsLink#NavExportsLink',
         '@/components/navigation/NavInvestigationLink#NavInvestigationLink',
+        '@/components/navigation/NavMarketingLink#NavMarketingLink',
       ],
       // Notification bell in header actions (next to user profile button)
       actions: ['@/components/Notifications/NotificationAction#NotificationAction'],
@@ -137,6 +138,11 @@ export default buildConfig({
         applications: {
           Component: '@/components/ApplicationsView/ApplicationsViewWithTemplate#ApplicationsViewWithTemplate',
           path: '/applications/:segments*',
+        },
+        // Marketing view (Task C6) — catch-all for contact-detail sub-routes
+        marketing: {
+          Component: '@/components/MarketingView/MarketingViewWithTemplate#MarketingViewWithTemplate',
+          path: '/marketing/:segments*',
         },
       },
     },
