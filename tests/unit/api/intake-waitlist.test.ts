@@ -3,15 +3,16 @@
  *
  * Covers:
  *   - WaitlistIntakeSchema (zod contract for the public payload)
- *   - POST /api/intake/waitlist — gRPC-primary write with a durable Redis
+ *   - POST /api/intake/waitlist — gRPC-primary write with a durable chatLedger
  *     fallback so a signup is never lost when the platform marketingService
  *     is unavailable.
  *
  * Mocks:
  *   - next/server                         → NextResponse.json returns { body, status }
  *   - @/server/marketing-grpc-client      → upsertContact is mocked (no real gRPC call)
- *   - @/server/redis-client               → getRedisClient returns a fake ioredis-shaped
- *                                            stub (status/connect/xadd)
+ *   - @/server/chatledger-publisher       → publishContactIntakeRequested is mocked; the
+ *                                            fallback publishes the command here and the
+ *                                            Broker (not the CRM) routes it to marketing
  *   - @/lib/intake-auth and @/lib/schemas/intake are the REAL implementations — auth and
  *     validation are exercised end-to-end, not stubbed away.
  */
@@ -41,18 +42,12 @@ vi.mock('@/server/marketing-grpc-client', () => ({
 }))
 
 // ---------------------------------------------------------------------------
-// Redis client mock — ioredis-shaped stub
+// chatLedger publisher mock — the intake fallback publishes the command here,
+// and billieChat's Broker (not the CRM) routes it to the marketingService inbox.
 // ---------------------------------------------------------------------------
-const mockXadd = vi.hoisted(() => vi.fn(async () => '1-1'))
-const mockConnect = vi.hoisted(() => vi.fn(async () => undefined))
-const mockRedis = vi.hoisted(() => ({
-  status: 'ready',
-  connect: mockConnect,
-  xadd: mockXadd,
-}))
-const mockGetRedisClient = vi.hoisted(() => vi.fn(() => mockRedis))
-vi.mock('@/server/redis-client', () => ({
-  getRedisClient: mockGetRedisClient,
+const mockPublishContactIntake = vi.hoisted(() => vi.fn(async () => ({ eventId: 'evt-1' })))
+vi.mock('@/server/chatledger-publisher', () => ({
+  publishContactIntakeRequested: mockPublishContactIntake,
 }))
 
 // ---------------------------------------------------------------------------
@@ -79,15 +74,6 @@ function makeSignedRequest(
     headers,
     body: raw,
   }) as unknown as NextRequest
-}
-
-/** Turn the flat [k, v, k, v, ...] xadd field list back into an object. */
-function xaddFieldsToObject(fields: unknown[]): Record<string, string> {
-  const out: Record<string, string> = {}
-  for (let i = 0; i < fields.length; i += 2) {
-    out[fields[i] as string] = fields[i + 1] as string
-  }
-  return out
 }
 
 // =============================================================================
@@ -154,10 +140,7 @@ describe('POST /api/intake/waitlist', () => {
     process.env.INTAKE_API_KEY = API_KEY
     process.env.INTAKE_HMAC_SECRET = HMAC_SECRET
     mockUpsertContact.mockReset()
-    mockXadd.mockReset().mockResolvedValue('1-1')
-    mockConnect.mockReset().mockResolvedValue(undefined)
-    mockGetRedisClient.mockClear()
-    mockRedis.status = 'ready'
+    mockPublishContactIntake.mockReset().mockResolvedValue({ eventId: 'evt-1' })
   })
 
   const validBody = {
@@ -188,7 +171,7 @@ describe('POST /api/intake/waitlist', () => {
     expect(mockUpsertContact).not.toHaveBeenCalled()
   })
 
-  test('accepts via gRPC and returns 200 with contactId, never touching Redis', async () => {
+  test('accepts via gRPC and returns 200 with contactId, never touching the fallback', async () => {
     mockUpsertContact.mockResolvedValue({
       contactId: 'contact-1',
       eventId: 'event-1',
@@ -203,7 +186,7 @@ describe('POST /api/intake/waitlist', () => {
     expect(res.status).toBe(200)
     expect(res.body.status).toBe('accepted')
     expect(res.body.contactId).toBe('contact-1')
-    expect(mockXadd).not.toHaveBeenCalled()
+    expect(mockPublishContactIntake).not.toHaveBeenCalled()
 
     // idempotency_key defaults to a stable value derived from mobile/email
     const call = mockUpsertContact.mock.calls[0][0]
@@ -212,23 +195,18 @@ describe('POST /api/intake/waitlist', () => {
     expect(call.waitlist).toBe(true)
   })
 
-  test('falls back to Redis and returns 200 queued when gRPC fails', async () => {
+  test('falls back to chatLedger and returns 200 queued when gRPC fails', async () => {
     mockUpsertContact.mockRejectedValue(new Error('UNAVAILABLE'))
     const req = makeSignedRequest(validBody)
     const res = (await POST(req)) as { body: { status: string }; status: number }
     expect(res.status).toBe(200)
     expect(res.body.status).toBe('queued')
-    expect(mockXadd).toHaveBeenCalledTimes(1)
+    expect(mockPublishContactIntake).toHaveBeenCalledTimes(1)
 
-    const [stream, id, ...fields] = mockXadd.mock.calls[0]
-    expect(stream).toBe('inbox:marketing')
-    expect(id).toBe('*')
-    const envelope = xaddFieldsToObject(fields)
-    expect(envelope.cls).toBe('cmd')
-    expect(envelope.typ).toBe('contact.intake.requested.v1')
-    expect(envelope.agt).toBe('billie-crm')
-
-    const payload = JSON.parse(envelope.payload)
+    // The route hands the command payload to the chatLedger publisher; the
+    // envelope + destination stream are the publisher's concern, and the Broker
+    // (not the CRM) routes it to the marketingService inbox.
+    const payload = mockPublishContactIntake.mock.calls[0][0]
     expect(payload).toMatchObject({
       first_name: 'Ash',
       mobile: '0400000001',
@@ -259,17 +237,9 @@ describe('POST /api/intake/waitlist', () => {
     }
   })
 
-  test('connects a lazy Redis client before xadd when status is "wait"', async () => {
+  test('returns 503 when both gRPC and the chatLedger fallback fail — signup genuinely at risk', async () => {
     mockUpsertContact.mockRejectedValue(new Error('UNAVAILABLE'))
-    mockRedis.status = 'wait'
-    const req = makeSignedRequest(validBody)
-    await POST(req)
-    expect(mockConnect).toHaveBeenCalledTimes(1)
-  })
-
-  test('returns 503 when both gRPC and Redis fail — signup genuinely at risk', async () => {
-    mockUpsertContact.mockRejectedValue(new Error('UNAVAILABLE'))
-    mockXadd.mockRejectedValue(new Error('ECONNREFUSED'))
+    mockPublishContactIntake.mockRejectedValue(new Error('ECONNREFUSED'))
     const req = makeSignedRequest(validBody)
     const res = (await POST(req)) as { body: { error: { code: string } }; status: number }
     expect(res.status).toBe(503)

@@ -265,3 +265,31 @@ export interface ReapplicationBlockClearAuthorizedPayload {
     comment: string
   }
 }
+
+/**
+ * Snake_case command payload for `contact.intake.requested.v1`, published to
+ * chatLedger as the public-intake fallback and routed by the Broker to the
+ * platform marketingService inbox. Keys mirror marketingService's
+ * `_handle_intake_command` / `build_contact_observed` cmd dict — do not rename
+ * without updating that consumer in lockstep.
+ */
+export interface ContactIntakeCommandPayload {
+  idempotency_key: string
+  first_name: string | null
+  email: string | null
+  mobile: string | null
+  city: string | null
+  postcode: string | null
+  source: string
+  utm: Record<string, unknown>
+  platforms: string[]
+  channel_preference: string | null
+  referred_by_code: string | null
+  waitlist: boolean
+  consent: {
+    granted: boolean
+    method: string
+    channels: string[]
+  }
+  actor: string
+}
