@@ -28,6 +28,7 @@ from .handlers import (
     handle_reapplication_blocked,
     handle_reapplication_block_cleared,
     handle_reapplication_block_clear_rejected,
+    handle_reapplication_block_auto_cleared,
     # Conversation handlers
     handle_conversation_started,
     handle_utterance,
@@ -183,6 +184,12 @@ def setup_handlers(processor: EventProcessor) -> None:
     )
     processor.register_handler(
         "reapplication_block.clear_rejected.v1", handle_reapplication_block_clear_rejected
+    )
+    # Automatic clear when a customer's last open loan is repaid (the ACTIVE_LOAN
+    # eligibility condition lapses) — clears the stale servicing "Active loan"
+    # banner without operator action.
+    processor.register_handler(
+        "reapplication_block.auto_cleared.v1", handle_reapplication_block_auto_cleared
     )
 
     # Identity verification report archival (PR #67)
