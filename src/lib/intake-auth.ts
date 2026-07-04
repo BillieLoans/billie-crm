@@ -17,7 +17,7 @@ import type { NextRequest } from 'next/server'
  * lengths differ, rather than passing mismatched buffers to
  * `timingSafeEqual`, which throws a RangeError in that case.
  */
-function safeEqual(provided: string, expected: string): boolean {
+export function safeEqual(provided: string, expected: string): boolean {
   const providedBuf = Buffer.from(provided)
   const expectedBuf = Buffer.from(expected)
   return providedBuf.length === expectedBuf.length && timingSafeEqual(providedBuf, expectedBuf)

@@ -16,6 +16,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
+import { safeEqual } from '@/lib/intake-auth'
 
 /** Canonical funnel order (mirrors Contacts.derivedStage options). */
 const FUNNEL_ORDER = [
@@ -43,8 +44,9 @@ function toCountMap(rows: CountRow[]): Record<string, number> {
 
 export async function GET(request: NextRequest) {
   const expected = process.env.MARKETING_DASHBOARD_API_KEY
-  const provided = request.headers.get('x-api-key')
-  if (!expected || !provided || provided !== expected) {
+  const provided = request.headers.get('x-api-key') ?? ''
+  // Constant-time comparison to avoid leaking the key via timing side channels.
+  if (!expected || !safeEqual(provided, expected)) {
     return NextResponse.json(
       { error: { code: 'UNAUTHENTICATED', message: 'Invalid service credentials' } },
       { status: 401 },
