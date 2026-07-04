@@ -81,6 +81,8 @@ export interface Config {
     contacts: Contact;
     interactions: Interaction;
     'contact-audit-log': ContactAuditLog;
+    batches: Batch;
+    feedback: Feedback;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -102,6 +104,8 @@ export interface Config {
     contacts: ContactsSelect<false> | ContactsSelect<true>;
     interactions: InteractionsSelect<false> | InteractionsSelect<true>;
     'contact-audit-log': ContactAuditLogSelect<false> | ContactAuditLogSelect<true>;
+    batches: BatchesSelect<false> | BatchesSelect<true>;
+    feedback: FeedbackSelect<false> | FeedbackSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -1672,6 +1676,61 @@ export interface ContactAuditLog {
   createdAt: string;
 }
 /**
+ * Marketing batch definitions — read-only projection of marketingService events
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "batches".
+ */
+export interface Batch {
+  id: string;
+  batchId: string;
+  name?: string | null;
+  /**
+   * Segment filter the batch was created from
+   */
+  criteria?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  createdByActor?: string | null;
+  batchCreatedAt?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Marketing feedback + queue — read-only projection of marketingService events
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "feedback".
+ */
+export interface Feedback {
+  id: string;
+  feedbackId: string;
+  /**
+   * Marketing contact natural-key id
+   */
+  contactIdString?: string | null;
+  customerId?: string | null;
+  feedbackType?: string | null;
+  severity?: string | null;
+  body?: string | null;
+  productArea?: string | null;
+  receivedAt?: string | null;
+  /**
+   * Queue triage status (new → acknowledged → resolved)
+   */
+  status?: string | null;
+  statusChangedAt?: string | null;
+  statusActor?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
@@ -1750,6 +1809,14 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'contact-audit-log';
         value: string | ContactAuditLog;
+      } | null)
+    | ({
+        relationTo: 'batches';
+        value: string | Batch;
+      } | null)
+    | ({
+        relationTo: 'feedback';
+        value: string | Feedback;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -2464,6 +2531,38 @@ export interface ContactAuditLogSelect<T extends boolean = true> {
   actor?: T;
   occurredAt?: T;
   detail?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "batches_select".
+ */
+export interface BatchesSelect<T extends boolean = true> {
+  batchId?: T;
+  name?: T;
+  criteria?: T;
+  createdByActor?: T;
+  batchCreatedAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "feedback_select".
+ */
+export interface FeedbackSelect<T extends boolean = true> {
+  feedbackId?: T;
+  contactIdString?: T;
+  customerId?: T;
+  feedbackType?: T;
+  severity?: T;
+  body?: T;
+  productArea?: T;
+  receivedAt?: T;
+  status?: T;
+  statusChangedAt?: T;
+  statusActor?: T;
   updatedAt?: T;
   createdAt?: T;
 }
