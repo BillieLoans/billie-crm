@@ -68,3 +68,26 @@ export const LogInteractionSchema = z.object({
 })
 
 export type LogInteraction = z.infer<typeof LogInteractionSchema>
+
+/**
+ * Phase-2 (Stream A) staff command contracts — batches + feedback triage.
+ */
+
+export const CreateBatchSchema = z.object({
+  name: z.string().min(1).max(200),
+  criteria: z.record(z.string(), z.unknown()).optional(),
+})
+
+export type CreateBatch = z.infer<typeof CreateBatchSchema>
+
+export const AssignBatchSchema = z.object({
+  contact_ids: z.array(z.string().min(1)).min(1).max(10000),
+})
+
+export type AssignBatch = z.infer<typeof AssignBatchSchema>
+
+export const SetFeedbackStatusSchema = z.object({
+  status: z.enum(['new', 'acknowledged', 'resolved']),
+})
+
+export type SetFeedbackStatus = z.infer<typeof SetFeedbackStatusSchema>

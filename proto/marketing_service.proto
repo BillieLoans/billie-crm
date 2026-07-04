@@ -8,6 +8,11 @@ service MarketingService {
   rpc SetConsent(SetConsentRequest) returns (CommandResponse);
   rpc LogInteraction(LogInteractionRequest) returns (CommandResponse);
   rpc EraseContact(EraseContactRequest) returns (CommandResponse);
+  rpc SubmitFeedback(SubmitFeedbackRequest) returns (SubmitFeedbackResponse);
+  rpc CreateBatch(CreateBatchRequest) returns (CreateBatchResponse);
+  rpc AssignBatch(AssignBatchRequest) returns (AssignBatchResponse);
+  rpc TriggerBatchInvitations(TriggerBatchInvitationsRequest) returns (TriggerBatchInvitationsResponse);
+  rpc SetFeedbackStatus(SetFeedbackStatusRequest) returns (SetFeedbackStatusResponse);
 }
 
 message ConsentCapture {
@@ -87,4 +92,75 @@ message CommandResponse {
   string contact_id = 1;
   string event_id = 2;
   bool idempotent_replay = 3;
+}
+
+message SubmitFeedbackRequest {
+  string idempotency_key = 1;
+  string contact_id = 2;
+  string customer_id = 3;           // optional canonical link if already a customer
+  string type = 4;                  // bug | praise | feature | complaint | ...
+  string severity = 5;              // optional
+  string text = 6;
+  string product_area = 7;          // optional
+  string actor = 8;
+}
+
+message SubmitFeedbackResponse {
+  string feedback_id = 1;
+  string event_id = 2;
+  bool idempotent_replay = 3;
+}
+
+message CreateBatchRequest {
+  string idempotency_key = 1;
+  string name = 2;
+  string criteria_json = 3;         // JSON object as string (segment snapshot)
+  string actor = 4;
+}
+
+message CreateBatchResponse {
+  string batch_id = 1;
+  string event_id = 2;
+  bool idempotent_replay = 3;
+}
+
+message AssignBatchRequest {
+  string idempotency_key = 1;
+  string batch_id = 2;
+  repeated string contact_ids = 3;  // from a filtered CRM segment
+  string actor = 4;
+}
+
+message AssignBatchResponse {
+  string batch_id = 1;
+  int32 assigned_count = 2;
+  string event_id = 3;              // last emitted contact.batch.assigned.v1
+  bool idempotent_replay = 4;
+}
+
+message TriggerBatchInvitationsRequest {
+  string idempotency_key = 1;
+  string batch_id = 2;
+  string actor = 3;
+}
+
+message TriggerBatchInvitationsResponse {
+  string batch_id = 1;
+  int32 invited_count = 2;          // consented members a dispatch was emitted for
+  int32 skipped_unconsented = 3;    // members skipped for lack of marketing consent
+  bool idempotent_replay = 4;
+}
+
+message SetFeedbackStatusRequest {
+  string idempotency_key = 1;
+  string feedback_id = 2;
+  string status = 3;                // new | acknowledged | resolved
+  string actor = 4;
+}
+
+message SetFeedbackStatusResponse {
+  string feedback_id = 1;
+  string event_id = 2;
+  string status = 3;
+  bool idempotent_replay = 4;
 }
