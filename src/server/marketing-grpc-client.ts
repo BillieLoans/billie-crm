@@ -140,6 +140,60 @@ export interface SubmitFeedbackResult {
   idempotentReplay: boolean
 }
 
+export interface CreateBatchInput {
+  idempotencyKey: string
+  name: string
+  criteriaJson?: string
+  actor?: string
+}
+
+export interface CreateBatchResult {
+  batchId: string
+  eventId: string
+  idempotentReplay: boolean
+}
+
+export interface AssignBatchInput {
+  idempotencyKey: string
+  batchId: string
+  contactIds: string[]
+  actor?: string
+}
+
+export interface AssignBatchResult {
+  batchId: string
+  assignedCount: number
+  eventId: string
+  idempotentReplay: boolean
+}
+
+export interface TriggerBatchInvitationsInput {
+  idempotencyKey: string
+  batchId: string
+  actor?: string
+}
+
+export interface TriggerBatchInvitationsResult {
+  batchId: string
+  invitedCount: number
+  skippedUnconsented: number
+  idempotentReplay: boolean
+}
+
+export interface SetFeedbackStatusInput {
+  idempotencyKey: string
+  feedbackId: string
+  status: string
+  actor?: string
+}
+
+export interface SetFeedbackStatusResult {
+  feedbackId: string
+  eventId: string
+  status: string
+  idempotentReplay: boolean
+}
+
 // =============================================================================
 // Client Class
 // =============================================================================
@@ -207,6 +261,28 @@ export class MarketingClient {
       request,
     )
   }
+
+  async createBatch(request: CreateBatchInput): Promise<CreateBatchResult> {
+    return this.promisify<CreateBatchInput, CreateBatchResult>(this.client.createBatch)(request)
+  }
+
+  async assignBatch(request: AssignBatchInput): Promise<AssignBatchResult> {
+    return this.promisify<AssignBatchInput, AssignBatchResult>(this.client.assignBatch)(request)
+  }
+
+  async triggerBatchInvitations(
+    request: TriggerBatchInvitationsInput,
+  ): Promise<TriggerBatchInvitationsResult> {
+    return this.promisify<TriggerBatchInvitationsInput, TriggerBatchInvitationsResult>(
+      this.client.triggerBatchInvitations,
+    )(request)
+  }
+
+  async setFeedbackStatus(request: SetFeedbackStatusInput): Promise<SetFeedbackStatusResult> {
+    return this.promisify<SetFeedbackStatusInput, SetFeedbackStatusResult>(
+      this.client.setFeedbackStatus,
+    )(request)
+  }
 }
 
 // =============================================================================
@@ -248,4 +324,24 @@ export async function eraseContact(request: EraseContactInput): Promise<CommandR
 
 export async function submitFeedback(request: SubmitFeedbackInput): Promise<SubmitFeedbackResult> {
   return getMarketingClient().submitFeedback(request)
+}
+
+export async function createBatch(request: CreateBatchInput): Promise<CreateBatchResult> {
+  return getMarketingClient().createBatch(request)
+}
+
+export async function assignBatch(request: AssignBatchInput): Promise<AssignBatchResult> {
+  return getMarketingClient().assignBatch(request)
+}
+
+export async function triggerBatchInvitations(
+  request: TriggerBatchInvitationsInput,
+): Promise<TriggerBatchInvitationsResult> {
+  return getMarketingClient().triggerBatchInvitations(request)
+}
+
+export async function setFeedbackStatus(
+  request: SetFeedbackStatusInput,
+): Promise<SetFeedbackStatusResult> {
+  return getMarketingClient().setFeedbackStatus(request)
 }
