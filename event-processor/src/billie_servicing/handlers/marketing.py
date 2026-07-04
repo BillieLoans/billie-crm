@@ -314,3 +314,140 @@ async def handle_contact_erased(pool: asyncpg.Pool, event: Any) -> None:
         p.contact_id,
     )
     await _audit(pool, p.contact_id, event.event_type, p.actor, {})
+
+
+# =============================================================================
+# Phase-2 (Stream A) handlers — batches, feedback, referral attribution.
+# batch.assigned + referral.attributed patch pre-provisioned columns on the
+# existing ``contacts`` row (batch_id / referred_by_contact_id); batch.created
+# and feedback.* project into their own read-only collections.
+# =============================================================================
+
+
+async def handle_batch_created(pool: asyncpg.Pool, event: Any) -> None:
+    """Handle ``batch.created.v1`` — upsert a marketing batch definition.
+
+    Batches are not contact-scoped, so there is no ``contact_audit_log`` row.
+    Create-once semantics: a re-delivery leaves the existing row untouched.
+    """
+    p = event.payload
+    await upsert(
+        pool,
+        "batches",
+        conflict_columns=["batch_id"],
+        values={
+            "batch_id": p.batch_id,
+            "name": p.name,
+            "criteria": json.dumps(p.criteria),
+            "created_by_actor": p.actor,
+            "batch_created_at": coerce_date(p.created_at),
+            "updated_at": _now(),
+            "created_at": _now(),
+        },
+        do_nothing_on_conflict=True,
+    )
+
+
+async def handle_contact_batch_assigned(pool: asyncpg.Pool, event: Any) -> None:
+    """Handle ``contact.batch.assigned.v1`` — set the contact's current batch."""
+    p = event.payload
+    await update_by_key(
+        pool,
+        "contacts",
+        key_column="contact_id",
+        key_value=p.contact_id,
+        values={"batch_id": p.batch_id, "updated_at": _now()},
+    )
+    await _audit(pool, p.contact_id, event.event_type, p.actor, {"batch_id": p.batch_id})
+
+
+async def handle_feedback_received(pool: asyncpg.Pool, event: Any) -> None:
+    """Handle ``feedback.received.v1`` — insert a feedback row (status=new).
+
+    Append-only projection keyed by ``feedback_id``; a re-delivery leaves the
+    row (and any status already advanced by a later event) untouched.
+    """
+    p = event.payload
+    values = {
+        "feedback_id": p.feedback_id,
+        "contact_id_string": p.contact_id,
+        "customer_id": p.customer_id,
+        "feedback_type": p.type,
+        "severity": p.severity,
+        "body": p.text,
+        "product_area": p.product_area,
+        "received_at": coerce_date(p.received_at),
+        "status": "new",
+        "updated_at": _now(),
+        "created_at": _now(),
+    }
+    await upsert(
+        pool,
+        "feedback",
+        conflict_columns=["feedback_id"],
+        values={k: v for k, v in values.items() if v is not None},
+        do_nothing_on_conflict=True,
+    )
+    await _audit(
+        pool,
+        p.contact_id,
+        event.event_type,
+        None,
+        {"feedback_id": p.feedback_id, "type": p.type},
+    )
+
+
+async def handle_feedback_status_changed(pool: asyncpg.Pool, event: Any) -> None:
+    """Handle ``feedback.status.changed.v1`` — advance a feedback row's status.
+
+    The event carries no ``contact_id``; the audit row is written against the
+    feedback's contact only if the feedback row already exists (out-of-order
+    delivery leaves no phantom audit).
+    """
+    p = event.payload
+    await update_by_key(
+        pool,
+        "feedback",
+        key_column="feedback_id",
+        key_value=p.feedback_id,
+        values={
+            "status": p.status,
+            "status_changed_at": coerce_date(p.changed_at),
+            "status_actor": p.actor,
+            "updated_at": _now(),
+        },
+    )
+    contact_ref = await pool.fetchval(
+        "SELECT contact_id_string FROM feedback WHERE feedback_id = $1", p.feedback_id
+    )
+    if contact_ref is not None:
+        await _audit(
+            pool,
+            contact_ref,
+            event.event_type,
+            p.actor,
+            {"feedback_id": p.feedback_id, "status": p.status},
+        )
+
+
+async def handle_referral_attributed(pool: asyncpg.Pool, event: Any) -> None:
+    """Handle ``referral.attributed.v1`` — record who referred the referee.
+
+    Patches ``referred_by_contact_id`` on the referee's contact row (the
+    referrer's referred-count is derived at read time). Idempotent.
+    """
+    p = event.payload
+    await update_by_key(
+        pool,
+        "contacts",
+        key_column="contact_id",
+        key_value=p.referee_contact_id,
+        values={"referred_by_contact_id": p.referrer_contact_id, "updated_at": _now()},
+    )
+    await _audit(
+        pool,
+        p.referee_contact_id,
+        event.event_type,
+        None,
+        {"referrer_contact_id": p.referrer_contact_id, "code": p.code},
+    )

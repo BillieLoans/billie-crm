@@ -4,6 +4,8 @@ import pytest
 
 from billie_marketing_events import parse_marketing_message
 from billie_servicing.handlers.marketing import (
+    handle_batch_created,
+    handle_contact_batch_assigned,
     handle_contact_consent_granted,
     handle_contact_consent_withdrawn,
     handle_contact_erased,
@@ -13,6 +15,9 @@ from billie_servicing.handlers.marketing import (
     handle_contact_stage_changed,
     handle_contact_unlinked,
     handle_contact_updated,
+    handle_feedback_received,
+    handle_feedback_status_changed,
+    handle_referral_attributed,
 )
 
 
@@ -196,3 +201,77 @@ async def test_erased_nulls_pi_columns_and_scrubs_interactions(mock_pool):
     assert interaction_scrub.where.get("contact_id_string") == "c-1"
     audit_row = mock_pool.last_insert("contact_audit_log")
     assert json.loads(audit_row["detail"]) == {}
+
+
+# ---------------------------------------------------------------------------
+# Phase-2 (Stream A) handlers — batches, feedback, referral attribution.
+# ---------------------------------------------------------------------------
+
+
+async def test_batch_created_upserts_batch(mock_pool):
+    await handle_batch_created(mock_pool, _parsed("batch.created.v1", {
+        "batch_id": "b-1", "name": "Campus wave 1", "actor": "ops",
+        "created_at": "2026-07-03T00:00:00+00:00", "criteria": {"source": "campus"}}))
+
+    row = mock_pool.last_upsert("batches")
+    assert row["batch_id"] == "b-1"
+    assert row["name"] == "Campus wave 1"
+    assert row["created_by_actor"] == "ops"
+    assert json.loads(row["criteria"]) == {"source": "campus"}
+    # Batches are not contact-scoped — no audit row.
+    assert not mock_pool.has_call_against("contact_audit_log")
+
+
+async def test_contact_batch_assigned_sets_batch_id_and_audit(mock_pool):
+    await handle_contact_batch_assigned(mock_pool, _parsed("contact.batch.assigned.v1", {
+        "batch_id": "b-1", "contact_id": "c-1", "actor": "ops",
+        "assigned_at": "2026-07-03T00:00:00+00:00"}))
+
+    updated = mock_pool.last_update("contacts")
+    assert updated["batch_id"] == "b-1"
+    audit_row = mock_pool.last_insert("contact_audit_log")
+    assert audit_row["contact_id_string"] == "c-1"
+    assert json.loads(audit_row["detail"])["batch_id"] == "b-1"
+
+
+async def test_feedback_received_inserts_row_status_new_and_audit(mock_pool):
+    await handle_feedback_received(mock_pool, _parsed("feedback.received.v1", {
+        "feedback_id": "f-1", "contact_id": "c-1", "type": "bug",
+        "text": "app crashed", "received_at": "2026-07-03T00:00:00+00:00"}))
+
+    row = mock_pool.last_upsert("feedback")
+    assert row["feedback_id"] == "f-1"
+    assert row["contact_id_string"] == "c-1"
+    assert row["feedback_type"] == "bug"
+    assert row["body"] == "app crashed"
+    assert row["status"] == "new"
+    audit_row = mock_pool.last_insert("contact_audit_log")
+    assert audit_row["contact_id_string"] == "c-1"
+
+
+async def test_feedback_status_changed_updates_status_and_audits_by_contact(mock_pool):
+    # The status event carries no contact_id; the handler looks the feedback's
+    # contact up for the audit row.
+    mock_pool.set_fetchval("c-1")
+    await handle_feedback_status_changed(mock_pool, _parsed("feedback.status.changed.v1", {
+        "feedback_id": "f-1", "status": "acknowledged", "actor": "ops",
+        "changed_at": "2026-07-03T00:00:00+00:00"}))
+
+    updated = mock_pool.last_update("feedback")
+    assert updated["status"] == "acknowledged"
+    assert updated["status_actor"] == "ops"
+    audit_row = mock_pool.last_insert("contact_audit_log")
+    assert audit_row["contact_id_string"] == "c-1"
+    assert json.loads(audit_row["detail"])["status"] == "acknowledged"
+
+
+async def test_referral_attributed_sets_referred_by_on_referee(mock_pool):
+    await handle_referral_attributed(mock_pool, _parsed("referral.attributed.v1", {
+        "referrer_contact_id": "c-ref", "referee_contact_id": "c-1", "code": "ABC123",
+        "attributed_at": "2026-07-03T00:00:00+00:00"}))
+
+    updated = mock_pool.last_update("contacts")
+    assert updated["referred_by_contact_id"] == "c-ref"
+    audit_row = mock_pool.last_insert("contact_audit_log")
+    assert audit_row["contact_id_string"] == "c-1"
+    assert json.loads(audit_row["detail"])["referrer_contact_id"] == "c-ref"

@@ -84,6 +84,11 @@ from .marketing import (
     handle_contact_interaction_logged,
     handle_contact_stage_changed,
     handle_contact_erased,
+    handle_batch_created,
+    handle_contact_batch_assigned,
+    handle_feedback_received,
+    handle_feedback_status_changed,
+    handle_referral_attributed,
 )
 
 __all__ = [
@@ -162,4 +167,10 @@ __all__ = [
     "handle_contact_interaction_logged",
     "handle_contact_stage_changed",
     "handle_contact_erased",
+    # Marketing Phase-2 (Stream A) handlers — batches, feedback, referral
+    "handle_batch_created",
+    "handle_contact_batch_assigned",
+    "handle_feedback_received",
+    "handle_feedback_status_changed",
+    "handle_referral_attributed",
 ]

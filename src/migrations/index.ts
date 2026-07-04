@@ -9,6 +9,7 @@ import * as migration_20260624_094132 from './20260624_094132';
 import * as migration_20260628_120000_reapplication_block_clear_requests from './20260628_120000_reapplication_block_clear_requests';
 import * as migration_20260702_052932 from './20260702_052932';
 import * as migration_20260702_223751_marketing_module from './20260702_223751_marketing_module';
+import * as migration_20260704_043533_marketing_phase2 from './20260704_043533_marketing_phase2';
 
 export const migrations = [
   {
@@ -64,6 +65,11 @@ export const migrations = [
   {
     up: migration_20260702_223751_marketing_module.up,
     down: migration_20260702_223751_marketing_module.down,
-    name: '20260702_223751_marketing_module'
+    name: '20260702_223751_marketing_module',
+  },
+  {
+    up: migration_20260704_043533_marketing_phase2.up,
+    down: migration_20260704_043533_marketing_phase2.down,
+    name: '20260704_043533_marketing_phase2',
   },
 ];

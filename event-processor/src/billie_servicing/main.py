@@ -74,7 +74,7 @@ from .handlers import (
     handle_collection_case_resumed,
     handle_collection_case_stop_contact_applied,
     handle_collection_case_step_advanced,
-    # Marketing events (billie_marketing_events SDK) — Task C3
+    # Marketing events (billie_marketing_events SDK) — Task C3 + Phase-2 B5
     handle_contact_observed,
     handle_contact_updated,
     handle_contact_linked,
@@ -84,6 +84,11 @@ from .handlers import (
     handle_contact_interaction_logged,
     handle_contact_stage_changed,
     handle_contact_erased,
+    handle_batch_created,
+    handle_contact_batch_assigned,
+    handle_feedback_received,
+    handle_feedback_status_changed,
+    handle_referral_attributed,
 )
 from .processor import EventProcessor
 
@@ -290,6 +295,13 @@ def setup_handlers(processor: EventProcessor) -> None:
     )
     processor.register_handler("contact.stage.changed.v1", handle_contact_stage_changed)
     processor.register_handler("contact.erased.v1", handle_contact_erased)
+
+    # Marketing Phase-2 (Stream A) — batches, feedback, referral attribution
+    processor.register_handler("batch.created.v1", handle_batch_created)
+    processor.register_handler("contact.batch.assigned.v1", handle_contact_batch_assigned)
+    processor.register_handler("feedback.received.v1", handle_feedback_received)
+    processor.register_handler("feedback.status.changed.v1", handle_feedback_status_changed)
+    processor.register_handler("referral.attributed.v1", handle_referral_attributed)
 
 
 async def run() -> None:

@@ -17,9 +17,9 @@ email-validator==2.2.0
 git+https://x-access-token:${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@accounts-v2.9.0#subdirectory=packages/accounts
 git+https://x-access-token:${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@customers-v2.1.0#subdirectory=packages/customers
 git+https://x-access-token:${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@ledger-v1.1.0#subdirectory=packages/ledger
-git+https://x-access-token:${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@notifications-v1.1.1#subdirectory=packages/notifications
+git+https://x-access-token:${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@notifications-v1.2.0#subdirectory=packages/notifications
 git+https://x-access-token:${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@aging-v1.1.0#subdirectory=packages/aging
 # Collection case events (BTB-199 consumer side).
 git+https://x-access-token:${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@collection-v0.3.0#subdirectory=packages/collection
-# Marketing (contact.*) events (Task C3 consumer side).
-git+https://x-access-token:${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@marketing-v0.1.0#subdirectory=packages/marketing
+# Marketing (contact.*/batch.*/feedback.*/referral.*) events (Phase-1 C3 + Phase-2 B5 consumer side).
+git+https://x-access-token:${GITHUB_TOKEN}@github.com/BillieLoans/billie-event-sdks.git@marketing-v0.2.0#subdirectory=packages/marketing
