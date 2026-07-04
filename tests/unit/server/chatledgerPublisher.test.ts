@@ -10,9 +10,13 @@ vi.mock('@/server/redis-client', () => ({
 import {
   publishClearAuthorized,
   publishContactIntakeRequested,
+  publishFeedbackSubmitted,
 } from '@/server/chatledger-publisher'
 import { EventPublishError } from '@/server/event-publisher'
-import type { ContactIntakeCommandPayload } from '@/lib/events/types'
+import type {
+  ContactIntakeCommandPayload,
+  FeedbackSubmitCommandPayload,
+} from '@/lib/events/types'
 
 beforeEach(() => {
   xadd.mockClear()
@@ -168,6 +172,64 @@ describe('publishContactIntakeRequested', () => {
     xadd.mockRejectedValue(new Error('down'))
     await expect(
       publishContactIntakeRequested(sampleIntakePayload({ idempotency_key: 'intake:k4' })),
+    ).rejects.toBeInstanceOf(EventPublishError)
+    expect(xadd).toHaveBeenCalledTimes(3)
+  })
+})
+
+function sampleFeedbackPayload(
+  overrides: Partial<FeedbackSubmitCommandPayload> = {},
+): FeedbackSubmitCommandPayload {
+  return {
+    idempotency_key: 'feedback:c-1:abcdef0123456789',
+    contact_id: 'c-1',
+    customer_id: null,
+    type: 'bug',
+    severity: null,
+    text: 'app crashed',
+    product_area: null,
+    actor: 'intake',
+    ...overrides,
+  }
+}
+
+describe('publishFeedbackSubmitted', () => {
+  it('xadds a chatLedger command with agt=billie-crm, cmd typ, and the feedback conv', async () => {
+    const res = await publishFeedbackSubmitted(sampleFeedbackPayload())
+    expect(res.eventId).toBeTruthy()
+    expect(xadd).toHaveBeenCalledTimes(1)
+    const [stream, star, ...flat] = xadd.mock.calls[0]
+    expect(stream).toBe('chatLedger')
+    expect(star).toBe('*')
+    const fields = Object.fromEntries(
+      flat.reduce((acc: string[][], v: string, i: number) => {
+        if (i % 2 === 0) acc.push([v, flat[i + 1]])
+        return acc
+      }, []),
+    )
+    expect(fields.agt).toBe('billie-crm')
+    expect(fields.typ).toBe('feedback.submit.requested.v1')
+    expect(fields.conv).toBe('feedback-intake:feedback:c-1:abcdef0123456789')
+    expect(fields.usr).toBe('intake')
+    expect(fields.cls).toBe('cmd')
+    expect(JSON.parse(fields.payload).contact_id).toBe('c-1')
+  })
+
+  it('retries a transient xadd failure and succeeds', async () => {
+    xadd
+      .mockRejectedValueOnce(
+        new Error("Stream isn't writeable and enableOfflineQueue options is false"),
+      )
+      .mockResolvedValueOnce('1-1')
+    const res = await publishFeedbackSubmitted(sampleFeedbackPayload({ idempotency_key: 'k3' }))
+    expect(res.eventId).toBeTruthy()
+    expect(xadd).toHaveBeenCalledTimes(2)
+  })
+
+  it('throws EventPublishError after exhausting retries', async () => {
+    xadd.mockRejectedValue(new Error('down'))
+    await expect(
+      publishFeedbackSubmitted(sampleFeedbackPayload({ idempotency_key: 'k4' })),
     ).rejects.toBeInstanceOf(EventPublishError)
     expect(xadd).toHaveBeenCalledTimes(3)
   })

@@ -18,12 +18,14 @@ import {
   CRM_AGENT_ID,
   EVENT_TYPE_REAPPLICATION_BLOCK_CLEAR_AUTHORIZED,
   EVENT_TYPE_CONTACT_INTAKE_REQUESTED,
+  EVENT_TYPE_FEEDBACK_SUBMIT_REQUESTED,
   PUBLISH_MAX_RETRIES,
   PUBLISH_BACKOFF_MS,
 } from '@/lib/events/config'
 import type {
   ReapplicationBlockClearAuthorizedPayload,
   ContactIntakeCommandPayload,
+  FeedbackSubmitCommandPayload,
 } from '@/lib/events/types'
 
 function sleep(ms: number): Promise<void> {
@@ -134,6 +136,60 @@ export async function publishContactIntakeRequested(
     }
   }
   throw new EventPublishError('Failed to publish contact intake to chatLedger after retries', {
+    attempts: PUBLISH_MAX_RETRIES,
+    cause: lastError,
+  })
+}
+
+/**
+ * Publish a feedback.submit.requested.v1 command to chatLedger.
+ *
+ * Durable fallback for the public feedback intake route when the primary gRPC
+ * SubmitFeedback fails. The Broker routes it to the marketingService inbox
+ * (billieChat routes.json: `${agent_billie-crm}` → `feedback.submit.requested.v1`).
+ * Carries the same idempotency_key as the gRPC path, so a later-processed
+ * command can't duplicate feedback the gRPC call already recorded.
+ *
+ * @param payload - The feedback command payload (mirrors the SubmitFeedback request).
+ * @returns The nanoid used as both the cause field and the returned eventId.
+ */
+export async function publishFeedbackSubmitted(
+  payload: FeedbackSubmitCommandPayload,
+): Promise<{ eventId: string }> {
+  const eventId = nanoid()
+  const fields: Record<string, string> = {
+    conv: `feedback-intake:${payload.idempotency_key}`,
+    agt: CRM_AGENT_ID,
+    usr: payload.actor,
+    seq: '1',
+    cls: 'cmd',
+    typ: EVENT_TYPE_FEEDBACK_SUBMIT_REQUESTED,
+    cause: eventId,
+    payload: JSON.stringify(payload),
+  }
+  const redis = getChatLedgerRedisClient()
+
+  // Same lazyConnect + retry posture as the other chatLedger publishers above.
+  let lastError: Error | undefined
+  for (let attempt = 0; attempt < PUBLISH_MAX_RETRIES; attempt++) {
+    try {
+      if (redis.status === 'wait') {
+        await redis.connect()
+      }
+      await redis.xadd(CHATLEDGER_STREAM, '*', ...Object.entries(fields).flat())
+      return { eventId }
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error))
+      console.warn(
+        `[ChatLedgerPublisher] Attempt ${attempt + 1}/${PUBLISH_MAX_RETRIES} failed:`,
+        lastError.message,
+      )
+      if (attempt < PUBLISH_MAX_RETRIES - 1) {
+        await sleep(PUBLISH_BACKOFF_MS[attempt] ?? 400)
+      }
+    }
+  }
+  throw new EventPublishError('Failed to publish feedback intake to chatLedger after retries', {
     attempts: PUBLISH_MAX_RETRIES,
     cause: lastError,
   })

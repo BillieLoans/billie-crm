@@ -30,3 +30,21 @@ export const WaitlistIntakeSchema = z
   .refine((d) => !!d.mobile || !!d.email, { message: 'mobile or email is required' })
 
 export type WaitlistIntake = z.infer<typeof WaitlistIntakeSchema>
+
+/**
+ * Public contract for the feedback intake route (POST /api/intake/feedback).
+ * snake_case to match the marketingService `SubmitFeedback` command fields.
+ * `contact_id` is required — the public feedback form carries it (e.g. from a
+ * feedback-prompt link); anonymous feedback is out of scope for phase 2.
+ */
+export const FeedbackIntakeSchema = z.object({
+  idempotency_key: z.string().max(128).optional(),
+  contact_id: z.string().min(1).max(128),
+  customer_id: z.string().max(128).optional(),
+  type: z.string().min(1).max(50), // bug | praise | feature | complaint | ...
+  severity: z.string().max(50).optional(),
+  text: z.string().min(1).max(5000),
+  product_area: z.string().max(100).optional(),
+})
+
+export type FeedbackIntake = z.infer<typeof FeedbackIntakeSchema>

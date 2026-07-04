@@ -123,6 +123,23 @@ export interface CommandResult {
   idempotentReplay: boolean
 }
 
+export interface SubmitFeedbackInput {
+  idempotencyKey: string
+  contactId: string
+  customerId?: string
+  type: string
+  severity?: string
+  text: string
+  productArea?: string
+  actor?: string
+}
+
+export interface SubmitFeedbackResult {
+  feedbackId: string
+  eventId: string
+  idempotentReplay: boolean
+}
+
 // =============================================================================
 // Client Class
 // =============================================================================
@@ -184,6 +201,12 @@ export class MarketingClient {
   async eraseContact(request: EraseContactInput): Promise<CommandResult> {
     return this.promisify<EraseContactInput, CommandResult>(this.client.eraseContact)(request)
   }
+
+  async submitFeedback(request: SubmitFeedbackInput): Promise<SubmitFeedbackResult> {
+    return this.promisify<SubmitFeedbackInput, SubmitFeedbackResult>(this.client.submitFeedback)(
+      request,
+    )
+  }
 }
 
 // =============================================================================
@@ -221,4 +244,8 @@ export async function logInteraction(request: LogInteractionInput): Promise<Comm
 
 export async function eraseContact(request: EraseContactInput): Promise<CommandResult> {
   return getMarketingClient().eraseContact(request)
+}
+
+export async function submitFeedback(request: SubmitFeedbackInput): Promise<SubmitFeedbackResult> {
+  return getMarketingClient().submitFeedback(request)
 }

@@ -293,3 +293,19 @@ export interface ContactIntakeCommandPayload {
   }
   actor: string
 }
+
+/**
+ * snake_case command payload for `feedback.submit.requested.v1`, published to
+ * chatLedger as the feedback-intake fallback and routed by the Broker to the
+ * marketingService inbox. Keys mirror the `SubmitFeedback` gRPC request.
+ */
+export interface FeedbackSubmitCommandPayload {
+  idempotency_key: string
+  contact_id: string
+  customer_id: string | null
+  type: string
+  severity: string | null
+  text: string
+  product_area: string | null
+  actor: string
+}

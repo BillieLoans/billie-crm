@@ -150,6 +150,19 @@ export const EVENT_TYPE_CONTACT_INTAKE_REQUESTED =
   process.env.EVENT_TYPE_CONTACT_INTAKE_REQUESTED ?? 'contact.intake.requested.v1'
 
 /**
+ * Event type for the public feedback-intake command, published to chatLedger as
+ * the durable fallback when the primary gRPC SubmitFeedback fails. The Broker
+ * routes it to the marketingService inbox (billieChat routes.json,
+ * `${agent_billie-crm}` → `feedback.submit.requested.v1`).
+ *
+ * NOTE: requires a matching `feedback.submit.requested.v1` handler in the
+ * platform marketingService inbox consumer (companion to `_handle_intake_command`)
+ * for the fallback to be effective — see the B2 dependency flag.
+ */
+export const EVENT_TYPE_FEEDBACK_SUBMIT_REQUESTED =
+  process.env.EVENT_TYPE_FEEDBACK_SUBMIT_REQUESTED ?? 'feedback.submit.requested.v1'
+
+/**
  * Single source of truth for the clear vocabulary (mirrors billieChat enums).
  */
 export const CLEARABLE_REASONS = [

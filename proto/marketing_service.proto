@@ -8,6 +8,7 @@ service MarketingService {
   rpc SetConsent(SetConsentRequest) returns (CommandResponse);
   rpc LogInteraction(LogInteractionRequest) returns (CommandResponse);
   rpc EraseContact(EraseContactRequest) returns (CommandResponse);
+  rpc SubmitFeedback(SubmitFeedbackRequest) returns (SubmitFeedbackResponse);
 }
 
 message ConsentCapture {
@@ -85,6 +86,23 @@ message EraseContactRequest {
 
 message CommandResponse {
   string contact_id = 1;
+  string event_id = 2;
+  bool idempotent_replay = 3;
+}
+
+message SubmitFeedbackRequest {
+  string idempotency_key = 1;
+  string contact_id = 2;
+  string customer_id = 3;           // optional canonical link if already a customer
+  string type = 4;                  // bug | praise | feature | complaint | ...
+  string severity = 5;              // optional
+  string text = 6;
+  string product_area = 7;          // optional
+  string actor = 8;
+}
+
+message SubmitFeedbackResponse {
+  string feedback_id = 1;
   string event_id = 2;
   bool idempotent_replay = 3;
 }
