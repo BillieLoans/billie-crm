@@ -92,6 +92,9 @@ event-processor/src/billie_servicing/__pycache__/*
 event-processor/src/billie_servicing/handlers/__pycache__/*
 event-processor/src/billie_servicing/__pycache__
 event-processor/src/billie_servicing/handlers/__pycache__
+# Broad catch-all so new package dirs don't re-leak compiled artefacts
+**/__pycache__/
+*.pyc
 event-processor/.venv/*
 
 .superpowers/

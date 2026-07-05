@@ -163,6 +163,15 @@ export const EVENT_TYPE_FEEDBACK_SUBMIT_REQUESTED =
   process.env.EVENT_TYPE_FEEDBACK_SUBMIT_REQUESTED ?? 'feedback.submit.requested.v1'
 
 /**
+ * Event type for a captured ClickSend inbound SMS. The webhook verifies +
+ * enqueues this onto the CRM internal stream and returns 200; the Python
+ * event-processor consumes it, resolves the sender to a contact, and issues a
+ * marketingService LogInteraction (kind=message_in) asynchronously.
+ */
+export const EVENT_TYPE_CLICKSEND_INBOUND_RECEIVED =
+  process.env.EVENT_TYPE_CLICKSEND_INBOUND_RECEIVED ?? 'clicksend.inbound.received.v1'
+
+/**
  * Single source of truth for the clear vocabulary (mirrors billieChat enums).
  */
 export const CLEARABLE_REASONS = [
