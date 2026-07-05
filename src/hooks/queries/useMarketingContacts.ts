@@ -8,6 +8,7 @@ export interface MarketingContactsFilters {
   stage?: string
   source?: string
   city?: string
+  batch?: string
   page?: number
 }
 
@@ -27,6 +28,7 @@ function buildQueryString(filters: MarketingContactsFilters): string {
   if (filters.stage) params.set('stage', filters.stage)
   if (filters.source) params.set('source', filters.source)
   if (filters.city) params.set('city', filters.city)
+  if (filters.batch) params.set('batch', filters.batch)
   if (filters.page) params.set('page', String(filters.page))
   const qs = params.toString()
   return qs ? `?${qs}` : ''
