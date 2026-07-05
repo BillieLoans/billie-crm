@@ -12,6 +12,7 @@ import { formatDateShort } from '@/lib/formatters'
 import { getMarketingConsentGranted } from '@/lib/marketing'
 import { ContactDetail } from './ContactDetail'
 import { FeedbackQueueView } from './FeedbackQueueView'
+import { NewContactModal } from './NewContactModal'
 import styles from './styles.module.css'
 
 export interface MarketingViewProps {
@@ -89,6 +90,7 @@ const MarketingContactsGrid: React.FC = () => {
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [assignTarget, setAssignTarget] = useState('')
+  const [showNewContact, setShowNewContact] = useState(false)
 
   const filters = useMemo<MarketingContactsFilters>(
     () => ({
@@ -156,6 +158,9 @@ const MarketingContactsGrid: React.FC = () => {
     <div className={styles.container}>
       <div className={styles.header}>
         <h1 className={styles.headerTitle}>Marketing</h1>
+        <button type="button" className={styles.pageButton} onClick={() => setShowNewContact(true)}>
+          + New contact
+        </button>
         <Link href="/admin/marketing/feedback" className={styles.backLink}>
           Feedback queue →
         </Link>
@@ -388,6 +393,13 @@ const MarketingContactsGrid: React.FC = () => {
           </>
         )}
       </div>
+
+      {showNewContact && (
+        <NewContactModal
+          onClose={() => setShowNewContact(false)}
+          onSuccess={() => setShowNewContact(false)}
+        />
+      )}
     </div>
   )
 }

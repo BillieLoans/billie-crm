@@ -99,3 +99,26 @@ export function useSetFeedbackStatus() {
     onError: (e: Error) => toast.error('Failed to update status', { description: e.message }),
   })
 }
+
+export interface CreateContactVars {
+  first_name?: string
+  email?: string
+  mobile?: string
+  city?: string
+  postcode?: string
+  channel_preference?: 'whatsapp' | 'sms'
+  source: string
+}
+
+export function useCreateContact() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (vars: CreateContactVars) =>
+      postCommand<{ contactId: string; eventId: string }>('/api/marketing/contacts', vars),
+    onSuccess: () => {
+      toast.success('Contact created')
+      qc.invalidateQueries({ queryKey: ['marketing-contacts'] })
+    },
+    onError: (e: Error) => toast.error('Failed to create contact', { description: e.message }),
+  })
+}
