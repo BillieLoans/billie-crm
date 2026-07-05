@@ -8,6 +8,44 @@ from .account import (
     handle_schedule_created,
     handle_schedule_updated,
 )
+from .aging import (
+    handle_loan_aging_updated,
+)
+from .block_clear_approval import (
+    handle_block_clear_approval_approved,
+    handle_block_clear_approval_cancelled,
+    handle_block_clear_approval_rejected,
+    handle_block_clear_approval_requested,
+)
+from .clicksend import handle_clicksend_inbound
+from .collections import (
+    handle_collection_case_cured,
+    handle_collection_case_exhausted,
+    handle_collection_case_hardship_paused,
+    handle_collection_case_opened,
+    handle_collection_case_resumed,
+    handle_collection_case_step_advanced,
+    handle_collection_case_stop_contact_applied,
+)
+from .conversation import (
+    handle_affordability_report_downloaded,
+    handle_application_detail_changed,
+    handle_assessment,
+    handle_basiq_job_created,
+    handle_conversation_started,
+    handle_conversation_summary,
+    handle_conversation_summary_changed,
+    handle_credit_assessment_complete,
+    handle_final_decision,
+    handle_noticeboard_updated,
+    handle_post_identity_risk_check,
+    handle_statement_checks_complete,
+    handle_statement_consent_cancelled,
+    handle_statement_consent_complete,
+    handle_statement_consent_initiated,
+    handle_statement_retrieval_complete,
+    handle_utterance,
+)
 from .customer import (
     handle_customer_changed,
     handle_customer_verified,
@@ -19,76 +57,39 @@ from .identity import (
 from .identity_verification import (
     handle_identity_report_archived,
 )
-from .reapplication import (
-    handle_reapplication_blocked,
-    handle_reapplication_block_cleared,
-    handle_reapplication_block_clear_rejected,
-    handle_reapplication_block_auto_cleared,
-)
-from .conversation import (
-    handle_conversation_started,
-    handle_utterance,
-    handle_final_decision,
-    handle_conversation_summary,
-    handle_conversation_summary_changed,
-    handle_application_detail_changed,
-    handle_assessment,
-    handle_noticeboard_updated,
-    handle_statement_consent_initiated,
-    handle_statement_consent_complete,
-    handle_statement_consent_cancelled,
-    handle_basiq_job_created,
-    handle_statement_retrieval_complete,
-    handle_affordability_report_downloaded,
-    handle_statement_checks_complete,
-    handle_post_identity_risk_check,
-    handle_credit_assessment_complete,
-)
-from .writeoff import (
-    handle_writeoff_requested,
-    handle_writeoff_approved,
-    handle_writeoff_rejected,
-    handle_writeoff_cancelled,
-)
-from .block_clear_approval import (
-    handle_block_clear_approval_requested,
-    handle_block_clear_approval_approved,
-    handle_block_clear_approval_rejected,
-    handle_block_clear_approval_cancelled,
-)
-from .notification import (
-    handle_notification_sent,
-    handle_notification_delivery_failed,
-    handle_notification_suppression_changed,
-    handle_statement_generated,
-)
-from .aging import (
-    handle_loan_aging_updated,
-)
-from .collections import (
-    handle_collection_case_opened,
-    handle_collection_case_exhausted,
-    handle_collection_case_cured,
-    handle_collection_case_hardship_paused,
-    handle_collection_case_resumed,
-    handle_collection_case_stop_contact_applied,
-    handle_collection_case_step_advanced,
-)
 from .marketing import (
-    handle_contact_observed,
-    handle_contact_updated,
-    handle_contact_linked,
-    handle_contact_unlinked,
-    handle_contact_consent_granted,
-    handle_contact_consent_withdrawn,
-    handle_contact_interaction_logged,
-    handle_contact_stage_changed,
-    handle_contact_erased,
     handle_batch_created,
     handle_contact_batch_assigned,
+    handle_contact_consent_granted,
+    handle_contact_consent_withdrawn,
+    handle_contact_erased,
+    handle_contact_interaction_logged,
+    handle_contact_linked,
+    handle_contact_observed,
+    handle_contact_stage_changed,
+    handle_contact_unlinked,
+    handle_contact_updated,
     handle_feedback_received,
     handle_feedback_status_changed,
     handle_referral_attributed,
+)
+from .notification import (
+    handle_notification_delivery_failed,
+    handle_notification_sent,
+    handle_notification_suppression_changed,
+    handle_statement_generated,
+)
+from .reapplication import (
+    handle_reapplication_block_auto_cleared,
+    handle_reapplication_block_clear_rejected,
+    handle_reapplication_block_cleared,
+    handle_reapplication_blocked,
+)
+from .writeoff import (
+    handle_writeoff_approved,
+    handle_writeoff_cancelled,
+    handle_writeoff_rejected,
+    handle_writeoff_requested,
 )
 
 __all__ = [
@@ -173,4 +174,6 @@ __all__ = [
     "handle_feedback_received",
     "handle_feedback_status_changed",
     "handle_referral_attributed",
+    # ClickSend inbound SMS (B1)
+    "handle_clicksend_inbound",
 ]

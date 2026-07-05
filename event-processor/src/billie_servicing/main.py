@@ -14,81 +14,82 @@ from .handlers import (
     handle_account_created,
     handle_account_status_changed,
     handle_account_updated,
-    handle_schedule_created,
-    handle_schedule_updated,
+    handle_affordability_report_downloaded,
+    handle_application_detail_changed,
+    handle_assessment,
+    handle_basiq_job_created,
+    handle_batch_created,
+    handle_block_clear_approval_approved,
+    handle_block_clear_approval_cancelled,
+    handle_block_clear_approval_rejected,
+    # Block-clear approval handlers (CRM-originated events)
+    handle_block_clear_approval_requested,
+    handle_clicksend_inbound,
+    handle_collection_case_cured,
+    handle_collection_case_exhausted,
+    handle_collection_case_hardship_paused,
+    # Collection case handlers (platform → CRM read-only projection — BTB-199)
+    handle_collection_case_opened,
+    handle_collection_case_resumed,
+    handle_collection_case_step_advanced,
+    handle_collection_case_stop_contact_applied,
+    handle_contact_batch_assigned,
+    handle_contact_consent_granted,
+    handle_contact_consent_withdrawn,
+    handle_contact_erased,
+    handle_contact_interaction_logged,
+    handle_contact_linked,
+    # Marketing events (billie_marketing_events SDK) — Task C3 + Phase-2 B5
+    handle_contact_observed,
+    handle_contact_stage_changed,
+    handle_contact_unlinked,
+    handle_contact_updated,
+    # Conversation handlers
+    handle_conversation_started,
+    handle_conversation_summary,
+    handle_conversation_summary_changed,
+    handle_credit_assessment_complete,
     # Customer handlers
     handle_customer_changed,
-    handle_customer_verified,
     # Identity link/merge handlers (BTB-120)
     handle_customer_identity_linked,
     handle_customer_identity_merged,
-    # Identity verification archival (PR #67)
-    handle_identity_report_archived,
-    # Re-application block (BTB-135) + cleared/rejected projection (Task 6)
-    handle_reapplication_blocked,
-    handle_reapplication_block_cleared,
-    handle_reapplication_block_clear_rejected,
-    handle_reapplication_block_auto_cleared,
-    # Conversation handlers
-    handle_conversation_started,
-    handle_utterance,
-    handle_final_decision,
-    handle_conversation_summary,
-    handle_conversation_summary_changed,
-    handle_application_detail_changed,
-    handle_assessment,
-    handle_noticeboard_updated,
-    # Statement capture handlers
-    handle_statement_consent_initiated,
-    handle_statement_consent_complete,
-    handle_statement_consent_cancelled,
-    handle_basiq_job_created,
-    handle_statement_retrieval_complete,
-    handle_affordability_report_downloaded,
-    handle_statement_checks_complete,
-    # Credit assessment & post-identity handlers
-    handle_post_identity_risk_check,
-    handle_credit_assessment_complete,
-    # Write-off handlers (CRM-originated events)
-    handle_writeoff_requested,
-    handle_writeoff_approved,
-    handle_writeoff_rejected,
-    handle_writeoff_cancelled,
-    # Block-clear approval handlers (CRM-originated events)
-    handle_block_clear_approval_requested,
-    handle_block_clear_approval_approved,
-    handle_block_clear_approval_rejected,
-    handle_block_clear_approval_cancelled,
-    # Notification handlers (platform → CRM read-only projections)
-    handle_notification_sent,
-    handle_notification_delivery_failed,
-    handle_notification_suppression_changed,
-    handle_statement_generated,
-    # Aging handler (platform → CRM read-only projection of arrears state)
-    handle_loan_aging_updated,
-    # Collection case handlers (platform → CRM read-only projection — BTB-199)
-    handle_collection_case_opened,
-    handle_collection_case_exhausted,
-    handle_collection_case_cured,
-    handle_collection_case_hardship_paused,
-    handle_collection_case_resumed,
-    handle_collection_case_stop_contact_applied,
-    handle_collection_case_step_advanced,
-    # Marketing events (billie_marketing_events SDK) — Task C3 + Phase-2 B5
-    handle_contact_observed,
-    handle_contact_updated,
-    handle_contact_linked,
-    handle_contact_unlinked,
-    handle_contact_consent_granted,
-    handle_contact_consent_withdrawn,
-    handle_contact_interaction_logged,
-    handle_contact_stage_changed,
-    handle_contact_erased,
-    handle_batch_created,
-    handle_contact_batch_assigned,
+    handle_customer_verified,
     handle_feedback_received,
     handle_feedback_status_changed,
+    handle_final_decision,
+    # Identity verification archival (PR #67)
+    handle_identity_report_archived,
+    # Aging handler (platform → CRM read-only projection of arrears state)
+    handle_loan_aging_updated,
+    handle_noticeboard_updated,
+    handle_notification_delivery_failed,
+    # Notification handlers (platform → CRM read-only projections)
+    handle_notification_sent,
+    handle_notification_suppression_changed,
+    # Credit assessment & post-identity handlers
+    handle_post_identity_risk_check,
+    handle_reapplication_block_auto_cleared,
+    handle_reapplication_block_clear_rejected,
+    handle_reapplication_block_cleared,
+    # Re-application block (BTB-135) + cleared/rejected projection (Task 6)
+    handle_reapplication_blocked,
     handle_referral_attributed,
+    handle_schedule_created,
+    handle_schedule_updated,
+    handle_statement_checks_complete,
+    handle_statement_consent_cancelled,
+    handle_statement_consent_complete,
+    # Statement capture handlers
+    handle_statement_consent_initiated,
+    handle_statement_generated,
+    handle_statement_retrieval_complete,
+    handle_utterance,
+    handle_writeoff_approved,
+    handle_writeoff_cancelled,
+    handle_writeoff_rejected,
+    # Write-off handlers (CRM-originated events)
+    handle_writeoff_requested,
 )
 from .processor import EventProcessor
 
@@ -302,6 +303,9 @@ def setup_handlers(processor: EventProcessor) -> None:
     processor.register_handler("feedback.received.v1", handle_feedback_received)
     processor.register_handler("feedback.status.changed.v1", handle_feedback_status_changed)
     processor.register_handler("referral.attributed.v1", handle_referral_attributed)
+
+    # ClickSend inbound SMS (B1, CRM-originated internal event) → LogInteraction
+    processor.register_handler("clicksend.inbound.received.v1", handle_clicksend_inbound)
 
 
 async def run() -> None:
