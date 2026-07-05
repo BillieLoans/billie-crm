@@ -6,6 +6,7 @@ import type { Feedback } from '@/payload-types'
 export interface FeedbackQueueFilters {
   status?: string
   product_area?: string
+  contact_id?: string
   page?: number
 }
 
@@ -23,6 +24,7 @@ function buildQueryString(filters: FeedbackQueueFilters): string {
   const params = new URLSearchParams()
   if (filters.status) params.set('status', filters.status)
   if (filters.product_area) params.set('product_area', filters.product_area)
+  if (filters.contact_id) params.set('contact_id', filters.contact_id)
   if (filters.page) params.set('page', String(filters.page))
   const qs = params.toString()
   return qs ? `?${qs}` : ''

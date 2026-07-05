@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
   const where: Record<string, unknown> = {}
   if (sp.get('status')) where.status = { equals: sp.get('status') }
   if (sp.get('product_area')) where.productArea = { equals: sp.get('product_area') }
+  if (sp.get('contact_id')) where.contactIdString = { equals: sp.get('contact_id') }
 
   const result = await payload.find({
     collection: 'feedback',

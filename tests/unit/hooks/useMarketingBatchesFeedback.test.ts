@@ -16,4 +16,14 @@ describe('B6 marketing query hooks', () => {
       { status: 'new' },
     ])
   })
+
+  test('useContactReferrals exports hook + query key factory', async () => {
+    const mod = await import('@/hooks/queries/useContactReferrals')
+    expect(typeof mod.useContactReferrals).toBe('function')
+    expect(mod.contactReferralsQueryKey('c-1')).toEqual([
+      'marketing-contacts',
+      'referrals',
+      'c-1',
+    ])
+  })
 })
