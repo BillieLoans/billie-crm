@@ -26,8 +26,9 @@ export async function MarketingViewWithTemplate({
   }
   const resolvedParams = await params
   const segments = resolvedParams?.segments as string[] | undefined
-  // /marketing → grid; /marketing/contacts/<id> → detail
+  // /marketing → grid; /marketing/contacts/<id> → detail; /marketing/feedback → queue
   const contactId = segments?.[1] === 'contacts' ? (segments?.[2] ?? '') : ''
+  const feedback = segments?.[1] === 'feedback'
 
   return (
     <DefaultTemplate
@@ -40,7 +41,7 @@ export async function MarketingViewWithTemplate({
       user={initPageResult.req.user}
       visibleEntities={initPageResult.visibleEntities}
     >
-      <MarketingView contactId={contactId} />
+      <MarketingView contactId={contactId} feedback={feedback} />
     </DefaultTemplate>
   )
 }

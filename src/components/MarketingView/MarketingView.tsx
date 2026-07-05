@@ -5,14 +5,18 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useMarketingContacts } from '@/hooks/queries/useMarketingContacts'
 import type { MarketingContactsFilters } from '@/hooks/queries/useMarketingContacts'
+import { useBatches } from '@/hooks/queries/useBatches'
+import { useAssignBatch } from '@/hooks/mutations/useMarketingCommands'
 import type { Contact } from '@/payload-types'
 import { formatDateShort } from '@/lib/formatters'
 import { getMarketingConsentGranted } from '@/lib/marketing'
 import { ContactDetail } from './ContactDetail'
+import { FeedbackQueueView } from './FeedbackQueueView'
 import styles from './styles.module.css'
 
 export interface MarketingViewProps {
   contactId: string
+  feedback?: boolean
 }
 
 const STAGE_OPTIONS: Array<{ value: Contact['derivedStage'] & string; label: string }> = [
@@ -65,7 +69,10 @@ function ConsentBadge({ consent }: { consent: Contact['consent'] }) {
  * timeline at `/admin/marketing/contacts/<contactId>` when a contactId is
  * supplied by the WithTemplate wrapper.
  */
-export const MarketingView: React.FC<MarketingViewProps> = ({ contactId }) => {
+export const MarketingView: React.FC<MarketingViewProps> = ({ contactId, feedback }) => {
+  if (feedback) {
+    return <FeedbackQueueView />
+  }
   if (contactId) {
     return <ContactDetail contactId={contactId} />
   }
@@ -78,7 +85,10 @@ const MarketingContactsGrid: React.FC = () => {
   const [stage, setStage] = useState('')
   const [source, setSource] = useState('')
   const [city, setCity] = useState('')
+  const [batch, setBatch] = useState('')
   const [page, setPage] = useState(1)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [assignTarget, setAssignTarget] = useState('')
 
   const filters = useMemo<MarketingContactsFilters>(
     () => ({
@@ -86,32 +96,58 @@ const MarketingContactsGrid: React.FC = () => {
       stage: stage || undefined,
       source: source || undefined,
       city: city || undefined,
+      batch: batch || undefined,
       page,
     }),
-    [q, stage, source, city, page],
+    [q, stage, source, city, batch, page],
   )
 
   const { data, isLoading, isError } = useMarketingContacts(filters)
+  const { data: batchesData } = useBatches()
+  const assign = useAssignBatch()
   const docs = data?.docs ?? []
+  const batchOptions = batchesData?.docs ?? []
+  const batchNameFor = (id?: string | null) =>
+    id ? (batchOptions.find((b) => b.batchId === id)?.name ?? id) : '—'
 
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setQ(e.target.value)
-    setPage(1)
-  }
+  const onFilter =
+    (setter: (v: string) => void) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+      setter(e.target.value)
+      setPage(1)
+    }
 
-  const handleStageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setStage(e.target.value)
-    setPage(1)
-  }
+  const toggleOne = (contactId: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(contactId)) next.delete(contactId)
+      else next.add(contactId)
+      return next
+    })
 
-  const handleSourceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSource(e.target.value)
-    setPage(1)
-  }
+  const pageContactIds = docs.map((d) => d.contactId).filter((v): v is string => !!v)
+  const allOnPageSelected =
+    pageContactIds.length > 0 && pageContactIds.every((id) => selected.has(id))
+  const toggleAllOnPage = () =>
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (allOnPageSelected) pageContactIds.forEach((id) => next.delete(id))
+      else pageContactIds.forEach((id) => next.add(id))
+      return next
+    })
 
-  const handleCityChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setCity(e.target.value)
-    setPage(1)
+  const canAssign = selected.size > 0 && !!assignTarget && !assign.isPending
+  const handleAssign = () => {
+    if (!canAssign) return
+    assign.mutate(
+      { batchId: assignTarget, contactIds: Array.from(selected) },
+      {
+        onSuccess: () => {
+          setSelected(new Set())
+          setAssignTarget('')
+        },
+      },
+    )
   }
 
   const contactHref = (contact: Contact) => `/admin/marketing/contacts/${contact.contactId}`
@@ -120,6 +156,9 @@ const MarketingContactsGrid: React.FC = () => {
     <div className={styles.container}>
       <div className={styles.header}>
         <h1 className={styles.headerTitle}>Marketing</h1>
+        <Link href="/admin/marketing/feedback" className={styles.backLink}>
+          Feedback queue →
+        </Link>
       </div>
 
       <div className={styles.filters}>
@@ -128,7 +167,7 @@ const MarketingContactsGrid: React.FC = () => {
           className={styles.searchInput}
           placeholder="Search name, email, mobile"
           value={q}
-          onChange={handleSearchChange}
+          onChange={onFilter(setQ)}
           aria-label="Search contacts"
         />
 
@@ -140,7 +179,7 @@ const MarketingContactsGrid: React.FC = () => {
             id="marketing-stage-filter"
             className={styles.filterSelect}
             value={stage}
-            onChange={handleStageChange}
+            onChange={onFilter(setStage)}
           >
             <option value="">All stages</option>
             {STAGE_OPTIONS.map((opt) => (
@@ -159,7 +198,7 @@ const MarketingContactsGrid: React.FC = () => {
             id="marketing-source-filter"
             className={styles.filterSelect}
             value={source}
-            onChange={handleSourceChange}
+            onChange={onFilter(setSource)}
           >
             <option value="">All sources</option>
             {SOURCE_OPTIONS.map((opt) => (
@@ -178,7 +217,7 @@ const MarketingContactsGrid: React.FC = () => {
             id="marketing-city-filter"
             className={styles.filterSelect}
             value={city}
-            onChange={handleCityChange}
+            onChange={onFilter(setCity)}
           >
             <option value="">All cities</option>
             {CITY_OPTIONS.map((c) => (
@@ -188,6 +227,58 @@ const MarketingContactsGrid: React.FC = () => {
             ))}
           </select>
         </div>
+
+        <div className={styles.filterGroup}>
+          <label className={styles.filterLabel} htmlFor="marketing-batch-filter">
+            Batch
+          </label>
+          <select
+            id="marketing-batch-filter"
+            className={styles.filterSelect}
+            value={batch}
+            onChange={onFilter(setBatch)}
+          >
+            <option value="">All batches</option>
+            {batchOptions.map((b) => (
+              <option key={b.batchId} value={b.batchId}>
+                {b.name ?? b.batchId}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Assign-to-batch bar — always present (fixed layout); controls disable
+          until a selection + target batch exist. */}
+      <div className={styles.filters}>
+        <span className={styles.pageStatus}>{selected.size} selected</span>
+        <div className={styles.filterGroup}>
+          <label className={styles.filterLabel} htmlFor="marketing-assign-batch">
+            Assign to batch
+          </label>
+          <select
+            id="marketing-assign-batch"
+            className={styles.filterSelect}
+            value={assignTarget}
+            onChange={(e) => setAssignTarget(e.target.value)}
+            disabled={selected.size === 0}
+          >
+            <option value="">Choose a batch…</option>
+            {batchOptions.map((b) => (
+              <option key={b.batchId} value={b.batchId}>
+                {b.name ?? b.batchId}
+              </option>
+            ))}
+          </select>
+        </div>
+        <button
+          type="button"
+          className={styles.pageButton}
+          onClick={handleAssign}
+          disabled={!canAssign}
+        >
+          {assign.isPending ? 'Assigning…' : 'Assign'}
+        </button>
       </div>
 
       <div className={styles.tableWrapper}>
@@ -198,10 +289,19 @@ const MarketingContactsGrid: React.FC = () => {
             <table className={styles.table}>
               <thead>
                 <tr>
+                  <th>
+                    <input
+                      type="checkbox"
+                      checked={allOnPageSelected}
+                      onChange={toggleAllOnPage}
+                      aria-label="Select all on page"
+                    />
+                  </th>
                   <th>Name</th>
                   <th>Mobile</th>
                   <th>Stage</th>
                   <th>Source</th>
+                  <th>Batch</th>
                   <th>Consent</th>
                   <th>Updated</th>
                 </tr>
@@ -209,13 +309,13 @@ const MarketingContactsGrid: React.FC = () => {
               <tbody>
                 {isLoading && docs.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className={styles.emptyCell}>
+                    <td colSpan={8} className={styles.emptyCell}>
                       Loading contacts…
                     </td>
                   </tr>
                 ) : docs.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className={styles.emptyCell}>
+                    <td colSpan={8} className={styles.emptyCell}>
                       No contacts match the current filters.
                     </td>
                   </tr>
@@ -226,6 +326,14 @@ const MarketingContactsGrid: React.FC = () => {
                       className={styles.row}
                       onClick={() => router.push(contactHref(contact))}
                     >
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={contact.contactId ? selected.has(contact.contactId) : false}
+                          onChange={() => contact.contactId && toggleOne(contact.contactId)}
+                          aria-label={`Select ${contact.firstName ?? contact.contactId}`}
+                        />
+                      </td>
                       <td>
                         <Link
                           href={contactHref(contact)}
@@ -244,6 +352,7 @@ const MarketingContactsGrid: React.FC = () => {
                         )}
                       </td>
                       <td>{contact.source ? sourceLabel(contact.source) : '—'}</td>
+                      <td>{batchNameFor(contact.batchId)}</td>
                       <td>
                         <ConsentBadge consent={contact.consent} />
                       </td>
@@ -264,7 +373,8 @@ const MarketingContactsGrid: React.FC = () => {
                 ← Previous
               </button>
               <span className={styles.pageStatus}>
-                Page {data?.page ?? page} of {data?.totalPages ?? 1} · {data?.totalDocs ?? 0} contacts
+                Page {data?.page ?? page} of {data?.totalPages ?? 1} · {data?.totalDocs ?? 0}{' '}
+                contacts
               </span>
               <button
                 type="button"
