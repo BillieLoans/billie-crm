@@ -35,27 +35,39 @@ is silently dropped (falls to the "ignoring inbox event type" debug log). The gR
 primary path works; only the durable fallback is dead until this lands. This is the
 one open gap in the sends stream.
 
-**Do (in `src/services/marketingService/marketingService.py`):** add an inbox-dispatch
-branch for `feedback.submit.requested.v1` → a new `_handle_feedback_command`, mirroring
-the existing `_handle_intake_command` in the same file:
+**Do** — two changes, **reusing the gRPC `SubmitFeedback` logic**, which already has
+idempotency via the command-response cache (not a Redis fence):
 
-- Idempotency fence in Redis (e.g. `marketingService:feedback-intake:{idempotency_key}`),
-  checked before and set only **after** a successful emit (so a failed emit re-delivers).
-- Mint `feedback_id` (uuid) behind the fence, then reuse the **same** feedback-creation
-  logic as the gRPC `SubmitFeedback` servicer (`grpc_servicer.py`, `SubmitFeedback`,
-  ~line 536) — factor it into a shared helper if cleanest — to emit `feedback.received.v1`.
-- Add config key `msg_type_feedback_submit_requested` (default
-  `"feedback.submit.requested.v1"`) to `config.*.json`, matching how
-  `msg_type_contact_intake_requested` is wired.
+1. **Factor `SubmitFeedback`'s core** (`grpc_servicer.py`, `SubmitFeedback`, ~line 536)
+   into a shared coroutine both the servicer and the inbox handler call — e.g.
+   `submit_feedback_core(handlers, *, idempotency_key, contact_id, customer_id, type,
+   severity, text, product_area) -> (feedback_id, event_id)`. Keep its behaviour:
+   `get_cached_command_response(idempotency_key)` short-circuit → mint
+   `feedback_id = uuid4()` → build `FeedbackReceivedV1(… received_at=now_iso())` (type
+   defaults to `"other"` when empty) → `handlers.emit(FEEDBACK_RECEIVED_V1, event)` →
+   `cache_command_response(idempotency_key, …)`. Rewire the gRPC servicer to call it
+   (no behaviour change). Because the command carries the **same** `idempotency_key`
+   the CRM's gRPC call used, the gRPC and fallback paths dedupe against each other.
+2. **Add an inbox-dispatch branch** in `marketingService.py`'s consumer, next to the
+   `msg_type_contact_intake_requested` one (~line 114) → a new
+   `_handle_feedback_command(payload, event_data)` that reads the command payload and
+   calls `submit_feedback_core(…)`. If `contact_id` or `text` is missing, log a warning
+   and return (can't abort — it's an inbox event, not a gRPC call). No separate Redis
+   fence — the shared command cache handles idempotency.
+3. Add config key `msg_type_feedback_submit_requested` (default
+   `"feedback.submit.requested.v1"`) to `config.*.json`, matching how
+   `msg_type_contact_intake_requested` is wired.
 
 **Command payload contract** (from the CRM's `FeedbackSubmitCommandPayload` — do not
 rename): `idempotency_key`, `contact_id`, `customer_id` (nullable), `type`,
 `severity` (nullable), `text`, `product_area` (nullable), `actor`. It does **not**
 include `feedback_id` (marketingService mints it, like the gRPC path).
 
-**Test/CI:** unit-test like the intake-command tests (fence dedup + emit + payload
-mapping). CI gates on `black --check` + `flake8` — run both before pushing. The
-broker route already exists, so **no billieChat change** is needed.
+**Test/CI:** unit-test `_handle_feedback_command` (payload → shared helper → emit;
+missing `contact_id`/`text` skips; idempotent replay via the cache) and confirm the
+gRPC `SubmitFeedback` still passes after the refactor. CI gates on `black --check` +
+`flake8` — run both before pushing. The broker route already exists, so **no billieChat
+change** is needed.
 
 ---
 
