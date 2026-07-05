@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { useMarketingContact, marketingContactQueryKey } from '@/hooks/queries/useMarketingContact'
+import { useContactReferrals } from '@/hooks/queries/useContactReferrals'
+import { useFeedbackQueue } from '@/hooks/queries/useFeedbackQueue'
 import type { ContactAuditLog, Interaction } from '@/payload-types'
 import { formatDateMedium } from '@/lib/formatters'
 import { getMarketingConsentGranted } from '@/lib/marketing'
@@ -115,6 +117,8 @@ const InteractionCard: React.FC<{ interaction: Interaction }> = ({ interaction }
  */
 export const ContactDetail: React.FC<ContactDetailProps> = ({ contactId }) => {
   const { data, isLoading, isError } = useMarketingContact(contactId)
+  const { data: referrals } = useContactReferrals(contactId)
+  const { data: feedback } = useFeedbackQueue({ contact_id: contactId })
   const queryClient = useQueryClient()
   const [noteText, setNoteText] = useState('')
 
@@ -176,13 +180,17 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contactId }) => {
         </div>
         <div className={styles.detailHeaderBadges}>
           <span className={styles.badge}>
-            {contact.derivedStage ? (STAGE_LABELS[contact.derivedStage] ?? contact.derivedStage) : '—'}
+            {contact.derivedStage
+              ? (STAGE_LABELS[contact.derivedStage] ?? contact.derivedStage)
+              : '—'}
           </span>
           {consentGranted === true && (
             <span className={`${styles.badge} ${styles.badgeConsentGranted}`}>Consent granted</span>
           )}
           {consentGranted === false && (
-            <span className={`${styles.badge} ${styles.badgeConsentDeclined}`}>Consent declined</span>
+            <span className={`${styles.badge} ${styles.badgeConsentDeclined}`}>
+              Consent declined
+            </span>
           )}
           {consentGranted === null && <span className={styles.placeholder}>Consent —</span>}
           {contact.customerId ? (
@@ -244,15 +252,47 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contactId }) => {
             )}
           </Panel>
 
-          <Panel title="Referral">
+          <Panel title="Referrals">
             <div className={styles.panelRow}>
               <span className={styles.panelRowLabel}>Referral code</span>
               <span className={styles.panelRowValue}>{contact.referralCode ?? '—'}</span>
             </div>
             <div className={styles.panelRow}>
               <span className={styles.panelRowLabel}>Referred by</span>
-              <span className={styles.panelRowValue}>{contact.referredByContactId ?? '—'}</span>
+              <span className={styles.panelRowValue}>
+                {referrals?.referrer
+                  ? (referrals.referrer.firstName ?? referrals.referrer.contactId)
+                  : '—'}
+              </span>
             </div>
+            <div className={styles.panelRow}>
+              <span className={styles.panelRowLabel}>Referred</span>
+              <span className={styles.panelRowValue}>{referrals?.referredCount ?? 0}</span>
+            </div>
+            {(referrals?.referred ?? []).map((r) => (
+              <div key={r.contactId} className={styles.panelRow}>
+                <span className={styles.panelRowPrimary}>↳ {r.firstName ?? r.contactId}</span>
+                <span className={styles.panelRowMeta}>
+                  {r.derivedStage ? (STAGE_LABELS[r.derivedStage] ?? r.derivedStage) : '—'}
+                </span>
+              </div>
+            ))}
+          </Panel>
+
+          <Panel title={`Feedback${feedback?.totalDocs ? ` (${feedback.totalDocs})` : ''}`}>
+            {!feedback || feedback.docs.length === 0 ? (
+              <div className={styles.panelEmpty}>—</div>
+            ) : (
+              feedback.docs.map((f) => (
+                <div key={f.id} className={styles.panelRow}>
+                  <span className={styles.panelRowPrimary}>
+                    {f.feedbackType ? `${f.feedbackType}: ` : ''}
+                    {f.body ?? '—'}
+                  </span>
+                  <span className={styles.panelRowMeta}>{f.status ?? '—'}</span>
+                </div>
+              ))
+            )}
           </Panel>
 
           <Panel title="Loan status">
