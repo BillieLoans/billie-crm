@@ -73,7 +73,12 @@ function verifyCsrfOrigin(request: NextRequest): NextResponse | null {
   if (!appUrl) {
     // Fail closed: block mutations if we can't verify the origin
     return NextResponse.json(
-      { error: { code: 'CSRF_REJECTED', message: 'Server misconfigured — cannot verify request origin.' } },
+      {
+        error: {
+          code: 'CSRF_REJECTED',
+          message: 'Server misconfigured — cannot verify request origin.',
+        },
+      },
       { status: 403 },
     )
   }
@@ -85,7 +90,12 @@ function verifyCsrfOrigin(request: NextRequest): NextResponse | null {
   // Origin on cross-origin requests. Missing both headers on a mutation is suspicious.
   if (!origin && !referer) {
     return NextResponse.json(
-      { error: { code: 'CSRF_REJECTED', message: 'Missing Origin and Referer headers on mutation request.' } },
+      {
+        error: {
+          code: 'CSRF_REJECTED',
+          message: 'Missing Origin and Referer headers on mutation request.',
+        },
+      },
       { status: 403 },
     )
   }
@@ -120,6 +130,19 @@ function verifyCsrfOrigin(request: NextRequest): NextResponse | null {
   return null
 }
 
+/**
+ * Public endpoints authenticated by their own secret rather than a session
+ * cookie — the marketing-site intake forms (API key + HMAC) and inbound
+ * webhooks (shared secret). They are called cross-origin / server-to-server
+ * (e.g. ClickSend), so the browser CSRF origin check does not apply and would
+ * wrongly reject them (no Origin/Referer to match). Auth is enforced in-route.
+ */
+const CSRF_EXEMPT_PREFIXES = ['/api/intake/', '/api/webhooks/']
+
+function isCsrfExemptPath(pathname: string): boolean {
+  return CSRF_EXEMPT_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+}
+
 function setSecurityHeaders(response: NextResponse): NextResponse {
   response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload')
   response.headers.set('X-Frame-Options', 'DENY')
@@ -134,7 +157,8 @@ function setSecurityHeaders(response: NextResponse): NextResponse {
 }
 
 const hasPayloadSecret =
-  !!process.env.PAYLOAD_SECRET && process.env.PAYLOAD_SECRET !== 'build-placeholder-not-for-production'
+  !!process.env.PAYLOAD_SECRET &&
+  process.env.PAYLOAD_SECRET !== 'build-placeholder-not-for-production'
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -153,8 +177,11 @@ export async function proxy(request: NextRequest) {
   }
 
   // --- CSRF origin validation ---
-  // Block cross-origin mutation requests (POST/PUT/PATCH/DELETE)
-  if (pathname !== '/api/health') {
+  // Block cross-origin mutation requests (POST/PUT/PATCH/DELETE), except the
+  // secret-authenticated public API surface (intake forms + inbound webhooks),
+  // which is cross-origin/server-to-server by design and carries no session
+  // cookie — see isCsrfExemptPath.
+  if (pathname !== '/api/health' && !isCsrfExemptPath(pathname)) {
     const csrfBlocked = verifyCsrfOrigin(request)
     if (csrfBlocked) return csrfBlocked
   }
