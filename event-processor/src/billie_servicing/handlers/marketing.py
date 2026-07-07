@@ -137,7 +137,8 @@ async def handle_contact_linked(pool: asyncpg.Pool, event: Any) -> None:
         pool,
         p.contact_id,
         event.event_type,
-        None,
+        # Manual (staff) links carry the actor; matcher links don't.
+        getattr(p, "actor", None),
         {"customer_id": p.customer_id, "match_basis": p.match_basis},
     )
 
@@ -161,7 +162,7 @@ async def handle_contact_unlinked(pool: asyncpg.Pool, event: Any) -> None:
         pool,
         p.contact_id,
         event.event_type,
-        None,
+        getattr(p, "actor", None),
         {"customer_id": p.customer_id, "reason": p.reason},
     )
 

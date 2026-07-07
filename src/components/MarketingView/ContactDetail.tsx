@@ -7,6 +7,8 @@ import { toast } from 'sonner'
 import { useMarketingContact, marketingContactQueryKey } from '@/hooks/queries/useMarketingContact'
 import { useContactReferrals } from '@/hooks/queries/useContactReferrals'
 import { useFeedbackQueue } from '@/hooks/queries/useFeedbackQueue'
+import { useUnlinkContact } from '@/hooks/mutations/useMarketingCommands'
+import { LinkCustomerModal } from './LinkCustomerModal'
 import type { ContactAuditLog, Interaction } from '@/payload-types'
 import { formatDateMedium } from '@/lib/formatters'
 import { getMarketingConsentGranted } from '@/lib/marketing'
@@ -121,6 +123,9 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contactId }) => {
   const { data: feedback } = useFeedbackQueue({ contact_id: contactId })
   const queryClient = useQueryClient()
   const [noteText, setNoteText] = useState('')
+  const [showLinkModal, setShowLinkModal] = useState(false)
+  const [showUnlinkConfirm, setShowUnlinkConfirm] = useState(false)
+  const unlink = useUnlinkContact()
 
   const logNoteMutation = useMutation({
     mutationFn: logNote,
@@ -237,6 +242,57 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contactId }) => {
         </div>
 
         <div className={styles.detailRight}>
+          {/* Manual contact<->customer linking (LinkContact/UnlinkContact
+              commands). Fixed layout: both buttons always present; Unlink
+              disables when there is no link to remove. */}
+          <Panel title="Customer link">
+            <div className={styles.panelRow}>
+              <span className={styles.panelRowLabel}>Status</span>
+              <span className={styles.panelRowValue}>
+                {contact.customerId ? 'Linked' : 'Not linked'}
+              </span>
+            </div>
+            <div className={styles.panelRow}>
+              <span className={styles.panelRowLabel}>Customer</span>
+              <span className={styles.panelRowValue}>
+                {contact.customerId ? (
+                  <Link href={`/admin/servicing/${contact.customerId}`} className={styles.nameLink}>
+                    {contact.customerId}
+                  </Link>
+                ) : (
+                  '—'
+                )}
+              </span>
+            </div>
+            <div className={styles.panelRow}>
+              <span className={styles.panelRowLabel}>Basis</span>
+              <span className={styles.panelRowValue}>{contact.linkBasis ?? '—'}</span>
+            </div>
+            <div className={styles.panelRow}>
+              <span className={styles.panelRowLabel}>Linked</span>
+              <span className={styles.panelRowValue}>
+                {contact.linkedAt ? formatDateMedium(contact.linkedAt) : '—'}
+              </span>
+            </div>
+            <div className={styles.panelButtonRow}>
+              <button
+                type="button"
+                className={styles.pageButton}
+                onClick={() => setShowLinkModal(true)}
+              >
+                {contact.customerId ? 'Change…' : 'Link customer…'}
+              </button>
+              <button
+                type="button"
+                className={styles.pageButton}
+                onClick={() => setShowUnlinkConfirm(true)}
+                disabled={!contact.customerId || unlink.isPending}
+              >
+                {unlink.isPending ? 'Unlinking…' : 'Unlink'}
+              </button>
+            </div>
+          </Panel>
+
           <Panel title="Consent history">
             {consentHistory.length === 0 ? (
               <div className={styles.panelEmpty}>—</div>
@@ -318,6 +374,61 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contactId }) => {
           </Panel>
         </div>
       </div>
+
+      {showLinkModal && (
+        <LinkCustomerModal
+          contactId={contactId}
+          contactName={contact.firstName ?? 'this contact'}
+          onClose={() => setShowLinkModal(false)}
+        />
+      )}
+
+      {showUnlinkConfirm && (
+        <div className={styles.modalOverlay} onClick={() => setShowUnlinkConfirm(false)}>
+          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h2 className={styles.modalTitle}>Unlink customer</h2>
+              <button
+                type="button"
+                className={styles.closeBtn}
+                onClick={() => setShowUnlinkConfirm(false)}
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className={styles.modalBody}>
+              <p>
+                Remove the link between <strong>{contact.firstName ?? 'this contact'}</strong> and
+                customer <strong>{contact.customerId}</strong>?
+              </p>
+              <p className={styles.formHint}>
+                The matcher may re-link automatically if the contact&apos;s mobile or email matches
+                a customer record.
+              </p>
+            </div>
+            <div className={styles.modalFooter}>
+              <button
+                type="button"
+                className={styles.btnCancel}
+                onClick={() => setShowUnlinkConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={styles.btnSubmit}
+                onClick={() =>
+                  unlink.mutate(contactId, { onSettled: () => setShowUnlinkConfirm(false) })
+                }
+                disabled={unlink.isPending}
+              >
+                {unlink.isPending ? 'Unlinking…' : 'Unlink'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

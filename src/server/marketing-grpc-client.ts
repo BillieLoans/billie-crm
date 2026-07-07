@@ -117,6 +117,19 @@ export interface EraseContactInput {
   actor?: string
 }
 
+export interface LinkContactInput {
+  idempotencyKey: string
+  contactId: string
+  customerId: string
+  actor?: string
+}
+
+export interface UnlinkContactInput {
+  idempotencyKey: string
+  contactId: string
+  actor?: string
+}
+
 export interface CommandResult {
   contactId: string
   eventId: string
@@ -258,6 +271,14 @@ export class MarketingClient {
     return this.promisify<EraseContactInput, CommandResult>(this.client.eraseContact)(request)
   }
 
+  async linkContact(request: LinkContactInput): Promise<CommandResult> {
+    return this.promisify<LinkContactInput, CommandResult>(this.client.linkContact)(request)
+  }
+
+  async unlinkContact(request: UnlinkContactInput): Promise<CommandResult> {
+    return this.promisify<UnlinkContactInput, CommandResult>(this.client.unlinkContact)(request)
+  }
+
   async submitFeedback(request: SubmitFeedbackInput): Promise<SubmitFeedbackResult> {
     return this.promisify<SubmitFeedbackInput, SubmitFeedbackResult>(this.client.submitFeedback)(
       request,
@@ -322,6 +343,14 @@ export async function logInteraction(request: LogInteractionInput): Promise<Comm
 
 export async function eraseContact(request: EraseContactInput): Promise<CommandResult> {
   return getMarketingClient().eraseContact(request)
+}
+
+export async function linkContact(request: LinkContactInput): Promise<CommandResult> {
+  return getMarketingClient().linkContact(request)
+}
+
+export async function unlinkContact(request: UnlinkContactInput): Promise<CommandResult> {
+  return getMarketingClient().unlinkContact(request)
 }
 
 export async function submitFeedback(request: SubmitFeedbackInput): Promise<SubmitFeedbackResult> {
