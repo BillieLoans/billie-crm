@@ -84,6 +84,8 @@ export function useTriggerInvitations() {
 export interface SetFeedbackStatusVars {
   feedbackId: string
   status: 'new' | 'acknowledged' | 'resolved'
+  /** What was done — required by the API when resolving. */
+  note?: string
 }
 
 export function useSetFeedbackStatus() {
@@ -92,6 +94,7 @@ export function useSetFeedbackStatus() {
     mutationFn: (vars: SetFeedbackStatusVars) =>
       postCommand(`/api/marketing/feedback/${encodeURIComponent(vars.feedbackId)}/status`, {
         status: vars.status,
+        ...(vars.note ? { note: vars.note } : {}),
       }),
     onSuccess: () => {
       toast.success('Feedback status updated')

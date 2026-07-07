@@ -160,4 +160,45 @@ describe('POST /api/marketing/feedback/[feedbackId]/status (SetFeedbackStatus)',
     expect(res.status).toBe(400)
     expect(grpc.setFeedbackStatus).not.toHaveBeenCalled()
   })
+
+  test('resolve passes the trimmed note through to the gRPC command', async () => {
+    const res = (await feedbackStatusPost(
+      req({ status: 'resolved', note: '  Called the contact; fixed in 1.4  ' }),
+      p({ feedbackId: 'f-1' }),
+    )) as { status: number }
+    expect(res.status).toBe(202)
+    const arg = grpc.setFeedbackStatus.mock.calls[0][0]
+    expect(arg.note).toBe('Called the contact; fixed in 1.4')
+    expect(arg.idempotencyKey).toBe('feedback-status:f-1:resolved')
+  })
+
+  test('400 when resolving without a note (required-on-resolve policy)', async () => {
+    const res = (await feedbackStatusPost(
+      req({ status: 'resolved' }),
+      p({ feedbackId: 'f-1' }),
+    )) as {
+      status: number
+    }
+    expect(res.status).toBe(400)
+    expect(grpc.setFeedbackStatus).not.toHaveBeenCalled()
+  })
+
+  test('400 when resolving with a whitespace-only note', async () => {
+    const res = (await feedbackStatusPost(
+      req({ status: 'resolved', note: '   ' }),
+      p({ feedbackId: 'f-1' }),
+    )) as { status: number }
+    expect(res.status).toBe(400)
+    expect(grpc.setFeedbackStatus).not.toHaveBeenCalled()
+  })
+
+  test('acknowledge stays note-free (one-click)', async () => {
+    const res = (await feedbackStatusPost(
+      req({ status: 'acknowledged' }),
+      p({ feedbackId: 'f-1' }),
+    )) as { status: number }
+    expect(res.status).toBe(202)
+    const arg = grpc.setFeedbackStatus.mock.calls[0][0]
+    expect(arg.note).toBeUndefined()
+  })
 })

@@ -3,10 +3,12 @@
 import React, { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useFeedbackQueue } from '@/hooks/queries/useFeedbackQueue'
+import type { FeedbackWithContact } from '@/hooks/queries/useFeedbackQueue'
 import { useSetFeedbackStatus } from '@/hooks/mutations/useMarketingCommands'
 import type { Feedback } from '@/payload-types'
 import { formatDateShort } from '@/lib/formatters'
 import { ContactPeekModal } from './ContactPeekModal'
+import { ResolveFeedbackModal } from './ResolveFeedbackModal'
 import styles from './styles.module.css'
 
 const STATUS_OPTIONS = [
@@ -29,15 +31,18 @@ export const FeedbackQueueView: React.FC = () => {
   const [status, setStatus] = useState('')
   const [page, setPage] = useState(1)
   const [peekContactId, setPeekContactId] = useState<string | null>(null)
+  const [resolveTarget, setResolveTarget] = useState<FeedbackWithContact | null>(null)
 
   const filters = useMemo(() => ({ status: status || undefined, page }), [status, page])
   const { data, isLoading, isError } = useFeedbackQueue(filters)
   const setStatusMutation = useSetFeedbackStatus()
   const docs = data?.docs ?? []
 
-  const advance = (feedbackId: string | null | undefined, to: 'acknowledged' | 'resolved') => {
+  // Acknowledge is a one-click nudge; Resolve requires a note (see
+  // ResolveFeedbackModal), matching the approval flows' comment requirement.
+  const acknowledge = (feedbackId: string | null | undefined) => {
     if (!feedbackId) return
-    setStatusMutation.mutate({ feedbackId, status: to })
+    setStatusMutation.mutate({ feedbackId, status: 'acknowledged' })
   }
 
   const statusBadge = (s: Feedback['status']) => <span className={styles.badge}>{s ?? 'new'}</span>
@@ -87,6 +92,7 @@ export const FeedbackQueueView: React.FC = () => {
                   <th>Type</th>
                   <th>Feedback</th>
                   <th>Status</th>
+                  <th>Resolution</th>
                   <th>Received</th>
                   <th>Actions</th>
                 </tr>
@@ -94,13 +100,13 @@ export const FeedbackQueueView: React.FC = () => {
               <tbody>
                 {isLoading && docs.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className={styles.emptyCell}>
+                    <td colSpan={7} className={styles.emptyCell}>
                       Loading feedback…
                     </td>
                   </tr>
                 ) : docs.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className={styles.emptyCell}>
+                    <td colSpan={7} className={styles.emptyCell}>
                       No feedback matches the current filter.
                     </td>
                   </tr>
@@ -123,12 +129,21 @@ export const FeedbackQueueView: React.FC = () => {
                       <td>{fb.feedbackType ?? '—'}</td>
                       <td>{fb.body ?? '—'}</td>
                       <td>{statusBadge(fb.status)}</td>
+                      <td>
+                        {fb.statusNote ? (
+                          <span className={styles.noteCell} title={fb.statusNote}>
+                            {fb.statusNote}
+                          </span>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
                       <td>{fb.receivedAt ? formatDateShort(fb.receivedAt) : '—'}</td>
                       <td>
                         <button
                           type="button"
                           className={styles.pageButton}
-                          onClick={() => advance(fb.feedbackId, 'acknowledged')}
+                          onClick={() => acknowledge(fb.feedbackId)}
                           disabled={setStatusMutation.isPending || fb.status !== 'new'}
                         >
                           Acknowledge
@@ -136,7 +151,7 @@ export const FeedbackQueueView: React.FC = () => {
                         <button
                           type="button"
                           className={styles.pageButton}
-                          onClick={() => advance(fb.feedbackId, 'resolved')}
+                          onClick={() => setResolveTarget(fb)}
                           disabled={setStatusMutation.isPending || fb.status === 'resolved'}
                         >
                           Resolve
@@ -175,6 +190,10 @@ export const FeedbackQueueView: React.FC = () => {
 
       {peekContactId && (
         <ContactPeekModal contactId={peekContactId} onClose={() => setPeekContactId(null)} />
+      )}
+
+      {resolveTarget && (
+        <ResolveFeedbackModal feedback={resolveTarget} onClose={() => setResolveTarget(null)} />
       )}
     </div>
   )

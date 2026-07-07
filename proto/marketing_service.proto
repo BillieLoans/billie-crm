@@ -156,6 +156,7 @@ message SetFeedbackStatusRequest {
   string feedback_id = 2;
   string status = 3;                // new | acknowledged | resolved
   string actor = 4;
+  string note = 5;                  // what was done — required by the CRM when resolving
 }
 
 message SetFeedbackStatusResponse {

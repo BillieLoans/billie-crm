@@ -86,8 +86,16 @@ export const AssignBatchSchema = z.object({
 
 export type AssignBatch = z.infer<typeof AssignBatchSchema>
 
-export const SetFeedbackStatusSchema = z.object({
-  status: z.enum(['new', 'acknowledged', 'resolved']),
-})
+export const SetFeedbackStatusSchema = z
+  .object({
+    status: z.enum(['new', 'acknowledged', 'resolved']),
+    // What was done with the feedback. Required when resolving (matches the
+    // approval flows' comment requirement); optional on acknowledge.
+    note: z.string().max(2000).optional(),
+  })
+  .refine((d) => d.status !== 'resolved' || !!d.note?.trim(), {
+    message: 'A resolution note is required when resolving feedback',
+    path: ['note'],
+  })
 
 export type SetFeedbackStatus = z.infer<typeof SetFeedbackStatusSchema>

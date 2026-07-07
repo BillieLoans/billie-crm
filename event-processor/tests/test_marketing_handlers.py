@@ -275,3 +275,30 @@ async def test_referral_attributed_sets_referred_by_on_referee(mock_pool):
     audit_row = mock_pool.last_insert("contact_audit_log")
     assert audit_row["contact_id_string"] == "c-1"
     assert json.loads(audit_row["detail"])["referrer_contact_id"] == "c-ref"
+
+
+async def test_feedback_status_changed_stores_resolution_note(mock_pool) -> None:
+    # `note` (what was done) travels on the status event; extra="allow" on the
+    # SDK model means it parses even before the SDK adds the field explicitly.
+    mock_pool.set_fetchval("c-1")
+    await handle_feedback_status_changed(mock_pool, _parsed("feedback.status.changed.v1", {
+        "feedback_id": "f-1", "status": "resolved", "actor": "ops",
+        "changed_at": "2026-07-07T00:00:00+00:00",
+        "note": "Called the contact; fixed in release 1.4"}))
+
+    updated = mock_pool.last_update("feedback")
+    assert updated["status"] == "resolved"
+    assert updated["status_note"] == "Called the contact; fixed in release 1.4"
+
+
+async def test_feedback_status_changed_without_note_leaves_column_untouched(mock_pool) -> None:
+    # Pre-note events (and pre-note SDK models) keep working — status_note is
+    # omitted from the UPDATE rather than nulled.
+    mock_pool.set_fetchval("c-1")
+    await handle_feedback_status_changed(mock_pool, _parsed("feedback.status.changed.v1", {
+        "feedback_id": "f-1", "status": "acknowledged", "actor": "ops",
+        "changed_at": "2026-07-07T00:00:00+00:00"}))
+
+    updated = mock_pool.last_update("feedback")
+    assert updated["status"] == "acknowledged"
+    assert "status_note" not in updated
