@@ -143,6 +143,8 @@ Auth: internal network (Fly private networking), same posture as the accounting-
 
 ## 3. Customer state projection (new module in `customerService`)
 
+> **Open at sign-off (A4, discuss):** this added workstream — the governed Customer State Model driving stage and loan status — is under discussion; scope and sequencing may change. Per §10, it can slip to phase 3 without blocking the rest of phase 2.
+
 Implements the governed A × B\* × C × L tuple as a derived projection — platform-owned, exactly per the state model's D14 (C and L are projections over agreement records) and R4 (events move states; treatments read states).
 
 Persists `customer.customer_state` (canonical_id, `a_level`, `b_star`, `c_history`, `live`, current_application_ref, cause_event_id, updated_at); emits **`customer.state.changed.v1`** (added to the `customers` SDK package) carrying the full tuple + cause.
@@ -151,7 +153,7 @@ Persists `customer.customer_state` (canonical_id, `a_level`, `b_star`, `c_histor
 |---|---|---|
 | A (sticky, rises only) | `customer.changed.v1` → A2; OTP signal → A3; `customer.verified.v1` / IDV result → A4 | **Gap (flagged decision):** no explicit OTP-pass event exists today. Either billieChat emits one (preferred; small addition) or A3 is inferred from fields on `customer.changed.v1`. Resolve during phase-2 planning with the billieChat owner. |
 | B\* (per-application, mortal) | `applicationDetail_changed` → B0; `final_credit_decision` → B1/B2; `loan_agreement_accepted` → B3; `account.disbursed.v1` → B4 then concludes to B– (L carries on) | **Bx (exit)**: no abandonment event exists; a platform-side timeout sweep marks applications inactive for N days as Bx (N configurable, default 30). Terminal stages (B2, Bx) never persist as B\* (per D9a). |
-| C (sticky) + L | `account.created.v1`/`account.disbursed.v1` → L=true; `account.closed.v1` closure_reason: `PAID_OFF` → C-P; `WRITTEN_OFF` → C-N (dominant, sticky); `ADMIN_CLOSED` → C-N by default (settled-short semantics) | The accounts SDK lacks a `SETTLED_SHORT` closure reason; `ADMIN_CLOSED`→C-N is the conservative default mapping, configurable. Adding `SETTLED_SHORT` to the SDK is noted as future work. |
+| C (sticky) + L | `account.created.v1`/`account.disbursed.v1` → L=true; `account.closed.v1` closure_reason: `PAID_OFF` → C-P; `WRITTEN_OFF` → C-N (dominant, sticky); `ADMIN_CLOSED` → **C-P by default (win-back-eligible), surfaced for review** | **Changed at sign-off (B2, 7 Jul 2026):** admin closures must not default to negative — C-N would silently drop genuine former customers out of the win-back segment. Settled-short accounts are the exception, not the rule; they get C-N properly at source once the accounts SDK gains a `SETTLED_SHORT` closure reason (phase 3). Until then, every `ADMIN_CLOSED` mapping raises a review metric/flag so credit can reclassify individual accounts. |
 
 **Testing gift from the state model:** the projection ships with a property test asserting it can only ever emit tuples inside the 28 feasible cells (invariants I1–I5 from §5A of the model), and a metric/alert when a ◉ control-failure cell (concurrent applicant, returning non-performed applicant, etc.) is observed — those cells are representable by design and their observation is a control signal.
 
@@ -171,6 +173,8 @@ The stage on a contact is **derived, never hand-edited** — computed by marketi
 | 6 | Lead | contact observed |
 
 **Advocate is a flag overlay, not a stage** (per D16: type tests are attributes): `advocate = true` when ≥1 attributed referral reached Customer. The CRM grid can still filter/present it as a pseudo-stage.
+
+> **Open at sign-off (A2, discuss):** whether staff get a manual stage override or an "Other / needs review" stage, so we're never locked out of reclassifying as new situations emerge. Derivation-only stands until that discussion lands; if an override is approved it will be an explicit, audited command (an attribute overlay the derivation respects), never a hand-edit of the derived field. Note the general `attributes` field already absorbs unexpected campaign data — the gap is specifically stage correction.
 
 Loan-status mirror (minimal, per brief §3): `approved` (B1) / `disbursed` (B4 or L) / `repaid` (C-P ∧ ¬L). No amounts — structurally impossible (§2.2).
 
@@ -302,7 +306,7 @@ Customer-state projection in customerService + `customer.state.changed.v1` + lif
 *Note: the state projection and the notification work are independent streams — run in parallel if team capacity allows; otherwise state projection may slip to phase 3 without blocking anything else in phase 2.*
 
 **Phase 3 — Harden and complete:**
-WhatsApp provider client + webhook; DSR tooling complete (erase incl. XDEL sweep + subject-access export); one-click CSV exports; audit hardening review; backup restore test for `marketing.*`; `SETTLED_SHORT` SDK addition (with `ADMIN_CLOSED` mapping revisit).
+WhatsApp provider client + webhook; DSR tooling complete (erase incl. XDEL sweep + subject-access export); one-click CSV exports; audit hardening review; backup restore test for `marketing.*`; `SETTLED_SHORT` SDK addition so settled-short closures map to C-N at source (`ADMIN_CLOSED` itself stays win-back-eligible per the B2 sign-off change, §3).
 
 ---
 
@@ -327,10 +331,26 @@ WhatsApp provider client + webhook; DSR tooling complete (erase incl. XDEL sweep
 
 ## 13. Flagged decisions (owners, defaults)
 
-| # | Decision | Default in this spec | Owner to confirm |
-|---|---|---|---|
-| 1 | OTP-pass event from billieChat vs A3 inference | billieChat emits explicit event | billieChat owner, phase-2 planning |
-| 2 | WhatsApp before or after cutover | after (phase 3), SMS-first cutover | marketing/product |
-| 3 | Referral URL resolution on website | `/r/{code}` redirect → form `ref` param | web owner |
-| 4 | `ADMIN_CLOSED` → C-N mapping | conservative C-N until `SETTLED_SHORT` exists | product/credit, phase 3 |
-| 5 | Bx timeout window | 30 days inactivity | product |
+| # | Decision | Default in this spec | Owner to confirm | Status (sign-off, 7 Jul 2026) |
+|---|---|---|---|---|
+| 1 | OTP-pass event from billieChat vs A3 inference | billieChat emits explicit event | billieChat owner, phase-2 planning | open — awareness item (Part C), billieChat owner to confirm |
+| 2 | WhatsApp before or after cutover | after (phase 3), SMS-first cutover | marketing/product | in discussion (B1) — default stands until resolved |
+| 3 | Referral URL resolution on website | `/r/{code}` redirect → form `ref` param | web owner | open — awareness item (Part C), web owner to confirm |
+| 4 | `ADMIN_CLOSED` mapping | ~~conservative C-N~~ → **C-P (win-back-eligible) + review flag** | product/credit, phase 3 | **changed (B2)** — incorporated in §3; `SETTLED_SHORT` at source remains phase 3 |
+| 5 | Bx timeout window | 30 days inactivity | product | **approved as default (B3)** |
+| 6 | Manual stage override / "Other — needs review" stage | none — stage strictly derived (§4) | product + design | in discussion (A2) |
+| 7 | Customer State Model + state-projection workstream | new module in customerService (§3) | product/platform | in discussion (A4) |
+
+## 14. Sign-off record (7 July 2026)
+
+Design sign-off sheet reviewed against the build brief; decisions returned by Nichola Patterson:
+
+| Item | Outcome |
+|---|---|
+| A1 — marketingService masters the data; Payload is read-only view + command screens | **Approved** |
+| A2 — stage derived, never hand-edited (override / "needs review" stage proposed) | **Discuss** — recorded in §4 and decision #6; derivation-only stands meanwhile |
+| A3 — no Apps Script integration; all sends via platform notificationService; cutover + backfill | **Approved** |
+| A4 — Customer State Model + state-projection workstream | **Discuss** — recorded in §3 and decision #7 |
+| B1 — WhatsApp after cutover (phase 3) | **Discuss** — decision #2; default stands until resolved |
+| B2 — admin-closed loans treated as written-off/negative | **Changed** — now C-P (win-back-eligible) + review flag; §3, decision #4 |
+| B3 — abandoned application dead after 30 days | **Approved as default** — decision #5 |
