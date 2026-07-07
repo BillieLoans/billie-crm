@@ -8,6 +8,12 @@ service MarketingService {
   rpc SetConsent(SetConsentRequest) returns (CommandResponse);
   rpc LogInteraction(LogInteractionRequest) returns (CommandResponse);
   rpc EraseContact(EraseContactRequest) returns (CommandResponse);
+
+  // Manual contact<->customer linking from the CRM (staff command). The
+  // matcher links automatically on mobile/email; these cover the cases it
+  // can't, and undo. Emitted events carry match_basis/reason = "manual".
+  rpc LinkContact(LinkContactRequest) returns (CommandResponse);
+  rpc UnlinkContact(UnlinkContactRequest) returns (CommandResponse);
   rpc SubmitFeedback(SubmitFeedbackRequest) returns (SubmitFeedbackResponse);
   rpc CreateBatch(CreateBatchRequest) returns (CreateBatchResponse);
   rpc AssignBatch(AssignBatchRequest) returns (AssignBatchResponse);
@@ -83,6 +89,19 @@ message LogInteractionRequest {
 }
 
 message EraseContactRequest {
+  string idempotency_key = 1;
+  string contact_id = 2;
+  string actor = 3;
+}
+
+message LinkContactRequest {
+  string idempotency_key = 1;
+  string contact_id = 2;
+  string customer_id = 3;
+  string actor = 4;
+}
+
+message UnlinkContactRequest {
   string idempotency_key = 1;
   string contact_id = 2;
   string actor = 3;

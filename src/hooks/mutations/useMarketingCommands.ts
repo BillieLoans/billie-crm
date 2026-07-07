@@ -104,6 +104,41 @@ export function useSetFeedbackStatus() {
   })
 }
 
+export interface LinkContactVars {
+  contactId: string
+  customerId: string
+}
+
+/** Manually link a contact to a customer (marketing detail view). */
+export function useLinkContact() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (vars: LinkContactVars) =>
+      postCommand(`/api/marketing/contacts/${encodeURIComponent(vars.contactId)}/link`, {
+        customer_id: vars.customerId,
+      }),
+    onSuccess: () => {
+      toast.success('Contact linked')
+      qc.invalidateQueries({ queryKey: ['marketing-contacts'] })
+    },
+    onError: (e: Error) => toast.error('Failed to link contact', { description: e.message }),
+  })
+}
+
+/** Remove a contact's customer link (marketing detail view). */
+export function useUnlinkContact() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (contactId: string) =>
+      postCommand(`/api/marketing/contacts/${encodeURIComponent(contactId)}/unlink`),
+    onSuccess: () => {
+      toast.success('Contact unlinked')
+      qc.invalidateQueries({ queryKey: ['marketing-contacts'] })
+    },
+    onError: (e: Error) => toast.error('Failed to unlink contact', { description: e.message }),
+  })
+}
+
 export interface CreateContactVars {
   first_name?: string
   email?: string

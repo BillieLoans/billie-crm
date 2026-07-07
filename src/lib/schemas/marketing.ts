@@ -86,6 +86,12 @@ export const AssignBatchSchema = z.object({
 
 export type AssignBatch = z.infer<typeof AssignBatchSchema>
 
+export const LinkContactSchema = z.object({
+  customer_id: z.string().min(1).max(128),
+})
+
+export type LinkContact = z.infer<typeof LinkContactSchema>
+
 export const SetFeedbackStatusSchema = z
   .object({
     status: z.enum(['new', 'acknowledged', 'resolved']),
