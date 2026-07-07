@@ -278,6 +278,16 @@ async def handle_contact_interaction_logged(pool: asyncpg.Pool, event: Any) -> N
 async def handle_contact_stage_changed(pool: asyncpg.Pool, event: Any) -> None:
     """Handle ``contact.stage.changed.v1`` — flip the ``derived_stage`` column."""
     p = event.payload
+    # Symmetric naive-downgrade guard (mirrors marketingService apply_stage):
+    # only the authoritative state derivation (basis="state") may move a
+    # protected stage back to lead/waitlist — a stray naive event must not
+    # make this projection disagree with the canonical one.
+    if getattr(p, "basis", None) != "state" and p.stage in ("lead", "waitlist"):
+        current = await pool.fetchval(
+            "SELECT derived_stage FROM contacts WHERE contact_id = $1", p.contact_id
+        )
+        if current in ("invited", "applicant", "customer", "former_customer", "closed"):
+            return
     await update_by_key(
         pool,
         "contacts",

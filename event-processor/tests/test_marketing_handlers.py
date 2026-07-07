@@ -338,3 +338,22 @@ async def test_stage_changed_without_loan_status_leaves_column_untouched(mock_po
         "changed_at": "2026-07-08T00:00:00+00:00"}))
     updated = mock_pool.last_update("contacts")
     assert "loan_status" not in updated
+
+
+async def test_stage_changed_naive_downgrade_refused_without_state_basis(mock_pool):
+    # Mirrors marketingService's apply_stage guard: a naive lead/waitlist event
+    # must not downgrade a protected stage — only basis="state" may.
+    mock_pool.set_fetchval("customer")  # current derived_stage
+    await handle_contact_stage_changed(mock_pool, _parsed("contact.stage.changed.v1", {
+        "contact_id": "c-1", "stage": "waitlist",
+        "changed_at": "2026-07-08T00:00:00+00:00"}))
+    assert mock_pool.last_update("contacts") is None  # refused
+
+
+async def test_stage_changed_state_basis_may_downgrade(mock_pool):
+    mock_pool.set_fetchval("applicant")
+    await handle_contact_stage_changed(mock_pool, _parsed("contact.stage.changed.v1", {
+        "contact_id": "c-1", "stage": "waitlist", "basis": "state",
+        "changed_at": "2026-07-08T00:00:00+00:00"}))
+    updated = mock_pool.last_update("contacts")
+    assert updated["derived_stage"] == "waitlist"  # Bx abandonment — legitimate
