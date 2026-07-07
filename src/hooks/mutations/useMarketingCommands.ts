@@ -33,7 +33,8 @@ export interface CreateBatchVars {
 export function useCreateBatch() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (vars: CreateBatchVars) => postCommand('/api/marketing/batches', vars),
+    mutationFn: (vars: CreateBatchVars) =>
+      postCommand<{ batchId: string; eventId: string }>('/api/marketing/batches', vars),
     onSuccess: () => {
       toast.success('Batch created')
       qc.invalidateQueries({ queryKey: ['marketing-batches'] })

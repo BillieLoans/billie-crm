@@ -98,3 +98,4 @@ event-processor/src/billie_servicing/handlers/__pycache__
 event-processor/.venv/*
 
 .superpowers/
+.playwright-mcp/
