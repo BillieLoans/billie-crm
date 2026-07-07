@@ -16,6 +16,7 @@ import {
   useAssignBatch,
   useTriggerInvitations,
   useSetFeedbackStatus,
+  useCreateContact,
 } from '@/hooks/mutations/useMarketingCommands'
 
 function createWrapper() {
@@ -85,5 +86,25 @@ describe('useMarketingCommands', () => {
     const [url, init] = mockFetch().mock.calls[0]
     expect(url).toBe('/api/marketing/feedback/f-1/status')
     expect(JSON.parse(init.body)).toEqual({ status: 'acknowledged' })
+  })
+
+  test('useCreateContact POSTs the contact body to /api/marketing/contacts', async () => {
+    const { wrapper } = createWrapper()
+    const { result } = renderHook(() => useCreateContact(), { wrapper })
+    await act(async () => {
+      await result.current.mutateAsync({
+        mobile: '+61403320117',
+        first_name: 'Test',
+        source: 'other',
+      })
+    })
+    const [url, init] = mockFetch().mock.calls[0]
+    expect(url).toBe('/api/marketing/contacts')
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(init.body)).toEqual({
+      mobile: '+61403320117',
+      first_name: 'Test',
+      source: 'other',
+    })
   })
 })

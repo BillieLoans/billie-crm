@@ -415,3 +415,140 @@
   font-size: 12px;
   white-space: nowrap;
 }
+
+/* --- New-contact modal (mirrors the LoanAccountServicing modal styles) --- */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: var(--theme-bg, white);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+}
+
+.modalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--theme-elevation-100);
+}
+
+.modalTitle {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.closeBtn {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: var(--theme-elevation-500);
+  line-height: 1;
+}
+
+.closeBtn:hover {
+  color: var(--theme-elevation-800);
+}
+
+.modalBody {
+  padding: 1.5rem;
+}
+
+.formGroup {
+  margin-bottom: 1rem;
+}
+
+.formLabel {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin-bottom: 0.375rem;
+  color: var(--theme-elevation-700);
+}
+
+.formInput,
+.formSelect {
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--theme-elevation-200);
+  border-radius: 6px;
+  font-size: 0.875rem;
+}
+
+.formInput:focus,
+.formSelect:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.formHint {
+  font-size: 0.75rem;
+  color: var(--theme-elevation-500);
+  margin-top: 0.25rem;
+}
+
+.modalFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--theme-elevation-100);
+}
+
+.btnCancel {
+  padding: 0.625rem 1.25rem;
+  background: var(--theme-elevation-100);
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.btnCancel:hover {
+  background: var(--theme-elevation-200);
+}
+
+.btnSubmit {
+  padding: 0.625rem 1.25rem;
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.btnSubmit:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.btnSubmit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.errorMessage {
+  background: #fee2e2;
+  color: #991b1b;
+  padding: 0.75rem;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+}
