@@ -55,3 +55,13 @@ The Apps Script trigger can be re-enabled at any point before step 5; the
 backfill is additive and idempotent, so no data cleanup is needed to roll
 back. After step 5, rollback means re-issuing credentials — prefer fixing
 forward through the platform pipeline.
+
+## Deferred items (explicit — decided 8 Jul 2026 review passes)
+
+| Item | Why deferred | Where it lands |
+|---|---|---|
+| Batch send-history persistence (per-batch invited/skipped counts on the projection, not just the toast) | Needs a batch-outcome event + alembic + CRM migration; interactions already record per-contact `message_out` | Phase 3, with the campaign-measurement work |
+| Collections `stop_contact` ↔ marketing suppression bridge (customer-level suppression consulted for contact-addressed sends) | Cross-service design decision — suppression is keyed by customer_id in collections, contact_id in marketing; needs the collections owner | Raise with collections owner; candidate: dispatcher gate checks linked customer suppression |
+| Grid keyboard navigation (j/k/Enter, per AccountsBrowser) | UX polish, mouse + name-link paths work | Next UI pass |
+| XDEL stream sweep + subject-access export (full DSR) | Already-governed phase-3 scope (spec §10); projection + feedback + evidence redaction is DONE | Phase 3 |
+| WhatsApp provider + templates | B1 decision — external Meta lead time | Phase 3 (start template approval now) |
