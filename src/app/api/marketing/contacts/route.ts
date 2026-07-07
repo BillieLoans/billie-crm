@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
   if (sp.get('source')) where.source = { equals: sp.get('source') }
   if (sp.get('city')) where.city = { like: sp.get('city') }
   if (sp.get('batch')) where.batchId = { equals: sp.get('batch') }
+  if (sp.get('needs_review') === 'true') where.needsReview = { equals: true }
   if (sp.get('q')) {
     where.or = [
       { firstName: { like: sp.get('q') } },

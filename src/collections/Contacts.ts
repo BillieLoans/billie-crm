@@ -28,7 +28,16 @@ export const Contacts: CollectionConfig = {
     {
       name: 'source',
       type: 'select',
-      options: ['meta', 'google', 'campus', 'referral', 'social_dm', 'ai_search', 'organic', 'other'],
+      options: [
+        'meta',
+        'google',
+        'campus',
+        'referral',
+        'social_dm',
+        'ai_search',
+        'organic',
+        'other',
+      ],
       admin: { readOnly: true },
     },
     { name: 'utm', type: 'json', admin: { readOnly: true } },
@@ -46,10 +55,23 @@ export const Contacts: CollectionConfig = {
     { name: 'batchId', type: 'text', admin: { readOnly: true } },
     { name: 'panelMember', type: 'checkbox', admin: { readOnly: true } },
     {
+      name: 'needsReview',
+      type: 'checkbox',
+      index: true,
+      admin: {
+        readOnly: true,
+        description:
+          'A2 flag (attributes.needs_review mirror) — parked for staff review; excluded from invitation sends',
+      },
+    },
+    {
       name: 'customerId',
       type: 'text',
       index: true,
-      admin: { readOnly: true, description: 'Canonical platform customer id once linked (one-way)' },
+      admin: {
+        readOnly: true,
+        description: 'Canonical platform customer id once linked (one-way)',
+      },
     },
     { name: 'linkBasis', type: 'text', admin: { readOnly: true } },
     { name: 'linkedAt', type: 'date', admin: { readOnly: true } },

@@ -96,6 +96,7 @@ const MarketingContactsGrid: React.FC = () => {
   const [source, setSource] = useState('')
   const [city, setCity] = useState('')
   const [batch, setBatch] = useState('')
+  const [needsReview, setNeedsReview] = useState('')
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [assignTarget, setAssignTarget] = useState('')
@@ -110,9 +111,10 @@ const MarketingContactsGrid: React.FC = () => {
       source: source || undefined,
       city: city || undefined,
       batch: batch || undefined,
+      needs_review: needsReview || undefined,
       page,
     }),
-    [q, stage, source, city, batch, page],
+    [q, stage, source, city, batch, needsReview, page],
   )
 
   const { data, isLoading, isError } = useMarketingContacts(filters)
@@ -307,6 +309,21 @@ const MarketingContactsGrid: React.FC = () => {
             ))}
           </select>
         </div>
+
+        <div className={styles.filterGroup}>
+          <label className={styles.filterLabel} htmlFor="marketing-review-filter">
+            Review
+          </label>
+          <select
+            id="marketing-review-filter"
+            className={styles.filterSelect}
+            value={needsReview}
+            onChange={onFilter(setNeedsReview)}
+          >
+            <option value="">All contacts</option>
+            <option value="true">⚑ Needs review</option>
+          </select>
+        </div>
       </div>
 
       {/* Assign-to-batch bar — always present (fixed layout); controls disable
@@ -377,6 +394,7 @@ const MarketingContactsGrid: React.FC = () => {
                   <th>Stage</th>
                   <th>Source</th>
                   <th>Batch</th>
+                  <th>Flags</th>
                   <th>Consent</th>
                   <th>Updated</th>
                 </tr>
@@ -384,13 +402,13 @@ const MarketingContactsGrid: React.FC = () => {
               <tbody>
                 {isLoading && docs.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className={styles.emptyCell}>
+                    <td colSpan={9} className={styles.emptyCell}>
                       Loading contacts…
                     </td>
                   </tr>
                 ) : docs.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className={styles.emptyCell}>
+                    <td colSpan={9} className={styles.emptyCell}>
                       No contacts match the current filters.
                     </td>
                   </tr>
@@ -428,6 +446,18 @@ const MarketingContactsGrid: React.FC = () => {
                       </td>
                       <td>{contact.source ? sourceLabel(contact.source) : '—'}</td>
                       <td>{batchNameFor(contact.batchId)}</td>
+                      <td>
+                        {contact.needsReview ? (
+                          <span
+                            className={`${styles.badge} ${styles.badgeConsentDeclined}`}
+                            title="Parked for review — excluded from invitation sends"
+                          >
+                            ⚑ Review
+                          </span>
+                        ) : (
+                          <span className={styles.placeholder}>—</span>
+                        )}
+                      </td>
                       <td>
                         <ConsentBadge consent={contact.consent} />
                       </td>

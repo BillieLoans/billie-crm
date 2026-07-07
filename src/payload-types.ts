@@ -1580,6 +1580,10 @@ export interface Contact {
   batchId?: string | null;
   panelMember?: boolean | null;
   /**
+   * A2 flag (attributes.needs_review mirror) — parked for staff review; excluded from invitation sends
+   */
+  needsReview?: boolean | null;
+  /**
    * Canonical platform customer id once linked (one-way)
    */
   customerId?: string | null;
@@ -2494,6 +2498,7 @@ export interface ContactsSelect<T extends boolean = true> {
   waitlistPosition?: T;
   batchId?: T;
   panelMember?: T;
+  needsReview?: T;
   customerId?: T;
   linkBasis?: T;
   linkedAt?: T;

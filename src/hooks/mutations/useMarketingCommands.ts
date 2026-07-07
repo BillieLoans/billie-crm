@@ -139,6 +139,29 @@ export function useUnlinkContact() {
   })
 }
 
+export interface SetReviewFlagVars {
+  contactId: string
+  needsReview: boolean
+  reason?: string
+}
+
+/** A2: park/unpark a contact for review (excluded from sends while set). */
+export function useSetReviewFlag() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (vars: SetReviewFlagVars) =>
+      postCommand(`/api/marketing/contacts/${encodeURIComponent(vars.contactId)}/review-flag`, {
+        needs_review: vars.needsReview,
+        ...(vars.reason ? { reason: vars.reason } : {}),
+      }),
+    onSuccess: (_res, vars) => {
+      toast.success(vars.needsReview ? 'Contact flagged for review' : 'Review flag cleared')
+      qc.invalidateQueries({ queryKey: ['marketing-contacts'] })
+    },
+    onError: (e: Error) => toast.error('Failed to update review flag', { description: e.message }),
+  })
+}
+
 export interface CreateContactVars {
   first_name?: string
   email?: string

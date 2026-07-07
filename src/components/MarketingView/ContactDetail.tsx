@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import { useMarketingContact, marketingContactQueryKey } from '@/hooks/queries/useMarketingContact'
 import { useContactReferrals } from '@/hooks/queries/useContactReferrals'
 import { useFeedbackQueue } from '@/hooks/queries/useFeedbackQueue'
-import { useUnlinkContact } from '@/hooks/mutations/useMarketingCommands'
+import { useSetReviewFlag, useUnlinkContact } from '@/hooks/mutations/useMarketingCommands'
 import { LinkCustomerModal } from './LinkCustomerModal'
 import type { ContactAuditLog, Interaction } from '@/payload-types'
 import { formatDateMedium } from '@/lib/formatters'
@@ -125,7 +125,10 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contactId }) => {
   const [noteText, setNoteText] = useState('')
   const [showLinkModal, setShowLinkModal] = useState(false)
   const [showUnlinkConfirm, setShowUnlinkConfirm] = useState(false)
+  const [showFlagModal, setShowFlagModal] = useState(false)
+  const [flagReason, setFlagReason] = useState('')
   const unlink = useUnlinkContact()
+  const reviewFlag = useSetReviewFlag()
 
   const logNoteMutation = useMutation({
     mutationFn: logNote,
@@ -293,6 +296,42 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contactId }) => {
             </div>
           </Panel>
 
+          {/* A2: needs-review flag — parked contacts receive no sends. */}
+          <Panel title="Review">
+            <div className={styles.panelRow}>
+              <span className={styles.panelRowLabel}>Status</span>
+              <span className={styles.panelRowValue}>
+                {contact.needsReview ? '⚑ Needs review' : '—'}
+              </span>
+            </div>
+            <div className={styles.panelRow}>
+              <span className={styles.panelRowLabel}>Reason</span>
+              <span className={styles.panelRowValue}>
+                {(contact.attributes as Record<string, unknown> | null)?.[
+                  'needs_review_reason'
+                ]?.toString() ?? '—'}
+              </span>
+            </div>
+            <div className={styles.panelButtonRow}>
+              <button
+                type="button"
+                className={styles.pageButton}
+                onClick={() => setShowFlagModal(true)}
+                disabled={!!contact.needsReview || reviewFlag.isPending}
+              >
+                Flag for review…
+              </button>
+              <button
+                type="button"
+                className={styles.pageButton}
+                onClick={() => reviewFlag.mutate({ contactId, needsReview: false })}
+                disabled={!contact.needsReview || reviewFlag.isPending}
+              >
+                {reviewFlag.isPending ? 'Saving…' : 'Clear flag'}
+              </button>
+            </div>
+          </Panel>
+
           <Panel title="Consent history">
             {consentHistory.length === 0 ? (
               <div className={styles.panelEmpty}>—</div>
@@ -381,6 +420,71 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contactId }) => {
           contactName={contact.firstName ?? 'this contact'}
           onClose={() => setShowLinkModal(false)}
         />
+      )}
+
+      {showFlagModal && (
+        <div className={styles.modalOverlay} onClick={() => setShowFlagModal(false)}>
+          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h2 className={styles.modalTitle}>Flag for review</h2>
+              <button
+                type="button"
+                className={styles.closeBtn}
+                onClick={() => setShowFlagModal(false)}
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className={styles.modalBody}>
+              <p className={styles.formHint}>
+                While flagged, this contact is excluded from every invitation send. The flag and
+                reason are audited.
+              </p>
+              <div className={styles.formGroup}>
+                <label className={styles.formLabel} htmlFor="review-flag-reason">
+                  Reason (optional)
+                </label>
+                <textarea
+                  id="review-flag-reason"
+                  className={styles.noteTextarea}
+                  rows={3}
+                  value={flagReason}
+                  onChange={(e) => setFlagReason(e.target.value)}
+                  placeholder="e.g. Possible duplicate of another contact — confirm before messaging"
+                  maxLength={500}
+                />
+              </div>
+            </div>
+            <div className={styles.modalFooter}>
+              <button
+                type="button"
+                className={styles.btnCancel}
+                onClick={() => setShowFlagModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={styles.btnSubmit}
+                onClick={() =>
+                  reviewFlag.mutate(
+                    { contactId, needsReview: true, reason: flagReason.trim() || undefined },
+                    {
+                      onSettled: () => {
+                        setShowFlagModal(false)
+                        setFlagReason('')
+                      },
+                    },
+                  )
+                }
+                disabled={reviewFlag.isPending}
+              >
+                {reviewFlag.isPending ? 'Flagging…' : 'Flag for review'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {showUnlinkConfirm && (

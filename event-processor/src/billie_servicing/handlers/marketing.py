@@ -102,8 +102,12 @@ async def handle_contact_updated(pool: asyncpg.Pool, event: Any) -> None:
         "channel_preference": p.channel_preference,
     }
     changed = {k: v for k, v in candidate.items() if v is not None}
-    if p.attributes is not None:
-        changed["attributes"] = json.dumps(p.attributes)
+    # attributes is a DELTA (the command's patch) — merge it, never overwrite,
+    # or flag overlays (advocate, needs_review) would wipe each other.
+    attributes_patch = p.attributes if p.attributes else None
+    if attributes_patch and "needs_review" in attributes_patch:
+        # Mirror to the dedicated column so the grid can filter on it.
+        changed["needs_review"] = bool(attributes_patch.get("needs_review"))
 
     values = {"contact_id": p.contact_id, **changed, "updated_at": _now()}
     await upsert(
@@ -113,8 +117,18 @@ async def handle_contact_updated(pool: asyncpg.Pool, event: Any) -> None:
         values=values,
         insert_only_columns=[],
     )
+    if attributes_patch:
+        await merge_jsonb(
+            pool,
+            "contacts",
+            column="attributes",
+            key_column="contact_id",
+            key_value=p.contact_id,
+            patch=attributes_patch,
+        )
+    audit_fields = sorted(set(changed) | ({"attributes"} if attributes_patch else set()))
     await _audit(
-        pool, p.contact_id, event.event_type, p.actor, {"changed_fields": sorted(changed.keys())}
+        pool, p.contact_id, event.event_type, p.actor, {"changed_fields": audit_fields}
     )
 
 
@@ -269,7 +283,17 @@ async def handle_contact_stage_changed(pool: asyncpg.Pool, event: Any) -> None:
         "contacts",
         key_column="contact_id",
         key_value=p.contact_id,
-        values={"derived_stage": p.stage, "updated_at": _now()},
+        values={
+            "derived_stage": p.stage,
+            "updated_at": _now(),
+            # Loan-status mirror rides on state-projection-driven stage
+            # changes (spec §4); tolerant of pre-field SDK models.
+            **(
+                {"loan_status": getattr(p, "loan_status", None)}
+                if getattr(p, "loan_status", None) is not None
+                else {}
+            ),
+        },
     )
     await _audit(
         pool,
