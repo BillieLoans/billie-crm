@@ -3,6 +3,7 @@
 import React, { useState } from 'react'
 import { useSetFeedbackStatus } from '@/hooks/mutations/useMarketingCommands'
 import type { FeedbackWithContact } from '@/hooks/queries/useFeedbackQueue'
+import { useEscapeClose } from '@/hooks/useModalA11y'
 import styles from './styles.module.css'
 
 interface ResolveFeedbackModalProps {
@@ -34,9 +35,16 @@ export const ResolveFeedbackModal: React.FC<ResolveFeedbackModalProps> = ({
     )
   }
 
+  useEscapeClose(onClose)
+
   return (
     <div className={styles.modalOverlay} onClick={onClose}>
-      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+      <div
+        className={styles.modal}
+        role="dialog"
+        aria-modal="true"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className={styles.modalHeader}>
           <h2 className={styles.modalTitle}>Resolve feedback</h2>
           <button type="button" className={styles.closeBtn} onClick={onClose} aria-label="Close">
@@ -62,6 +70,7 @@ export const ResolveFeedbackModal: React.FC<ResolveFeedbackModalProps> = ({
               </label>
               <textarea
                 id="resolve-feedback-note"
+                autoFocus
                 className={styles.noteTextarea}
                 rows={4}
                 value={note}

@@ -17,7 +17,9 @@ interface SuppressionResponse {
 }
 
 async function fetchSuppression(customerId: string): Promise<SuppressionData | null> {
-  const res = await fetch(`/api/notifications/suppression?customerId=${encodeURIComponent(customerId)}`)
+  const res = await fetch(
+    `/api/notifications/suppression?customerId=${encodeURIComponent(customerId)}`,
+  )
   if (!res.ok) {
     throw new Error('Failed to fetch notification suppression state')
   }
@@ -39,9 +41,7 @@ export interface UseNotificationSuppressionResult {
   isExpired: boolean
 }
 
-export function useNotificationSuppression(
-  customerId: string,
-): UseNotificationSuppressionResult {
+export function useNotificationSuppression(customerId: string): UseNotificationSuppressionResult {
   const query = useQuery({
     queryKey: suppressionQueryKey(customerId),
     queryFn: () => fetchSuppression(customerId),

@@ -28,6 +28,7 @@ export type FailedActionType =
   | 'resume-hardship'
   | 'stop-contact'
   | 'advance-step'
+  | 'marketing-command'
 
 /**
  * A failed action that can be retried later.
@@ -54,28 +55,28 @@ export interface FailedAction {
 interface FailedActionsState {
   /** List of failed actions */
   actions: FailedAction[]
-  
+
   /** Add a failed action to the queue */
   addFailedAction: (
     type: FailedActionType,
     accountId: string,
     params: Record<string, unknown>,
     errorMessage: string,
-    accountLabel?: string
+    accountLabel?: string,
   ) => string
-  
+
   /** Remove a failed action (on success or dismiss) */
   removeAction: (id: string) => void
-  
+
   /** Increment retry count for an action */
   incrementRetryCount: (id: string) => void
-  
+
   /** Clear all failed actions */
   clearAll: () => void
-  
+
   /** Get count of non-expired actions */
   getActiveCount: () => number
-  
+
   /** Load actions from localStorage (call on mount) */
   loadFromStorage: () => void
 }
@@ -93,11 +94,11 @@ function isExpired(action: FailedAction): boolean {
  */
 function loadFromLocalStorage(): FailedAction[] {
   if (typeof window === 'undefined') return []
-  
+
   try {
     const stored = localStorage.getItem(FAILED_ACTIONS_STORAGE_KEY)
     if (!stored) return []
-    
+
     const actions: FailedAction[] = JSON.parse(stored)
     // Filter out expired actions
     return actions.filter((action) => !isExpired(action))
@@ -112,13 +113,11 @@ function loadFromLocalStorage(): FailedAction[] {
  */
 function saveToLocalStorage(actions: FailedAction[]): void {
   if (typeof window === 'undefined') return
-  
+
   try {
     // Only save non-expired actions, limited to max count
-    const validActions = actions
-      .filter((action) => !isExpired(action))
-      .slice(-MAX_FAILED_ACTIONS)
-    
+    const validActions = actions.filter((action) => !isExpired(action)).slice(-MAX_FAILED_ACTIONS)
+
     localStorage.setItem(FAILED_ACTIONS_STORAGE_KEY, JSON.stringify(validActions))
   } catch {
     // Ignore localStorage errors
@@ -127,55 +126,53 @@ function saveToLocalStorage(actions: FailedAction[]): void {
 
 /**
  * Zustand store for managing failed actions that can be retried.
- * 
+ *
  * Features:
  * - Persists to localStorage with TTL (24h)
  * - Limits storage to MAX_FAILED_ACTIONS items
  * - Filters expired actions on load
  * - Supports retry count tracking
- * 
+ *
  * SECURITY:
  * - Data is CLEARED when a different user logs in (see UserSessionGuard)
  * - This prevents User B from seeing User A's failed action queue
- * 
+ *
  * @see src/components/UserSessionGuard - clears this store on user change
- * 
+ *
  * @example
  * ```tsx
  * const { actions, addFailedAction, removeAction } = useFailedActionsStore()
- * 
+ *
  * // Add a failed action
  * addFailedAction('waive-fee', 'ACC-123', { amount: 10 }, 'Network error')
- * 
+ *
  * // Remove on success or dismiss
  * removeAction(actionId)
  * ```
  */
 export const useFailedActionsStore = create<FailedActionsState>((set, get) => ({
   actions: [],
-  
+
   addFailedAction: (type, accountId, params, errorMessage, accountLabel) => {
     // Check for existing action with same type and accountId to prevent duplicates
     const existingActions = get().actions
     const existingIndex = existingActions.findIndex(
-      (a) => a.type === type && a.accountId === accountId && !isExpired(a)
+      (a) => a.type === type && a.accountId === accountId && !isExpired(a),
     )
-    
+
     // If duplicate exists, update it instead of adding new
     if (existingIndex >= 0) {
       const existingAction = existingActions[existingIndex]
       set((state) => {
         const newActions = state.actions.map((a, i) =>
-          i === existingIndex
-            ? { ...a, errorMessage, timestamp: new Date().toISOString() }
-            : a
+          i === existingIndex ? { ...a, errorMessage, timestamp: new Date().toISOString() } : a,
         )
         saveToLocalStorage(newActions)
         return { actions: newActions }
       })
       return existingAction.id
     }
-    
+
     const id = nanoid()
     const action: FailedAction = {
       id,
@@ -187,16 +184,16 @@ export const useFailedActionsStore = create<FailedActionsState>((set, get) => ({
       timestamp: new Date().toISOString(),
       retryCount: 0,
     }
-    
+
     set((state) => {
       const newActions = [...state.actions, action].slice(-MAX_FAILED_ACTIONS)
       saveToLocalStorage(newActions)
       return { actions: newActions }
     })
-    
+
     return id
   },
-  
+
   removeAction: (id) => {
     set((state) => {
       const newActions = state.actions.filter((a) => a.id !== id)
@@ -204,26 +201,26 @@ export const useFailedActionsStore = create<FailedActionsState>((set, get) => ({
       return { actions: newActions }
     })
   },
-  
+
   incrementRetryCount: (id) => {
     set((state) => {
       const newActions = state.actions.map((a) =>
-        a.id === id ? { ...a, retryCount: a.retryCount + 1 } : a
+        a.id === id ? { ...a, retryCount: a.retryCount + 1 } : a,
       )
       saveToLocalStorage(newActions)
       return { actions: newActions }
     })
   },
-  
+
   clearAll: () => {
     set({ actions: [] })
     saveToLocalStorage([])
   },
-  
+
   getActiveCount: () => {
     return get().actions.filter((a) => !isExpired(a)).length
   },
-  
+
   loadFromStorage: () => {
     const storedActions = loadFromLocalStorage()
     set({ actions: storedActions })

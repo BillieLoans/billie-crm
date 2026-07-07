@@ -81,3 +81,40 @@ async def log_interaction(
     )
     response = await _get_stub().LogInteraction(request, timeout=5.0)
     return response.event_id
+
+
+async def set_consent(
+    *,
+    idempotency_key: str,
+    contact_id: str,
+    granted: bool,
+    channels: list[str],
+    method: str,
+    evidence: str = "",
+    actor: str = "",
+) -> str:
+    """Issue MarketingService.SetConsent; returns the emitted event_id.
+
+    Used by the inbound-SMS STOP handler to withdraw marketing consent
+    automatically (Spam Act: a functional unsubscribe must actually work).
+    """
+    from .marketing_grpc import marketing_service_pb2 as pb2
+
+    stub = _get_stub()
+    request = pb2.SetConsentRequest(
+        idempotency_key=idempotency_key,
+        contact_id=contact_id,
+        granted=granted,
+        channels=channels,
+        method=method,
+        evidence=evidence,
+        actor=actor,
+    )
+    response = await stub.SetConsent(request, timeout=10.0)
+    logger.info(
+        "marketing SetConsent issued",
+        contact_id=contact_id,
+        granted=granted,
+        event_id=response.event_id,
+    )
+    return response.event_id

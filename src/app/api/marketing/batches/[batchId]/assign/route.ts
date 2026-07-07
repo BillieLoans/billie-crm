@@ -46,7 +46,9 @@ export async function POST(
 
   try {
     const result = await assignBatch({
-      idempotencyKey: `assign:${batchId}:${Date.now()}`,
+      // Stable per (batch, member-set) so a retry/double-click can't
+      // double-fire — matching the sibling command routes.
+      idempotencyKey: `assign:${batchId}:${[...parsed.data.contact_ids].sort().join(',').slice(0, 64)}:${parsed.data.contact_ids.length}`,
       batchId,
       contactIds: parsed.data.contact_ids,
       actor: String(user.id),

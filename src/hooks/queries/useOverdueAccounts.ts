@@ -57,9 +57,11 @@ export interface UseOverdueAccountsOptions extends OverdueAccountsFilters {
 /**
  * Fetch overdue accounts from the API
  */
-async function fetchOverdueAccounts(filters: OverdueAccountsFilters): Promise<OverdueAccountsResponse> {
+async function fetchOverdueAccounts(
+  filters: OverdueAccountsFilters,
+): Promise<OverdueAccountsResponse> {
   const params = new URLSearchParams()
-  
+
   if (filters.bucket) params.set('bucket', filters.bucket)
   if (filters.minDpd !== undefined) params.set('minDpd', filters.minDpd.toString())
   if (filters.maxDpd !== undefined) params.set('maxDpd', filters.maxDpd.toString())

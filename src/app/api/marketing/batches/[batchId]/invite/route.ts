@@ -34,6 +34,7 @@ export async function POST(
         batchId,
         invitedCount: result.invitedCount,
         skippedUnconsented: result.skippedUnconsented,
+        skippedNeedsReview: (result as { skippedNeedsReview?: number }).skippedNeedsReview ?? 0,
       },
       { status: 202 },
     )

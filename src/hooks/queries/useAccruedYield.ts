@@ -130,8 +130,7 @@ async function fetchAccrualHistory(
 /**
  * Query key for accrued yield
  */
-export const accruedYieldQueryKey = (accountId: string) =>
-  ['accrued-yield', accountId] as const
+export const accruedYieldQueryKey = (accountId: string) => ['accrued-yield', accountId] as const
 
 /**
  * Query key for accrual history

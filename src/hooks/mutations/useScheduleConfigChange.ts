@@ -46,7 +46,11 @@ export function useScheduleConfigChange() {
       })
       if (!res.ok) {
         const error = await res.json().catch(() => ({}))
-        const errorMessage = error.error || error.message || error.details || `HTTP ${res.status}: Failed to schedule config change`
+        const errorMessage =
+          error.error ||
+          error.message ||
+          error.details ||
+          `HTTP ${res.status}: Failed to schedule config change`
         throw new Error(errorMessage)
       }
       return res.json()

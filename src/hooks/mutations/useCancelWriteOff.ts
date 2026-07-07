@@ -44,9 +44,7 @@ export interface CancelWriteOffResult {
 /**
  * Publish cancel command via the command API.
  */
-async function publishCancelCommand(
-  params: CancelWriteOffParams
-): Promise<PublishEventResponse> {
+async function publishCancelCommand(params: CancelWriteOffParams): Promise<PublishEventResponse> {
   const command: WriteOffCancelCommand = {
     requestId: params.requestId,
     requestNumber: params.requestNumber,
@@ -69,9 +67,7 @@ async function publishCancelCommand(
 /**
  * Cancel write-off request and poll for the status change.
  */
-async function cancelWriteOff(
-  params: CancelWriteOffParams
-): Promise<CancelWriteOffResult> {
+async function cancelWriteOff(params: CancelWriteOffParams): Promise<CancelWriteOffResult> {
   // 1. Publish the command event
   await publishCancelCommand(params)
 
@@ -83,7 +79,7 @@ async function cancelWriteOff(
       maxAttempts: 10,
       intervalMs: 500,
       initialDelayMs: 100,
-    }
+    },
   )
 
   return projection
@@ -118,7 +114,8 @@ export function useCancelWriteOff() {
       // Handle polling timeout specifically
       if (error instanceof PollTimeoutError) {
         toast.warning('Cancellation submitted but confirmation delayed', {
-          description: 'Your cancellation was accepted but is taking longer than expected. Please refresh to see the status.',
+          description:
+            'Your cancellation was accepted but is taking longer than expected. Please refresh to see the status.',
         })
         queryClient.invalidateQueries({ queryKey: ['write-off-requests'] })
         queryClient.invalidateQueries({ queryKey: ['pending-approvals'] })

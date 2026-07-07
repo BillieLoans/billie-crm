@@ -8,8 +8,25 @@
  * list/detail queries.
  */
 
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useEffect } from 'react'
+import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { useFailedActionsStore } from '@/stores/failed-actions'
+
+/**
+ * Marketing commands are 202-accepted (command → event → projection), so a
+ * refetch fired at success time frequently races the projection and returns
+ * pre-change data — the UI looks like it reverted. Invalidate now AND again
+ * after the typical projection lag so the view self-heals without a manual
+ * refresh.
+ */
+const LAG_RETRIES_MS = [1500, 4000]
+
+function invalidateWithLag(qc: QueryClient, keys: string[][]) {
+  const run = () => keys.forEach((queryKey) => qc.invalidateQueries({ queryKey }))
+  run()
+  LAG_RETRIES_MS.forEach((ms) => setTimeout(run, ms))
+}
 
 async function postCommand<T = unknown>(url: string, body?: unknown): Promise<T> {
   const res = await fetch(url, {
@@ -37,9 +54,18 @@ export function useCreateBatch() {
       postCommand<{ batchId: string; eventId: string }>('/api/marketing/batches', vars),
     onSuccess: () => {
       toast.success('Batch created')
-      qc.invalidateQueries({ queryKey: ['marketing-batches'] })
+      invalidateWithLag(qc, [['marketing-batches']])
     },
-    onError: (e: Error) => toast.error('Failed to create batch', { description: e.message }),
+    onError: (e: Error, vars) => {
+      toast.error('Failed to create batch', { description: e.message })
+      recordMarketingFailure(
+        `Create batch "${vars.name}"`,
+        vars.name,
+        '/api/marketing/batches',
+        vars,
+        e,
+      )
+    },
   })
 }
 
@@ -58,26 +84,49 @@ export function useAssignBatch() {
       ),
     onSuccess: (res) => {
       toast.success(`Assigned ${res.assignedCount} contact(s) to the batch`)
-      qc.invalidateQueries({ queryKey: ['marketing-batches'] })
-      qc.invalidateQueries({ queryKey: ['marketing-contacts'] })
+      invalidateWithLag(qc, [['marketing-batches'], ['marketing-contacts']])
     },
-    onError: (e: Error) => toast.error('Failed to assign contacts', { description: e.message }),
+    onError: (e: Error, vars) => {
+      toast.error('Failed to assign contacts', { description: e.message })
+      recordMarketingFailure(
+        `Assign ${vars.contactIds.length} contact(s) to batch`,
+        vars.batchId,
+        `/api/marketing/batches/${encodeURIComponent(vars.batchId)}/assign`,
+        { contact_ids: vars.contactIds },
+        e,
+      )
+    },
   })
 }
 
 export function useTriggerInvitations() {
   return useMutation({
     mutationFn: (batchId: string) =>
-      postCommand<{ invitedCount: number; skippedUnconsented: number }>(
-        `/api/marketing/batches/${encodeURIComponent(batchId)}/invite`,
-      ),
+      postCommand<{
+        invitedCount: number
+        skippedUnconsented: number
+        skippedNeedsReview?: number
+      }>(`/api/marketing/batches/${encodeURIComponent(batchId)}/invite`),
     onSuccess: (res) => {
+      const skipped = [
+        res.skippedUnconsented ? `${res.skippedUnconsented} unconsented` : null,
+        res.skippedNeedsReview ? `${res.skippedNeedsReview} needing review` : null,
+      ].filter(Boolean)
       toast.success(
         `Invited ${res.invitedCount} member(s)` +
-          (res.skippedUnconsented ? `, skipped ${res.skippedUnconsented} unconsented` : ''),
+          (skipped.length ? ` — skipped ${skipped.join(', ')}` : ''),
       )
     },
-    onError: (e: Error) => toast.error('Failed to trigger invitations', { description: e.message }),
+    onError: (e: Error, batchId) => {
+      toast.error('Failed to trigger invitations', { description: e.message })
+      recordMarketingFailure(
+        'Send batch invitations',
+        batchId,
+        `/api/marketing/batches/${encodeURIComponent(batchId)}/invite`,
+        undefined,
+        e,
+      )
+    },
   })
 }
 
@@ -98,7 +147,7 @@ export function useSetFeedbackStatus() {
       }),
     onSuccess: () => {
       toast.success('Feedback status updated')
-      qc.invalidateQueries({ queryKey: ['marketing-feedback'] })
+      invalidateWithLag(qc, [['marketing-feedback']])
     },
     onError: (e: Error) => toast.error('Failed to update status', { description: e.message }),
   })
@@ -119,9 +168,18 @@ export function useLinkContact() {
       }),
     onSuccess: () => {
       toast.success('Contact linked')
-      qc.invalidateQueries({ queryKey: ['marketing-contacts'] })
+      invalidateWithLag(qc, [['marketing-contacts']])
     },
-    onError: (e: Error) => toast.error('Failed to link contact', { description: e.message }),
+    onError: (e: Error, vars) => {
+      toast.error('Failed to link contact', { description: e.message })
+      recordMarketingFailure(
+        'Link contact to customer',
+        vars.contactId,
+        `/api/marketing/contacts/${encodeURIComponent(vars.contactId)}/link`,
+        { customer_id: vars.customerId },
+        e,
+      )
+    },
   })
 }
 
@@ -133,9 +191,73 @@ export function useUnlinkContact() {
       postCommand(`/api/marketing/contacts/${encodeURIComponent(contactId)}/unlink`),
     onSuccess: () => {
       toast.success('Contact unlinked')
-      qc.invalidateQueries({ queryKey: ['marketing-contacts'] })
+      invalidateWithLag(qc, [['marketing-contacts']])
     },
     onError: (e: Error) => toast.error('Failed to unlink contact', { description: e.message }),
+  })
+}
+
+export interface RecordConsentVars {
+  contactId: string
+  granted: boolean
+  channels: Array<'sms' | 'whatsapp' | 'email'>
+  method: string
+  evidence?: string
+}
+
+/** Staff consent capture/withdrawal (offline contacts, verbal opt-outs). */
+export function useRecordConsent() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (vars: RecordConsentVars) =>
+      postCommand(`/api/marketing/contacts/${encodeURIComponent(vars.contactId)}/consent`, {
+        granted: vars.granted,
+        channels: vars.channels,
+        method: vars.method,
+        ...(vars.evidence ? { evidence: vars.evidence } : {}),
+      }),
+    onSuccess: (_res, vars) => {
+      toast.success(vars.granted ? 'Consent recorded' : 'Consent withdrawal recorded')
+      invalidateWithLag(qc, [['marketing-contacts']])
+    },
+    onError: (e: Error, vars) => {
+      toast.error('Failed to record consent', { description: e.message })
+      recordMarketingFailure(
+        vars.granted ? 'Record consent' : 'Record consent withdrawal',
+        vars.contactId,
+        `/api/marketing/contacts/${encodeURIComponent(vars.contactId)}/consent`,
+        {
+          granted: vars.granted,
+          channels: vars.channels,
+          method: vars.method,
+          evidence: vars.evidence,
+        },
+        e,
+      )
+    },
+  })
+}
+
+export interface SetReviewFlagVars {
+  contactId: string
+  needsReview: boolean
+  reason?: string
+}
+
+/** A2: park/unpark a contact for review (excluded from sends while set). */
+export function useSetReviewFlag() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (vars: SetReviewFlagVars) =>
+      postCommand(`/api/marketing/contacts/${encodeURIComponent(vars.contactId)}/review-flag`, {
+        needs_review: vars.needsReview,
+        ...(vars.reason ? { reason: vars.reason } : {}),
+      }),
+    onSuccess: (_res, vars) => {
+      toast.success(vars.needsReview ? 'Contact flagged for review' : 'Review flag cleared')
+      invalidateWithLag(qc, [['marketing-contacts']])
+    },
+    onError: (e: Error) => toast.error('Failed to update review flag', { description: e.message }),
   })
 }
 
@@ -155,9 +277,74 @@ export function useCreateContact() {
     mutationFn: (vars: CreateContactVars) =>
       postCommand<{ contactId: string; eventId: string }>('/api/marketing/contacts', vars),
     onSuccess: () => {
-      toast.success('Contact created')
-      qc.invalidateQueries({ queryKey: ['marketing-contacts'] })
+      toast.success('Contact created — appearing in the grid shortly')
+      invalidateWithLag(qc, [['marketing-contacts']])
     },
     onError: (e: Error) => toast.error('Failed to create contact', { description: e.message }),
   })
+}
+
+// ── Failed-actions integration ──────────────────────────────────────────────
+//
+// Marketing commands are idempotent platform-side, so a generic replay is
+// safe: every command is a postCommand(url, body). Failures land in the
+// shared failed-actions queue with enough context to replay verbatim.
+
+export interface MarketingCommandFailureParams {
+  url: string
+  body?: unknown
+  label: string
+  [key: string]: unknown
+}
+
+export function recordMarketingFailure(
+  label: string,
+  subjectId: string,
+  url: string,
+  body: unknown,
+  error: Error,
+): void {
+  useFailedActionsStore
+    .getState()
+    .addFailedAction(
+      'marketing-command',
+      subjectId,
+      { url, body, label } satisfies MarketingCommandFailureParams,
+      error.message,
+      label,
+    )
+}
+
+/**
+ * Mount once inside the marketing views: replays failed marketing commands
+ * when the Failed Actions panel dispatches a retry event.
+ */
+export function useMarketingCommandRetryListener() {
+  const qc = useQueryClient()
+  const removeAction = useFailedActionsStore((state) => state.removeAction)
+
+  useEffect(() => {
+    const onRetry = async (event: Event) => {
+      const detail = (event as CustomEvent).detail as
+        | { id: string; type: string; params: MarketingCommandFailureParams }
+        | undefined
+      if (!detail || detail.type !== 'marketing-command') return
+      try {
+        await postCommand(detail.params.url, detail.params.body)
+        removeAction(detail.id)
+        toast.success(`Retried: ${detail.params.label}`)
+        invalidateWithLag(qc, [
+          ['marketing-contacts'],
+          ['marketing-batches'],
+          ['marketing-feedback'],
+        ])
+      } catch (e) {
+        toast.error(`Retry failed: ${detail.params.label}`, {
+          description: e instanceof Error ? e.message : undefined,
+        })
+      }
+    }
+    window.addEventListener('billie-retry-action', onRetry)
+    return () => window.removeEventListener('billie-retry-action', onRetry)
+  }, [qc, removeAction])
 }

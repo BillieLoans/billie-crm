@@ -25,9 +25,7 @@ export function useGlobalHotkeys(hotkeys: HotkeyConfig[]): void {
       // Check if we're in an input/textarea/contenteditable
       const target = e.target as HTMLElement
       const isInput =
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.isContentEditable
+        target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable
 
       for (const hotkey of hotkeys) {
         // Skip if in input and not allowed
@@ -71,7 +69,7 @@ export function useGlobalHotkeys(hotkeys: HotkeyConfig[]): void {
  */
 export function useCommandPaletteHotkeys(
   isOpen: boolean,
-  onOpenChange: (open: boolean) => void
+  onOpenChange: (open: boolean) => void,
 ): void {
   // Memoize callbacks to prevent effect re-runs
   const handleToggle = useCallback(() => onOpenChange(!isOpen), [isOpen, onOpenChange])
@@ -83,24 +81,27 @@ export function useCommandPaletteHotkeys(
   }, [isOpen, onOpenChange])
 
   // Memoize hotkeys array to prevent effect re-runs on every render
-  const hotkeys = useMemo<HotkeyConfig[]>(() => [
-    {
-      key: 'k',
-      cmdOrCtrl: true,
-      onPress: handleToggle,
-      allowInInput: true,
-    },
-    {
-      key: 'F7',
-      onPress: handleOpen,
-      allowInInput: true,
-    },
-    {
-      key: 'Escape',
-      onPress: handleClose,
-      allowInInput: true,
-    },
-  ], [handleToggle, handleOpen, handleClose])
+  const hotkeys = useMemo<HotkeyConfig[]>(
+    () => [
+      {
+        key: 'k',
+        cmdOrCtrl: true,
+        onPress: handleToggle,
+        allowInInput: true,
+      },
+      {
+        key: 'F7',
+        onPress: handleOpen,
+        allowInInput: true,
+      },
+      {
+        key: 'Escape',
+        onPress: handleClose,
+        allowInInput: true,
+      },
+    ],
+    [handleToggle, handleOpen, handleClose],
+  )
 
   useGlobalHotkeys(hotkeys)
 }

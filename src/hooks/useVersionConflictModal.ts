@@ -51,16 +51,13 @@ export function useVersionConflictModal() {
   /**
    * Show the version conflict modal.
    */
-  const showConflict = useCallback(
-    (loanAccountId: string, preservedChanges?: PreservedChanges) => {
-      setState({
-        isOpen: true,
-        loanAccountId,
-        preservedChanges: preservedChanges ?? null,
-      })
-    },
-    []
-  )
+  const showConflict = useCallback((loanAccountId: string, preservedChanges?: PreservedChanges) => {
+    setState({
+      isOpen: true,
+      loanAccountId,
+      preservedChanges: preservedChanges ?? null,
+    })
+  }, [])
 
   /**
    * Close the modal without refreshing.

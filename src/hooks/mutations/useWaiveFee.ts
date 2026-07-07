@@ -71,14 +71,14 @@ async function waiveFee(params: WaiveFeeParams): Promise<WaiveFeeResponse> {
 
 /**
  * Mutation hook for waiving fees with optimistic UI updates.
- * 
+ *
  * Flow:
  * 1. Generate idempotency key
  * 2. Add to optimistic store (stage: 'optimistic')
  * 3. Submit API request
  * 4a. On success: update stage to 'confirmed', show toast, invalidate queries
  * 4b. On error: update stage to 'failed', show error toast
- * 
+ *
  * Also listens for `billie-retry-action` custom events to retry failed actions
  * from the Failed Actions Notification Center.
  */
@@ -96,10 +96,7 @@ export function useWaiveFee(loanAccountId?: string, accountLabel?: string) {
 
     onMutate: async (params) => {
       // Generate idempotency key
-      const mutationId = generateIdempotencyKey(
-        params.loanAccountId,
-        'waive-fee'
-      )
+      const mutationId = generateIdempotencyKey(params.loanAccountId, 'waive-fee')
 
       // Create pending mutation
       const pendingMutation: PendingMutation = {
@@ -176,15 +173,16 @@ export function useWaiveFee(loanAccountId?: string, accountLabel?: string) {
             approvedBy: params.approvedBy,
           },
           appError.message,
-          accountLabel
+          accountLabel,
         )
       }
 
       // Show error toast with retry option and copy details
       toast.error('Failed to waive fee', {
-        description: appError.code === ERROR_CODES.UNKNOWN_ERROR
-          ? `${appError.message} (${appError.errorId})`
-          : appError.message,
+        description:
+          appError.code === ERROR_CODES.UNKNOWN_ERROR
+            ? `${appError.message} (${appError.errorId})`
+            : appError.message,
         action: appError.isRetryable()
           ? {
               label: 'Retry',
@@ -195,10 +193,11 @@ export function useWaiveFee(loanAccountId?: string, accountLabel?: string) {
             }
           : {
               label: '📋 Copy details',
-              onClick: () => copyErrorDetails(appError, {
-                action: 'waive-fee',
-                accountId: params.loanAccountId,
-              }),
+              onClick: () =>
+                copyErrorDetails(appError, {
+                  action: 'waive-fee',
+                  accountId: params.loanAccountId,
+                }),
             },
       })
     },
@@ -227,7 +226,8 @@ export function useWaiveFee(loanAccountId?: string, accountLabel?: string) {
       }
 
       // Execute the mutation and remove from failed actions on success
-      mutation.mutateAsync(waiveParams)
+      mutation
+        .mutateAsync(waiveParams)
         .then(() => {
           // Successfully retried - remove from failed actions
           removeAction(id)
@@ -237,7 +237,7 @@ export function useWaiveFee(loanAccountId?: string, accountLabel?: string) {
           // The action stays in the queue for another retry attempt
         })
     },
-    [mutation, removeAction, getExpectedVersion]
+    [mutation, removeAction, getExpectedVersion],
   )
 
   // Listen for retry events
@@ -256,7 +256,7 @@ export function useWaiveFee(loanAccountId?: string, accountLabel?: string) {
       const expectedVersion = getExpectedVersion(params.loanAccountId)
       mutation.mutate({ ...params, expectedVersion })
     },
-    [mutation, getExpectedVersion]
+    [mutation, getExpectedVersion],
   )
 
   const waiveFeeAsyncWithVersion = useCallback(
@@ -264,7 +264,7 @@ export function useWaiveFee(loanAccountId?: string, accountLabel?: string) {
       const expectedVersion = getExpectedVersion(params.loanAccountId)
       return mutation.mutateAsync({ ...params, expectedVersion })
     },
-    [mutation, getExpectedVersion]
+    [mutation, getExpectedVersion],
   )
 
   return {

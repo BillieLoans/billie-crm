@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react'
 import { useCreateContact, type CreateContactVars } from '@/hooks/mutations/useMarketingCommands'
+import { useEscapeClose } from '@/hooks/useModalA11y'
 import styles from './styles.module.css'
 
 interface NewContactModalProps {
@@ -55,9 +56,16 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ onClose, onSuc
     create.mutate(vars, { onSuccess: () => onSuccess() })
   }
 
+  useEscapeClose(onClose)
+
   return (
     <div className={styles.modalOverlay} onClick={onClose}>
-      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+      <div
+        className={styles.modal}
+        role="dialog"
+        aria-modal="true"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className={styles.modalHeader}>
           <h2 className={styles.modalTitle}>New contact</h2>
           <button type="button" className={styles.closeBtn} onClick={onClose} aria-label="Close">
@@ -79,6 +87,7 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ onClose, onSuc
               </label>
               <input
                 id="new-contact-first-name"
+                autoFocus
                 type="text"
                 className={styles.formInput}
                 value={firstName}

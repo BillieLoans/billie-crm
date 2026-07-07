@@ -93,7 +93,7 @@ async function recordRepayment(params: RecordRepaymentParams): Promise<RecordRep
  * 3. Submit API request
  * 4a. On success: update stage to 'confirmed', show toast, invalidate queries
  * 4b. On error: update stage to 'failed', show error toast
- * 
+ *
  * Also listens for `billie-retry-action` custom events to retry failed actions
  * from the Failed Actions Notification Center.
  */
@@ -104,7 +104,9 @@ export function useRecordRepayment(loanAccountId?: string, accountLabel?: string
   const addFailedAction = useFailedActionsStore((state) => state.addFailedAction)
   const removeAction = useFailedActionsStore((state) => state.removeAction)
   const getExpectedVersion = useVersionStore((state) => state.getExpectedVersion)
-  const hasPendingRepayment = loanAccountId ? hasPendingAction(loanAccountId, 'record-repayment') : false
+  const hasPendingRepayment = loanAccountId
+    ? hasPendingAction(loanAccountId, 'record-repayment')
+    : false
 
   const mutation = useMutation({
     mutationFn: recordRepayment,
@@ -148,7 +150,8 @@ export function useRecordRepayment(loanAccountId?: string, accountLabel?: string
 
       // Show success toast
       toast.success('Repayment recorded', {
-        description: allocDesc.length > 0 ? allocDesc.join(', ') : `$${params.amount.toFixed(2)} applied`,
+        description:
+          allocDesc.length > 0 ? allocDesc.join(', ') : `$${params.amount.toFixed(2)} applied`,
       })
 
       // Invalidate transactions query to refresh list
@@ -198,15 +201,16 @@ export function useRecordRepayment(loanAccountId?: string, accountLabel?: string
             notes: params.notes,
           },
           appError.message,
-          accountLabel
+          accountLabel,
         )
       }
 
       // Show error toast with retry option and copy details
       toast.error('Failed to record repayment', {
-        description: appError.code === ERROR_CODES.UNKNOWN_ERROR
-          ? `${appError.message} (${appError.errorId})`
-          : appError.message,
+        description:
+          appError.code === ERROR_CODES.UNKNOWN_ERROR
+            ? `${appError.message} (${appError.errorId})`
+            : appError.message,
         action: appError.isRetryable()
           ? {
               label: 'Retry',
@@ -217,10 +221,11 @@ export function useRecordRepayment(loanAccountId?: string, accountLabel?: string
             }
           : {
               label: '📋 Copy details',
-              onClick: () => copyErrorDetails(appError, {
-                action: 'record-repayment',
-                accountId: params.loanAccountId,
-              }),
+              onClick: () =>
+                copyErrorDetails(appError, {
+                  action: 'record-repayment',
+                  accountId: params.loanAccountId,
+                }),
             },
       })
     },
@@ -250,7 +255,8 @@ export function useRecordRepayment(loanAccountId?: string, accountLabel?: string
       }
 
       // Execute the mutation and remove from failed actions on success
-      mutation.mutateAsync(repaymentParams)
+      mutation
+        .mutateAsync(repaymentParams)
         .then(() => {
           // Successfully retried - remove from failed actions
           removeAction(id)
@@ -260,7 +266,7 @@ export function useRecordRepayment(loanAccountId?: string, accountLabel?: string
           // The action stays in the queue for another retry attempt
         })
     },
-    [mutation, removeAction, getExpectedVersion]
+    [mutation, removeAction, getExpectedVersion],
   )
 
   // Listen for retry events
@@ -279,7 +285,7 @@ export function useRecordRepayment(loanAccountId?: string, accountLabel?: string
       const expectedVersion = getExpectedVersion(params.loanAccountId)
       mutation.mutate({ ...params, expectedVersion })
     },
-    [mutation, getExpectedVersion]
+    [mutation, getExpectedVersion],
   )
 
   const recordRepaymentAsyncWithVersion = useCallback(
@@ -287,7 +293,7 @@ export function useRecordRepayment(loanAccountId?: string, accountLabel?: string
       const expectedVersion = getExpectedVersion(params.loanAccountId)
       return mutation.mutateAsync({ ...params, expectedVersion })
     },
-    [mutation, getExpectedVersion]
+    [mutation, getExpectedVersion],
   )
 
   return {

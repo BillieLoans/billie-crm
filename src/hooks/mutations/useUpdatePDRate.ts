@@ -54,7 +54,7 @@ export function useUpdatePDRate() {
       // Invalidate ECL config to refresh data
       queryClient.invalidateQueries({ queryKey: eclConfigQueryKey })
       queryClient.invalidateQueries({ queryKey: ['ecl-config', 'history'] })
-      
+
       // Show success toast
       toast.success('PD rate updated', {
         description: `Bucket "${data.bucket}" rate updated to ${(data.newRate * 100).toFixed(2)}%`,

@@ -1,12 +1,16 @@
 'use client'
 
-import React, { useMemo, useState } from 'react'
+import React, { useDeferredValue, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useMarketingContacts } from '@/hooks/queries/useMarketingContacts'
 import type { MarketingContactsFilters } from '@/hooks/queries/useMarketingContacts'
 import { useBatches } from '@/hooks/queries/useBatches'
-import { useAssignBatch, useTriggerInvitations } from '@/hooks/mutations/useMarketingCommands'
+import {
+  useAssignBatch,
+  useMarketingCommandRetryListener,
+  useTriggerInvitations,
+} from '@/hooks/mutations/useMarketingCommands'
 import type { Contact } from '@/payload-types'
 import { formatDateShort } from '@/lib/formatters'
 import { getMarketingConsentGranted } from '@/lib/marketing'
@@ -92,30 +96,41 @@ export const MarketingView: React.FC<MarketingViewProps> = ({ contactId, feedbac
 const MarketingContactsGrid: React.FC = () => {
   const router = useRouter()
   const [q, setQ] = useState('')
+  // Defer the search term so keystrokes don't fire a network request each —
+  // same treatment as useCustomerSearch (React prioritises typing).
+  const deferredQ = useDeferredValue(q)
   const [stage, setStage] = useState('')
   const [source, setSource] = useState('')
   const [city, setCity] = useState('')
   const [batch, setBatch] = useState('')
+  const [needsReview, setNeedsReview] = useState('')
+  const [loanStatus, setLoanStatus] = useState('')
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [assignTarget, setAssignTarget] = useState('')
+  // Invitations get their OWN target — deliberately decoupled from the grid's
+  // Batch filter so a leftover filter can never silently prime a send.
+  const [inviteTarget, setInviteTarget] = useState('')
   const [showNewContact, setShowNewContact] = useState(false)
   const [showNewBatch, setShowNewBatch] = useState(false)
   const [showInviteConfirm, setShowInviteConfirm] = useState(false)
 
   const filters = useMemo<MarketingContactsFilters>(
     () => ({
-      q: q || undefined,
+      q: deferredQ || undefined,
       stage: stage || undefined,
       source: source || undefined,
       city: city || undefined,
       batch: batch || undefined,
+      needs_review: needsReview || undefined,
+      loan_status: loanStatus || undefined,
       page,
     }),
-    [q, stage, source, city, batch, page],
+    [deferredQ, stage, source, city, batch, needsReview, loanStatus, page],
   )
 
-  const { data, isLoading, isError } = useMarketingContacts(filters)
+  const { data, isLoading, isError, isFetching } = useMarketingContacts(filters)
+  useMarketingCommandRetryListener()
   const { data: batchesData, refetch: refetchBatches } = useBatches()
   const assign = useAssignBatch()
   const invite = useTriggerInvitations()
@@ -123,6 +138,8 @@ const MarketingContactsGrid: React.FC = () => {
   const batchOptions = batchesData?.docs ?? []
   const batchNameFor = (id?: string | null) =>
     id ? (batchOptions.find((b) => b.batchId === id)?.name ?? id) : '—'
+  const batchLabelWithCount = (b: (typeof batchOptions)[number]) =>
+    `${b.name ?? b.batchId}${typeof b.memberCount === 'number' ? ` (${b.memberCount})` : ''}`
 
   const onFilter =
     (setter: (v: string) => void) =>
@@ -159,6 +176,8 @@ const MarketingContactsGrid: React.FC = () => {
         onSuccess: () => {
           setSelected(new Set())
           setAssignTarget('')
+          // The batch just assigned is the natural next invite target.
+          setInviteTarget(assignTarget)
         },
       },
     )
@@ -183,6 +202,7 @@ const MarketingContactsGrid: React.FC = () => {
       const res = await refetchBatches()
       if (res.data?.docs?.some((b) => b.batchId === batchId)) {
         setAssignTarget(batchId)
+        setInviteTarget(batchId)
         return
       }
       await new Promise((resolve) => setTimeout(resolve, BATCH_POLL_INTERVAL_MS))
@@ -200,12 +220,10 @@ const MarketingContactsGrid: React.FC = () => {
     return snapshot
   }, [q, stage, source, city, batch])
 
-  // Invitations fire for the batch chosen in the Batch FILTER — filter to the
-  // batch (seeing exactly its members), then send.
-  const canInvite = !!batch && !invite.isPending
+  const canInvite = !!inviteTarget && !invite.isPending
   const handleInviteConfirm = () => {
     if (!canInvite) return
-    invite.mutate(batch, { onSettled: () => setShowInviteConfirm(false) })
+    invite.mutate(inviteTarget, { onSettled: () => setShowInviteConfirm(false) })
   }
 
   const contactHref = (contact: Contact) => `/admin/marketing/contacts/${contact.contactId}`
@@ -307,11 +325,45 @@ const MarketingContactsGrid: React.FC = () => {
             ))}
           </select>
         </div>
+
+        <div className={styles.filterGroup}>
+          <label className={styles.filterLabel} htmlFor="marketing-loan-outcome-filter">
+            Loan outcome
+          </label>
+          <select
+            id="marketing-loan-outcome-filter"
+            className={styles.filterSelect}
+            value={loanStatus}
+            onChange={onFilter(setLoanStatus)}
+            title="Win-back segments should target Repaid — written-off customers never re-enter"
+          >
+            <option value="">Any outcome</option>
+            <option value="repaid">Repaid (win-back safe)</option>
+            <option value="disbursed">Disbursed (active)</option>
+            <option value="approved">Approved</option>
+          </select>
+        </div>
+
+        <div className={styles.filterGroup}>
+          <label className={styles.filterLabel} htmlFor="marketing-review-filter">
+            Review
+          </label>
+          <select
+            id="marketing-review-filter"
+            className={styles.filterSelect}
+            value={needsReview}
+            onChange={onFilter(setNeedsReview)}
+          >
+            <option value="">All contacts</option>
+            <option value="true">⚑ Needs review</option>
+          </select>
+        </div>
       </div>
 
       {/* Assign-to-batch bar — always present (fixed layout); controls disable
-          until a selection + target batch exist. Invitations live on the right:
-          they fire for the batch chosen in the Batch filter above. */}
+          until a selection + target batch exist. Invitations get their OWN
+          batch selector (seeded by assign/create) — deliberately independent
+          of the grid filter so a leftover filter never primes a send. */}
       <div className={styles.filters}>
         <span className={styles.pageStatus}>{selected.size} selected</span>
         <div className={styles.filterGroup}>
@@ -328,7 +380,7 @@ const MarketingContactsGrid: React.FC = () => {
             <option value="">Choose a batch…</option>
             {batchOptions.map((b) => (
               <option key={b.batchId} value={b.batchId}>
-                {b.name ?? b.batchId}
+                {batchLabelWithCount(b)}
               </option>
             ))}
             <option value={NEW_BATCH_SENTINEL}>＋ New batch…</option>
@@ -339,18 +391,41 @@ const MarketingContactsGrid: React.FC = () => {
           className={styles.pageButton}
           onClick={handleAssign}
           disabled={!canAssign}
+          title={
+            selected.size === 0
+              ? 'Select contacts first'
+              : !assignTarget
+                ? 'Choose a target batch'
+                : undefined
+          }
         >
           {assign.isPending ? 'Assigning…' : 'Assign'}
         </button>
         <div className={styles.spacer} />
-        <span className={styles.pageStatus}>
-          Invitations: {batch ? batchNameFor(batch) : 'choose a batch in the filter'}
-        </span>
+        <div className={styles.filterGroup}>
+          <label className={styles.filterLabel} htmlFor="marketing-invite-batch">
+            Send invitations to
+          </label>
+          <select
+            id="marketing-invite-batch"
+            className={styles.filterSelect}
+            value={inviteTarget}
+            onChange={(e) => setInviteTarget(e.target.value)}
+          >
+            <option value="">Choose a batch…</option>
+            {batchOptions.map((b) => (
+              <option key={b.batchId} value={b.batchId}>
+                {batchLabelWithCount(b)}
+              </option>
+            ))}
+          </select>
+        </div>
         <button
           type="button"
           className={styles.pageButton}
           onClick={() => setShowInviteConfirm(true)}
           disabled={!canInvite}
+          title={!inviteTarget ? 'Choose the batch to invite' : undefined}
         >
           {invite.isPending ? 'Sending…' : 'Send invitations'}
         </button>
@@ -377,6 +452,7 @@ const MarketingContactsGrid: React.FC = () => {
                   <th>Stage</th>
                   <th>Source</th>
                   <th>Batch</th>
+                  <th>Flags</th>
                   <th>Consent</th>
                   <th>Updated</th>
                 </tr>
@@ -384,13 +460,13 @@ const MarketingContactsGrid: React.FC = () => {
               <tbody>
                 {isLoading && docs.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className={styles.emptyCell}>
+                    <td colSpan={9} className={styles.emptyCell}>
                       Loading contacts…
                     </td>
                   </tr>
                 ) : docs.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className={styles.emptyCell}>
+                    <td colSpan={9} className={styles.emptyCell}>
                       No contacts match the current filters.
                     </td>
                   </tr>
@@ -427,7 +503,35 @@ const MarketingContactsGrid: React.FC = () => {
                         )}
                       </td>
                       <td>{contact.source ? sourceLabel(contact.source) : '—'}</td>
-                      <td>{batchNameFor(contact.batchId)}</td>
+                      <td onClick={(e) => e.stopPropagation()}>
+                        {contact.batchId ? (
+                          <button
+                            type="button"
+                            className={styles.linkButton}
+                            title="Filter the grid to this batch"
+                            onClick={() => {
+                              setBatch(contact.batchId!)
+                              setPage(1)
+                            }}
+                          >
+                            {batchNameFor(contact.batchId)}
+                          </button>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td>
+                        {contact.needsReview ? (
+                          <span
+                            className={`${styles.badge} ${styles.badgeConsentDeclined}`}
+                            title="Parked for review — excluded from invitation sends"
+                          >
+                            ⚑ Review
+                          </span>
+                        ) : (
+                          <span className={styles.placeholder}>—</span>
+                        )}
+                      </td>
                       <td>
                         <ConsentBadge consent={contact.consent} />
                       </td>
@@ -449,7 +553,7 @@ const MarketingContactsGrid: React.FC = () => {
               </button>
               <span className={styles.pageStatus}>
                 Page {data?.page ?? page} of {data?.totalPages ?? 1} · {data?.totalDocs ?? 0}{' '}
-                contacts
+                contacts{isFetching ? ' · refreshing…' : ''}
               </span>
               <button
                 type="button"
@@ -495,7 +599,8 @@ const MarketingContactsGrid: React.FC = () => {
             </div>
             <div className={styles.modalBody}>
               <p>
-                Send invitations to all consented members of <strong>{batchNameFor(batch)}</strong>?
+                Send invitations to all consented members of{' '}
+                <strong>{batchNameFor(inviteTarget)}</strong>?
               </p>
               <p className={styles.formHint}>
                 Members without marketing consent are skipped automatically. Repeating the send for

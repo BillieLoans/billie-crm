@@ -89,13 +89,18 @@ async def test_contact_updated_upserts_changed_fields_and_audit(mock_pool):
         "contact_id": "c-1", "city": "Melbourne", "attributes": {"segment": "vip"},
         "updated_at": "2026-07-02T00:00:00+00:00", "actor": "ops"}))
 
-    contact_row = mock_pool.last_upsert("contacts")
+    contact_row = mock_pool.last_insert("contacts")
     assert contact_row["contact_id"] == "c-1"
     assert contact_row["city"] == "Melbourne"
-    assert json.loads(contact_row["attributes"]) == {"segment": "vip"}
+    # attributes is a DELTA applied via jsonb merge (||), not an upsert column —
+    # overwriting would wipe flag overlays like advocate/needs_review.
+    assert "attributes" not in contact_row
+    sql_all = " ".join(c.sql for c in mock_pool.connection.calls)
+    assert "||" in sql_all
     audit_row = mock_pool.last_insert("contact_audit_log")
     assert audit_row["contact_id_string"] == "c-1"
-    assert "city" in json.loads(audit_row["detail"])["changed_fields"]
+    detail = json.loads(audit_row["detail"])["changed_fields"]
+    assert "city" in detail and "attributes" in detail
 
 
 async def test_contact_linked_sets_customer_and_link_basis(mock_pool):
@@ -302,3 +307,53 @@ async def test_feedback_status_changed_without_note_leaves_column_untouched(mock
     updated = mock_pool.last_update("feedback")
     assert updated["status"] == "acknowledged"
     assert "status_note" not in updated
+
+
+async def test_contact_updated_merges_attributes_and_mirrors_needs_review(mock_pool):
+    # attributes is a DELTA — merged via jsonb ||, never overwritten — and
+    # needs_review mirrors to its dedicated grid-filterable column (A2).
+    await handle_contact_updated(mock_pool, _parsed("contact.updated.v1", {
+        "contact_id": "c-1", "attributes": {"needs_review": True, "needs_review_reason": "dupe?"},
+        "updated_at": "2026-07-08T00:00:00+00:00", "actor": "staff-1"}))
+
+    upserted = mock_pool.last_insert("contacts")
+    assert upserted["needs_review"] is True
+    # merge_jsonb issues a jsonb-concat UPDATE for the attributes patch
+    sql_all = " ".join(c.sql for c in mock_pool.connection.calls)
+    assert "||" in sql_all and "attributes" in sql_all
+
+
+async def test_stage_changed_mirrors_loan_status_when_present(mock_pool):
+    await handle_contact_stage_changed(mock_pool, _parsed("contact.stage.changed.v1", {
+        "contact_id": "c-1", "previous_stage": "waitlist", "stage": "customer",
+        "changed_at": "2026-07-08T00:00:00+00:00", "loan_status": "disbursed"}))
+    updated = mock_pool.last_update("contacts")
+    assert updated["derived_stage"] == "customer"
+    assert updated["loan_status"] == "disbursed"
+
+
+async def test_stage_changed_without_loan_status_leaves_column_untouched(mock_pool):
+    await handle_contact_stage_changed(mock_pool, _parsed("contact.stage.changed.v1", {
+        "contact_id": "c-1", "stage": "waitlist",
+        "changed_at": "2026-07-08T00:00:00+00:00"}))
+    updated = mock_pool.last_update("contacts")
+    assert "loan_status" not in updated
+
+
+async def test_stage_changed_naive_downgrade_refused_without_state_basis(mock_pool):
+    # Mirrors marketingService's apply_stage guard: a naive lead/waitlist event
+    # must not downgrade a protected stage — only basis="state" may.
+    mock_pool.set_fetchval("customer")  # current derived_stage
+    await handle_contact_stage_changed(mock_pool, _parsed("contact.stage.changed.v1", {
+        "contact_id": "c-1", "stage": "waitlist",
+        "changed_at": "2026-07-08T00:00:00+00:00"}))
+    assert mock_pool.last_update("contacts") is None  # refused
+
+
+async def test_stage_changed_state_basis_may_downgrade(mock_pool):
+    mock_pool.set_fetchval("applicant")
+    await handle_contact_stage_changed(mock_pool, _parsed("contact.stage.changed.v1", {
+        "contact_id": "c-1", "stage": "waitlist", "basis": "state",
+        "changed_at": "2026-07-08T00:00:00+00:00"}))
+    updated = mock_pool.last_update("contacts")
+    assert updated["derived_stage"] == "waitlist"  # Bx abandonment — legitimate

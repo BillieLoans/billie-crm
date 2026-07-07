@@ -48,7 +48,9 @@ export const carryingAmountBreakdownQueryKey = (accountId: string) => [
 async function fetchCarryingAmountBreakdown(
   accountId: string,
 ): Promise<CarryingAmountBreakdownResponse | null> {
-  const response = await fetch(`/api/investigation/carrying-amount/${encodeURIComponent(accountId)}`)
+  const response = await fetch(
+    `/api/investigation/carrying-amount/${encodeURIComponent(accountId)}`,
+  )
 
   if (!response.ok) {
     if (response.status === 503) {

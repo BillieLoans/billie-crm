@@ -1,6 +1,10 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { exportJobsQueryKey, type ExportJobType, type ExportFormat } from '@/hooks/queries/useExportJobs'
+import {
+  exportJobsQueryKey,
+  type ExportJobType,
+  type ExportFormat,
+} from '@/hooks/queries/useExportJobs'
 
 export interface CreateExportJobRequest {
   type: ExportJobType
@@ -85,7 +89,12 @@ export function useCreateExportJob() {
       })
 
       const data = await res.json().catch(() => ({}))
-      console.log('[ExportJob] Response status:', res.status, 'body:', JSON.stringify(data, null, 2))
+      console.log(
+        '[ExportJob] Response status:',
+        res.status,
+        'body:',
+        JSON.stringify(data, null, 2),
+      )
 
       if (!res.ok) {
         console.error('[ExportJob] Create failed:', res.status, data)

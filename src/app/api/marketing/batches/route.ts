@@ -29,7 +29,25 @@ export async function GET(request: NextRequest) {
     user,
   })
 
-  return NextResponse.json(result)
+  // Enrich each page with a member count (one count query per row, page<=50)
+  // so pickers/summaries can show batch sizes without a filter round-trip.
+  const docs = await Promise.all(
+    result.docs.map(async (doc) => ({
+      ...doc,
+      memberCount: doc.batchId
+        ? (
+            await payload.count({
+              collection: 'contacts',
+              where: { batchId: { equals: doc.batchId } } as never,
+              overrideAccess: false,
+              user,
+            })
+          ).totalDocs
+        : 0,
+    })),
+  )
+
+  return NextResponse.json({ ...result, docs })
 }
 
 export async function POST(request: NextRequest) {

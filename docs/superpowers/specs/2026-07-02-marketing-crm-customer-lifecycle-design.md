@@ -143,7 +143,7 @@ Auth: internal network (Fly private networking), same posture as the accounting-
 
 ## 3. Customer state projection (new module in `customerService`)
 
-> **Open at sign-off (A4, discuss):** this added workstream — the governed Customer State Model driving stage and loan status — is under discussion; scope and sequencing may change. Per §10, it can slip to phase 3 without blocking the rest of phase 2.
+> **BUILT (8 Jul 2026, billie-platform-services #57 + billieChat #134):** the A4 workstream was assessed as load-bearing for win-back/lifecycle segmentation and implemented. **Flagged decision #1 resolved without inference or new billieChat work:** billieChat already emits `customer.contact.verified.v1` on OTP pass — it was simply never routed to a projection; the state module consumes it directly (A3). A4 derives from `ekyc_status` on `customer.changed.v1` (verified-value set), with `customer.verified.v1` also honoured if emitted.
 
 Implements the governed A × B\* × C × L tuple as a derived projection — platform-owned, exactly per the state model's D14 (C and L are projections over agreement records) and R4 (events move states; treatments read states).
 
@@ -174,7 +174,7 @@ The stage on a contact is **derived, never hand-edited** — computed by marketi
 
 **Advocate is a flag overlay, not a stage** (per D16: type tests are attributes): `advocate = true` when ≥1 attributed referral reached Customer. The CRM grid can still filter/present it as a pseudo-stage.
 
-> **Open at sign-off (A2, discuss):** whether staff get a manual stage override or an "Other / needs review" stage, so we're never locked out of reclassifying as new situations emerge. Derivation-only stands until that discussion lands; if an override is approved it will be an explicit, audited command (an attribute overlay the derivation respects), never a hand-edit of the derived field. Note the general `attributes` field already absorbs unexpected campaign data — the gap is specifically stage correction.
+> **DECIDED + BUILT (8 Jul 2026):** no manual stage override — derivation stays authoritative (the §4 precedence list is safety-critical: it prevents messaging into open applications). Instead, staff get an audited **needs-review flag** (`attributes.needs_review`, per the model's D16 ruling that type tests are attributes — the same mechanism as advocate): flagged contacts are excluded from every invitation send (`skipped_needs_review` on TriggerBatchInvitations) and filterable in the grid, with reason + actor on the audit trail. Combined with batches (manual segmentation) and manual contact↔customer linking, this covers reclassification needs without letting a stale manual pin contradict live state.
 
 Loan-status mirror (minimal, per brief §3): `approved` (B1) / `disbursed` (B4 or L) / `repaid` (C-P ∧ ¬L). No amounts — structurally impossible (§2.2).
 
@@ -333,13 +333,13 @@ WhatsApp provider client + webhook; DSR tooling complete (erase incl. XDEL sweep
 
 | # | Decision | Default in this spec | Owner to confirm | Status (sign-off, 7 Jul 2026) |
 |---|---|---|---|---|
-| 1 | OTP-pass event from billieChat vs A3 inference | billieChat emits explicit event | billieChat owner, phase-2 planning | open — awareness item (Part C), billieChat owner to confirm |
-| 2 | WhatsApp before or after cutover | after (phase 3), SMS-first cutover | marketing/product | in discussion (B1) — default stands until resolved |
+| 1 | OTP-pass event from billieChat vs A3 inference | billieChat emits explicit event | billieChat owner, phase-2 planning | **RESOLVED (8 Jul)** — `customer.contact.verified.v1` already existed; now routed to the state projector (billieChat #134) |
+| 2 | WhatsApp before or after cutover | after (phase 3), SMS-first cutover | marketing/product | **DECIDED (8 Jul)** — default held (external Meta-template lead time); start template approval in parallel; see cutover runbook |
 | 3 | Referral URL resolution on website | `/r/{code}` redirect → form `ref` param | web owner | open — awareness item (Part C), web owner to confirm |
 | 4 | `ADMIN_CLOSED` mapping | ~~conservative C-N~~ → **C-P (win-back-eligible) + review flag** | product/credit, phase 3 | **changed (B2)** — incorporated in §3; `SETTLED_SHORT` at source remains phase 3 |
 | 5 | Bx timeout window | 30 days inactivity | product | **approved as default (B3)** |
-| 6 | Manual stage override / "Other — needs review" stage | none — stage strictly derived (§4) | product + design | in discussion (A2) |
-| 7 | Customer State Model + state-projection workstream | new module in customerService (§3) | product/platform | in discussion (A4) |
+| 6 | Manual stage override / "Other — needs review" stage | none — stage strictly derived (§4) | product + design | **DECIDED + BUILT (8 Jul)** — needs-review flag, no override (§4 note) |
+| 7 | Customer State Model + state-projection workstream | new module in customerService (§3) | product/platform | **BUILT (8 Jul)** — platform #57 + billieChat #134 (§3 note) |
 
 ## 14. Sign-off record (7 July 2026)
 

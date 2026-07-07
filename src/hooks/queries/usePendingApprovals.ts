@@ -21,7 +21,9 @@ export interface WriteOffApproval {
   requiresSeniorApproval: boolean
   requestedAt: string
   /** User who requested - can be a string ID or populated user object */
-  requestedBy?: string | { id: string | number; email?: string; firstName?: string; lastName?: string }
+  requestedBy?:
+    | string
+    | { id: string | number; email?: string; firstName?: string; lastName?: string }
   requestedByName?: string
   createdAt: string
   updatedAt: string
@@ -46,7 +48,7 @@ export interface PendingApprovalsOptions {
 }
 
 async function fetchPendingApprovals(
-  options: PendingApprovalsOptions = {}
+  options: PendingApprovalsOptions = {},
 ): Promise<PendingApprovalsResponse> {
   const { page = 1, limit = 20, sort = 'oldest' } = options
 
@@ -67,7 +69,7 @@ async function fetchPendingApprovals(
       page,
       sort: sortMap[sort] || 'createdAt',
     },
-    { addQueryPrefix: true }
+    { addQueryPrefix: true },
   )
 
   const res = await fetch(`/api/write-off-requests${queryString}`)

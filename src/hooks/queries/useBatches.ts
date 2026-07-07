@@ -7,8 +7,11 @@ export interface BatchesFilters {
   page?: number
 }
 
+/** Batch enriched server-side with its contact member count. */
+export type BatchWithCount = Batch & { memberCount?: number }
+
 export interface BatchesResponse {
-  docs: Batch[]
+  docs: BatchWithCount[]
   totalDocs: number
   totalPages: number
   page: number

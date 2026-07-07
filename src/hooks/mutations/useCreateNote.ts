@@ -36,9 +36,7 @@ async function createNote(params: CreateNoteParams): Promise<CreateNoteResult> {
     const body = await res.json().catch(() => ({}))
     const message =
       // Payload wraps validation errors in errors array
-      body?.errors?.[0]?.message ||
-      body?.message ||
-      'Failed to create note'
+      body?.errors?.[0]?.message || body?.message || 'Failed to create note'
     throw new Error(message)
   }
 

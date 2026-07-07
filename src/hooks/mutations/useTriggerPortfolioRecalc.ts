@@ -47,7 +47,11 @@ export function useTriggerPortfolioRecalc() {
       })
       if (!res.ok) {
         const error = await res.json().catch(() => ({}))
-        const errorMessage = error.error || error.message || error.details || `HTTP ${res.status}: Failed to trigger recalculation`
+        const errorMessage =
+          error.error ||
+          error.message ||
+          error.details ||
+          `HTTP ${res.status}: Failed to trigger recalculation`
         throw new Error(errorMessage)
       }
       return res.json()
@@ -55,7 +59,7 @@ export function useTriggerPortfolioRecalc() {
     onSuccess: (data) => {
       // Invalidate portfolio ECL data after recalc starts
       queryClient.invalidateQueries({ queryKey: ['portfolio-ecl'] })
-      
+
       // Show success toast
       toast.success('ECL recalculation started', {
         description: `Processing ${data.accountCount} accounts`,
@@ -63,7 +67,8 @@ export function useTriggerPortfolioRecalc() {
     },
     onError: (error) => {
       // Show error toast
-      const errorMessage = error instanceof Error ? error.message : 'Failed to trigger recalculation'
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to trigger recalculation'
       toast.error('Failed to trigger recalculation', {
         description: errorMessage,
       })

@@ -57,9 +57,7 @@ export function useListKeyboardNav(options: UseListKeyboardNavOptions): {
       const target = e.target as HTMLElement | null
       const inInput =
         !!target &&
-        (target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA' ||
-          target.isContentEditable)
+        (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
       if (inInput) return
 
       // Skip modifier-laden combos so we don't conflict with browser/system
