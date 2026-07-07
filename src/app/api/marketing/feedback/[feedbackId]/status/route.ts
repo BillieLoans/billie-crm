@@ -45,13 +45,14 @@ export async function POST(
     )
   }
 
-  const { status } = parsed.data
+  const { status, note } = parsed.data
 
   try {
     const result = await setFeedbackStatus({
       idempotencyKey: `feedback-status:${feedbackId}:${status}`,
       feedbackId,
       status,
+      note: note?.trim() || undefined,
       actor: String(user.id),
     })
     return NextResponse.json(

@@ -405,17 +405,23 @@ async def handle_feedback_status_changed(pool: asyncpg.Pool, event: Any) -> None
     delivery leaves no phantom audit).
     """
     p = event.payload
+    # `note` (what was done) arrived with the resolution-note feature —
+    # getattr keeps this tolerant of pre-note SDK models during rollout.
+    note = getattr(p, "note", None)
+    values = {
+        "status": p.status,
+        "status_changed_at": coerce_date(p.changed_at),
+        "status_actor": p.actor,
+        "updated_at": _now(),
+    }
+    if note:
+        values["status_note"] = note
     await update_by_key(
         pool,
         "feedback",
         key_column="feedback_id",
         key_value=p.feedback_id,
-        values={
-            "status": p.status,
-            "status_changed_at": coerce_date(p.changed_at),
-            "status_actor": p.actor,
-            "updated_at": _now(),
-        },
+        values=values,
     )
     contact_ref = await pool.fetchval(
         "SELECT contact_id_string FROM feedback WHERE feedback_id = $1", p.feedback_id

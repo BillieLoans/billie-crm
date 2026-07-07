@@ -184,6 +184,8 @@ export interface SetFeedbackStatusInput {
   idempotencyKey: string
   feedbackId: string
   status: string
+  /** What was done with the feedback — carried on feedback.status.changed.v1. */
+  note?: string
   actor?: string
 }
 

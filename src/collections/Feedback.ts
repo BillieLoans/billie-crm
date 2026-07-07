@@ -42,6 +42,14 @@ export const Feedback: CollectionConfig = {
     },
     { name: 'statusChangedAt', type: 'date', admin: { readOnly: true } },
     { name: 'statusActor', type: 'text', admin: { readOnly: true } },
+    {
+      name: 'statusNote',
+      type: 'textarea',
+      admin: {
+        readOnly: true,
+        description: 'What was done — carried on feedback.status.changed.v1',
+      },
+    },
   ],
   timestamps: true,
 }

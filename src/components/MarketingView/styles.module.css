@@ -421,6 +421,26 @@
   margin-left: auto;
 }
 
+/* Truncated resolution note in the feedback queue (full text in title). */
+.noteCell {
+  display: inline-block;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+/* The feedback being resolved, quoted in the resolve modal. */
+.feedbackQuote {
+  margin: 0 0 1rem 0;
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid var(--theme-elevation-200, #d5d5d5);
+  color: var(--theme-elevation-600, #666);
+  font-size: 0.875rem;
+  white-space: pre-wrap;
+}
+
 /* Button that reads as an inline name link (feedback queue contact peek). */
 .linkButton {
   background: none;

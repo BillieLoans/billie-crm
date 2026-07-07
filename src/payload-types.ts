@@ -1727,6 +1727,10 @@ export interface Feedback {
   status?: string | null;
   statusChangedAt?: string | null;
   statusActor?: string | null;
+  /**
+   * What was done — carried on feedback.status.changed.v1
+   */
+  statusNote?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -2563,6 +2567,7 @@ export interface FeedbackSelect<T extends boolean = true> {
   status?: T;
   statusChangedAt?: T;
   statusActor?: T;
+  statusNote?: T;
   updatedAt?: T;
   createdAt?: T;
 }
