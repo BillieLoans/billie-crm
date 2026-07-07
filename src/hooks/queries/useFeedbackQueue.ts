@@ -10,8 +10,11 @@ export interface FeedbackQueueFilters {
   page?: number
 }
 
+/** Feedback row enriched server-side with the contact's name (GET route). */
+export type FeedbackWithContact = Feedback & { contactName?: string | null }
+
 export interface FeedbackQueueResponse {
-  docs: Feedback[]
+  docs: FeedbackWithContact[]
   totalDocs: number
   totalPages: number
   page: number

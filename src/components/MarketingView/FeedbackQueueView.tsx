@@ -6,6 +6,7 @@ import { useFeedbackQueue } from '@/hooks/queries/useFeedbackQueue'
 import { useSetFeedbackStatus } from '@/hooks/mutations/useMarketingCommands'
 import type { Feedback } from '@/payload-types'
 import { formatDateShort } from '@/lib/formatters'
+import { ContactPeekModal } from './ContactPeekModal'
 import styles from './styles.module.css'
 
 const STATUS_OPTIONS = [
@@ -14,6 +15,9 @@ const STATUS_OPTIONS = [
   { value: 'acknowledged', label: 'Acknowledged' },
   { value: 'resolved', label: 'Resolved' },
 ]
+
+/** Fallback label when the contact has no name (or the lookup missed). */
+const shortId = (id: string) => `${id.slice(0, 8)}…`
 
 /**
  * FeedbackQueueView — the marketing feedback triage queue at
@@ -24,6 +28,7 @@ const STATUS_OPTIONS = [
 export const FeedbackQueueView: React.FC = () => {
   const [status, setStatus] = useState('')
   const [page, setPage] = useState(1)
+  const [peekContactId, setPeekContactId] = useState<string | null>(null)
 
   const filters = useMemo(() => ({ status: status || undefined, page }), [status, page])
   const { data, isLoading, isError } = useFeedbackQueue(filters)
@@ -104,12 +109,13 @@ export const FeedbackQueueView: React.FC = () => {
                     <tr key={fb.id} className={styles.row}>
                       <td>
                         {fb.contactIdString ? (
-                          <Link
-                            href={`/admin/marketing/contacts/${fb.contactIdString}`}
-                            className={styles.nameLink}
+                          <button
+                            type="button"
+                            className={styles.linkButton}
+                            onClick={() => setPeekContactId(fb.contactIdString!)}
                           >
-                            {fb.contactIdString}
-                          </Link>
+                            {fb.contactName ?? shortId(fb.contactIdString)}
+                          </button>
                         ) : (
                           '—'
                         )}
@@ -166,6 +172,10 @@ export const FeedbackQueueView: React.FC = () => {
           </>
         )}
       </div>
+
+      {peekContactId && (
+        <ContactPeekModal contactId={peekContactId} onClose={() => setPeekContactId(null)} />
+      )}
     </div>
   )
 }
