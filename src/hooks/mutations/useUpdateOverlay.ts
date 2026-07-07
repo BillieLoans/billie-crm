@@ -43,7 +43,11 @@ export function useUpdateOverlay() {
       })
       if (!res.ok) {
         const error = await res.json().catch(() => ({}))
-        const errorMessage = error.error || error.message || error.details || `HTTP ${res.status}: Failed to update overlay multiplier`
+        const errorMessage =
+          error.error ||
+          error.message ||
+          error.details ||
+          `HTTP ${res.status}: Failed to update overlay multiplier`
         throw new Error(errorMessage)
       }
       return res.json()
@@ -52,7 +56,7 @@ export function useUpdateOverlay() {
       // Invalidate ECL config to refresh data
       queryClient.invalidateQueries({ queryKey: eclConfigQueryKey })
       queryClient.invalidateQueries({ queryKey: ['ecl-config', 'history'] })
-      
+
       // Show success toast
       toast.success('Overlay multiplier updated', {
         description: `Overlay multiplier updated to ${data.newValue.toFixed(2)}x`,
@@ -60,7 +64,8 @@ export function useUpdateOverlay() {
     },
     onError: (error) => {
       // Show error toast
-      const errorMessage = error instanceof Error ? error.message : 'Failed to update overlay multiplier'
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to update overlay multiplier'
       toast.error('Failed to update overlay multiplier', {
         description: errorMessage,
       })

@@ -62,7 +62,7 @@ async function fetchApprovalNotifications(): Promise<PendingApprovalsResponse> {
  */
 function getSeenNotifications(): Set<string> {
   if (typeof window === 'undefined') return new Set()
-  
+
   try {
     const stored = localStorage.getItem(SEEN_NOTIFICATIONS_KEY)
     if (stored) {
@@ -79,7 +79,7 @@ function getSeenNotifications(): Set<string> {
  */
 function markNotificationsAsSeen(ids: string[]): void {
   if (typeof window === 'undefined') return
-  
+
   try {
     const seen = getSeenNotifications()
     ids.forEach((id) => seen.add(id))
@@ -100,20 +100,17 @@ export const approvalNotificationsQueryKey = ['write-off-requests', 'notificatio
 
 /**
  * Hook for fetching and managing approval notifications.
- * 
+ *
  * Features:
  * - Polls every 30 seconds for new pending approvals
  * - Detects new notifications and shows toast
  * - Tracks seen notifications in localStorage
  * - Returns unread count and notification list
- * 
+ *
  * @param options.enabled - Whether to enable polling (default: true)
  * @param options.showToasts - Whether to show toast for new items (default: true)
  */
-export function useApprovalNotifications(options?: {
-  enabled?: boolean
-  showToasts?: boolean
-}) {
+export function useApprovalNotifications(options?: { enabled?: boolean; showToasts?: boolean }) {
   const { enabled = true, showToasts = true } = options ?? {}
   const queryClient = useQueryClient()
   const previousIdsRef = useRef<Set<string>>(new Set())
@@ -143,7 +140,7 @@ export function useApprovalNotifications(options?: {
 
     // Find new notifications that weren't in the previous set and haven't been seen
     const newNotifications = query.data.docs.filter(
-      (n) => !previousIdsRef.current.has(n.id) && !seenIds.has(n.id)
+      (n) => !previousIdsRef.current.has(n.id) && !seenIds.has(n.id),
     )
 
     if (newNotifications.length > 0) {
@@ -197,7 +194,7 @@ export function useApprovalNotifications(options?: {
       markNotificationsAsSeen([id])
       queryClient.invalidateQueries({ queryKey: approvalNotificationsQueryKey })
     },
-    [queryClient]
+    [queryClient],
   )
 
   return {

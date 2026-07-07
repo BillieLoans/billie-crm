@@ -46,9 +46,7 @@ export interface RejectWriteOffResult {
 /**
  * Publish reject command via the command API.
  */
-async function publishRejectCommand(
-  params: RejectWriteOffParams
-): Promise<PublishEventResponse> {
+async function publishRejectCommand(params: RejectWriteOffParams): Promise<PublishEventResponse> {
   const command: WriteOffRejectCommand = {
     requestId: params.requestId,
     requestNumber: params.requestNumber,
@@ -72,9 +70,7 @@ async function publishRejectCommand(
 /**
  * Reject write-off request and poll for the status change.
  */
-async function rejectWriteOff(
-  params: RejectWriteOffParams
-): Promise<RejectWriteOffResult> {
+async function rejectWriteOff(params: RejectWriteOffParams): Promise<RejectWriteOffResult> {
   // Validate reason length
   if (!params.reason || params.reason.trim().length < MIN_APPROVAL_COMMENT_LENGTH) {
     throw new Error(`Rejection reason must be at least ${MIN_APPROVAL_COMMENT_LENGTH} characters`)
@@ -91,7 +87,7 @@ async function rejectWriteOff(
       maxAttempts: 10,
       intervalMs: 500,
       initialDelayMs: 100,
-    }
+    },
   )
 
   return projection
@@ -125,7 +121,8 @@ export function useRejectWriteOff() {
       // Handle polling timeout specifically
       if (error instanceof PollTimeoutError) {
         toast.warning('Rejection submitted but confirmation delayed', {
-          description: 'Your rejection was accepted but is taking longer than expected. Please refresh to see the status.',
+          description:
+            'Your rejection was accepted but is taking longer than expected. Please refresh to see the status.',
         })
         queryClient.invalidateQueries({ queryKey: ['write-off-requests'] })
         return

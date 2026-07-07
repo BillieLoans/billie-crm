@@ -20,7 +20,9 @@ export interface ContactNoteData {
   amendsNote?: string | null | { id: string }
   customer: string | { id: string; fullName?: string | null }
   loanAccount?: string | null | { id: string; loanAccountId: string; accountNumber: string }
-  createdBy: string | { id: string; firstName?: string | null; lastName?: string | null; email?: string | null }
+  createdBy:
+    | string
+    | { id: string; firstName?: string | null; lastName?: string | null; email?: string | null }
   createdAt: string
   updatedAt: string
 }
@@ -50,9 +52,7 @@ async function fetchContactNotes(
   filters: ContactNotesFilters,
   page: number,
 ): Promise<ContactNotesResult> {
-  const andClauses: Record<string, unknown>[] = [
-    { 'customer': { equals: customerId } },
-  ]
+  const andClauses: Record<string, unknown>[] = [{ customer: { equals: customerId } }]
 
   if (filters.topic) {
     andClauses.push({ topic: { equals: filters.topic } })

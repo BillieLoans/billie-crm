@@ -338,6 +338,14 @@ async def handle_contact_erased(pool: asyncpg.Pool, event: Any) -> None:
         json.dumps({}),
         p.contact_id,
     )
+    # DSR completeness: feedback text is free text typed by the data subject —
+    # often the most sensitive content held. Redact it (and the staff
+    # resolution note, which may quote it) alongside interactions.
+    await pool.execute(
+        "UPDATE feedback SET body = NULL, status_note = NULL "
+        "WHERE contact_id_string = $1",
+        p.contact_id,
+    )
     await _audit(pool, p.contact_id, event.event_type, p.actor, {})
 
 

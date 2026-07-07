@@ -66,7 +66,7 @@ export const writeOffRequestsQueryKey = (loanAccountId: string) =>
  * Returns 202 Accepted with eventId for polling.
  */
 async function publishWriteOffCommand(
-  params: WriteOffRequestParams
+  params: WriteOffRequestParams,
 ): Promise<PublishEventResponse> {
   const command: WriteOffRequestCommand = {
     loanAccountId: params.loanAccountId,
@@ -98,7 +98,7 @@ async function publishWriteOffCommand(
  * Submit write-off request and poll for the resulting projection.
  */
 async function submitWriteOffRequest(
-  params: WriteOffRequestParams
+  params: WriteOffRequestParams,
 ): Promise<WriteOffRequestResult> {
   // 1. Publish the command event
   const { eventId } = await publishWriteOffCommand(params)
@@ -148,7 +148,8 @@ export function useWriteOffRequest() {
       // Handle polling timeout specifically
       if (error instanceof PollTimeoutError) {
         toast.error('Request submitted but confirmation delayed', {
-          description: 'Your request was accepted but is taking longer than expected to process. Please refresh to see the status.',
+          description:
+            'Your request was accepted but is taking longer than expected to process. Please refresh to see the status.',
         })
         // Still invalidate queries so a manual refresh shows the request
         queryClient.invalidateQueries({ queryKey: ['write-off-requests'] })

@@ -62,7 +62,9 @@ export const scheduleWithStatusQueryKey = (accountId: string) => ['schedule-with
 // Fetcher
 // =============================================================================
 
-async function fetchScheduleWithStatus(accountId: string): Promise<ScheduleWithStatusResponse | null> {
+async function fetchScheduleWithStatus(
+  accountId: string,
+): Promise<ScheduleWithStatusResponse | null> {
   const response = await fetch(`/api/ledger/schedule/${encodeURIComponent(accountId)}`)
 
   if (!response.ok) {

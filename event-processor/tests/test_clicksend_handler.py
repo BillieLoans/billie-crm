@@ -73,3 +73,53 @@ async def test_inbound_unnormalisable_sender_skips(mock_pool, monkeypatch):
 
     await handle_clicksend_inbound(mock_pool, _event({"from": "garbage", "body": "hi"}))
     log.assert_not_awaited()
+
+
+class TestOptOutDetection:
+    def test_keywords_match_case_insensitively(self):
+        from billie_servicing.handlers.clicksend import is_opt_out
+
+        assert is_opt_out("STOP")
+        assert is_opt_out("stop")
+        assert is_opt_out("Stop please")
+        assert is_opt_out("UNSUBSCRIBE")
+        assert is_opt_out("opt out")
+        assert is_opt_out(None, keyword="STOP")
+        assert not is_opt_out("please stop sending me these")  # mid-sentence
+        assert not is_opt_out("what time do you open?")
+        assert not is_opt_out("")
+        assert not is_opt_out(None)
+
+
+async def test_stop_reply_withdraws_consent(mock_pool, monkeypatch):
+    # Spam Act: a STOP reply must actually withdraw consent, automatically.
+    log = AsyncMock(return_value="ev-1")
+    consent = AsyncMock(return_value="ev-2")
+    monkeypatch.setattr(marketing_client, "log_interaction", log)
+    monkeypatch.setattr(marketing_client, "set_consent", consent)
+    mock_pool.set_fetchval("c-1")
+
+    await handle_clicksend_inbound(
+        mock_pool, _event({"from": "0403320117", "body": "STOP", "message_id": "M-1"})
+    )
+
+    assert log.await_args.kwargs["kind"] == "message_in"
+    kwargs = consent.await_args.kwargs
+    assert kwargs["granted"] is False
+    assert kwargs["method"] == "sms_stop_reply"
+    assert "M-1" in kwargs["evidence"]
+
+
+async def test_normal_reply_does_not_touch_consent(mock_pool, monkeypatch):
+    log = AsyncMock(return_value="ev-1")
+    consent = AsyncMock(return_value="ev-2")
+    monkeypatch.setattr(marketing_client, "log_interaction", log)
+    monkeypatch.setattr(marketing_client, "set_consent", consent)
+    mock_pool.set_fetchval("c-1")
+
+    await handle_clicksend_inbound(
+        mock_pool, _event({"from": "0403320117", "body": "thanks!", "message_id": "M-2"})
+    )
+
+    log.assert_awaited_once()
+    consent.assert_not_awaited()

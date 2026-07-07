@@ -9,6 +9,7 @@ import { useContactReferrals } from '@/hooks/queries/useContactReferrals'
 import { useFeedbackQueue } from '@/hooks/queries/useFeedbackQueue'
 import { useSetReviewFlag, useUnlinkContact } from '@/hooks/mutations/useMarketingCommands'
 import { LinkCustomerModal } from './LinkCustomerModal'
+import { RecordConsentModal } from './RecordConsentModal'
 import type { ContactAuditLog, Interaction } from '@/payload-types'
 import { formatDateMedium } from '@/lib/formatters'
 import { getMarketingConsentGranted } from '@/lib/marketing'
@@ -126,6 +127,7 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contactId }) => {
   const [showLinkModal, setShowLinkModal] = useState(false)
   const [showUnlinkConfirm, setShowUnlinkConfirm] = useState(false)
   const [showFlagModal, setShowFlagModal] = useState(false)
+  const [showConsentModal, setShowConsentModal] = useState(false)
   const [flagReason, setFlagReason] = useState('')
   const unlink = useUnlinkContact()
   const reviewFlag = useSetReviewFlag()
@@ -135,7 +137,13 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contactId }) => {
     onSuccess: () => {
       toast.success('Note logged')
       setNoteText('')
-      queryClient.invalidateQueries({ queryKey: marketingContactQueryKey(contactId) })
+      // Command → projection lag: refetch now and again shortly after so the
+      // note reliably appears without a manual refresh.
+      const invalidate = () =>
+        queryClient.invalidateQueries({ queryKey: marketingContactQueryKey(contactId) })
+      invalidate()
+      setTimeout(invalidate, 1500)
+      setTimeout(invalidate, 4000)
     },
     onError: (error) => {
       toast.error('Failed to log note', {
@@ -345,6 +353,15 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contactId }) => {
                 </div>
               ))
             )}
+            <div className={styles.panelButtonRow}>
+              <button
+                type="button"
+                className={styles.pageButton}
+                onClick={() => setShowConsentModal(true)}
+              >
+                Record consent…
+              </button>
+            </div>
           </Panel>
 
           <Panel title="Referrals">
@@ -422,9 +439,22 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contactId }) => {
         />
       )}
 
+      {showConsentModal && (
+        <RecordConsentModal
+          contactId={contactId}
+          contactName={contact.firstName ?? 'this contact'}
+          onClose={() => setShowConsentModal(false)}
+        />
+      )}
+
       {showFlagModal && (
         <div className={styles.modalOverlay} onClick={() => setShowFlagModal(false)}>
-          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+          <div
+            className={styles.modal}
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className={styles.modalHeader}>
               <h2 className={styles.modalTitle}>Flag for review</h2>
               <button
@@ -489,7 +519,12 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contactId }) => {
 
       {showUnlinkConfirm && (
         <div className={styles.modalOverlay} onClick={() => setShowUnlinkConfirm(false)}>
-          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+          <div
+            className={styles.modal}
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className={styles.modalHeader}>
               <h2 className={styles.modalTitle}>Unlink customer</h2>
               <button

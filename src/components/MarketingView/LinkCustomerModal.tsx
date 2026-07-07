@@ -4,6 +4,7 @@ import React, { useState } from 'react'
 import { useCustomerSearch } from '@/hooks/queries/useCustomerSearch'
 import type { CustomerSearchResult } from '@/hooks/queries/useCustomerSearch'
 import { useLinkContact } from '@/hooks/mutations/useMarketingCommands'
+import { useEscapeClose } from '@/hooks/useModalA11y'
 import styles from './styles.module.css'
 
 interface LinkCustomerModalProps {
@@ -37,9 +38,16 @@ export const LinkCustomerModal: React.FC<LinkCustomerModalProps> = ({
     link.mutate({ contactId, customerId: selected.customerId }, { onSuccess: () => onClose() })
   }
 
+  useEscapeClose(onClose)
+
   return (
     <div className={styles.modalOverlay} onClick={onClose}>
-      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+      <div
+        className={styles.modal}
+        role="dialog"
+        aria-modal="true"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className={styles.modalHeader}>
           <h2 className={styles.modalTitle}>Link {contactName} to a customer</h2>
           <button type="button" className={styles.closeBtn} onClick={onClose} aria-label="Close">

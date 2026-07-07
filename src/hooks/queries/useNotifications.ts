@@ -1,12 +1,7 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { stringify } from 'qs-esm'
 
-export type NotificationStatus =
-  | 'sent'
-  | 'failed'
-  | 'blocked'
-  | 'statement'
-  | 'suppression_change'
+export type NotificationStatus = 'sent' | 'failed' | 'blocked' | 'statement' | 'suppression_change'
 
 export interface NotificationData {
   id: string

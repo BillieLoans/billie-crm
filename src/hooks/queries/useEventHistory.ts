@@ -29,8 +29,10 @@ export interface UseEventHistoryOptions {
   enabled?: boolean
 }
 
-export const eventHistoryQueryKey = (accountId: string, options?: Partial<UseEventHistoryOptions>) =>
-  ['event-history', accountId, options] as const
+export const eventHistoryQueryKey = (
+  accountId: string,
+  options?: Partial<UseEventHistoryOptions>,
+) => ['event-history', accountId, options] as const
 
 /**
  * Hook to fetch event history for an account.

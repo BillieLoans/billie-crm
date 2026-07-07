@@ -61,8 +61,7 @@ async function fetchAccountAging(accountId: string): Promise<AccountAgingRespons
 /**
  * Query key for account aging
  */
-export const accountAgingQueryKey = (accountId: string) =>
-  ['account-aging', accountId] as const
+export const accountAgingQueryKey = (accountId: string) => ['account-aging', accountId] as const
 
 /**
  * Hook to fetch account aging status (DPD, bucket, overdue amounts).

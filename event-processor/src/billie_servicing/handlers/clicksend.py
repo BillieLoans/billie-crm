@@ -61,6 +61,28 @@ def _coerce_occurred_at(ts: str | int | None) -> str:
         return ""
 
 
+# Spam Act 2003: an unsubscribe request must actually work. Industry-standard
+# opt-out keywords, matched case-insensitively against the trimmed body (and
+# ClickSend's parsed _keyword field). A message that BEGINS with one counts —
+# "STOP", "Stop please" — but "please stop sending" does not auto-trigger
+# (staff still see it on the timeline).
+OPT_OUT_KEYWORDS = frozenset(
+    {"stop", "stopall", "stop all", "unsubscribe", "opt out", "optout", "end", "quit", "cancel"}
+)
+
+
+def is_opt_out(body: str | None, keyword: str | None = None) -> bool:
+    if keyword and keyword.strip().lower() in OPT_OUT_KEYWORDS:
+        return True
+    text = (body or "").strip().lower()
+    if not text:
+        return False
+    if text in OPT_OUT_KEYWORDS:
+        return True
+    first_word = text.split()[0].rstrip(".!,")
+    return first_word in OPT_OUT_KEYWORDS
+
+
 async def handle_clicksend_inbound(pool: asyncpg.Pool, event: dict[str, Any]) -> None:
     """Handle ``clicksend.inbound.received.v1`` — resolve sender → LogInteraction."""
     payload = _parse_payload(event)
@@ -74,6 +96,10 @@ async def handle_clicksend_inbound(pool: asyncpg.Pool, event: dict[str, Any]) ->
         mobile,
     )
     if not contact_id:
+        # No contact ⇒ nothing to suppress: marketing sends only ever target
+        # contacts, so an unknown number is unreachable by construction. Log
+        # loudly (an opt-out from an unknown number may mean a mis-linked or
+        # erased contact) but there is no consent record to update.
         logger.warning("clicksend inbound: no contact for sender, skipping", mobile=mobile)
         return
 
@@ -96,3 +122,19 @@ async def handle_clicksend_inbound(pool: asyncpg.Pool, event: dict[str, Any]) ->
         actor="clicksend",
     )
     logger.info("clicksend inbound logged", contact_id=contact_id, message_id=message_id)
+
+    # Spam Act: STOP/unsubscribe replies withdraw marketing consent
+    # automatically — the dispatcher's fail-closed opt-in gate then blocks all
+    # future marketing sends with no further work.
+    body = payload.get("body") or ""
+    if is_opt_out(body, payload.get("_keyword")):
+        await marketing_client.set_consent(
+            idempotency_key=f"clicksend-optout:{message_id or mobile}",
+            contact_id=contact_id,
+            granted=False,
+            channels=["sms", "whatsapp", "email"],
+            method="sms_stop_reply",
+            evidence=f"Inbound SMS {message_id or '(no id)'}: {body[:200]}",
+            actor="clicksend",
+        )
+        logger.info("clicksend inbound OPT-OUT — consent withdrawn", contact_id=contact_id)

@@ -17,6 +17,10 @@ export interface FailedActionsPanelProps {
  */
 function getActionLabel(type: FailedActionType): string {
   switch (type) {
+    case 'marketing-command':
+      return '📣'
+    case 'marketing-command':
+      return 'Marketing command'
     case 'waive-fee':
       return 'Waive Fee'
     case 'record-repayment':
@@ -60,7 +64,6 @@ function getActionIcon(type: FailedActionType): string {
   }
 }
 
-
 /**
  * Individual failed action item component.
  */
@@ -89,9 +92,7 @@ const ActionItem: React.FC<ActionItemProps> = ({
             </span>
             {getActionLabel(action.type)}
           </span>
-          <span className={styles.actionAccount}>
-            {action.accountLabel || action.accountId}
-          </span>
+          <span className={styles.actionAccount}>{action.accountLabel || action.accountId}</span>
         </div>
         <span className={styles.actionTime}>{formatRelativeTime(action.timestamp)}</span>
       </div>
@@ -113,7 +114,11 @@ const ActionItem: React.FC<ActionItemProps> = ({
           }
           data-testid={`retry-action-${action.id}`}
         >
-          {isRetrying ? '⏳ Retrying...' : action.retryCount >= MAX_RETRY_ATTEMPTS ? '❌ Max retries' : '🔄 Retry'}
+          {isRetrying
+            ? '⏳ Retrying...'
+            : action.retryCount >= MAX_RETRY_ATTEMPTS
+              ? '❌ Max retries'
+              : '🔄 Retry'}
         </button>
         <button
           type="button"
@@ -163,7 +168,7 @@ export const FailedActionsPanel: React.FC<FailedActionsPanelProps> = ({ onClose 
       if (!panel) return
 
       const focusableElements = panel.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
       )
 
       const firstElement = focusableElements[0]

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useMarketingContact } from '@/hooks/queries/useMarketingContact'
 import { formatDateMedium } from '@/lib/formatters'
 import { getMarketingConsentGranted } from '@/lib/marketing'
+import { useEscapeClose } from '@/hooks/useModalA11y'
 import styles from './styles.module.css'
 
 interface ContactPeekModalProps {
@@ -56,9 +57,16 @@ export const ContactPeekModal: React.FC<ContactPeekModalProps> = ({ contactId, o
     { label: 'Updated', value: contact?.updatedAt ? formatDateMedium(contact.updatedAt) : '—' },
   ]
 
+  useEscapeClose(onClose)
+
   return (
     <div className={styles.modalOverlay} onClick={onClose}>
-      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+      <div
+        className={styles.modal}
+        role="dialog"
+        aria-modal="true"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className={styles.modalHeader}>
           <h2 className={styles.modalTitle}>
             {isLoading ? 'Loading contact…' : (contact?.firstName ?? 'Unnamed contact')}

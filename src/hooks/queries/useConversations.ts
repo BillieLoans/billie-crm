@@ -59,8 +59,7 @@ export function useConversations({
 }: UseConversationsOptions = {}): UseConversationsResult {
   const query = useInfiniteQuery({
     queryKey: ['conversations', filters],
-    queryFn: ({ pageParam }) =>
-      fetchConversations({ ...filters, cursor: pageParam ?? undefined }),
+    queryFn: ({ pageParam }) => fetchConversations({ ...filters, cursor: pageParam ?? undefined }),
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.cursor : undefined),
     enabled,

@@ -46,9 +46,7 @@ export interface ApproveWriteOffResult {
 /**
  * Publish approve command via the command API.
  */
-async function publishApproveCommand(
-  params: ApproveWriteOffParams
-): Promise<PublishEventResponse> {
+async function publishApproveCommand(params: ApproveWriteOffParams): Promise<PublishEventResponse> {
   const command: WriteOffApproveCommand = {
     requestId: params.requestId,
     requestNumber: params.requestNumber,
@@ -62,7 +60,9 @@ async function publishApproveCommand(
   })
 
   if (!res.ok) {
-    const error = await res.json().catch(() => ({ error: { message: 'Failed to approve request' } }))
+    const error = await res
+      .json()
+      .catch(() => ({ error: { message: 'Failed to approve request' } }))
     throw new Error(error.error?.message || 'Failed to approve write-off request')
   }
 
@@ -72,9 +72,7 @@ async function publishApproveCommand(
 /**
  * Approve write-off request and poll for the status change.
  */
-async function approveWriteOff(
-  params: ApproveWriteOffParams
-): Promise<ApproveWriteOffResult> {
+async function approveWriteOff(params: ApproveWriteOffParams): Promise<ApproveWriteOffResult> {
   // Validate comment length
   if (!params.comment || params.comment.trim().length < MIN_APPROVAL_COMMENT_LENGTH) {
     throw new Error(`Approval comment must be at least ${MIN_APPROVAL_COMMENT_LENGTH} characters`)
@@ -91,7 +89,7 @@ async function approveWriteOff(
       maxAttempts: 10,
       intervalMs: 500,
       initialDelayMs: 100,
-    }
+    },
   )
 
   return projection
@@ -125,7 +123,8 @@ export function useApproveWriteOff() {
       // Handle polling timeout specifically
       if (error instanceof PollTimeoutError) {
         toast.warning('Approval submitted but confirmation delayed', {
-          description: 'Your approval was accepted but is taking longer than expected. Please refresh to see the status.',
+          description:
+            'Your approval was accepted but is taking longer than expected. Please refresh to see the status.',
         })
         queryClient.invalidateQueries({ queryKey: ['write-off-requests'] })
         return

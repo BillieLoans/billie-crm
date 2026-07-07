@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useFeedbackQueue } from '@/hooks/queries/useFeedbackQueue'
 import type { FeedbackWithContact } from '@/hooks/queries/useFeedbackQueue'
@@ -35,6 +35,11 @@ export const FeedbackQueueView: React.FC = () => {
 
   const filters = useMemo(() => ({ status: status || undefined, page }), [status, page])
   const { data, isLoading, isError } = useFeedbackQueue(filters)
+  // Render-pure clock snapshot for the Age column; refreshed with each fetch.
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    setNow(Date.now())
+  }, [data])
   const setStatusMutation = useSetFeedbackStatus()
   const docs = data?.docs ?? []
 
@@ -46,6 +51,23 @@ export const FeedbackQueueView: React.FC = () => {
   }
 
   const statusBadge = (s: Feedback['status']) => <span className={styles.badge}>{s ?? 'new'}</span>
+
+  // Row-scoped pending: acknowledging one item must not freeze the buttons on
+  // every other row — triage is fast sequential work.
+  const isRowPending = (feedbackId: string | null | undefined) =>
+    setStatusMutation.isPending && setStatusMutation.variables?.feedbackId === feedbackId
+
+  // Days-open ages the queue; unresolved complaints older than 21 days get an
+  // overdue highlight (internal IDR posture: resolve complaints well inside
+  // 30 days).
+  const daysOpen = (receivedAt: string | null | undefined): number | null => {
+    if (!receivedAt) return null
+    return Math.floor((now - new Date(receivedAt).getTime()) / 86_400_000)
+  }
+  const isOverdue = (fb: Feedback) =>
+    fb.status !== 'resolved' &&
+    (fb.feedbackType ?? '').toLowerCase() === 'complaint' &&
+    (daysOpen(fb.receivedAt) ?? 0) > 21
 
   return (
     <div className={styles.container}>
@@ -93,6 +115,7 @@ export const FeedbackQueueView: React.FC = () => {
                   <th>Feedback</th>
                   <th>Status</th>
                   <th>Resolution</th>
+                  <th>Age</th>
                   <th>Received</th>
                   <th>Actions</th>
                 </tr>
@@ -100,13 +123,13 @@ export const FeedbackQueueView: React.FC = () => {
               <tbody>
                 {isLoading && docs.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className={styles.emptyCell}>
+                    <td colSpan={8} className={styles.emptyCell}>
                       Loading feedback…
                     </td>
                   </tr>
                 ) : docs.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className={styles.emptyCell}>
+                    <td colSpan={8} className={styles.emptyCell}>
                       No feedback matches the current filter.
                     </td>
                   </tr>
@@ -127,7 +150,15 @@ export const FeedbackQueueView: React.FC = () => {
                         )}
                       </td>
                       <td>{fb.feedbackType ?? '—'}</td>
-                      <td>{fb.body ?? '—'}</td>
+                      <td>
+                        {fb.body ? (
+                          <span className={styles.noteCell} title={fb.body}>
+                            {fb.body}
+                          </span>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
                       <td>{statusBadge(fb.status)}</td>
                       <td>
                         {fb.statusNote ? (
@@ -138,13 +169,31 @@ export const FeedbackQueueView: React.FC = () => {
                           '—'
                         )}
                       </td>
+                      <td>
+                        {daysOpen(fb.receivedAt) === null ? (
+                          '—'
+                        ) : (
+                          <span
+                            className={
+                              isOverdue(fb)
+                                ? `${styles.badge} ${styles.badgeConsentDeclined}`
+                                : undefined
+                            }
+                            title={
+                              isOverdue(fb) ? 'Unresolved complaint over 21 days old' : undefined
+                            }
+                          >
+                            {daysOpen(fb.receivedAt)}d
+                          </span>
+                        )}
+                      </td>
                       <td>{fb.receivedAt ? formatDateShort(fb.receivedAt) : '—'}</td>
                       <td>
                         <button
                           type="button"
                           className={styles.pageButton}
                           onClick={() => acknowledge(fb.feedbackId)}
-                          disabled={setStatusMutation.isPending || fb.status !== 'new'}
+                          disabled={isRowPending(fb.feedbackId) || fb.status !== 'new'}
                         >
                           Acknowledge
                         </button>{' '}
@@ -152,7 +201,7 @@ export const FeedbackQueueView: React.FC = () => {
                           type="button"
                           className={styles.pageButton}
                           onClick={() => setResolveTarget(fb)}
-                          disabled={setStatusMutation.isPending || fb.status === 'resolved'}
+                          disabled={isRowPending(fb.feedbackId) || fb.status === 'resolved'}
                         >
                           Resolve
                         </button>

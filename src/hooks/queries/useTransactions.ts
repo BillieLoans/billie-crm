@@ -61,11 +61,11 @@ export const TRANSACTION_TYPES = [
 
 async function fetchTransactions(
   loanAccountId: string,
-  filters: TransactionFilters
+  filters: TransactionFilters,
 ): Promise<TransactionsResponse> {
   const params = new URLSearchParams()
   params.set('loanAccountId', loanAccountId)
-  
+
   if (filters.limit) params.set('limit', filters.limit.toString())
   if (filters.type) params.set('type', filters.type)
   if (filters.fromDate) params.set('fromDate', filters.fromDate)
@@ -99,4 +99,3 @@ export function useTransactions(loanAccountId: string | null, filters: Transacti
     placeholderData: keepPreviousData,
   })
 }
-

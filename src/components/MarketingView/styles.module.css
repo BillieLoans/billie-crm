@@ -459,7 +459,7 @@
 }
 
 .searchResultSelected {
-  border-color: #2563eb;
+  border-color: var(--theme-success-500, #2563eb);
   background: var(--theme-elevation-50, #f5f5f5);
 }
 
@@ -580,8 +580,8 @@
 .formInput:focus,
 .formSelect:focus {
   outline: none;
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  border-color: var(--theme-success-500, #2563eb);
+  box-shadow: 0 0 0 3px var(--theme-success-100, rgba(37, 99, 235, 0.1));
 }
 
 .formHint {
@@ -616,7 +616,7 @@
   display: inline-flex;
   align-items: center;
   padding: 0.625rem 1.25rem;
-  background: #2563eb;
+  background: var(--theme-success-500, #2563eb);
   color: white;
   border: none;
   border-radius: 6px;
@@ -627,7 +627,7 @@
 }
 
 .btnSubmit:hover:not(:disabled) {
-  background: #1d4ed8;
+  background: var(--theme-success-600, #1d4ed8);
 }
 
 .btnSubmit:disabled {
@@ -636,8 +636,8 @@
 }
 
 .errorMessage {
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--theme-error-50, #fee2e2);
+  color: var(--theme-error-600, #991b1b);
   padding: 0.75rem;
   border-radius: 6px;
   margin-bottom: 1rem;

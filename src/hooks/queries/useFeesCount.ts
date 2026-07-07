@@ -19,8 +19,7 @@ export function useFeesCount(loanAccountId: string | null): number {
     return transactions.filter((tx) => {
       const feeAmount = parseFloat(tx.feeDelta || '0')
       return (
-        WAIVABLE_FEE_TYPES.includes(tx.type as (typeof WAIVABLE_FEE_TYPES)[number]) &&
-        feeAmount > 0
+        WAIVABLE_FEE_TYPES.includes(tx.type as (typeof WAIVABLE_FEE_TYPES)[number]) && feeAmount > 0
       )
     }).length
   }, [data?.transactions])

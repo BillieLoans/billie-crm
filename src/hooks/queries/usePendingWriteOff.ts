@@ -19,22 +19,17 @@ interface WriteOffRequestsResponse {
   hasPrevPage: boolean
 }
 
-async function fetchPendingWriteOff(
-  loanAccountId: string
-): Promise<PendingWriteOffData | null> {
+async function fetchPendingWriteOff(loanAccountId: string): Promise<PendingWriteOffData | null> {
   // Use qs-esm to properly serialize Payload REST API where queries
   const queryString = stringify(
     {
       where: {
-        and: [
-          { loanAccountId: { equals: loanAccountId } },
-          { status: { equals: 'pending' } },
-        ],
+        and: [{ loanAccountId: { equals: loanAccountId } }, { status: { equals: 'pending' } }],
       },
       limit: 1,
       sort: '-createdAt',
     },
-    { addQueryPrefix: true }
+    { addQueryPrefix: true },
   )
 
   const res = await fetch(`/api/write-off-requests${queryString}`)

@@ -48,7 +48,10 @@ export interface ExportJobsResponse {
 export interface UseExportJobsOptions {
   userId?: string
   enabled?: boolean
-  refetchInterval?: number | false | ((query: { state: { data?: ExportJobsResponse } }) => number | false)
+  refetchInterval?:
+    | number
+    | false
+    | ((query: { state: { data?: ExportJobsResponse } }) => number | false)
 }
 
 export const exportJobsQueryKey = ['export-jobs'] as const

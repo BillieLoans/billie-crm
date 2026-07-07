@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react'
 import { useCreateBatch } from '@/hooks/mutations/useMarketingCommands'
+import { useEscapeClose } from '@/hooks/useModalA11y'
 import styles from './styles.module.css'
 
 interface NewBatchModalProps {
@@ -35,9 +36,16 @@ export const NewBatchModal: React.FC<NewBatchModalProps> = ({ criteria, onClose,
     create.mutate({ name: name.trim(), criteria }, { onSuccess: (res) => onSuccess(res.batchId) })
   }
 
+  useEscapeClose(onClose)
+
   return (
     <div className={styles.modalOverlay} onClick={onClose}>
-      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+      <div
+        className={styles.modal}
+        role="dialog"
+        aria-modal="true"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className={styles.modalHeader}>
           <h2 className={styles.modalTitle}>New batch</h2>
           <button type="button" className={styles.closeBtn} onClick={onClose} aria-label="Close">
@@ -59,6 +67,7 @@ export const NewBatchModal: React.FC<NewBatchModalProps> = ({ criteria, onClose,
               </label>
               <input
                 id="new-batch-name"
+                autoFocus
                 type="text"
                 className={styles.formInput}
                 value={name}

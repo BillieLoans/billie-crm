@@ -72,7 +72,7 @@ export interface ApprovalHistoryOptions {
  * Only returns approved and rejected requests (completed workflow).
  */
 async function fetchApprovalHistory(
-  options: ApprovalHistoryOptions = {}
+  options: ApprovalHistoryOptions = {},
 ): Promise<ApprovalHistoryResponse> {
   const { page = 1, limit = DEFAULT_PAGE_SIZE, sort = 'newest', filters = {} } = options
 
@@ -93,13 +93,13 @@ async function fetchApprovalHistory(
   // To filter by decision date, use approvalDetails.decidedAt field (future enhancement).
   if (filters.startDate) {
     where.createdAt = {
-      ...(where.createdAt as Record<string, unknown> || {}),
+      ...((where.createdAt as Record<string, unknown>) || {}),
       greater_than_equal: filters.startDate,
     }
   }
   if (filters.endDate) {
     where.createdAt = {
-      ...(where.createdAt as Record<string, unknown> || {}),
+      ...((where.createdAt as Record<string, unknown>) || {}),
       less_than_equal: filters.endDate,
     }
   }
@@ -124,7 +124,7 @@ async function fetchApprovalHistory(
       page,
       sort: sortMap[sort] || '-updatedAt',
     },
-    { addQueryPrefix: true }
+    { addQueryPrefix: true },
   )
 
   const res = await fetch(`/api/write-off-requests${queryString}`)

@@ -96,8 +96,7 @@ async function fetchECLAllowance(accountId: string): Promise<ECLAllowanceRespons
 /**
  * Query key for ECL allowance
  */
-export const eclAllowanceQueryKey = (accountId: string) =>
-  ['ecl-allowance', accountId] as const
+export const eclAllowanceQueryKey = (accountId: string) => ['ecl-allowance', accountId] as const
 
 /**
  * Hook to fetch ECL (Expected Credit Loss) allowance for an account.
