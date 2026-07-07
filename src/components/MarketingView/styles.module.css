@@ -421,6 +421,21 @@
   margin-left: auto;
 }
 
+/* Button that reads as an inline name link (feedback queue contact peek). */
+.linkButton {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--theme-elevation-800, #333);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.linkButton:hover {
+  text-decoration: underline;
+}
+
 /* Criteria snapshot list in the new-batch modal. */
 .criteriaList {
   margin: 0;
@@ -536,6 +551,8 @@
 }
 
 .btnSubmit {
+  display: inline-flex;
+  align-items: center;
   padding: 0.625rem 1.25rem;
   background: #2563eb;
   color: white;
@@ -544,6 +561,7 @@
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
+  text-decoration: none;
 }
 
 .btnSubmit:hover:not(:disabled) {
