@@ -416,6 +416,17 @@
   white-space: nowrap;
 }
 
+/* Pushes the invitations controls to the right edge of the assign bar. */
+.spacer {
+  margin-left: auto;
+}
+
+/* Criteria snapshot list in the new-batch modal. */
+.criteriaList {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
 /* --- New-contact modal (mirrors the LoanAccountServicing modal styles) --- */
 .modalOverlay {
   position: fixed;

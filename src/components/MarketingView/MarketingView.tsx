@@ -6,12 +6,13 @@ import { useRouter } from 'next/navigation'
 import { useMarketingContacts } from '@/hooks/queries/useMarketingContacts'
 import type { MarketingContactsFilters } from '@/hooks/queries/useMarketingContacts'
 import { useBatches } from '@/hooks/queries/useBatches'
-import { useAssignBatch } from '@/hooks/mutations/useMarketingCommands'
+import { useAssignBatch, useTriggerInvitations } from '@/hooks/mutations/useMarketingCommands'
 import type { Contact } from '@/payload-types'
 import { formatDateShort } from '@/lib/formatters'
 import { getMarketingConsentGranted } from '@/lib/marketing'
 import { ContactDetail } from './ContactDetail'
 import { FeedbackQueueView } from './FeedbackQueueView'
+import { NewBatchModal } from './NewBatchModal'
 import { NewContactModal } from './NewContactModal'
 import styles from './styles.module.css'
 
@@ -43,6 +44,14 @@ const SOURCE_OPTIONS: Array<{ value: Contact['source'] & string; label: string }
 // Free-text on the backend (a `like` filter) — this is a curated shortlist of
 // the cities marketing campaigns currently target, not an exhaustive enum.
 const CITY_OPTIONS = ['Sydney', 'Melbourne', 'Brisbane', 'Perth', 'Adelaide', 'Canberra']
+
+// Sentinel value for the assign dropdown's "＋ New batch…" option — never a
+// real batchId (batch ids are UUIDs minted by marketingService).
+const NEW_BATCH_SENTINEL = '__new_batch__'
+
+// Bounds for the post-create projection poll (see handleBatchCreated).
+const BATCH_POLL_MAX_ATTEMPTS = 8
+const BATCH_POLL_INTERVAL_MS = 1500
 
 function stageLabel(stage: Contact['derivedStage']): string {
   return STAGE_OPTIONS.find((o) => o.value === stage)?.label ?? stage ?? '—'
@@ -91,6 +100,8 @@ const MarketingContactsGrid: React.FC = () => {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [assignTarget, setAssignTarget] = useState('')
   const [showNewContact, setShowNewContact] = useState(false)
+  const [showNewBatch, setShowNewBatch] = useState(false)
+  const [showInviteConfirm, setShowInviteConfirm] = useState(false)
 
   const filters = useMemo<MarketingContactsFilters>(
     () => ({
@@ -105,8 +116,9 @@ const MarketingContactsGrid: React.FC = () => {
   )
 
   const { data, isLoading, isError } = useMarketingContacts(filters)
-  const { data: batchesData } = useBatches()
+  const { data: batchesData, refetch: refetchBatches } = useBatches()
   const assign = useAssignBatch()
+  const invite = useTriggerInvitations()
   const docs = data?.docs ?? []
   const batchOptions = batchesData?.docs ?? []
   const batchNameFor = (id?: string | null) =>
@@ -150,6 +162,50 @@ const MarketingContactsGrid: React.FC = () => {
         },
       },
     )
+  }
+
+  const handleAssignTargetChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    if (e.target.value === NEW_BATCH_SENTINEL) {
+      setShowNewBatch(true)
+      return // leave the current target untouched while the modal is open
+    }
+    setAssignTarget(e.target.value)
+  }
+
+  // The batch projection lags the CreateBatch 202 (command → event → projection).
+  // Poll the batches list until the new id appears, then pre-select it as the
+  // assign target so "New batch… → Assign" is a single flow. Bounded: on
+  // timeout the batch still lands via the list's regular 30s refetch — the
+  // pre-selection is just skipped.
+  const handleBatchCreated = async (batchId: string) => {
+    setShowNewBatch(false)
+    for (let attempt = 0; attempt < BATCH_POLL_MAX_ATTEMPTS; attempt++) {
+      const res = await refetchBatches()
+      if (res.data?.docs?.some((b) => b.batchId === batchId)) {
+        setAssignTarget(batchId)
+        return
+      }
+      await new Promise((resolve) => setTimeout(resolve, BATCH_POLL_INTERVAL_MS))
+    }
+  }
+
+  // Segment snapshot for a new batch: the grid's active filters, verbatim.
+  const criteriaSnapshot = useMemo(() => {
+    const snapshot: Record<string, string> = {}
+    if (q) snapshot.q = q
+    if (stage) snapshot.stage = stage
+    if (source) snapshot.source = source
+    if (city) snapshot.city = city
+    if (batch) snapshot.batch = batch
+    return snapshot
+  }, [q, stage, source, city, batch])
+
+  // Invitations fire for the batch chosen in the Batch FILTER — filter to the
+  // batch (seeing exactly its members), then send.
+  const canInvite = !!batch && !invite.isPending
+  const handleInviteConfirm = () => {
+    if (!canInvite) return
+    invite.mutate(batch, { onSettled: () => setShowInviteConfirm(false) })
   }
 
   const contactHref = (contact: Contact) => `/admin/marketing/contacts/${contact.contactId}`
@@ -254,7 +310,8 @@ const MarketingContactsGrid: React.FC = () => {
       </div>
 
       {/* Assign-to-batch bar — always present (fixed layout); controls disable
-          until a selection + target batch exist. */}
+          until a selection + target batch exist. Invitations live on the right:
+          they fire for the batch chosen in the Batch filter above. */}
       <div className={styles.filters}>
         <span className={styles.pageStatus}>{selected.size} selected</span>
         <div className={styles.filterGroup}>
@@ -265,7 +322,7 @@ const MarketingContactsGrid: React.FC = () => {
             id="marketing-assign-batch"
             className={styles.filterSelect}
             value={assignTarget}
-            onChange={(e) => setAssignTarget(e.target.value)}
+            onChange={handleAssignTargetChange}
             disabled={selected.size === 0}
           >
             <option value="">Choose a batch…</option>
@@ -274,6 +331,7 @@ const MarketingContactsGrid: React.FC = () => {
                 {b.name ?? b.batchId}
               </option>
             ))}
+            <option value={NEW_BATCH_SENTINEL}>＋ New batch…</option>
           </select>
         </div>
         <button
@@ -283,6 +341,18 @@ const MarketingContactsGrid: React.FC = () => {
           disabled={!canAssign}
         >
           {assign.isPending ? 'Assigning…' : 'Assign'}
+        </button>
+        <div className={styles.spacer} />
+        <span className={styles.pageStatus}>
+          Invitations: {batch ? batchNameFor(batch) : 'choose a batch in the filter'}
+        </span>
+        <button
+          type="button"
+          className={styles.pageButton}
+          onClick={() => setShowInviteConfirm(true)}
+          disabled={!canInvite}
+        >
+          {invite.isPending ? 'Sending…' : 'Send invitations'}
         </button>
       </div>
 
@@ -399,6 +469,59 @@ const MarketingContactsGrid: React.FC = () => {
           onClose={() => setShowNewContact(false)}
           onSuccess={() => setShowNewContact(false)}
         />
+      )}
+
+      {showNewBatch && (
+        <NewBatchModal
+          criteria={criteriaSnapshot}
+          onClose={() => setShowNewBatch(false)}
+          onSuccess={handleBatchCreated}
+        />
+      )}
+
+      {showInviteConfirm && (
+        <div className={styles.modalOverlay} onClick={() => setShowInviteConfirm(false)}>
+          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h2 className={styles.modalTitle}>Send invitations</h2>
+              <button
+                type="button"
+                className={styles.closeBtn}
+                onClick={() => setShowInviteConfirm(false)}
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className={styles.modalBody}>
+              <p>
+                Send invitations to all consented members of <strong>{batchNameFor(batch)}</strong>?
+              </p>
+              <p className={styles.formHint}>
+                Members without marketing consent are skipped automatically. Repeating the send for
+                this batch is deduplicated platform-side, so a double-click can&apos;t fan out a
+                second wave.
+              </p>
+            </div>
+            <div className={styles.modalFooter}>
+              <button
+                type="button"
+                className={styles.btnCancel}
+                onClick={() => setShowInviteConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={styles.btnSubmit}
+                onClick={handleInviteConfirm}
+                disabled={!canInvite}
+              >
+                {invite.isPending ? 'Sending…' : 'Send invitations'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
