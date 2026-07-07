@@ -128,8 +128,8 @@
 1. billieChat routes (A8) → 2. platform-services (A1–A7) → 3. billie-crm (B1–B6). Then C1 cutover. Rationale: routes + emitters must exist before the CRM relies on them, same as the intake-via-broker rollout.
 
 ## Not in this plan (explicit)
-- **Stream B — customer-state projection** in customerService (`customer.customer_state`, `customer.state.changed.v1`, derived Billie stage, §3/§4). Independent; can run in parallel or slip to Phase 3. **Blocked on Flagged Decision #1** (OTP-pass event vs A3 inference — billieChat owner).
-- **Phase 3** — WhatsApp provider + webhook; full DSR (XDEL sweep + subject-access export); backup restore test; `SETTLED_SHORT` SDK addition.
+- **Stream B — customer-state projection** in customerService (`customer.customer_state`, `customer.state.changed.v1`, derived Billie stage, §3/§4). Independent; can run in parallel or slip to Phase 3. **Blocked on Flagged Decision #1** (OTP-pass event vs A3 inference — billieChat owner). **Sign-off (7 Jul 2026):** the workstream itself is in discussion (A4); when built, `ADMIN_CLOSED` maps to **C-P (win-back-eligible) + review flag**, not C-N (B2 change — design spec §3).
+- **Phase 3** — WhatsApp provider + webhook (timing in discussion, B1); full DSR (XDEL sweep + subject-access export); backup restore test; `SETTLED_SHORT` SDK addition (settled-short → C-N at source; `ADMIN_CLOSED` stays win-back-eligible per B2).
 
 ## Flagged decisions / external dependencies
 - **#3 (web owner):** `billie.loans/r/{code}` → form `ref` param — A4 attribution works once `ref` arrives; confirm the website route.
