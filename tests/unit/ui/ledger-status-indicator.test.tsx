@@ -4,6 +4,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import React from 'react'
 import { LedgerStatusIndicator } from '@/components/LedgerStatus'
 
+// Mock useAuth — lending-side role by default; individual tests flip it
+const mockUseAuth = vi.fn(() => ({ user: { id: 'u-1', role: 'operations' } }))
+vi.mock('@payloadcms/ui', () => ({
+  useAuth: () => mockUseAuth(),
+}))
+
 // Create query client wrapper
 function createWrapper() {
   const queryClient = new QueryClient({
@@ -70,6 +76,21 @@ describe('LedgerStatusIndicator', () => {
 
       // Initial state shows "Checking..."
       expect(screen.getByText('Checking...')).toBeInTheDocument()
+    })
+  })
+
+  describe('Lending wall', () => {
+    it('does not render or poll for lending-walled roles (marketing)', async () => {
+      setupMockFetch()
+      mockUseAuth.mockReturnValue({ user: { id: 'u-2', role: 'marketing' } })
+      render(<LedgerStatusIndicator />, { wrapper: createWrapper() })
+
+      // Give the mount effect + any (wrong) query a tick to fire.
+      await new Promise((r) => setTimeout(r, 50))
+      expect(screen.queryByTestId('ledger-status-indicator')).not.toBeInTheDocument()
+      expect(global.fetch).not.toHaveBeenCalled()
+
+      mockUseAuth.mockReturnValue({ user: { id: 'u-1', role: 'operations' } })
     })
   })
 

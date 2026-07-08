@@ -115,6 +115,8 @@ export type {
 export { usePendingBlockClears } from './queries/usePendingBlockClears'
 export type { BlockClearRequest, PendingBlockClearsOptions } from './queries/usePendingBlockClears'
 
+export { useLendingAccess } from './useLendingAccess'
+
 // Re-export types from canonical location
 export type {
   CustomerSearchResult,

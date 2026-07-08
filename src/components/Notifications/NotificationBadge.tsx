@@ -2,6 +2,7 @@
 
 import React, { useState, useCallback, useEffect } from 'react'
 import { useApprovalNotifications } from '@/hooks/queries/useApprovalNotifications'
+import { useLendingAccess } from '@/hooks/useLendingAccess'
 import { NotificationPanel } from './NotificationPanel'
 import styles from './styles.module.css'
 
@@ -18,7 +19,12 @@ export const NotificationBadge: React.FC<NotificationBadgeProps> = ({
   visible = true,
 }) => {
   const [panelOpen, setPanelOpen] = useState(false)
-  
+
+  // write_off_requests is behind the lending wall (hasAnyRole) — polling it
+  // as a marketing/service user just 403s on every cycle and floods the logs.
+  const hasLendingAccess = useLendingAccess()
+  const canSee = visible && hasLendingAccess
+
   const {
     notifications,
     totalPending,
@@ -26,7 +32,7 @@ export const NotificationBadge: React.FC<NotificationBadgeProps> = ({
     isLoading,
     markAllAsRead,
     markAsRead,
-  } = useApprovalNotifications({ enabled: visible })
+  } = useApprovalNotifications({ enabled: canSee })
 
   const handleTogglePanel = useCallback(() => {
     setPanelOpen((prev) => !prev)
@@ -50,7 +56,7 @@ export const NotificationBadge: React.FC<NotificationBadgeProps> = ({
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [panelOpen])
 
-  if (!visible) return null
+  if (!canSee) return null
 
   // Format count for display
   const displayCount = totalPending > 99 ? '99+' : totalPending.toString()

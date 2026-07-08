@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { useLedgerHealth } from '@/hooks/queries/useLedgerHealth'
+import { useLendingAccess } from '@/hooks/useLendingAccess'
 import type { LedgerHealthStatus } from '@/types/ledger-health'
 import { LATENCY_DISPLAY_THRESHOLD_MS } from '@/lib/constants'
 import styles from './styles.module.css'
@@ -72,14 +73,19 @@ export const LedgerStatusIndicator: React.FC<LedgerStatusIndicatorProps> = ({
   showLatency = true,
 }) => {
   const [mounted, setMounted] = useState(false)
-  const { status, latencyMs, message, isLoading, isFetching, refetch } = useLedgerHealth()
+  // The ledger is lending chrome — marketing/service roles can't call
+  // /api/ledger/health (hasAnyRole), so don't poll or render for them.
+  const hasLendingAccess = useLendingAccess()
+  const { status, latencyMs, message, isLoading, isFetching, refetch } = useLedgerHealth({
+    enabled: hasLendingAccess,
+  })
 
   // Only render on client side
   useEffect(() => {
     setMounted(true)
   }, [])
 
-  if (!mounted) return null
+  if (!mounted || !hasLendingAccess) return null
 
   const isMinimized = minimizeWhenConnected && status === 'connected' && !isLoading
   const shouldShowLatency = showLatency && (status !== 'connected' || latencyMs > LATENCY_DISPLAY_THRESHOLD_MS)

@@ -2,6 +2,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { NotificationBadge } from '@/components/Notifications'
 
+// Mock useAuth — lending-side role by default; individual tests flip it
+const mockUseAuth = vi.fn(() => ({ user: { id: 'u-1', role: 'operations' } }))
+vi.mock('@payloadcms/ui', () => ({
+  useAuth: () => mockUseAuth(),
+}))
+
 // Mock the useApprovalNotifications hook
 const mockRefetch = vi.fn()
 const mockMarkAllAsRead = vi.fn()
@@ -37,6 +43,13 @@ describe('NotificationBadge', () => {
   it('should render badge button', () => {
     render(<NotificationBadge />)
     expect(screen.getByTestId('notification-badge-button')).toBeInTheDocument()
+  })
+
+  it('does not render or poll for lending-walled roles (marketing)', () => {
+    mockUseAuth.mockReturnValueOnce({ user: { id: 'u-2', role: 'marketing' } })
+    render(<NotificationBadge />)
+    expect(screen.queryByTestId('notification-badge-button')).not.toBeInTheDocument()
+    expect(mockUseApprovalNotifications).toHaveBeenCalledWith({ enabled: false })
   })
 
   it('should not render when visible is false', () => {
