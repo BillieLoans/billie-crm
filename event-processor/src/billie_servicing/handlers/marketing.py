@@ -227,6 +227,23 @@ async def handle_contact_consent_withdrawn(pool: asyncpg.Pool, event: Any) -> No
     )
 
 
+# The interactions.direction column is a Postgres enum (inbound/outbound).
+# The SDK field is a free string, so normalise here: a non-canonical value in
+# one event must degrade to NULL, not DLQ-loop the whole stream partition.
+_DIRECTION_ALIASES = {
+    "in": "inbound",
+    "inbound": "inbound",
+    "out": "outbound",
+    "outbound": "outbound",
+}
+
+
+def _normalise_direction(raw: Any) -> str | None:
+    if not raw:
+        return None
+    return _DIRECTION_ALIASES.get(str(raw).strip().lower())
+
+
 async def handle_contact_interaction_logged(pool: asyncpg.Pool, event: Any) -> None:
     """Handle ``contact.interaction.logged.v1`` — append-only interaction row.
 
@@ -248,7 +265,7 @@ async def handle_contact_interaction_logged(pool: asyncpg.Pool, event: Any) -> N
         "occurred_at": coerce_date(p.occurred_at),
         "kind": p.kind,
         "channel": p.channel,
-        "direction": p.direction,
+        "direction": _normalise_direction(p.direction),
         "subject": p.subject,
         "body": p.body,
         "source_system": p.source_system,
