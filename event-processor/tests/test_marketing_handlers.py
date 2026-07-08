@@ -71,6 +71,22 @@ async def test_interaction_logged_inserts_row():
     assert any("interactions" in s for s, _ in pool.executed)
 
 
+async def test_interaction_direction_normalised_to_enum_values(mock_pool):
+    # The platform's notification echo shipped direction="out" for a while;
+    # the projection must map short forms onto the pg enum, and degrade
+    # unknown values to NULL rather than DLQ-loop the event.
+    for raw, stored in [("out", "outbound"), ("in", "inbound"),
+                        ("outbound", "outbound"), ("sideways", None), (None, None)]:
+        await handle_contact_interaction_logged(mock_pool, _parsed(
+            "contact.interaction.logged.v1", {
+                "interaction_id": f"i-{raw}", "contact_id": "c-1",
+                "kind": "message_out", "direction": raw,
+                "occurred_at": "2026-07-02T00:00:00+00:00",
+                "source_system": "notification"}))
+        row = mock_pool.last_upsert("interactions")
+        assert row["direction"] == stored, f"direction {raw!r} stored as {row['direction']!r}"
+
+
 async def test_erased_redacts_pi():
     pool = FakePool()
     await handle_contact_erased(pool, _parsed("contact.erased.v1", {
