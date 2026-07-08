@@ -32,6 +32,8 @@ export function siblingBases(contact: NaturalKeys, candidate: NaturalKeys): Sibl
   if (contact.mobileE164 && candidate.mobileE164 === contact.mobileE164) bases.push('same_mobile')
   if (contact.email && candidate.email === contact.email) bases.push('same_email')
   return bases
+}
+
 /**
  * Natural-key normalisation — exact TS mirror of the platform's
  * marketingService `normalise_mobile`/`normalise_email` (commands.py). The
