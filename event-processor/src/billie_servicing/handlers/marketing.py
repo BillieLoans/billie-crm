@@ -356,6 +356,14 @@ async def handle_contact_erased(pool: asyncpg.Pool, event: Any) -> None:
         "WHERE contact_id_string = $1",
         p.contact_id,
     )
+    # Audit-hardening pass: audit details are ids-only by design, EXCEPT the
+    # consent 'method' free text (e.g. "phone call") — strip it on erasure so
+    # the audit trail stays PI-clean while remaining append-only otherwise.
+    await pool.execute(
+        "UPDATE contact_audit_log SET detail = (detail::jsonb - 'method')::json "
+        "WHERE contact_id_string = $1 AND detail::jsonb ? 'method'",
+        p.contact_id,
+    )
     await _audit(pool, p.contact_id, event.event_type, p.actor, {})
 
 
@@ -402,6 +410,25 @@ async def handle_contact_batch_assigned(pool: asyncpg.Pool, event: Any) -> None:
         values={"batch_id": p.batch_id, "updated_at": _now()},
     )
     await _audit(pool, p.contact_id, event.event_type, p.actor, {"batch_id": p.batch_id})
+
+
+async def handle_batch_invitations_triggered(pool: asyncpg.Pool, event: Any) -> None:
+    """Handle ``batch.invitations.triggered.v1`` — persist the send outcome
+    (invited_at + counts) on the batch row. Last-write-wins per batch."""
+    p = event.payload
+    await update_by_key(
+        pool,
+        "batches",
+        key_column="batch_id",
+        key_value=p.batch_id,
+        values={
+            "invited_at": coerce_date(p.triggered_at),
+            "invited_count": p.invited_count,
+            "skipped_unconsented": p.skipped_unconsented,
+            "skipped_needs_review": p.skipped_needs_review,
+            "updated_at": _now(),
+        },
+    )
 
 
 async def handle_feedback_received(pool: asyncpg.Pool, event: Any) -> None:

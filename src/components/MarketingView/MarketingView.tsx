@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useDeferredValue, useMemo, useState } from 'react'
+import { useListKeyboardNav } from '@/hooks/useListKeyboardNav'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useMarketingContacts } from '@/hooks/queries/useMarketingContacts'
@@ -139,7 +140,24 @@ const MarketingContactsGrid: React.FC = () => {
   const batchNameFor = (id?: string | null) =>
     id ? (batchOptions.find((b) => b.batchId === id)?.name ?? id) : '—'
   const batchLabelWithCount = (b: (typeof batchOptions)[number]) =>
-    `${b.name ?? b.batchId}${typeof b.memberCount === 'number' ? ` (${b.memberCount})` : ''}`
+    `${b.name ?? b.batchId}${typeof b.memberCount === 'number' ? ` (${b.memberCount})` : ''}${
+      b.invitedAt ? ` · sent ${new Date(b.invitedAt).toLocaleDateString('en-AU')}` : ''
+    }`
+
+  // Keyboard navigation (j/k + Enter to open, Space to toggle selection) —
+  // same convention as the Accounts browser.
+  const { index: focusedIndex, setIndex: setFocusedIndex } = useListKeyboardNav({
+    count: docs.length,
+    onOpen: (idx) => {
+      const contact = docs[idx]
+      if (contact) router.push(`/admin/marketing/contacts/${contact.contactId}`)
+    },
+    onPeek: (idx) => {
+      const contact = docs[idx]
+      if (contact?.contactId) toggleOne(contact.contactId)
+    },
+    enabled: !showNewContact && !showNewBatch && !showInviteConfirm,
+  })
 
   const onFilter =
     (setter: (v: string) => void) =>
@@ -234,6 +252,24 @@ const MarketingContactsGrid: React.FC = () => {
         <h1 className={styles.headerTitle}>Marketing</h1>
         <button type="button" className={styles.pageButton} onClick={() => setShowNewContact(true)}>
           + New contact
+        </button>
+        <button
+          type="button"
+          className={styles.pageButton}
+          title="Download the current filter as CSV"
+          onClick={() => {
+            const params = new URLSearchParams()
+            if (deferredQ) params.set('q', deferredQ)
+            if (stage) params.set('stage', stage)
+            if (source) params.set('source', source)
+            if (city) params.set('city', city)
+            if (batch) params.set('batch', batch)
+            if (needsReview) params.set('needs_review', needsReview)
+            if (loanStatus) params.set('loan_status', loanStatus)
+            window.open(`/api/marketing/contacts/export?${params.toString()}`, '_blank')
+          }}
+        >
+          Export CSV
         </button>
         <Link href="/admin/marketing/feedback" className={styles.backLink}>
           Feedback queue →
@@ -471,11 +507,14 @@ const MarketingContactsGrid: React.FC = () => {
                     </td>
                   </tr>
                 ) : (
-                  docs.map((contact) => (
+                  docs.map((contact, idx) => (
                     <tr
                       key={contact.id}
-                      className={styles.row}
-                      onClick={() => router.push(contactHref(contact))}
+                      className={`${styles.row}${idx === focusedIndex ? ` ${styles.rowFocused}` : ''}`}
+                      onClick={() => {
+                        setFocusedIndex(idx)
+                        router.push(contactHref(contact))
+                      }}
                     >
                       <td onClick={(e) => e.stopPropagation()}>
                         <input

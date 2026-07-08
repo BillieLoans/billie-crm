@@ -28,6 +28,14 @@ export const Batches: CollectionConfig = {
     },
     { name: 'createdByActor', type: 'text', admin: { readOnly: true } },
     { name: 'batchCreatedAt', type: 'date', admin: { readOnly: true } },
+    {
+      name: 'invitedAt',
+      type: 'date',
+      admin: { readOnly: true, description: 'When invitations were last triggered' },
+    },
+    { name: 'invitedCount', type: 'number', admin: { readOnly: true } },
+    { name: 'skippedUnconsented', type: 'number', admin: { readOnly: true } },
+    { name: 'skippedNeedsReview', type: 'number', admin: { readOnly: true } },
   ],
   timestamps: true,
 }

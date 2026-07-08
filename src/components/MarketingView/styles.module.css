@@ -109,6 +109,13 @@
   background: var(--theme-elevation-50, #f5f5f5);
 }
 
+/* Keyboard cursor row (j/k navigation). */
+.rowFocused {
+  background: var(--theme-elevation-100, #ececec);
+  outline: 2px solid var(--theme-success-500, #2563eb);
+  outline-offset: -2px;
+}
+
 .emptyCell {
   text-align: center;
   color: var(--theme-elevation-500, #666);

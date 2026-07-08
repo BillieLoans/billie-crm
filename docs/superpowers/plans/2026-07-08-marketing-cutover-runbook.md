@@ -56,12 +56,12 @@ backfill is additive and idempotent, so no data cleanup is needed to roll
 back. After step 5, rollback means re-issuing credentials — prefer fixing
 forward through the platform pipeline.
 
-## Deferred items (explicit — decided 8 Jul 2026 review passes)
+## Deferred items — ALL CLEARED in phase 3 (9 Jul 2026)
 
-| Item | Why deferred | Where it lands |
-|---|---|---|
-| Batch send-history persistence (per-batch invited/skipped counts on the projection, not just the toast) | Needs a batch-outcome event + alembic + CRM migration; interactions already record per-contact `message_out` | Phase 3, with the campaign-measurement work |
-| Collections `stop_contact` ↔ marketing suppression bridge (customer-level suppression consulted for contact-addressed sends) | Cross-service design decision — suppression is keyed by customer_id in collections, contact_id in marketing; needs the collections owner | Raise with collections owner; candidate: dispatcher gate checks linked customer suppression |
-| Grid keyboard navigation (j/k/Enter, per AccountsBrowser) | UX polish, mouse + name-link paths work | Next UI pass |
-| XDEL stream sweep + subject-access export (full DSR) | Already-governed phase-3 scope (spec §10); projection + feedback + evidence redaction is DONE | Phase 3 |
-| WhatsApp provider + templates | B1 decision — external Meta lead time | Phase 3 (start template approval now) |
+| Item | Outcome |
+|---|---|
+| Batch send-history persistence | ✅ `batch.invitations.triggered.v1` → invited_at + counts on the batches projection (also fixed the never-written invited_at) |
+| Collections `stop_contact` ↔ marketing suppression bridge | ✅ stop-contact raises the dispatcher kill-switch (mode=non_essential); marketing dispatches carry linked customer_id |
+| Grid keyboard navigation | ✅ j/k/Enter/Space, Accounts-browser convention |
+| XDEL stream sweep + subject-access export (full DSR) | ✅ erase sweeps the marketing event stream; ExportContact + admin download in the CRM |
+| WhatsApp provider + templates | ✅ built end-to-end, env-gated dark. **Activation checklist:** Meta templates approved → ClickSend WhatsApp sender (`CLICKSEND_WHATSAPP_FROM`) → verify `CLICKSEND_WHATSAPP_SEND_PATH` against the account → flip `marketing_whatsapp_enabled` |

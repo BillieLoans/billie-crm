@@ -117,6 +117,17 @@ export interface EraseContactInput {
   actor?: string
 }
 
+export interface ExportContactInput {
+  contactId: string
+  actor?: string
+}
+
+export interface ExportContactResult {
+  contactId: string
+  exportJson: string
+  generatedAt: string
+}
+
 export interface LinkContactInput {
   idempotencyKey: string
   contactId: string
@@ -271,6 +282,12 @@ export class MarketingClient {
     return this.promisify<EraseContactInput, CommandResult>(this.client.eraseContact)(request)
   }
 
+  async exportContact(request: ExportContactInput): Promise<ExportContactResult> {
+    return this.promisify<ExportContactInput, ExportContactResult>(this.client.exportContact)(
+      request,
+    )
+  }
+
   async linkContact(request: LinkContactInput): Promise<CommandResult> {
     return this.promisify<LinkContactInput, CommandResult>(this.client.linkContact)(request)
   }
@@ -343,6 +360,10 @@ export async function logInteraction(request: LogInteractionInput): Promise<Comm
 
 export async function eraseContact(request: EraseContactInput): Promise<CommandResult> {
   return getMarketingClient().eraseContact(request)
+}
+
+export async function exportContact(request: ExportContactInput): Promise<ExportContactResult> {
+  return getMarketingClient().exportContact(request)
 }
 
 export async function linkContact(request: LinkContactInput): Promise<CommandResult> {

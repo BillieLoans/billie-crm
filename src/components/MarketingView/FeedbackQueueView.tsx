@@ -77,6 +77,18 @@ export const FeedbackQueueView: React.FC = () => {
 
       <div className={styles.header}>
         <h1 className={styles.headerTitle}>Feedback queue</h1>
+        <button
+          type="button"
+          className={styles.pageButton}
+          title="Download the current filter as CSV"
+          onClick={() => {
+            const params = new URLSearchParams()
+            if (status) params.set('status', status)
+            window.open(`/api/marketing/feedback/export?${params.toString()}`, '_blank')
+          }}
+        >
+          Export CSV
+        </button>
       </div>
 
       <div className={styles.filters}>

@@ -59,6 +59,7 @@ from .identity_verification import (
 )
 from .marketing import (
     handle_batch_created,
+    handle_batch_invitations_triggered,
     handle_contact_batch_assigned,
     handle_contact_consent_granted,
     handle_contact_consent_withdrawn,
@@ -170,6 +171,7 @@ __all__ = [
     "handle_contact_erased",
     # Marketing Phase-2 (Stream A) handlers — batches, feedback, referral
     "handle_batch_created",
+    "handle_batch_invitations_triggered",
     "handle_contact_batch_assigned",
     "handle_feedback_received",
     "handle_feedback_status_changed",

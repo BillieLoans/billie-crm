@@ -5,6 +5,7 @@ import pytest
 from billie_marketing_events import parse_marketing_message
 from billie_servicing.handlers.marketing import (
     handle_batch_created,
+    handle_batch_invitations_triggered,
     handle_contact_batch_assigned,
     handle_contact_consent_granted,
     handle_contact_consent_withdrawn,
@@ -357,3 +358,18 @@ async def test_stage_changed_state_basis_may_downgrade(mock_pool):
         "changed_at": "2026-07-08T00:00:00+00:00"}))
     updated = mock_pool.last_update("contacts")
     assert updated["derived_stage"] == "waitlist"  # Bx abandonment — legitimate
+
+
+async def test_batch_invitations_triggered_persists_outcome(mock_pool):
+    # Phase 3: send outcomes persist on the batch row (and invited_at drives
+    # the "invited" stage derivation).
+    await handle_batch_invitations_triggered(mock_pool, _parsed(
+        "batch.invitations.triggered.v1", {
+            "batch_id": "b-1", "invited_count": 42, "skipped_unconsented": 3,
+            "skipped_needs_review": 1, "triggered_at": "2026-07-08T02:00:00+00:00",
+            "actor": "staff-1"}))
+    updated = mock_pool.last_update("batches")
+    assert updated["invited_count"] == 42
+    assert updated["skipped_unconsented"] == 3
+    assert updated["skipped_needs_review"] == 1
+    assert updated["invited_at"] is not None
