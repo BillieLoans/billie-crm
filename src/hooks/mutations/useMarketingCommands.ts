@@ -238,6 +238,22 @@ export function useRecordConsent() {
   })
 }
 
+/** Admin-only privacy erasure — irreversible; UI must verify first. */
+export function useEraseContact() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (contactId: string) =>
+      postCommand(`/api/marketing/contacts/${encodeURIComponent(contactId)}/erase`),
+    onSuccess: () => {
+      toast.success('Contact erased', {
+        description: 'Personal information is being redacted across all records.',
+      })
+      invalidateWithLag(qc, [['marketing-contacts']])
+    },
+    onError: (e: Error) => toast.error('Erasure failed', { description: e.message }),
+  })
+}
+
 export interface SetReviewFlagVars {
   contactId: string
   needsReview: boolean

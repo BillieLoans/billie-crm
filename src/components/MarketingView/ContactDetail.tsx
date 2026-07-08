@@ -7,9 +7,12 @@ import { toast } from 'sonner'
 import { useMarketingContact, marketingContactQueryKey } from '@/hooks/queries/useMarketingContact'
 import { useContactReferrals } from '@/hooks/queries/useContactReferrals'
 import { useFeedbackQueue } from '@/hooks/queries/useFeedbackQueue'
+import { useAuth } from '@payloadcms/ui'
 import { useSetReviewFlag, useUnlinkContact } from '@/hooks/mutations/useMarketingCommands'
+import { isAdmin } from '@/lib/access'
 import { LinkCustomerModal } from './LinkCustomerModal'
 import { RecordConsentModal } from './RecordConsentModal'
+import { EraseContactModal } from './EraseContactModal'
 import type { ContactAuditLog, Interaction } from '@/payload-types'
 import { formatDateMedium } from '@/lib/formatters'
 import { getMarketingConsentGranted } from '@/lib/marketing'
@@ -128,7 +131,10 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contactId }) => {
   const [showUnlinkConfirm, setShowUnlinkConfirm] = useState(false)
   const [showFlagModal, setShowFlagModal] = useState(false)
   const [showConsentModal, setShowConsentModal] = useState(false)
+  const [showEraseModal, setShowEraseModal] = useState(false)
   const [flagReason, setFlagReason] = useState('')
+  const { user } = useAuth()
+  const userIsAdmin = isAdmin(user)
   const unlink = useUnlinkContact()
   const reviewFlag = useSetReviewFlag()
 
@@ -415,16 +421,35 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contactId }) => {
 
           <Panel title="Data & privacy">
             <div className={styles.panelRow}>
-              <span className={styles.panelRowLabel}>Subject access</span>
+              <span className={styles.panelRowLabel}>Status</span>
               <span className={styles.panelRowValue}>
-                <a
-                  className={styles.nameLink}
-                  href={`/api/marketing/contacts/${contactId}/export`}
-                  title="Download everything held about this contact (admin only)"
-                >
-                  Download export
-                </a>
+                {contact.erased ? 'Erased' : '—'}
               </span>
+            </div>
+            <div className={styles.panelButtonRow}>
+              <button
+                type="button"
+                className={styles.pageButton}
+                title="Download everything held about this contact (admin only)"
+                onClick={() => {
+                  window.location.href = `/api/marketing/contacts/${contactId}/export`
+                }}
+              >
+                Download export
+              </button>
+              <button
+                type="button"
+                className={styles.pageButtonDanger}
+                disabled={!userIsAdmin || !!contact.erased}
+                title={
+                  userIsAdmin
+                    ? 'Permanently erase this contact (right to be forgotten)'
+                    : 'Admin only'
+                }
+                onClick={() => setShowEraseModal(true)}
+              >
+                Erase contact…
+              </button>
             </div>
           </Panel>
 
@@ -445,6 +470,14 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contactId }) => {
           </Panel>
         </div>
       </div>
+
+      {showEraseModal && (
+        <EraseContactModal
+          contactId={contactId}
+          contactName={contact.firstName ?? null}
+          onClose={() => setShowEraseModal(false)}
+        />
+      )}
 
       {showLinkModal && (
         <LinkCustomerModal
