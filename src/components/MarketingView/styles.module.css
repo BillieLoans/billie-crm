@@ -202,6 +202,25 @@
   cursor: not-allowed;
 }
 
+.pageButtonDanger {
+  padding: 8px 16px;
+  border: 1px solid var(--theme-error-500, #dc2626);
+  border-radius: 6px;
+  background: var(--theme-elevation-0, #fff);
+  color: var(--theme-error-500, #dc2626);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.pageButtonDanger:hover:not(:disabled) {
+  background: var(--theme-error-50, #fee2e2);
+}
+
+.pageButtonDanger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .pageStatus {
   font-size: 13px;
   color: var(--theme-elevation-500, #666);
@@ -662,26 +681,6 @@
 .btnDanger:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-.dangerLink {
-  background: none;
-  border: none;
-  padding: 0;
-  font-size: inherit;
-  color: var(--theme-error-500, #dc2626);
-  cursor: pointer;
-  text-decoration: underline;
-}
-
-.dangerLink:hover:not(:disabled) {
-  color: var(--theme-error-600, #b91c1c);
-}
-
-.dangerLink:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  text-decoration: none;
 }
 
 .errorMessage {

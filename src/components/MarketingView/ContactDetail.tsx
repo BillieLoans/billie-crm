@@ -421,38 +421,35 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contactId }) => {
 
           <Panel title="Data & privacy">
             <div className={styles.panelRow}>
-              <span className={styles.panelRowLabel}>Subject access</span>
+              <span className={styles.panelRowLabel}>Status</span>
               <span className={styles.panelRowValue}>
-                <a
-                  className={styles.nameLink}
-                  href={`/api/marketing/contacts/${contactId}/export`}
-                  title="Download everything held about this contact (admin only)"
-                >
-                  Download export
-                </a>
+                {contact.erased ? 'Erased' : '—'}
               </span>
             </div>
-            <div className={styles.panelRow}>
-              <span className={styles.panelRowLabel}>Erasure</span>
-              <span className={styles.panelRowValue}>
-                {contact.erased ? (
-                  <span className={styles.panelRowMeta}>Erased</span>
-                ) : (
-                  <button
-                    type="button"
-                    className={styles.dangerLink}
-                    disabled={!userIsAdmin}
-                    title={
-                      userIsAdmin
-                        ? 'Permanently erase this contact (right to be forgotten)'
-                        : 'Admin only'
-                    }
-                    onClick={() => setShowEraseModal(true)}
-                  >
-                    Erase contact…
-                  </button>
-                )}
-              </span>
+            <div className={styles.panelButtonRow}>
+              <button
+                type="button"
+                className={styles.pageButton}
+                title="Download everything held about this contact (admin only)"
+                onClick={() => {
+                  window.location.href = `/api/marketing/contacts/${contactId}/export`
+                }}
+              >
+                Download export
+              </button>
+              <button
+                type="button"
+                className={styles.pageButtonDanger}
+                disabled={!userIsAdmin || !!contact.erased}
+                title={
+                  userIsAdmin
+                    ? 'Permanently erase this contact (right to be forgotten)'
+                    : 'Admin only'
+                }
+                onClick={() => setShowEraseModal(true)}
+              >
+                Erase contact…
+              </button>
             </div>
           </Panel>
 
