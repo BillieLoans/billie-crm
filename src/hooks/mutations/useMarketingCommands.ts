@@ -287,13 +287,51 @@ export interface CreateContactVars {
   source: string
 }
 
+export interface ContactMatch {
+  contactId: string
+  firstName: string | null
+  mobileE164: string | null
+  email: string | null
+  derivedStage: string | null
+  matchedOn: 'mobile' | 'email'
+}
+
+/**
+ * Natural-key duplicate pre-check for the New-contact flow. Returns the
+ * existing contact the platform's UpsertContact would resolve to (mobile
+ * first, then email), or null. Imperative on purpose — it runs on submit,
+ * not while typing.
+ */
+export async function checkContactMatch(vars: {
+  mobile?: string
+  email?: string
+}): Promise<ContactMatch | null> {
+  const params = new URLSearchParams()
+  if (vars.mobile) params.set('mobile', vars.mobile)
+  if (vars.email) params.set('email', vars.email)
+  const res = await fetch(`/api/marketing/contacts/match?${params}`, { credentials: 'include' })
+  if (!res.ok) {
+    const err = await res.json().catch(() => null)
+    throw new Error(err?.error?.message ?? `Duplicate check failed: ${res.status}`)
+  }
+  const data = (await res.json()) as { match: ContactMatch | null }
+  return data.match
+}
+
 export function useCreateContact() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (vars: CreateContactVars) =>
-      postCommand<{ contactId: string; eventId: string }>('/api/marketing/contacts', vars),
-    onSuccess: () => {
-      toast.success('Contact created — appearing in the grid shortly')
+      postCommand<{ contactId: string; eventId: string; created?: boolean }>(
+        '/api/marketing/contacts',
+        vars,
+      ),
+    onSuccess: (res) => {
+      toast.success(
+        res.created === false
+          ? 'Existing contact updated — changes appearing shortly'
+          : 'Contact created — appearing in the grid shortly',
+      )
       invalidateWithLag(qc, [['marketing-contacts']])
     },
     onError: (e: Error) => toast.error('Failed to create contact', { description: e.message }),
