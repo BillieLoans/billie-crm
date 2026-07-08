@@ -24,7 +24,9 @@ export async function GET(request: NextRequest) {
   const { payload, user } = auth
 
   const sp = request.nextUrl.searchParams
-  const where: Record<string, unknown> = {}
+  // Merged-away duplicates never appear in the grid — their history lives on
+  // the survivor.
+  const where: Record<string, unknown> = { mergedInto: { exists: false } }
   if (sp.get('stage')) where.derivedStage = { equals: sp.get('stage') }
   if (sp.get('source')) where.source = { equals: sp.get('source') }
   if (sp.get('city')) where.city = { like: sp.get('city') }

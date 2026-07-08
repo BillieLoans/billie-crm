@@ -65,6 +65,7 @@ export async function GET(
           { or },
           { contactId: { not_equals: contactId } },
           { erased: { not_equals: true } },
+          { mergedInto: { exists: false } },
         ],
       } as never,
       limit: 20,

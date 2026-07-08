@@ -9,6 +9,12 @@ service MarketingService {
   rpc LogInteraction(LogInteractionRequest) returns (CommandResponse);
   rpc EraseContact(EraseContactRequest) returns (CommandResponse);
 
+  // Resolve two contact records to one person. The survivor keeps its
+  // contact_id; the other record's interactions/feedback/referrals re-attach
+  // and it is tombstoned with a merged_into pointer. Consent resolves
+  // conservatively (an opt-out on either record wins).
+  rpc MergeContact(MergeContactRequest) returns (CommandResponse);
+
   // Manual contact<->customer linking from the CRM (staff command). The
   // matcher links automatically on mobile/email; these cover the cases it
   // can't, and undo. Emitted events carry match_basis/reason = "manual".
@@ -18,10 +24,14 @@ service MarketingService {
   // Phase 3 DSR: subject-access export — everything the marketing facet holds
   // about one contact, as a JSON document (admin-gated in the CRM).
   rpc ExportContact(ExportContactRequest) returns (ExportContactResponse);
-  rpc SubmitFeedback(SubmitFeedbackRequest) returns (SubmitFeedbackResponse);
+
+  // Phase 2 (Stream A) — batches + invites
   rpc CreateBatch(CreateBatchRequest) returns (CreateBatchResponse);
   rpc AssignBatch(AssignBatchRequest) returns (AssignBatchResponse);
   rpc TriggerBatchInvitations(TriggerBatchInvitationsRequest) returns (TriggerBatchInvitationsResponse);
+
+  // Phase 2 (Stream A) — feedback intake + triage
+  rpc SubmitFeedback(SubmitFeedbackRequest) returns (SubmitFeedbackResponse);
   rpc SetFeedbackStatus(SetFeedbackStatusRequest) returns (SetFeedbackStatusResponse);
 }
 
@@ -98,6 +108,13 @@ message EraseContactRequest {
   string actor = 3;
 }
 
+message MergeContactRequest {
+  string idempotency_key = 1;
+  string survivor_contact_id = 2;
+  string merged_contact_id = 3;
+  string actor = 4;
+}
+
 message LinkContactRequest {
   string idempotency_key = 1;
   string contact_id = 2;
@@ -128,22 +145,7 @@ message CommandResponse {
   bool idempotent_replay = 3;
 }
 
-message SubmitFeedbackRequest {
-  string idempotency_key = 1;
-  string contact_id = 2;
-  string customer_id = 3;           // optional canonical link if already a customer
-  string type = 4;                  // bug | praise | feature | complaint | ...
-  string severity = 5;              // optional
-  string text = 6;
-  string product_area = 7;          // optional
-  string actor = 8;
-}
-
-message SubmitFeedbackResponse {
-  string feedback_id = 1;
-  string event_id = 2;
-  bool idempotent_replay = 3;
-}
+// ── Phase 2 (Stream A): batches + invites ──────────────────────────────
 
 message CreateBatchRequest {
   string idempotency_key = 1;
@@ -183,6 +185,26 @@ message TriggerBatchInvitationsResponse {
   int32 invited_count = 2;          // consented members a dispatch was emitted for
   int32 skipped_unconsented = 3;    // members skipped for lack of marketing consent
   bool idempotent_replay = 4;
+  int32 skipped_needs_review = 5;   // members skipped because attributes.needs_review is set
+}
+
+// ── Phase 2 (Stream A): feedback ───────────────────────────────────────
+
+message SubmitFeedbackRequest {
+  string idempotency_key = 1;
+  string contact_id = 2;
+  string customer_id = 3;           // optional canonical link if already a customer
+  string type = 4;                  // bug | praise | feature | complaint | ...
+  string severity = 5;              // optional
+  string text = 6;
+  string product_area = 7;          // optional
+  string actor = 8;
+}
+
+message SubmitFeedbackResponse {
+  string feedback_id = 1;
+  string event_id = 2;
+  bool idempotent_replay = 3;
 }
 
 message SetFeedbackStatusRequest {

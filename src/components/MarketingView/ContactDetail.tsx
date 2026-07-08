@@ -18,6 +18,7 @@ import { isAdmin } from '@/lib/access'
 import { LinkCustomerModal } from './LinkCustomerModal'
 import { RecordConsentModal } from './RecordConsentModal'
 import { EraseContactModal } from './EraseContactModal'
+import { MergeContactsModal } from './MergeContactsModal'
 import type { ContactAuditLog, Interaction } from '@/payload-types'
 import { formatDateMedium } from '@/lib/formatters'
 import { getMarketingConsentGranted } from '@/lib/marketing'
@@ -152,6 +153,7 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contactId }) => {
   const [showConsentModal, setShowConsentModal] = useState(false)
   const [showEraseModal, setShowEraseModal] = useState(false)
   const [includeSiblings, setIncludeSiblings] = useState(false)
+  const [mergeTarget, setMergeTarget] = useState<IdentitySibling | null>(null)
   const [flagReason, setFlagReason] = useState('')
   const { user } = useAuth()
   const userIsAdmin = isAdmin(user)
@@ -395,6 +397,14 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contactId }) => {
                   <span className={styles.panelRowMeta}>
                     {s.bases.map((b) => BASIS_LABELS[b] ?? b).join(', ')}
                   </span>
+                  <button
+                    type="button"
+                    className={styles.pageButton}
+                    onClick={() => setMergeTarget(s)}
+                    title="Merge this record into the contact being viewed"
+                  >
+                    Merge…
+                  </button>
                 </div>
               ))
             )}
@@ -560,6 +570,15 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contactId }) => {
           </Panel>
         </div>
       </div>
+
+      {mergeTarget && (
+        <MergeContactsModal
+          survivorContactId={contactId}
+          survivorName={contact.firstName ?? 'this contact'}
+          sibling={mergeTarget}
+          onClose={() => setMergeTarget(null)}
+        />
+      )}
 
       {showEraseModal && (
         <EraseContactModal

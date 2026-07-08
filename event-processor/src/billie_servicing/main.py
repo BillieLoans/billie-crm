@@ -38,6 +38,7 @@ from .handlers import (
     handle_contact_consent_granted,
     handle_contact_consent_withdrawn,
     handle_contact_erased,
+    handle_contact_merged,
     handle_contact_interaction_logged,
     handle_contact_linked,
     # Marketing events (billie_marketing_events SDK) — Task C3 + Phase-2 B5
@@ -297,6 +298,7 @@ def setup_handlers(processor: EventProcessor) -> None:
     )
     processor.register_handler("contact.stage.changed.v1", handle_contact_stage_changed)
     processor.register_handler("contact.erased.v1", handle_contact_erased)
+    processor.register_handler("contact.merged.v1", handle_contact_merged)
 
     # Marketing Phase-2 (Stream A) — batches, feedback, referral attribution
     processor.register_handler("batch.created.v1", handle_batch_created)

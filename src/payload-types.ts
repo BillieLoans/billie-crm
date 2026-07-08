@@ -1616,6 +1616,10 @@ export interface Contact {
     | boolean
     | null;
   erased?: boolean | null;
+  /**
+   * Survivor contact_id after a merge — merged records are hidden from the grid
+   */
+  mergedInto?: string | null;
   observedAt?: string | null;
   updatedAt: string;
   createdAt: string;
@@ -2514,6 +2518,7 @@ export interface ContactsSelect<T extends boolean = true> {
   consent?: T;
   attributes?: T;
   erased?: T;
+  mergedInto?: T;
   observedAt?: T;
   updatedAt?: T;
   createdAt?: T;

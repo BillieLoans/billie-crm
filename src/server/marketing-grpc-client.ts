@@ -111,6 +111,13 @@ export interface LogInteractionInput {
   actor?: string
 }
 
+export interface MergeContactInput {
+  idempotencyKey?: string
+  survivorContactId: string
+  mergedContactId: string
+  actor: string
+}
+
 export interface EraseContactInput {
   idempotencyKey: string
   contactId: string
@@ -278,6 +285,10 @@ export class MarketingClient {
     return this.promisify<LogInteractionInput, CommandResult>(this.client.logInteraction)(request)
   }
 
+  async mergeContact(request: MergeContactInput): Promise<CommandResult> {
+    return this.promisify<MergeContactInput, CommandResult>(this.client.mergeContact)(request)
+  }
+
   async eraseContact(request: EraseContactInput): Promise<CommandResult> {
     return this.promisify<EraseContactInput, CommandResult>(this.client.eraseContact)(request)
   }
@@ -356,6 +367,10 @@ export async function setConsent(request: SetConsentInput): Promise<CommandResul
 
 export async function logInteraction(request: LogInteractionInput): Promise<CommandResult> {
   return getMarketingClient().logInteraction(request)
+}
+
+export async function mergeContact(request: MergeContactInput): Promise<CommandResult> {
+  return getMarketingClient().mergeContact(request)
 }
 
 export async function eraseContact(request: EraseContactInput): Promise<CommandResult> {

@@ -91,6 +91,14 @@ export const Contacts: CollectionConfig = {
     { name: 'consent', type: 'json', admin: { readOnly: true } },
     { name: 'attributes', type: 'json', admin: { readOnly: true } },
     { name: 'erased', type: 'checkbox', admin: { readOnly: true } },
+    {
+      name: 'mergedInto',
+      type: 'text',
+      admin: {
+        readOnly: true,
+        description: 'Survivor contact_id after a merge — merged records are hidden from the grid',
+      },
+    },
     { name: 'observedAt', type: 'date', admin: { readOnly: true } },
   ],
   timestamps: true,
