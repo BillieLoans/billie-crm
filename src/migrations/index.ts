@@ -12,6 +12,7 @@ import * as migration_20260702_223751_marketing_module from './20260702_223751_m
 import * as migration_20260704_043533_marketing_phase2 from './20260704_043533_marketing_phase2';
 import * as migration_20260707_121002 from './20260707_121002';
 import * as migration_20260707_141505 from './20260707_141505';
+import * as migration_20260708_020322 from './20260708_020322';
 
 export const migrations = [
   {
@@ -82,6 +83,11 @@ export const migrations = [
   {
     up: migration_20260707_141505.up,
     down: migration_20260707_141505.down,
-    name: '20260707_141505'
+    name: '20260707_141505',
+  },
+  {
+    up: migration_20260708_020322.up,
+    down: migration_20260708_020322.down,
+    name: '20260708_020322'
   },
 ];

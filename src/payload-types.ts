@@ -1703,6 +1703,13 @@ export interface Batch {
     | null;
   createdByActor?: string | null;
   batchCreatedAt?: string | null;
+  /**
+   * When invitations were last triggered
+   */
+  invitedAt?: string | null;
+  invitedCount?: number | null;
+  skippedUnconsented?: number | null;
+  skippedNeedsReview?: number | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -2553,6 +2560,10 @@ export interface BatchesSelect<T extends boolean = true> {
   criteria?: T;
   createdByActor?: T;
   batchCreatedAt?: T;
+  invitedAt?: T;
+  invitedCount?: T;
+  skippedUnconsented?: T;
+  skippedNeedsReview?: T;
   updatedAt?: T;
   createdAt?: T;
 }

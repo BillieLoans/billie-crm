@@ -413,6 +413,21 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contactId }) => {
             </div>
           </Panel>
 
+          <Panel title="Data & privacy">
+            <div className={styles.panelRow}>
+              <span className={styles.panelRowLabel}>Subject access</span>
+              <span className={styles.panelRowValue}>
+                <a
+                  className={styles.nameLink}
+                  href={`/api/marketing/contacts/${contactId}/export`}
+                  title="Download everything held about this contact (admin only)"
+                >
+                  Download export
+                </a>
+              </span>
+            </div>
+          </Panel>
+
           <Panel title="Audit (last 10)">
             {recentAudit.length === 0 ? (
               <div className={styles.panelEmpty}>—</div>

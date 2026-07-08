@@ -14,6 +14,10 @@ service MarketingService {
   // can't, and undo. Emitted events carry match_basis/reason = "manual".
   rpc LinkContact(LinkContactRequest) returns (CommandResponse);
   rpc UnlinkContact(UnlinkContactRequest) returns (CommandResponse);
+
+  // Phase 3 DSR: subject-access export — everything the marketing facet holds
+  // about one contact, as a JSON document (admin-gated in the CRM).
+  rpc ExportContact(ExportContactRequest) returns (ExportContactResponse);
   rpc SubmitFeedback(SubmitFeedbackRequest) returns (SubmitFeedbackResponse);
   rpc CreateBatch(CreateBatchRequest) returns (CreateBatchResponse);
   rpc AssignBatch(AssignBatchRequest) returns (AssignBatchResponse);
@@ -105,6 +109,17 @@ message UnlinkContactRequest {
   string idempotency_key = 1;
   string contact_id = 2;
   string actor = 3;
+}
+
+message ExportContactRequest {
+  string contact_id = 1;
+  string actor = 2;
+}
+
+message ExportContactResponse {
+  string contact_id = 1;
+  string export_json = 2;           // the full subject-access document
+  string generated_at = 3;
 }
 
 message CommandResponse {

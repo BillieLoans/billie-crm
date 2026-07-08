@@ -19,6 +19,7 @@ from .handlers import (
     handle_assessment,
     handle_basiq_job_created,
     handle_batch_created,
+    handle_batch_invitations_triggered,
     handle_block_clear_approval_approved,
     handle_block_clear_approval_cancelled,
     handle_block_clear_approval_rejected,
@@ -299,6 +300,9 @@ def setup_handlers(processor: EventProcessor) -> None:
 
     # Marketing Phase-2 (Stream A) — batches, feedback, referral attribution
     processor.register_handler("batch.created.v1", handle_batch_created)
+    processor.register_handler(
+        "batch.invitations.triggered.v1", handle_batch_invitations_triggered
+    )
     processor.register_handler("contact.batch.assigned.v1", handle_contact_batch_assigned)
     processor.register_handler("feedback.received.v1", handle_feedback_received)
     processor.register_handler("feedback.status.changed.v1", handle_feedback_status_changed)
