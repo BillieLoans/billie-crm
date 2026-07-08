@@ -642,6 +642,48 @@
   cursor: not-allowed;
 }
 
+.btnDanger {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.625rem 1.25rem;
+  background: var(--theme-error-500, #dc2626);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.btnDanger:hover:not(:disabled) {
+  background: var(--theme-error-600, #b91c1c);
+}
+
+.btnDanger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dangerLink {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: inherit;
+  color: var(--theme-error-500, #dc2626);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.dangerLink:hover:not(:disabled) {
+  color: var(--theme-error-600, #b91c1c);
+}
+
+.dangerLink:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
 .errorMessage {
   background: var(--theme-error-50, #fee2e2);
   color: var(--theme-error-600, #991b1b);

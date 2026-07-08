@@ -7,9 +7,12 @@ import { toast } from 'sonner'
 import { useMarketingContact, marketingContactQueryKey } from '@/hooks/queries/useMarketingContact'
 import { useContactReferrals } from '@/hooks/queries/useContactReferrals'
 import { useFeedbackQueue } from '@/hooks/queries/useFeedbackQueue'
+import { useAuth } from '@payloadcms/ui'
 import { useSetReviewFlag, useUnlinkContact } from '@/hooks/mutations/useMarketingCommands'
+import { isAdmin } from '@/lib/access'
 import { LinkCustomerModal } from './LinkCustomerModal'
 import { RecordConsentModal } from './RecordConsentModal'
+import { EraseContactModal } from './EraseContactModal'
 import type { ContactAuditLog, Interaction } from '@/payload-types'
 import { formatDateMedium } from '@/lib/formatters'
 import { getMarketingConsentGranted } from '@/lib/marketing'
@@ -128,7 +131,10 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contactId }) => {
   const [showUnlinkConfirm, setShowUnlinkConfirm] = useState(false)
   const [showFlagModal, setShowFlagModal] = useState(false)
   const [showConsentModal, setShowConsentModal] = useState(false)
+  const [showEraseModal, setShowEraseModal] = useState(false)
   const [flagReason, setFlagReason] = useState('')
+  const { user } = useAuth()
+  const userIsAdmin = isAdmin(user)
   const unlink = useUnlinkContact()
   const reviewFlag = useSetReviewFlag()
 
@@ -426,6 +432,28 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contactId }) => {
                 </a>
               </span>
             </div>
+            <div className={styles.panelRow}>
+              <span className={styles.panelRowLabel}>Erasure</span>
+              <span className={styles.panelRowValue}>
+                {contact.erased ? (
+                  <span className={styles.panelRowMeta}>Erased</span>
+                ) : (
+                  <button
+                    type="button"
+                    className={styles.dangerLink}
+                    disabled={!userIsAdmin}
+                    title={
+                      userIsAdmin
+                        ? 'Permanently erase this contact (right to be forgotten)'
+                        : 'Admin only'
+                    }
+                    onClick={() => setShowEraseModal(true)}
+                  >
+                    Erase contact…
+                  </button>
+                )}
+              </span>
+            </div>
           </Panel>
 
           <Panel title="Audit (last 10)">
@@ -445,6 +473,14 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contactId }) => {
           </Panel>
         </div>
       </div>
+
+      {showEraseModal && (
+        <EraseContactModal
+          contactId={contactId}
+          contactName={contact.firstName ?? null}
+          onClose={() => setShowEraseModal(false)}
+        />
+      )}
 
       {showLinkModal && (
         <LinkCustomerModal
