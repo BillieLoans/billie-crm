@@ -2,9 +2,14 @@
 
 import React, { useState } from 'react'
 import Link from 'next/link'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { useMarketingContact, marketingContactQueryKey } from '@/hooks/queries/useMarketingContact'
+import {
+  useMarketingContact,
+  marketingContactQueryKey,
+  fetchMarketingContact,
+} from '@/hooks/queries/useMarketingContact'
+import { useContactIdentity, type IdentitySibling } from '@/hooks/queries/useContactIdentity'
 import { useContactReferrals } from '@/hooks/queries/useContactReferrals'
 import { useFeedbackQueue } from '@/hooks/queries/useFeedbackQueue'
 import { useAuth } from '@payloadcms/ui'
@@ -74,6 +79,15 @@ async function logNote({ contactId, body }: LogNoteParams): Promise<LogNoteResul
   return res.json()
 }
 
+const BASIS_LABELS: Record<string, string> = {
+  same_customer: 'same customer',
+  same_mobile: 'same mobile',
+  same_email: 'same email',
+}
+
+const siblingDisplayName = (s: IdentitySibling): string =>
+  s.firstName ?? s.mobileE164 ?? s.email ?? s.contactId.slice(0, 8)
+
 const BackLink: React.FC = () => (
   <Link href="/admin/marketing" className={styles.backLink}>
     ← Back to Marketing
@@ -87,7 +101,10 @@ const Panel: React.FC<{ title: string; children: React.ReactNode }> = ({ title, 
   </section>
 )
 
-const InteractionCard: React.FC<{ interaction: Interaction }> = ({ interaction }) => {
+const InteractionCard: React.FC<{ interaction: Interaction; sourceLabel?: string }> = ({
+  interaction,
+  sourceLabel,
+}) => {
   const meta = interaction.kind
     ? (KIND_META[interaction.kind] ?? { icon: '📝', label: interaction.kind })
     : { icon: '📝', label: 'Unknown' }
@@ -99,6 +116,7 @@ const InteractionCard: React.FC<{ interaction: Interaction }> = ({ interaction }
           {meta.icon}
         </span>
         <span className={styles.timelineKind}>{meta.label}</span>
+        {sourceLabel && <span className={styles.timelineSourceBadge}>{sourceLabel}</span>}
         {interaction.direction && (
           <span className={styles.timelineDirection}>({interaction.direction})</span>
         )}
@@ -123,6 +141,7 @@ const InteractionCard: React.FC<{ interaction: Interaction }> = ({ interaction }
  */
 export const ContactDetail: React.FC<ContactDetailProps> = ({ contactId }) => {
   const { data, isLoading, isError } = useMarketingContact(contactId)
+  const { data: identity } = useContactIdentity(contactId)
   const { data: referrals } = useContactReferrals(contactId)
   const { data: feedback } = useFeedbackQueue({ contact_id: contactId })
   const queryClient = useQueryClient()
@@ -132,6 +151,7 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contactId }) => {
   const [showFlagModal, setShowFlagModal] = useState(false)
   const [showConsentModal, setShowConsentModal] = useState(false)
   const [showEraseModal, setShowEraseModal] = useState(false)
+  const [includeSiblings, setIncludeSiblings] = useState(false)
   const [flagReason, setFlagReason] = useState('')
   const { user } = useAuth()
   const userIsAdmin = isAdmin(user)
@@ -164,6 +184,17 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contactId }) => {
     logNoteMutation.mutate({ contactId, body: trimmed })
   }
 
+  // Combined timeline: siblings' interactions load only when toggled on, via
+  // the same per-contact query key the detail view uses (shared cache).
+  const siblings = identity?.siblings ?? []
+  const siblingDetails = useQueries({
+    queries: siblings.map((s) => ({
+      queryKey: marketingContactQueryKey(s.contactId),
+      queryFn: () => fetchMarketingContact(s.contactId),
+      enabled: includeSiblings,
+    })),
+  })
+
   if (isLoading && !data) {
     return (
       <div className={styles.container}>
@@ -183,7 +214,22 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contactId }) => {
   }
 
   const { contact, interactions, audit } = data
-  const timeline = sortByOccurredAtDesc(interactions)
+  const ownEntries = interactions.map((i) => ({ interaction: i, sourceLabel: undefined as string | undefined }))
+  const siblingEntries = includeSiblings
+    ? siblingDetails.flatMap((q, idx) => {
+        const sibling = siblings[idx]
+        if (!q.data || !sibling) return []
+        const label = siblingDisplayName(sibling)
+        return q.data.interactions.map((i) => ({ interaction: i, sourceLabel: label }))
+      })
+    : []
+  const combined = [...ownEntries, ...siblingEntries]
+  combined.sort((a, b) => {
+    const aTime = a.interaction.occurredAt ? new Date(a.interaction.occurredAt).getTime() : 0
+    const bTime = b.interaction.occurredAt ? new Date(b.interaction.occurredAt).getTime() : 0
+    return bTime - aTime
+  })
+  const timeline = combined
   const consentHistory: ContactAuditLog[] = audit.filter((row) => /consent/i.test(row.eventType))
   const recentAudit = sortByOccurredAtDesc(audit).slice(0, 10)
   const consentGranted = getMarketingConsentGranted(contact.consent)
@@ -249,11 +295,29 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contactId }) => {
             </button>
           </div>
 
+          {siblings.length > 0 && (
+            <label className={styles.timelineToggle}>
+              <input
+                type="checkbox"
+                checked={includeSiblings}
+                onChange={(e) => setIncludeSiblings(e.target.checked)}
+              />
+              Include {siblings.length} linked record{siblings.length === 1 ? '' : 's'} in the
+              timeline
+            </label>
+          )}
+
           <div className={styles.timeline}>
             {timeline.length === 0 ? (
               <div className={styles.emptyState}>No interactions recorded yet.</div>
             ) : (
-              timeline.map((item) => <InteractionCard key={item.id} interaction={item} />)
+              timeline.map((item) => (
+                <InteractionCard
+                  key={`${item.sourceLabel ?? 'own'}-${item.interaction.id}`}
+                  interaction={item.interaction}
+                  sourceLabel={item.sourceLabel}
+                />
+              ))
             )}
           </div>
         </div>
@@ -308,6 +372,32 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contactId }) => {
                 {unlink.isPending ? 'Unlinking…' : 'Unlink'}
               </button>
             </div>
+          </Panel>
+
+          {/* Identity graph: every record the system believes is this same
+              person, with the basis for each connection. Fixed layout: the
+              panel always renders; no siblings shows a dash. */}
+          <Panel title="Same person">
+            {siblings.length === 0 ? (
+              <div className={styles.panelEmpty}>—</div>
+            ) : (
+              siblings.map((s) => (
+                <div key={s.contactId} className={styles.panelRow}>
+                  <span className={styles.panelRowPrimary}>
+                    <Link
+                      href={`/admin/marketing/contacts/${s.contactId}`}
+                      className={styles.nameLink}
+                    >
+                      {siblingDisplayName(s)}
+                    </Link>
+                    {s.derivedStage ? ` · ${STAGE_LABELS[s.derivedStage] ?? s.derivedStage}` : ''}
+                  </span>
+                  <span className={styles.panelRowMeta}>
+                    {s.bases.map((b) => BASIS_LABELS[b] ?? b).join(', ')}
+                  </span>
+                </div>
+              ))
+            )}
           </Panel>
 
           {/* A2: needs-review flag — parked contacts receive no sends. */}

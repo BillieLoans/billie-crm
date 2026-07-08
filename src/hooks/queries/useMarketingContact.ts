@@ -9,7 +9,7 @@ export interface MarketingContactDetailResponse {
   audit: ContactAuditLog[]
 }
 
-async function fetchMarketingContact(contactId: string): Promise<MarketingContactDetailResponse> {
+export async function fetchMarketingContact(contactId: string): Promise<MarketingContactDetailResponse> {
   const res = await fetch(`/api/marketing/contacts/${encodeURIComponent(contactId)}`, {
     credentials: 'include',
   })
