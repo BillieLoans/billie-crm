@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { normaliseAuMobile, normaliseEmail } from '@/lib/marketing'
+import { normaliseAuMobile, normaliseEmail, siblingBases } from '@/lib/marketing'
 
 // Parity cases mirroring the platform's normalise_mobile/normalise_email
 // (marketingService commands.py) — the duplicate pre-check must resolve the
@@ -36,5 +36,26 @@ describe('normaliseEmail', () => {
     expect(normaliseEmail('')).toBeNull()
     expect(normaliseEmail('   ')).toBeNull()
     expect(normaliseEmail(null)).toBeNull()
+  })
+})
+
+describe('siblingBases', () => {
+  const self = { customerId: 'CUST-1', mobileE164: '+61403320117', email: 'rohan@billie.loans' }
+
+  it('collects every matching basis in display order', () => {
+    expect(siblingBases(self, self)).toEqual(['same_customer', 'same_mobile', 'same_email'])
+    expect(
+      siblingBases(self, { customerId: 'CUST-1', mobileE164: '+61400111222', email: null }),
+    ).toEqual(['same_customer'])
+    expect(
+      siblingBases(self, { customerId: null, mobileE164: null, email: 'rohan@billie.loans' }),
+    ).toEqual(['same_email'])
+  })
+
+  it('never matches on a key the contact itself lacks', () => {
+    const noKeys = { customerId: null, mobileE164: null, email: null }
+    expect(siblingBases(noKeys, self)).toEqual([])
+    // Both null must not count as "same"
+    expect(siblingBases(noKeys, noKeys)).toEqual([])
   })
 })

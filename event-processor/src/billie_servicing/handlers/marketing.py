@@ -331,6 +331,77 @@ async def handle_contact_stage_changed(pool: asyncpg.Pool, event: Any) -> None:
     )
 
 
+async def handle_contact_merged(pool: asyncpg.Pool, event: Any) -> None:
+    """Handle ``contact.merged.v1`` — duplicate resolved to one person.
+
+    Mirrors the platform projection: the merged record's interactions,
+    feedback and audit rows re-attach to the survivor; the merged contact row
+    is tombstoned with ``merged_into`` (grid queries exclude it); the
+    survivor's consent takes the command-resolved value (opt-out dominates).
+    Idempotent — every statement is a no-op on replay.
+    """
+    p = event.payload
+    survivor = p.survivor_contact_id
+    merged = p.merged_contact_id
+
+    survivor_ref = await pool.fetchval(
+        "SELECT id FROM contacts WHERE contact_id = $1", survivor
+    )
+
+    # Re-attach history (natural-key column + relationship FK where present)
+    if survivor_ref is not None:
+        await pool.execute(
+            "UPDATE interactions SET contact_id_string = $1, contact_id = $2"
+            " WHERE contact_id_string = $3",
+            survivor,
+            survivor_ref,
+            merged,
+        )
+    else:
+        await pool.execute(
+            "UPDATE interactions SET contact_id_string = $1 WHERE contact_id_string = $2",
+            survivor,
+            merged,
+        )
+    await pool.execute(
+        "UPDATE feedback SET contact_id_string = $1 WHERE contact_id_string = $2",
+        survivor,
+        merged,
+    )
+    await pool.execute(
+        "UPDATE contact_audit_log SET contact_id_string = $1 WHERE contact_id_string = $2",
+        survivor,
+        merged,
+    )
+
+    # Tombstone the merged record
+    await update_by_key(
+        pool,
+        "contacts",
+        key_column="contact_id",
+        key_value=merged,
+        values={"merged_into": survivor, "updated_at": _now()},
+    )
+
+    # Survivor consent: command-resolved (opt-out dominates)
+    if p.consent_resolution is not None:
+        await update_by_key(
+            pool,
+            "contacts",
+            key_column="contact_id",
+            key_value=survivor,
+            values={"consent": json.dumps(p.consent_resolution), "updated_at": _now()},
+        )
+
+    await _audit(
+        pool,
+        survivor,
+        event.event_type,
+        getattr(p, "actor", None),
+        {"merged_contact_id": merged},
+    )
+
+
 async def handle_contact_erased(pool: asyncpg.Pool, event: Any) -> None:
     """Handle ``contact.erased.v1`` — redact PI from ``contacts`` + ``interactions``.
 

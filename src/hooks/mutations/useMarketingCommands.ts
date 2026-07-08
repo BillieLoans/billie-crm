@@ -238,6 +238,31 @@ export function useRecordConsent() {
   })
 }
 
+export interface MergeContactVars {
+  survivorContactId: string
+  mergedContactId: string
+}
+
+/** Merge a duplicate record into this contact (survivor). Irreversible —
+ * the modal requires typed confirmation before calling this. */
+export function useMergeContact() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (vars: MergeContactVars) =>
+      postCommand(
+        `/api/marketing/contacts/${encodeURIComponent(vars.survivorContactId)}/merge`,
+        { merged_contact_id: vars.mergedContactId },
+      ),
+    onSuccess: () => {
+      toast.success('Contacts merged', {
+        description: 'History is re-attaching to this record.',
+      })
+      invalidateWithLag(qc, [['marketing-contacts']])
+    },
+    onError: (e: Error) => toast.error('Merge failed', { description: e.message }),
+  })
+}
+
 /** Admin-only privacy erasure — irreversible; UI must verify first. */
 export function useEraseContact() {
   const qc = useQueryClient()

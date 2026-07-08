@@ -12,6 +12,7 @@ from billie_servicing.handlers.marketing import (
     handle_contact_erased,
     handle_contact_interaction_logged,
     handle_contact_linked,
+    handle_contact_merged,
     handle_contact_observed,
     handle_contact_stage_changed,
     handle_contact_unlinked,
@@ -85,6 +86,25 @@ async def test_interaction_direction_normalised_to_enum_values(mock_pool):
                 "source_system": "notification"}))
         row = mock_pool.last_upsert("interactions")
         assert row["direction"] == stored, f"direction {raw!r} stored as {row['direction']!r}"
+
+
+async def test_merged_repoints_history_and_tombstones(mock_pool):
+    await handle_contact_merged(mock_pool, _parsed("contact.merged.v1", {
+        "survivor_contact_id": "c-surv", "merged_contact_id": "c-dup",
+        "merged_at": "2026-07-08T00:00:00+00:00", "actor": "staff-1",
+        "consent_resolution": {"marketing": {"granted": False,
+                                             "method": "merge_opt_out_dominates"}}}))
+
+    # Re-pointing statements hit interactions, feedback and the audit log
+    raw = " ".join(c.sql for c in mock_pool.calls)
+    assert "UPDATE interactions SET contact_id_string" in raw
+    assert "UPDATE feedback SET contact_id_string" in raw
+    assert "UPDATE contact_audit_log SET contact_id_string" in raw
+
+    # Tombstone on the merged row + resolved consent on the survivor
+    updates = mock_pool.updates_to("contacts")
+    assert any(u.get("merged_into") == "c-surv" for u in updates)
+    assert any('"granted": false' in str(u.get("consent", "")) for u in updates)
 
 
 async def test_erased_redacts_pi():

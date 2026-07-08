@@ -64,6 +64,7 @@ from .marketing import (
     handle_contact_consent_granted,
     handle_contact_consent_withdrawn,
     handle_contact_erased,
+    handle_contact_merged,
     handle_contact_interaction_logged,
     handle_contact_linked,
     handle_contact_observed,
@@ -169,6 +170,7 @@ __all__ = [
     "handle_contact_interaction_logged",
     "handle_contact_stage_changed",
     "handle_contact_erased",
+    "handle_contact_merged",
     # Marketing Phase-2 (Stream A) handlers — batches, feedback, referral
     "handle_batch_created",
     "handle_batch_invitations_triggered",
