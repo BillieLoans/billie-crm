@@ -3,6 +3,12 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { NotificationPanel } from '@/components/Notifications'
 import type { ApprovalNotification } from '@/hooks/queries/useApprovalNotifications'
 
+// The Notifications barrel pulls in NotificationBadge → useLendingAccess →
+// @payloadcms/ui; mock it so the real package (and its CSS) never loads.
+vi.mock('@payloadcms/ui', () => ({
+  useAuth: () => ({ user: { id: 'u-1', role: 'operations' } }),
+}))
+
 const mockNotifications: ApprovalNotification[] = [
   {
     id: '1',

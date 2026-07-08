@@ -15,6 +15,12 @@ export interface UseReadOnlyModeOptions {
   showRecoveryToast?: boolean
   /** Treat 'degraded' as offline (default: false) */
   treatDegradedAsOffline?: boolean
+  /**
+   * Poll ledger health and sync the store (default: true). Disable for
+   * roles behind the lending wall — with the query off, the health status
+   * defaults to 'offline', which must NOT be synced into read-only mode.
+   */
+  enabled?: boolean
 }
 
 /**
@@ -36,9 +42,9 @@ export interface UseReadOnlyModeOptions {
  * ```
  */
 export function useReadOnlyMode(options: UseReadOnlyModeOptions = {}) {
-  const { showRecoveryToast = true, treatDegradedAsOffline = false } = options
+  const { showRecoveryToast = true, treatDegradedAsOffline = false, enabled = true } = options
 
-  const { status, isLoading } = useLedgerHealth()
+  const { status, isLoading } = useLedgerHealth({ enabled })
   const setReadOnlyMode = useUIStore((state) => state.setReadOnlyMode)
   const readOnlyMode = useUIStore((state) => state.readOnlyMode)
 
@@ -47,8 +53,9 @@ export function useReadOnlyMode(options: UseReadOnlyModeOptions = {}) {
   const hasInitializedRef = useRef(false)
 
   useEffect(() => {
-    // Don't update during initial load
-    if (isLoading) return
+    // Not polling (lending-walled role) or still on initial load — the
+    // 'offline' default from a disabled query must not flip read-only mode.
+    if (!enabled || isLoading) return
 
     // Determine if current status should trigger read-only mode
     const shouldBeReadOnly =
@@ -74,7 +81,7 @@ export function useReadOnlyMode(options: UseReadOnlyModeOptions = {}) {
     // Update previous status ref
     previousStatusRef.current = status
     hasInitializedRef.current = true
-  }, [status, isLoading, setReadOnlyMode, showRecoveryToast, treatDegradedAsOffline])
+  }, [status, isLoading, enabled, setReadOnlyMode, showRecoveryToast, treatDegradedAsOffline])
 
   return {
     /** Whether read-only mode is active */

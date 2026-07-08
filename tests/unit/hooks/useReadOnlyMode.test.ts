@@ -54,6 +54,26 @@ describe('useReadOnlyMode', () => {
     vi.restoreAllMocks()
   })
 
+  describe('Lending wall (enabled: false)', () => {
+    it('does not poll and never flips readOnlyMode when disabled', async () => {
+      ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(mockOfflineResponse),
+      })
+
+      const { result } = renderHook(() => useReadOnlyMode({ enabled: false }), {
+        wrapper: createWrapper(),
+      })
+
+      // The disabled query defaults status to 'offline' — that must NOT be
+      // synced into the store as read-only mode.
+      await new Promise((r) => setTimeout(r, 50))
+      expect(global.fetch).not.toHaveBeenCalled()
+      expect(result.current.isReadOnly).toBe(false)
+      expect(useUIStore.getState().readOnlyMode).toBe(false)
+    })
+  })
+
   describe('Status Sync', () => {
     it('should set readOnlyMode to false when ledger is connected', async () => {
       ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({

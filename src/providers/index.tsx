@@ -18,6 +18,7 @@ import { UserSessionGuard } from '@/components/UserSessionGuard'
 // Note: NotificationIndicator is now rendered through Payload's actions slot
 import { useUIStore } from '@/stores/ui'
 import { useCommandPaletteHotkeys } from '@/hooks/useGlobalHotkeys'
+import { useLendingAccess } from '@/hooks/useLendingAccess'
 import { useReadOnlyMode } from '@/hooks/useReadOnlyMode'
 import { useCustomerSearch } from '@/hooks/queries/useCustomerSearch'
 import { useLoanAccountSearch } from '@/hooks/queries/useLoanAccountSearch'
@@ -28,7 +29,10 @@ import { SMART_VIEWS } from '@/lib/smart-views'
  * Must be inside QueryClientProvider.
  */
 const ReadOnlyModeSync: React.FC = () => {
-  useReadOnlyMode()
+  // Ledger health is lending chrome — marketing/service roles can't read it
+  // (hasAnyRole), so don't poll on their behalf.
+  const hasLendingAccess = useLendingAccess()
+  useReadOnlyMode({ enabled: hasLendingAccess })
   return null
 }
 
