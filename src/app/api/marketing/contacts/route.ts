@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
       actor: String(user.id),
     })
     return NextResponse.json(
-      { contactId: result.contactId, eventId: result.eventId },
+      { contactId: result.contactId, eventId: result.eventId, created: result.created },
       { status: 202 },
     )
   } catch (e) {

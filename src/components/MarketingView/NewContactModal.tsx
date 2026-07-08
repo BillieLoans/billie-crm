@@ -1,7 +1,13 @@
 'use client'
 
 import React, { useState } from 'react'
-import { useCreateContact, type CreateContactVars } from '@/hooks/mutations/useMarketingCommands'
+import Link from 'next/link'
+import {
+  checkContactMatch,
+  useCreateContact,
+  type ContactMatch,
+  type CreateContactVars,
+} from '@/hooks/mutations/useMarketingCommands'
 import { useEscapeClose } from '@/hooks/useModalA11y'
 import styles from './styles.module.css'
 
@@ -26,6 +32,12 @@ const SOURCE_OPTIONS = [
  * /api/marketing/contacts (waitlist:false) — the contact is created in the
  * marketing system of record and projects back into the grid. Mobile or email
  * is required (the natural key); everything else is optional.
+ *
+ * Warn-and-confirm: UpsertContact resolves identity by natural key, so a
+ * mobile/email that matches an existing contact would silently UPDATE that
+ * record (including renaming it). Submit therefore pre-checks the natural
+ * keys and, on a match, requires a second, explicit "Update existing
+ * contact" submission. Editing either key clears the pending confirmation.
  */
 export const NewContactModal: React.FC<NewContactModalProps> = ({ onClose, onSuccess }) => {
   const [firstName, setFirstName] = useState('')
@@ -36,12 +48,42 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ onClose, onSuc
   const [city, setCity] = useState('')
   const [postcode, setPostcode] = useState('')
 
-  const create = useCreateContact()
-  const canSubmit = (!!mobile.trim() || !!email.trim()) && !create.isPending
+  const [match, setMatch] = useState<ContactMatch | null>(null)
+  const [checking, setChecking] = useState(false)
+  const [checkError, setCheckError] = useState<string | null>(null)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const create = useCreateContact()
+  const canSubmit = (!!mobile.trim() || !!email.trim()) && !create.isPending && !checking
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!canSubmit) return
+
+    // First pass: duplicate pre-check. A match switches the modal into
+    // confirm mode; only the second submit actually posts. Fail closed —
+    // if we can't verify, we must not risk silently renaming someone.
+    if (!match) {
+      setChecking(true)
+      setCheckError(null)
+      let found: ContactMatch | null = null
+      try {
+        found = await checkContactMatch({
+          mobile: mobile.trim() || undefined,
+          email: email.trim() || undefined,
+        })
+      } catch (err) {
+        setCheckError(
+          err instanceof Error ? err.message : 'Duplicate check failed. Please retry.',
+        )
+        return
+      } finally {
+        setChecking(false)
+      }
+      if (found) {
+        setMatch(found)
+        return
+      }
+    }
 
     const vars: CreateContactVars = { source }
     if (firstName.trim()) vars.first_name = firstName.trim()
@@ -54,6 +96,16 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ onClose, onSuc
     }
 
     create.mutate(vars, { onSuccess: () => onSuccess() })
+  }
+
+  // Editing a natural key invalidates a pending confirmation.
+  const handleMobileChange = (value: string) => {
+    setMobile(value)
+    setMatch(null)
+  }
+  const handleEmailChange = (value: string) => {
+    setEmail(value)
+    setMatch(null)
   }
 
   useEscapeClose(onClose)
@@ -80,6 +132,21 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ onClose, onSuc
                 {create.error instanceof Error ? create.error.message : 'Failed to create contact'}
               </div>
             )}
+            {checkError && <div className={styles.errorMessage}>{checkError}</div>}
+            {match && (
+              <div className={styles.warningMessage} data-testid="duplicate-warning">
+                This {match.matchedOn} already belongs to{' '}
+                <strong>{match.firstName ?? 'an unnamed contact'}</strong>
+                {match.derivedStage ? ` (${match.derivedStage})` : ''}. Saving will{' '}
+                <strong>update that contact</strong> — it will not create a new person.{' '}
+                <Link
+                  href={`/admin/marketing/contacts/${match.contactId}`}
+                  className={styles.nameLink}
+                >
+                  View contact
+                </Link>
+              </div>
+            )}
 
             <div className={styles.formGroup}>
               <label className={styles.formLabel} htmlFor="new-contact-first-name">
@@ -104,7 +171,7 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ onClose, onSuc
                 type="tel"
                 className={styles.formInput}
                 value={mobile}
-                onChange={(e) => setMobile(e.target.value)}
+                onChange={(e) => handleMobileChange(e.target.value)}
                 placeholder="+61…"
               />
               <p className={styles.formHint}>Mobile or email is required.</p>
@@ -119,7 +186,7 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ onClose, onSuc
                 type="email"
                 className={styles.formInput}
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => handleEmailChange(e.target.value)}
               />
             </div>
 
@@ -189,7 +256,13 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ onClose, onSuc
               Cancel
             </button>
             <button type="submit" className={styles.btnSubmit} disabled={!canSubmit}>
-              {create.isPending ? 'Creating…' : 'Create contact'}
+              {checking
+                ? 'Checking…'
+                : create.isPending
+                  ? 'Saving…'
+                  : match
+                    ? 'Update existing contact'
+                    : 'Create contact'}
             </button>
           </div>
         </form>
