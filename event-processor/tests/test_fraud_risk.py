@@ -55,3 +55,20 @@ class TestFraudRiskHalt:
         assert doc["customer_id"] == "CUST1"
         assert doc["fraud_risk_active"] is True
         assert doc["fraud_risk_severity"] == "HIGH"
+
+    @pytest.mark.asyncio
+    async def test_halt_writes_score_categories_and_flagged_at(self, mock_pool):
+        event = {"typ": "fraud_risk.halt.v1", "usr": "CUST1", "conv": CONV,
+                 "payload": dict(HALT_PAYLOAD)}
+        await handle_fraud_risk_halt(mock_pool, event)
+        doc = mock_pool.last_upsert("customers")
+        assert doc["fraud_risk_score"] == 70
+        assert "PROMPT_INJECTION" in str(doc["fraud_risk_categories"])
+        assert doc["fraud_risk_flagged_at"] is not None
+
+    @pytest.mark.asyncio
+    async def test_halt_without_customer_id_makes_no_mirror(self, mock_pool):
+        # No usr and no customer_id → no resolvable customer → no junk row.
+        event = {"typ": "fraud_risk.halt.v1", "conv": CONV, "payload": dict(HALT_PAYLOAD)}
+        await handle_fraud_risk_halt(mock_pool, event)
+        assert mock_pool.last_upsert("customers") is None
