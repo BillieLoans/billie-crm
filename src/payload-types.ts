@@ -357,6 +357,36 @@ export interface Customer {
     reportArchived?: boolean | null;
     archivedAt?: string | null;
   };
+  /**
+   * Latest HIGH/CRITICAL fraud-risk incident (flagged for review)
+   */
+  fraudRisk?: {
+    /**
+     * HIGH or CRITICAL
+     */
+    severity?: string | null;
+    /**
+     * Final fraud risk score 0-100
+     */
+    score?: number | null;
+    /**
+     * Detected fraud/abuse categories
+     */
+    categories?:
+      | {
+          [k: string]: unknown;
+        }
+      | unknown[]
+      | string
+      | number
+      | boolean
+      | null;
+    flaggedAt?: string | null;
+    /**
+     * True while the fraud alert is active
+     */
+    active?: boolean | null;
+  };
   identityDocuments?:
     | {
         documentType: 'DRIVERS_LICENCE' | 'PASSPORT' | 'MEDICARE';
@@ -1994,6 +2024,15 @@ export interface CustomersSelect<T extends boolean = true> {
         checkedAt?: T;
         reportArchived?: T;
         archivedAt?: T;
+      };
+  fraudRisk?:
+    | T
+    | {
+        severity?: T;
+        score?: T;
+        categories?: T;
+        flaggedAt?: T;
+        active?: T;
       };
   identityDocuments?:
     | T
