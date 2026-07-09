@@ -38,6 +38,7 @@ _ASSESSMENT_COLUMNS = {
     "accountConduct": "assessments_account_conduct",
     "postIdentityRisk": "assessments_post_identity_risk",
     "creditAssessmentComplete": "assessments_credit_assessment_complete",
+    "fraudCheck": "assessments_fraud_check",
 }
 
 
