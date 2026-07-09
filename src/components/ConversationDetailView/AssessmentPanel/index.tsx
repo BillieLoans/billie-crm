@@ -172,6 +172,11 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
   const pirDecision = postIdentityRisk?.decision as string | undefined
   const pirHasS3 = Boolean(postIdentityRisk?.s3Key || postIdentityRisk?.file_location)
 
+  // Fraud risk (billieChat FraudRiskAgent) — written to assessments.fraudCheck.
+  const fraudCheck = assessments?.fraudCheck as Record<string, unknown> | undefined
+  const fraudSeverity = (fraudCheck?.severity as string | undefined)?.toUpperCase()
+  const fraudSummary = fraudSeverity ? fraudSeverity : 'No data'
+
   // Statements summary
   const sc = statementCapture as Record<string, unknown> | undefined
   const consentStatus = sc?.consentStatus as string | undefined
@@ -320,6 +325,26 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
             <p>No post-IDV check data.</p>
           ) : null}
         </div>
+      </AssessmentSection>
+
+      {/* Fraud risk */}
+      <AssessmentSection title="Fraud risk" summary={fraudSummary}>
+        {fraudCheck ? (
+          <div>
+            <p
+              className={
+                fraudSeverity && ['HIGH', 'CRITICAL'].includes(fraudSeverity)
+                  ? styles.fail
+                  : styles.pass
+              }
+            >
+              {fraudSeverity} — score {String(fraudCheck.final_score ?? '?')}
+            </p>
+            <pre className={styles.jsonPreview}>{JSON.stringify(fraudCheck, null, 2)}</pre>
+          </div>
+        ) : (
+          <p>No fraud-risk assessment data.</p>
+        )}
       </AssessmentSection>
 
       {/* Statements */}
