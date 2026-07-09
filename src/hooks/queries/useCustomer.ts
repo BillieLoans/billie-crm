@@ -125,6 +125,14 @@ export interface CustomerData {
     reportArchived?: boolean | null
     archivedAt?: string | null
   } | null
+  /** Latest HIGH/CRITICAL fraud-risk incident (billieChat FraudRiskAgent). */
+  fraudRisk?: {
+    severity?: string | null
+    score?: number | null
+    categories?: string[] | null
+    flaggedAt?: string | null
+    active?: boolean | null
+  } | null
   loanAccounts?: LoanAccountData[] | null
 }
 

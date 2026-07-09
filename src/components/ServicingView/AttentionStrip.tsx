@@ -19,6 +19,7 @@ const ICON: Record<AttentionItem['kind'], string> = {
   collections: '☎',
   hardship: '🛡',
   stop_contact: '🔕',
+  fraud_risk: '🚩',
 }
 
 export const AttentionStrip: React.FC<AttentionStripProps> = ({

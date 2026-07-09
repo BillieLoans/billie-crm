@@ -320,7 +320,9 @@ export const Customers: CollectionConfig = {
         {
           name: 'clearStatus',
           type: 'text',
-          admin: { description: 'Status of the most recent block-clear request (e.g. approved, rejected)' },
+          admin: {
+            description: 'Status of the most recent block-clear request (e.g. approved, rejected)',
+          },
         },
         {
           name: 'clearedAt',
@@ -371,6 +373,42 @@ export const Customers: CollectionConfig = {
         {
           name: 'archivedAt',
           type: 'date',
+        },
+      ],
+    },
+    {
+      // Latest HIGH/CRITICAL fraud-risk incident, mirrored from fraud_risk.halt.v1
+      // (billieChat FraudRiskAgent). Drives the AttentionStrip fraud chip.
+      name: 'fraudRisk',
+      type: 'group',
+      admin: {
+        readOnly: true,
+        description: 'Latest HIGH/CRITICAL fraud-risk incident (flagged for review)',
+      },
+      fields: [
+        {
+          name: 'severity',
+          type: 'text',
+          admin: { description: 'HIGH or CRITICAL' },
+        },
+        {
+          name: 'score',
+          type: 'number',
+          admin: { description: 'Final fraud risk score 0-100' },
+        },
+        {
+          name: 'categories',
+          type: 'json',
+          admin: { description: 'Detected fraud/abuse categories' },
+        },
+        {
+          name: 'flaggedAt',
+          type: 'date',
+        },
+        {
+          name: 'active',
+          type: 'checkbox',
+          admin: { description: 'True while the fraud alert is active' },
         },
       ],
     },
@@ -459,4 +497,4 @@ export const Customers: CollectionConfig = {
       },
     },
   ],
-} 
+}

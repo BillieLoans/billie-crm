@@ -60,6 +60,9 @@ from .handlers import (
     handle_feedback_received,
     handle_feedback_status_changed,
     handle_final_decision,
+    # Fraud risk handlers (fraud_risk.* from billieChat FraudRiskAgent)
+    handle_fraud_risk_assessment,
+    handle_fraud_risk_halt,
     # Identity verification archival (PR #67)
     handle_identity_report_archived,
     # Aging handler (platform → CRM read-only projection of arrears state)
@@ -222,6 +225,12 @@ def setup_handlers(processor: EventProcessor) -> None:
     processor.register_handler("credit_assessment_accountConduct_result", handle_assessment)
     processor.register_handler("post_identity_risk_checks_complete", handle_post_identity_risk_check)
     processor.register_handler("credit_assessment_complete", handle_credit_assessment_complete)
+
+    # Fraud risk (billieChat FraudRiskAgent) — MEDIUM+ assessments land on the
+    # conversation's fraudCheck slot; HIGH/CRITICAL halts raise the customer-level
+    # fraud-risk mirror consumed by the CRM's AttentionStrip chip.
+    processor.register_handler("fraud_risk.assessment.v1", handle_fraud_risk_assessment)
+    processor.register_handler("fraud_risk.halt.v1", handle_fraud_risk_halt)
 
     # =========================================================================
     # Write-off events (CRM-originated, manual parsing)

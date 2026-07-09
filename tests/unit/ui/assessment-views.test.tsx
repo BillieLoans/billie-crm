@@ -113,6 +113,29 @@ describe('AssessmentPanel — identity summary', () => {
   })
 })
 
+describe('AssessmentPanel — fraud risk summary', () => {
+  afterEach(() => cleanup())
+
+  it('shows the severity and score, with fail styling for HIGH severity', () => {
+    const conversation = baseConversation({
+      assessments: { fraudCheck: { severity: 'HIGH', final_score: 87 } },
+    })
+    render(<AssessmentPanel conversation={conversation} conversationId="conv-001" />)
+    expect(screen.getAllByText('HIGH').length).toBeGreaterThan(0)
+    const fraudBtn = screen.getAllByRole('button').find((b) => b.textContent?.includes('Fraud risk'))
+    fireEvent.click(fraudBtn!)
+    expect(screen.getByText(/score 87/)).toBeInTheDocument()
+  })
+
+  it('shows "No data" summary and fallback message when fraudCheck is absent', () => {
+    const conversation = baseConversation({ assessments: {} })
+    render(<AssessmentPanel conversation={conversation} conversationId="conv-001" />)
+    const fraudBtn = screen.getAllByRole('button').find((b) => b.textContent?.includes('Fraud risk'))
+    fireEvent.click(fraudBtn!)
+    expect(screen.getByText('No fraud-risk assessment data.')).toBeInTheDocument()
+  })
+})
+
 describe('AssessmentPanel — application term label', () => {
   afterEach(() => cleanup())
 

@@ -50,6 +50,10 @@ from .customer import (
     handle_customer_changed,
     handle_customer_verified,
 )
+from .fraud import (
+    handle_fraud_risk_assessment,
+    handle_fraud_risk_halt,
+)
 from .identity import (
     handle_customer_identity_linked,
     handle_customer_identity_merged,
@@ -134,6 +138,9 @@ __all__ = [
     # Credit assessment & post-identity handlers
     "handle_post_identity_risk_check",
     "handle_credit_assessment_complete",
+    # Fraud risk handlers (fraud_risk.* from billieChat FraudRiskAgent)
+    "handle_fraud_risk_assessment",
+    "handle_fraud_risk_halt",
     # Write-off handlers (CRM-originated events)
     "handle_writeoff_requested",
     "handle_writeoff_approved",
