@@ -128,6 +128,7 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
           selectedAccountId && hasPendingWriteOff ? [selectedAccountId] : [],
         reapplicationBlock: customer?.reapplicationBlock ?? null,
         collectionsCases,
+        fraudRisk: customer?.fraudRisk ?? null,
       }),
     [
       customer?.vulnerableFlag,
@@ -136,6 +137,7 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
       selectedAccountId,
       hasPendingWriteOff,
       collectionsCases,
+      customer?.fraudRisk,
     ],
   )
 

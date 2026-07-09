@@ -107,6 +107,7 @@ export async function GET(
         vulnerableFlag: customer.vulnerableFlag || false,
         reapplicationBlock: customer.reapplicationBlock ?? null,
         identityVerification: customer.identityVerification ?? null,
+        fraudRisk: customer.fraudRisk ?? null,
       },
       accounts: accountsWithBalances.map((account) => ({
         id: account.id,

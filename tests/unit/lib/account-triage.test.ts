@@ -288,4 +288,28 @@ describe('getAttentionItems', () => {
       { kind: 'stop_contact', label: 'Contact stopped', accountId: null, severity: 'high' },
     ])
   })
+
+  it('emits a high-severity fraud_risk chip when fraudRisk is active', () => {
+    const items = getAttentionItems({
+      vulnerable: false,
+      accounts: [],
+      fraudRisk: { severity: 'CRITICAL', score: 90, active: true },
+      today: TODAY,
+    })
+    expect(items.map((i) => i.kind)).toContain('fraud_risk')
+    const chip = items.find((i) => i.kind === 'fraud_risk')!
+    expect(chip.severity).toBe('high')
+    expect(chip.accountId).toBeNull()
+    expect(chip.label).toContain('CRITICAL')
+  })
+
+  it('does not emit a fraud_risk chip when inactive', () => {
+    const items = getAttentionItems({
+      vulnerable: false,
+      accounts: [],
+      fraudRisk: { severity: 'CRITICAL', score: 90, active: false },
+      today: TODAY,
+    })
+    expect(items.map((i) => i.kind)).not.toContain('fraud_risk')
+  })
 })

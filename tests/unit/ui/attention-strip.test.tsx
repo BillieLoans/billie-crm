@@ -57,4 +57,19 @@ describe('AttentionStrip', () => {
     fireEvent.click(screen.getByText('Contact stopped'))
     expect(onSelectAccount).not.toHaveBeenCalled()
   })
+
+  test('renders a disabled fraud_risk chip (customer-level, not clickable)', () => {
+    const fraudItems: AttentionItem[] = [
+      { kind: 'fraud_risk', label: 'Fraud risk: CRITICAL — flagged for review', accountId: null, severity: 'high' },
+    ]
+    const onSelectAccount = vi.fn()
+    render(<AttentionStrip items={fraudItems} onSelectAccount={onSelectAccount} />)
+
+    expect(screen.getByText('Fraud risk: CRITICAL — flagged for review')).toBeInTheDocument()
+    const chip = screen.getByTestId('attention-chip-fraud_risk')
+    expect(chip).toBeDisabled()
+
+    fireEvent.click(chip)
+    expect(onSelectAccount).not.toHaveBeenCalled()
+  })
 })

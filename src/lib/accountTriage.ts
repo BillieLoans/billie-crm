@@ -23,6 +23,7 @@ export interface AttentionItem {
     | 'collections'
     | 'hardship'
     | 'stop_contact'
+    | 'fraud_risk'
   label: string
   accountId: string | null
   severity: 'high' | 'medium'
@@ -95,6 +96,7 @@ export function getAttentionItems(opts: {
   pendingWriteOffAccountIds?: string[]
   reapplicationBlock?: CustomerData['reapplicationBlock']
   collectionsCases?: CollectionsCaseRow[]
+  fraudRisk?: CustomerData['fraudRisk']
   today?: Date
 }): AttentionItem[] {
   const {
@@ -103,6 +105,7 @@ export function getAttentionItems(opts: {
     pendingWriteOffAccountIds = [],
     reapplicationBlock = null,
     collectionsCases = [],
+    fraudRisk = null,
     today = new Date(),
   } = opts
   const items: AttentionItem[] = []
@@ -117,6 +120,16 @@ export function getAttentionItems(opts: {
     items.push({
       kind: 'reapplication_blocked',
       label: `Re-application blocked — ${formatBlockReason(reapplicationBlock?.reason)} (${formatBlockedUntil(reapplicationBlock ?? {})})`,
+      accountId: null,
+      severity: 'high',
+    })
+  }
+
+  // Fraud risk (billieChat FraudRiskAgent) — customer-level, active HIGH/CRITICAL.
+  if (fraudRisk?.active && (fraudRisk.severity ?? '').toUpperCase() !== '') {
+    items.push({
+      kind: 'fraud_risk',
+      label: `Fraud risk: ${(fraudRisk.severity ?? '').toUpperCase()} — flagged for review`,
       accountId: null,
       severity: 'high',
     })
