@@ -370,6 +370,44 @@
 .cashSurplusPos .cashLabel { color: #15803d; opacity: 0.8; }
 .cashSurplusNeg .cashLabel { color: #b91c1c; opacity: 0.8; }
 
+/* HEM-floored living-expenses tile (BTB-221). The binding and non-binding
+   states render the same number of sub-lines so the tile keeps a fixed height. */
+.hemChip {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+.hemChipMuted {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--theme-elevation-400, #9ca3af);
+  border: 1px solid transparent;
+  padding: 1px 6px;
+}
+.hemObserved {
+  font-size: 11px;
+  color: var(--theme-elevation-500, #6b7280);
+  margin-top: 4px;
+}
+.hemBand {
+  font-size: 11px;
+  color: var(--theme-elevation-500, #6b7280);
+  margin-top: 4px;
+}
+.hemFloor {
+  font-size: 11px;
+  color: var(--theme-elevation-400, #9ca3af);
+  margin-top: 2px;
+}
+
 /* ── File list ── */
 .fileList {
   list-style: none;
@@ -640,6 +678,11 @@
 :global([data-theme="dark"]) .cashDaily { color: #6b7280; }
 :global([data-theme="dark"]) .cashSurplusPos { background: #052e16; }
 :global([data-theme="dark"]) .cashSurplusNeg { background: #2d0a0a; }
+:global([data-theme="dark"]) .hemChip { color: #fcd34d; background: #2a1c00; border-color: #a16207; }
+:global([data-theme="dark"]) .hemChipMuted { color: #6b7280; }
+:global([data-theme="dark"]) .hemObserved { color: #9ca3af; }
+:global([data-theme="dark"]) .hemBand { color: #9ca3af; }
+:global([data-theme="dark"]) .hemFloor { color: #6b7280; }
 
 :global([data-theme="dark"]) .fileItem { border-bottom-color: #374151; }
 :global([data-theme="dark"]) .fileName { color: #d1d5db; }

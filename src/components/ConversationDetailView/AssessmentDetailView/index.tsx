@@ -616,12 +616,30 @@ function MonthlyRatiosTable({ details }: { details: Record<string, unknown> }) {
 // Serviceability renderer
 // ══════════════════════════════════════════════════════════════════════════════
 
+// The serviceability engine hardcodes the `single_1_dep` HEM band for every
+// applicant (band selection is deliberately not wired yet) and never writes it
+// to the assessment payload — only to a log line. Mirror that fixed band here so
+// an assessor can see which population floor was assumed.
+// TODO(BTB-2xx): read `details.hem_band` once the engine emits it in the payload,
+// so this compliance label stops being hardcoded in the CRM.
+const SERVICEABILITY_HEM_BAND = 'Single, 1 dependent'
+
 interface SvcDetails {
   avg_daily_income?: number
   avg_daily_expenses?: number
   avg_daily_loan_repayment?: number
   days_loan_term?: number
   cash_savings?: number
+  // v2 net_income_surplus fields (monthly basis) — used to render the
+  // HEM-floored living-expenses figure the engine actually decided on.
+  avg_monthly_income?: number
+  avg_observed_living?: number
+  hem_monthly?: number
+  hem_floor_binding?: boolean
+  monthly_living?: number
+  avg_monthly_debt?: number
+  monthly_billie?: number
+  loan_term_months?: number
 }
 
 interface SvcRule {
@@ -664,12 +682,53 @@ function ServiceabilityContent({ assessment }: { assessment: Record<string, unkn
   const dailyRepayment = details.avg_daily_loan_repayment ?? data.monthly_metrics?.avg_daily_loan_repayment
   const termDays = details.days_loan_term ?? term ?? 0
   const surplus = primaryRule?.data_value
-
-  // Compute totals over term
-  const incomeOverTerm = dailyIncome != null ? dailyIncome * termDays : null
-  const expensesOverTerm = dailyExpenses != null ? dailyExpenses * termDays : null
-  const repaymentOverTerm = dailyRepayment != null ? dailyRepayment * termDays : null
   const surplusNegative = typeof surplus === 'number' && surplus < 0
+
+  // v2 net_income_surplus rule (BTB-221): the engine floors living expenses at
+  // the household HEM value and decides on the floored figure. When the v2
+  // monthly fields are present, render every tile from them over the loan term
+  // so the tiles reconcile to the engine's net surplus (`data_value`) and the
+  // HEM floor is surfaced. Older payloads without these fields fall back to the
+  // legacy daily rendering.
+  const hemMonthly = details.hem_monthly
+  const monthlyLiving = details.monthly_living
+  const isHemFormat = hemMonthly != null && monthlyLiving != null
+  const hemFloorBinding = details.hem_floor_binding === true
+
+  // The engine rounds `loan_term_months` to 4dp in the payload but computes the
+  // surplus at full precision. Recover `days_per_month` (engine default 30) to
+  // rebuild a full-precision term ratio, otherwise the 4dp rounding drifts the
+  // tiles a few cents off `data_value`.
+  const daysPerMonth =
+    details.loan_term_months && details.loan_term_months > 0
+      ? Math.round(termDays / details.loan_term_months)
+      : 30
+  const ltm = daysPerMonth > 0 ? termDays / daysPerMonth : details.loan_term_months ?? 0
+
+  let incomeOverTerm: number | null
+  let expensesOverTerm: number | null
+  let repaymentOverTerm: number | null
+  let observedLivingOverTerm: number | null = null
+
+  if (isHemFormat) {
+    incomeOverTerm = details.avg_monthly_income != null ? details.avg_monthly_income * ltm : null
+    expensesOverTerm = monthlyLiving * ltm
+    observedLivingOverTerm =
+      details.avg_observed_living != null ? details.avg_observed_living * ltm : null
+    repaymentOverTerm = ((details.avg_monthly_debt ?? 0) + (details.monthly_billie ?? 0)) * ltm
+  } else {
+    // Legacy daily basis.
+    incomeOverTerm = dailyIncome != null ? dailyIncome * termDays : null
+    expensesOverTerm = dailyExpenses != null ? dailyExpenses * termDays : null
+    repaymentOverTerm = dailyRepayment != null ? dailyRepayment * termDays : null
+  }
+
+  // Per-day sublines are derived from the over-term figure so they stay
+  // consistent with the tile value on both the v2 and legacy paths.
+  const incomeDaily = incomeOverTerm != null && termDays > 0 ? incomeOverTerm / termDays : null
+  const repaymentDaily =
+    repaymentOverTerm != null && termDays > 0 ? repaymentOverTerm / termDays : null
+  const livingDaily = expensesOverTerm != null && termDays > 0 ? expensesOverTerm / termDays : null
 
   const files = data.files_processed ?? []
 
@@ -697,8 +756,8 @@ function ServiceabilityContent({ assessment }: { assessment: Record<string, unkn
               <div className={styles.cashCard}>
                 <div className={styles.cashLabel}>Income</div>
                 <div className={styles.cashValue}>{formatCurrency(incomeOverTerm)}</div>
-                {dailyIncome != null && (
-                  <div className={styles.cashDaily}>{formatCurrency(dailyIncome)}/day</div>
+                {incomeDaily != null && (
+                  <div className={styles.cashDaily}>{formatCurrency(incomeDaily)}/day</div>
                 )}
               </div>
             )}
@@ -706,8 +765,31 @@ function ServiceabilityContent({ assessment }: { assessment: Record<string, unkn
               <div className={styles.cashCard}>
                 <div className={styles.cashLabel}>Living Expenses</div>
                 <div className={styles.cashValue}>{formatCurrency(expensesOverTerm)}</div>
-                {dailyExpenses != null && (
-                  <div className={styles.cashDaily}>{formatCurrency(dailyExpenses)}/day</div>
+                {isHemFormat ? (
+                  <>
+                    {hemFloorBinding ? (
+                      <div className={styles.hemChip}>⚑ HEM floor applied</div>
+                    ) : (
+                      <div className={styles.hemChipMuted}>above HEM floor</div>
+                    )}
+                    {hemFloorBinding && observedLivingOverTerm != null ? (
+                      <div className={styles.hemObserved}>
+                        observed: {formatCurrency(observedLivingOverTerm)}
+                      </div>
+                    ) : (
+                      livingDaily != null && (
+                        <div className={styles.cashDaily}>{formatCurrency(livingDaily)}/day</div>
+                      )
+                    )}
+                    <div className={styles.hemBand}>band: {SERVICEABILITY_HEM_BAND}</div>
+                    {hemMonthly != null && (
+                      <div className={styles.hemFloor}>HEM floor: {formatCurrency(hemMonthly)}/mo</div>
+                    )}
+                  </>
+                ) : (
+                  dailyExpenses != null && (
+                    <div className={styles.cashDaily}>{formatCurrency(dailyExpenses)}/day</div>
+                  )
                 )}
               </div>
             )}
@@ -715,8 +797,8 @@ function ServiceabilityContent({ assessment }: { assessment: Record<string, unkn
               <div className={styles.cashCard}>
                 <div className={styles.cashLabel}>Loan Repayment</div>
                 <div className={styles.cashValue}>{formatCurrency(repaymentOverTerm)}</div>
-                {dailyRepayment != null && (
-                  <div className={styles.cashDaily}>{formatCurrency(dailyRepayment)}/day</div>
+                {repaymentDaily != null && (
+                  <div className={styles.cashDaily}>{formatCurrency(repaymentDaily)}/day</div>
                 )}
               </div>
             )}
