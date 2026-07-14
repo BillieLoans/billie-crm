@@ -650,6 +650,26 @@ describe('AssessmentDetailView — serviceability HEM floor (BTB-221)', () => {
     expect(container.textContent).not.toContain('HEM floor applied')
     expect(container.textContent).not.toContain('HEM floor:')
   })
+
+  it('reads the HEM band label and income range from the payload when present', () => {
+    // single_0_dep (not the default) proves the label comes from the payload,
+    // not the hardcoded fallback constant.
+    const { container } = renderSvc(
+      makeSvcV2({
+        hem_band: { household: 'single_0_dep', min_income: 49540, max_income: 54243 },
+      }),
+    )
+    expect(container.textContent).toContain('Single, no dependents')
+    expect(container.textContent).not.toContain('Single, 1 dependent')
+    expect(container.textContent).toContain('$49,540')
+    expect(container.textContent).toContain('$54,243')
+  })
+
+  it('falls back to the constant band and shows no income range when hem_band is absent', () => {
+    const { container } = renderSvc(makeSvcV2())
+    expect(container.textContent).toContain('Single, 1 dependent')
+    expect(container.textContent).not.toContain('income band')
+  })
 })
 
 // ─────────────────────────────────────────────────────────────────────────────

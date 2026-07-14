@@ -616,13 +616,30 @@ function MonthlyRatiosTable({ details }: { details: Record<string, unknown> }) {
 // Serviceability renderer
 // ══════════════════════════════════════════════════════════════════════════════
 
-// The serviceability engine hardcodes the `single_1_dep` HEM band for every
-// applicant (band selection is deliberately not wired yet) and never writes it
-// to the assessment payload — only to a log line. Mirror that fixed band here so
-// an assessor can see which population floor was assumed.
-// TODO(BTB-2xx): read `details.hem_band` once the engine emits it in the payload,
-// so this compliance label stops being hardcoded in the CRM.
+// Fallback HEM band label. Newer serviceability payloads carry the band in
+// `details.hem_band` (household + income-band edges) — see `hemBandLabel`; older
+// payloads omit it, so this constant stands in for the engine's fixed
+// `single_1_dep` band so an assessor can still see which population floor was assumed.
 const SERVICEABILITY_HEM_BAND = 'Single, 1 dependent'
+
+// Map a payload household code to an assessor-facing label; fall back to a
+// prettified form of the raw code for households we don't have a label for yet.
+const HEM_HOUSEHOLD_LABELS: Record<string, string> = {
+  single_0_dep: 'Single, no dependents',
+  single_1_dep: 'Single, 1 dependent',
+}
+
+function hemBandLabel(household?: string): string {
+  if (!household) return SERVICEABILITY_HEM_BAND
+  return HEM_HOUSEHOLD_LABELS[household] ?? household.replace(/_/g, ' ')
+}
+
+// Whole-dollar AUD (no cents) for the HEM income-band edges.
+const hemBandDollars = new Intl.NumberFormat('en-AU', {
+  style: 'currency',
+  currency: 'AUD',
+  maximumFractionDigits: 0,
+})
 
 interface SvcDetails {
   avg_daily_income?: number
@@ -640,6 +657,8 @@ interface SvcDetails {
   avg_monthly_debt?: number
   monthly_billie?: number
   loan_term_months?: number
+  // Newer payloads carry the HEM band; string on some versions, object on others.
+  hem_band?: string | { household?: string; min_income?: number; max_income?: number }
 }
 
 interface SvcRule {
@@ -694,6 +713,14 @@ function ServiceabilityContent({ assessment }: { assessment: Record<string, unkn
   const monthlyLiving = details.monthly_living
   const isHemFormat = hemMonthly != null && monthlyLiving != null
   const hemFloorBinding = details.hem_floor_binding === true
+
+  // HEM band — read from the payload when present, else the fallback constant.
+  const hemBand = details.hem_band
+  const hemBandText = hemBandLabel(
+    typeof hemBand === 'string' ? hemBand : typeof hemBand === 'object' && hemBand ? hemBand.household : undefined,
+  )
+  const hemBandMin = typeof hemBand === 'object' && hemBand ? hemBand.min_income : undefined
+  const hemBandMax = typeof hemBand === 'object' && hemBand ? hemBand.max_income : undefined
 
   // The engine rounds `loan_term_months` to 4dp in the payload but computes the
   // surplus at full precision. Recover `days_per_month` (engine default 30) to
@@ -781,7 +808,12 @@ function ServiceabilityContent({ assessment }: { assessment: Record<string, unkn
                         <div className={styles.cashDaily}>{formatCurrency(livingDaily)}/day</div>
                       )
                     )}
-                    <div className={styles.hemBand}>band: {SERVICEABILITY_HEM_BAND}</div>
+                    <div className={styles.hemBand}>band: {hemBandText}</div>
+                    {hemBandMin != null && hemBandMax != null && (
+                      <div className={styles.hemBand}>
+                        income band: {hemBandDollars.format(hemBandMin)}–{hemBandDollars.format(hemBandMax)}
+                      </div>
+                    )}
                     {hemMonthly != null && (
                       <div className={styles.hemFloor}>HEM floor: {formatCurrency(hemMonthly)}/mo</div>
                     )}
