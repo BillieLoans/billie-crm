@@ -72,6 +72,27 @@ async def test_interaction_logged_inserts_row():
     assert any("interactions" in s for s, _ in pool.executed)
 
 
+async def test_contact_updated_mirrors_advisory_council_to_panel_member(mock_pool):
+    # merge_jsonb issues a second contacts write after the upsert, so scan
+    # every contacts write for the mirrored column rather than taking the last.
+    def _panel_values():
+        return [
+            row["panel_member"]
+            for row in (mock_pool.inserts_into("contacts") + mock_pool.updates_to("contacts"))
+            if "panel_member" in row
+        ]
+
+    await handle_contact_updated(mock_pool, _parsed("contact.updated.v1", {
+        "contact_id": "c-1", "attributes": {"advisory_council": True},
+        "updated_at": "2026-07-14T00:00:00+00:00", "actor": "staff-1"}))
+    assert _panel_values()[-1] is True
+
+    await handle_contact_updated(mock_pool, _parsed("contact.updated.v1", {
+        "contact_id": "c-1", "attributes": {"advisory_council": False},
+        "updated_at": "2026-07-14T00:01:00+00:00", "actor": "staff-1"}))
+    assert _panel_values()[-1] is False
+
+
 async def test_interaction_direction_normalised_to_enum_values(mock_pool):
     # The platform's notification echo shipped direction="out" for a while;
     # the projection must map short forms onto the pg enum, and degrade

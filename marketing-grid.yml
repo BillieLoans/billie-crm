@@ -1,0 +1,180 @@
+- generic [active] [ref=f33e1]:
+  - button "Refresh health status" [ref=f33e83] [cursor=pointer]: ↻
+  - generic [ref=f33e2]:
+    - button "Open Menu" [ref=f33e84] [cursor=pointer]:
+      - generic "Open" [ref=f33e85]:
+        - img [ref=f33e86]
+    - generic [ref=f33e9]:
+      - complementary [ref=f33e88]:
+        - navigation [ref=f33e90]:
+          - button "Open search (⌘K)" [ref=f33e91] [cursor=pointer]:
+            - generic [ref=f33e92]: 🔍
+            - generic [ref=f33e93]: Search
+            - generic [ref=f33e94]: ⌘K
+          - link "Dashboard" [ref=f33e95] [cursor=pointer]:
+            - /url: /admin/dashboard
+            - generic [ref=f33e96]: 🏠
+            - generic [ref=f33e97]: Dashboard
+          - link "Applications" [ref=f33e98] [cursor=pointer]:
+            - /url: /admin/applications
+            - generic [ref=f33e99]: 💬
+            - generic [ref=f33e100]: Applications
+          - link "Accounts" [ref=f33e101] [cursor=pointer]:
+            - /url: /admin/accounts
+            - generic [ref=f33e102]: 🗂
+            - generic [ref=f33e103]: Accounts
+          - link "Collections 13 overdue accounts" [ref=f33e104] [cursor=pointer]:
+            - /url: /admin/collections-queue
+            - generic [ref=f33e105]: 📋
+            - generic [ref=f33e106]: Collections
+            - generic "13 overdue accounts" [ref=f33e107]: "13"
+          - link "Approvals" [ref=f33e108] [cursor=pointer]:
+            - /url: /admin/approvals
+            - generic [ref=f33e109]: ✅
+            - generic [ref=f33e110]: Approvals
+          - link "📅 Period Close" [ref=f33e111] [cursor=pointer]:
+            - /url: /admin/period-close
+            - generic [ref=f33e112]: 📅
+            - generic [ref=f33e113]: Period Close
+          - link "⚙️ ECL Config" [ref=f33e114] [cursor=pointer]:
+            - /url: /admin/ecl-config
+            - generic [ref=f33e115]: ⚙️
+            - generic [ref=f33e116]: ECL Config
+          - link "📤 Export Center" [ref=f33e117] [cursor=pointer]:
+            - /url: /admin/exports
+            - generic [ref=f33e118]: 📤
+            - generic [ref=f33e119]: Export Center
+          - link "🔬 Investigation" [ref=f33e120] [cursor=pointer]:
+            - /url: /admin/investigation
+            - generic [ref=f33e121]: 🔬
+            - generic [ref=f33e122]: Investigation
+          - link "Marketing" [ref=f33e123] [cursor=pointer]:
+            - /url: /admin/marketing
+            - generic [ref=f33e124]: 📣
+            - generic [ref=f33e125]: Marketing
+          - link "Log out" [ref=f33e127] [cursor=pointer]:
+            - /url: /api/auth/logout
+            - img [ref=f33e128]
+      - generic [ref=f33e10]:
+        - banner [ref=f33e11]:
+          - generic [ref=f33e14]:
+            - generic "Dashboard" [ref=f33e18]:
+              - img [ref=f33e19]
+            - link "Account" [ref=f33e22] [cursor=pointer]:
+              - /url: /admin/account
+              - img "yas" [ref=f33e23]
+        - generic [ref=f33e24]:
+          - generic [ref=f33e25]:
+            - heading "Marketing" [level=1] [ref=f33e26]
+            - button "+ New contact" [ref=f33e27] [cursor=pointer]
+            - button "Export CSV" [ref=f33e28] [cursor=pointer]
+            - link "Feedback queue →" [ref=f33e29] [cursor=pointer]:
+              - /url: /admin/marketing/feedback
+          - generic [ref=f33e30]:
+            - textbox "Search contacts" [ref=f33e31]:
+              - /placeholder: Search name, email, mobile
+            - generic [ref=f33e32]:
+              - generic [ref=f33e33]: Stage
+              - combobox "Stage" [ref=f33e34]:
+                - option "All stages" [selected]
+                - option "Lead"
+                - option "Waitlist"
+                - option "Invited"
+                - option "Applicant"
+                - option "Customer"
+                - option "Former customer"
+            - generic [ref=f33e35]:
+              - generic [ref=f33e36]: Source
+              - combobox "Source" [ref=f33e37]:
+                - option "All sources" [selected]
+                - option "Meta"
+                - option "Google"
+                - option "Campus"
+                - option "Referral"
+                - option "Social DM"
+                - option "AI search"
+                - option "Organic"
+                - option "Other"
+            - generic [ref=f33e38]:
+              - generic [ref=f33e39]: City
+              - combobox "City" [ref=f33e40]:
+                - option "All cities" [selected]
+                - option "Sydney"
+                - option "Melbourne"
+                - option "Brisbane"
+                - option "Perth"
+                - option "Adelaide"
+                - option "Canberra"
+            - generic [ref=f33e41]:
+              - generic [ref=f33e42]: Batch
+              - combobox "Batch" [ref=f33e43]:
+                - option "All batches" [selected]
+                - option "Waitlist batch 1"
+                - option "QA Test Batch (7 Jul)"
+            - generic [ref=f33e44]:
+              - generic [ref=f33e45]: Loan outcome
+              - combobox "Loan outcome" [ref=f33e46]:
+                - option "Any outcome" [selected]
+                - option "Repaid (win-back safe)"
+                - option "Disbursed (active)"
+                - option "Approved"
+            - generic [ref=f33e47]:
+              - generic [ref=f33e48]: Review
+              - combobox "Review" [ref=f33e49]:
+                - option "All contacts" [selected]
+                - option "⚑ Needs review"
+          - generic [ref=f33e50]:
+            - generic [ref=f33e51]: 0 selected
+            - generic [ref=f33e52]:
+              - generic [ref=f33e53]: Assign to batch
+              - combobox "Assign to batch" [disabled] [ref=f33e54]:
+                - option "Choose a batch…" [selected]
+                - option "Waitlist batch 1 (0) · sent 08/07/2026"
+                - option "QA Test Batch (7 Jul) (1) · sent 08/07/2026"
+                - option "＋ New batch…"
+            - button "Assign" [disabled] [ref=f33e55]
+            - generic [ref=f33e56]:
+              - generic [ref=f33e57]: Send invitations to
+              - combobox "Send invitations to" [ref=f33e58]:
+                - option "Choose a batch…" [selected]
+                - option "Waitlist batch 1 (0) · sent 08/07/2026"
+                - option "QA Test Batch (7 Jul) (1) · sent 08/07/2026"
+            - button "Send invitations" [disabled] [ref=f33e59]
+          - generic [ref=f33e60]:
+            - table [ref=f33e61]:
+              - rowgroup [ref=f33e62]:
+                - row "Select all on page Name Mobile Stage Source Batch Flags Consent Updated" [ref=f33e63]:
+                  - columnheader "Select all on page" [ref=f33e64]:
+                    - checkbox "Select all on page" [ref=f33e65]
+                  - columnheader "Name" [ref=f33e66]
+                  - columnheader "Mobile" [ref=f33e67]
+                  - columnheader "Stage" [ref=f33e68]
+                  - columnheader "Source" [ref=f33e69]
+                  - columnheader "Batch" [ref=f33e70]
+                  - columnheader "Flags" [ref=f33e71]
+                  - columnheader "Consent" [ref=f33e72]
+                  - columnheader "Updated" [ref=f33e73]
+              - rowgroup [ref=f33e74]:
+                - row "Select Rohan (old number) Rohan (old number) +61400111222 — Organic QA Test Batch (7 Jul) — Granted 8/7/26, 10:46 pm" [ref=f33e132] [cursor=pointer]:
+                  - cell "Select Rohan (old number)" [ref=f33e133]:
+                    - checkbox "Select Rohan (old number)" [ref=f33e134]
+                  - cell "Rohan (old number)" [ref=f33e135]:
+                    - link "Rohan (old number)" [ref=f33e136]:
+                      - /url: /admin/marketing/contacts/a79ae28f-2e9d-4650-b466-b5a00e5abfc5
+                  - cell "+61400111222" [ref=f33e137]
+                  - cell "—" [ref=f33e138]
+                  - cell "Organic" [ref=f33e139]
+                  - cell "QA Test Batch (7 Jul)" [ref=f33e140]:
+                    - button "QA Test Batch (7 Jul)" [ref=f33e141]
+                  - cell "—" [ref=f33e142]
+                  - cell "Granted" [ref=f33e143]:
+                    - generic [ref=f33e144]: Granted
+                  - cell "8/7/26, 10:46 pm" [ref=f33e145]
+            - generic [ref=f33e77]:
+              - button "← Previous" [disabled] [ref=f33e78]
+              - generic [ref=f33e79]: Page 1 of 1 · 1 contacts
+              - button "Next →" [disabled] [ref=f33e80]
+  - region "Notifications alt+T"
+  - status [ref=f33e146]
+  - region "Notifications alt+T"
+  - alert [ref=f33e147]

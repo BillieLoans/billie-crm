@@ -23,6 +23,7 @@ const SOURCE_OPTIONS = [
   { value: 'referral', label: 'Referral' },
   { value: 'social_dm', label: 'Social DM' },
   { value: 'ai_search', label: 'AI search' },
+  { value: 'word_of_mouth', label: 'Word of mouth' },
   { value: 'organic', label: 'Organic' },
   { value: 'other', label: 'Other' },
 ]

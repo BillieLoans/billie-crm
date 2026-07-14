@@ -13,7 +13,11 @@ import { useContactIdentity, type IdentitySibling } from '@/hooks/queries/useCon
 import { useContactReferrals } from '@/hooks/queries/useContactReferrals'
 import { useFeedbackQueue } from '@/hooks/queries/useFeedbackQueue'
 import { useAuth } from '@payloadcms/ui'
-import { useSetReviewFlag, useUnlinkContact } from '@/hooks/mutations/useMarketingCommands'
+import {
+  useSetAdvisoryCouncil,
+  useSetReviewFlag,
+  useUnlinkContact,
+} from '@/hooks/mutations/useMarketingCommands'
 import { isAdmin } from '@/lib/access'
 import { LinkCustomerModal } from './LinkCustomerModal'
 import { RecordConsentModal } from './RecordConsentModal'
@@ -159,6 +163,7 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contactId }) => {
   const userIsAdmin = isAdmin(user)
   const unlink = useUnlinkContact()
   const reviewFlag = useSetReviewFlag()
+  const advisory = useSetAdvisoryCouncil()
 
   const logNoteMutation = useMutation({
     mutationFn: logNote,
@@ -442,6 +447,33 @@ export const ContactDetail: React.FC<ContactDetailProps> = ({ contactId }) => {
                 disabled={!contact.needsReview || reviewFlag.isPending}
               >
                 {reviewFlag.isPending ? 'Saving…' : 'Clear flag'}
+              </button>
+            </div>
+          </Panel>
+
+          {/* Advisory council (panel_member) — first-batch feedback panel.
+              Fixed layout: status row + one toggle button. */}
+          <Panel title="Advisory council">
+            <div className={styles.panelRow}>
+              <span className={styles.panelRowLabel}>Status</span>
+              <span className={styles.panelRowValue}>
+                {contact.panelMember ? 'Member' : '—'}
+              </span>
+            </div>
+            <div className={styles.panelButtonRow}>
+              <button
+                type="button"
+                className={styles.pageButton}
+                onClick={() =>
+                  advisory.mutate({ contactId, member: !contact.panelMember })
+                }
+                disabled={advisory.isPending}
+              >
+                {advisory.isPending
+                  ? 'Saving…'
+                  : contact.panelMember
+                    ? 'Remove from council'
+                    : 'Add to council…'}
               </button>
             </div>
           </Panel>

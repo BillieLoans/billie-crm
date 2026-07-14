@@ -1,0 +1,243 @@
+- generic [active] [ref=f34e1]:
+  - button "Refresh health status" [ref=f34e7] [cursor=pointer]: ↻
+  - generic [ref=f34e8]:
+    - button "Open Menu" [ref=f34e10] [cursor=pointer]:
+      - generic "Open" [ref=f34e12]:
+        - img [ref=f34e13]
+    - generic [ref=f34e15]:
+      - complementary [ref=f34e16]:
+        - navigation [ref=f34e18]:
+          - button "Open search (⌘K)" [ref=f34e19] [cursor=pointer]:
+            - generic [ref=f34e20]: 🔍
+            - generic [ref=f34e21]: Search
+            - generic [ref=f34e22]: ⌘K
+          - link "Dashboard" [ref=f34e23] [cursor=pointer]:
+            - /url: /admin/dashboard
+            - generic [ref=f34e24]: 🏠
+            - generic [ref=f34e25]: Dashboard
+          - link "Applications" [ref=f34e26] [cursor=pointer]:
+            - /url: /admin/applications
+            - generic [ref=f34e27]: 💬
+            - generic [ref=f34e28]: Applications
+          - link "Accounts" [ref=f34e29] [cursor=pointer]:
+            - /url: /admin/accounts
+            - generic [ref=f34e30]: 🗂
+            - generic [ref=f34e31]: Accounts
+          - link "Collections 13 overdue accounts" [ref=f34e78] [cursor=pointer]:
+            - /url: /admin/collections-queue
+            - generic [ref=f34e33]: 📋
+            - generic [ref=f34e34]: Collections
+            - generic "13 overdue accounts" [ref=f34e79]: "13"
+          - link "Approvals" [ref=f34e35] [cursor=pointer]:
+            - /url: /admin/approvals
+            - generic [ref=f34e36]: ✅
+            - generic [ref=f34e37]: Approvals
+          - link "📅 Period Close" [ref=f34e38] [cursor=pointer]:
+            - /url: /admin/period-close
+            - generic [ref=f34e39]: 📅
+            - generic [ref=f34e40]: Period Close
+          - link "⚙️ ECL Config" [ref=f34e41] [cursor=pointer]:
+            - /url: /admin/ecl-config
+            - generic [ref=f34e42]: ⚙️
+            - generic [ref=f34e43]: ECL Config
+          - link "📤 Export Center" [ref=f34e44] [cursor=pointer]:
+            - /url: /admin/exports
+            - generic [ref=f34e45]: 📤
+            - generic [ref=f34e46]: Export Center
+          - link "🔬 Investigation" [ref=f34e47] [cursor=pointer]:
+            - /url: /admin/investigation
+            - generic [ref=f34e48]: 🔬
+            - generic [ref=f34e49]: Investigation
+          - link "Marketing" [ref=f34e50] [cursor=pointer]:
+            - /url: /admin/marketing
+            - generic [ref=f34e51]: 📣
+            - generic [ref=f34e52]: Marketing
+          - link "Log out" [ref=f34e54] [cursor=pointer]:
+            - /url: /api/auth/logout
+            - img [ref=f34e55]
+      - generic [ref=f34e59]:
+        - banner [ref=f34e60]:
+          - generic [ref=f34e63]:
+            - generic "Dashboard" [ref=f34e67]:
+              - img [ref=f34e68]
+            - link "Account" [ref=f34e71] [cursor=pointer]:
+              - /url: /admin/account
+              - img "yas" [ref=f34e72]
+        - generic [ref=f34e73]:
+          - link "← Back to Marketing" [ref=f34e74] [cursor=pointer]:
+            - /url: /admin/marketing
+          - generic [ref=f34e75]:
+            - generic [ref=f34e80]:
+              - heading "Rohan Sharp" [level=1] [ref=f34e81]
+              - generic [ref=f34e82]:
+                - generic [ref=f34e83]: "+61403320117"
+                - generic [ref=f34e84]: rohan@billie.loans
+            - generic [ref=f34e85]:
+              - generic [ref=f34e86]: —
+              - generic [ref=f34e87]: Consent granted
+              - 'link "Linked customer: 0FDF11CF" [ref=f34e88] [cursor=pointer]':
+                - /url: /admin/servicing/0FDF11CF
+          - generic [ref=f34e89]:
+            - generic [ref=f34e90]:
+              - generic [ref=f34e91]:
+                - textbox "Note text" [ref=f34e92]:
+                  - /placeholder: Log a note…
+                - button "Log note" [disabled] [ref=f34e93]
+              - generic [ref=f34e94]:
+                - article [ref=f34e95]:
+                  - generic [ref=f34e96]:
+                    - generic [ref=f34e97]: 📤
+                    - generic [ref=f34e98]: Message out
+                    - generic [ref=f34e99]: (outbound)
+                    - generic [ref=f34e100]: 8 July 2026, 9:18 pm
+                  - generic [ref=f34e101]: —
+                  - generic [ref=f34e102]: —
+                - article [ref=f34e103]:
+                  - generic [ref=f34e104]:
+                    - generic [ref=f34e105]: 📤
+                    - generic [ref=f34e106]: Message out
+                    - generic [ref=f34e107]: (outbound)
+                    - generic [ref=f34e108]: 8 July 2026, 9:18 pm
+                  - generic [ref=f34e109]: —
+                  - generic [ref=f34e110]: —
+                - article [ref=f34e111]:
+                  - generic [ref=f34e112]:
+                    - generic [ref=f34e113]: 📤
+                    - generic [ref=f34e114]: Message out
+                    - generic [ref=f34e115]: (outbound)
+                    - generic [ref=f34e116]: 8 July 2026, 5:15 pm
+                  - generic [ref=f34e117]: —
+                  - generic [ref=f34e118]: —
+                - article [ref=f34e119]:
+                  - generic [ref=f34e120]:
+                    - generic [ref=f34e121]: 🗒️
+                    - generic [ref=f34e122]: Note
+                    - generic [ref=f34e123]: 7 July 2026, 11:04 pm
+                  - generic [ref=f34e124]: —
+                  - generic [ref=f34e125]: linked
+                - article [ref=f34e126]:
+                  - generic [ref=f34e127]:
+                    - generic [ref=f34e128]: 🗒️
+                    - generic [ref=f34e129]: Note
+                    - generic [ref=f34e130]: 7 July 2026, 9:05 pm
+                  - generic [ref=f34e131]: —
+                  - generic [ref=f34e132]: second note — retest after platform event_id fix
+                - article [ref=f34e133]:
+                  - generic [ref=f34e134]:
+                    - generic [ref=f34e135]: 🗒️
+                    - generic [ref=f34e136]: Note
+                    - generic [ref=f34e137]: 5 July 2026, 10:39 pm
+                  - generic [ref=f34e138]: —
+                  - generic [ref=f34e139]: said hi
+            - generic [ref=f34e140]:
+              - generic [ref=f34e141]:
+                - heading "Customer link" [level=2] [ref=f34e142]
+                - generic [ref=f34e143]:
+                  - generic [ref=f34e144]:
+                    - generic [ref=f34e145]: Status
+                    - generic [ref=f34e146]: Linked
+                  - generic [ref=f34e147]:
+                    - generic [ref=f34e148]: Customer
+                    - link "0FDF11CF" [ref=f34e150] [cursor=pointer]:
+                      - /url: /admin/servicing/0FDF11CF
+                  - generic [ref=f34e151]:
+                    - generic [ref=f34e152]: Basis
+                    - generic [ref=f34e153]: manual
+                  - generic [ref=f34e154]:
+                    - generic [ref=f34e155]: Linked
+                    - generic [ref=f34e156]: 7 July 2026, 11:03 pm
+                  - generic [ref=f34e157]:
+                    - button "Change…" [ref=f34e158] [cursor=pointer]
+                    - button "Unlink" [ref=f34e159] [cursor=pointer]
+              - generic [ref=f34e160]:
+                - heading "Same person" [level=2] [ref=f34e161]
+                - generic [ref=f34e163]: —
+              - generic [ref=f34e164]:
+                - heading "Review" [level=2] [ref=f34e165]
+                - generic [ref=f34e166]:
+                  - generic [ref=f34e167]:
+                    - generic [ref=f34e168]: Status
+                    - generic [ref=f34e169]: —
+                  - generic [ref=f34e170]:
+                    - generic [ref=f34e171]: Reason
+                    - generic [ref=f34e172]: —
+                  - generic [ref=f34e173]:
+                    - button "Flag for review…" [ref=f34e174] [cursor=pointer]
+                    - button "Clear flag" [disabled] [ref=f34e175]
+              - generic [ref=f34e176]:
+                - heading "Consent history" [level=2] [ref=f34e177]
+                - generic [ref=f34e178]:
+                  - generic [ref=f34e179]:
+                    - generic [ref=f34e180]: contact.consent.granted.v1
+                    - generic [ref=f34e181]: 8 July 2026, 9:37 am
+                  - button "Record consent…" [ref=f34e183] [cursor=pointer]
+              - generic [ref=f34e184]:
+                - heading "Referrals" [level=2] [ref=f34e185]
+                - generic [ref=f34e186]:
+                  - generic [ref=f34e187]:
+                    - generic [ref=f34e188]: Referral code
+                    - generic [ref=f34e189]: 23CTBW
+                  - generic [ref=f34e190]:
+                    - generic [ref=f34e191]: Referred by
+                    - generic [ref=f34e192]: —
+                  - generic [ref=f34e193]:
+                    - generic [ref=f34e194]: Referred
+                    - generic [ref=f34e195]: "0"
+              - generic [ref=f34e196]:
+                - heading "Feedback (2)" [level=2] [ref=f34e197]
+                - generic [ref=f34e198]:
+                  - generic [ref=f34e199]:
+                    - generic [ref=f34e200]: "feature: Would love a dark mode in the app — fresh item posted by Claude at 22:36"
+                    - generic [ref=f34e201]: resolved
+                  - generic [ref=f34e202]:
+                    - generic [ref=f34e203]: "praise: Feedback retest after platform fix — 7 Jul"
+                    - generic [ref=f34e204]: resolved
+              - generic [ref=f34e205]:
+                - heading "Loan status" [level=2] [ref=f34e206]
+                - generic [ref=f34e209]: —
+              - generic [ref=f34e210]:
+                - heading "Data & privacy" [level=2] [ref=f34e211]
+                - generic [ref=f34e212]:
+                  - generic [ref=f34e213]:
+                    - generic [ref=f34e214]: Status
+                    - generic [ref=f34e215]: —
+                  - generic [ref=f34e216]:
+                    - button "Download export" [ref=f34e217] [cursor=pointer]
+                    - button "Erase contact…" [disabled] [ref=f34e218]
+              - generic [ref=f34e219]:
+                - heading "Audit (last 10)" [level=2] [ref=f34e220]
+                - generic [ref=f34e221]:
+                  - generic [ref=f34e222]:
+                    - generic [ref=f34e223]: contact.observed.v1
+                    - generic [ref=f34e224]: intake · 8 July 2026, 10:54 pm
+                  - generic [ref=f34e225]:
+                    - generic [ref=f34e226]: contact.observed.v1
+                    - generic [ref=f34e227]: intake · 8 July 2026, 10:46 pm
+                  - generic [ref=f34e228]:
+                    - generic [ref=f34e229]: contact.interaction.logged.v1
+                    - generic [ref=f34e230]: system · 8 July 2026, 9:18 pm
+                  - generic [ref=f34e231]:
+                    - generic [ref=f34e232]: contact.batch.assigned.v1
+                    - generic [ref=f34e233]: 95979e54-7f2e-4578-a9d0-807c8951d684 · 8 July 2026, 9:18 pm
+                  - generic [ref=f34e234]:
+                    - generic [ref=f34e235]: contact.interaction.logged.v1
+                    - generic [ref=f34e236]: system · 8 July 2026, 9:18 pm
+                  - generic [ref=f34e237]:
+                    - generic [ref=f34e238]: contact.observed.v1
+                    - generic [ref=f34e239]: 95979e54-7f2e-4578-a9d0-807c8951d684 · 8 July 2026, 9:18 pm
+                  - generic [ref=f34e240]:
+                    - generic [ref=f34e241]: contact.interaction.logged.v1
+                    - generic [ref=f34e242]: system · 8 July 2026, 8:18 pm
+                  - generic [ref=f34e243]:
+                    - generic [ref=f34e244]: contact.batch.assigned.v1
+                    - generic [ref=f34e245]: 95979e54-7f2e-4578-a9d0-807c8951d684 · 8 July 2026, 5:15 pm
+                  - generic [ref=f34e246]:
+                    - generic [ref=f34e247]: contact.consent.granted.v1
+                    - generic [ref=f34e248]: 95979e54-7f2e-4578-a9d0-807c8951d684 · 8 July 2026, 9:37 am
+                  - generic [ref=f34e249]:
+                    - generic [ref=f34e250]: contact.interaction.logged.v1
+                    - generic [ref=f34e251]: system · 7 July 2026, 11:04 pm
+  - region "Notifications alt+T"
+  - status [ref=f34e76]
+  - region "Notifications alt+T"
+  - alert [ref=f34e77]

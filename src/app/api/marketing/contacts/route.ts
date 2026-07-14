@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
   if (sp.get('city')) where.city = { like: sp.get('city') }
   if (sp.get('batch')) where.batchId = { equals: sp.get('batch') }
   if (sp.get('needs_review') === 'true') where.needsReview = { equals: true }
+  if (sp.get('advisory_council') === 'true') where.panelMember = { equals: true }
   // Win-back safety: former_customer alone mixes repaid (C-P) and written-off
   // (C-N) people — loan_status distinguishes them ("repaid" only for C-P).
   if (sp.get('loan_status')) where.loanStatus = { equals: sp.get('loan_status') }

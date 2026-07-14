@@ -15,7 +15,7 @@ export const WaitlistIntakeSchema = z
     city: z.string().max(100).optional(),
     postcode: z.string().max(10).optional(),
     source: z
-      .enum(['meta', 'google', 'campus', 'referral', 'social_dm', 'ai_search', 'organic', 'other'])
+      .enum(['meta', 'google', 'campus', 'referral', 'social_dm', 'ai_search', 'word_of_mouth', 'organic', 'other'])
       .default('other'),
     utm: z.record(z.string(), z.string()).optional(),
     platforms: z.array(z.string()).optional(),
