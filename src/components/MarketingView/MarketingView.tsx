@@ -42,6 +42,7 @@ const SOURCE_OPTIONS: Array<{ value: Contact['source'] & string; label: string }
   { value: 'referral', label: 'Referral' },
   { value: 'social_dm', label: 'Social DM' },
   { value: 'ai_search', label: 'AI search' },
+  { value: 'word_of_mouth', label: 'Word of mouth' },
   { value: 'organic', label: 'Organic' },
   { value: 'other', label: 'Other' },
 ]
@@ -105,6 +106,7 @@ const MarketingContactsGrid: React.FC = () => {
   const [city, setCity] = useState('')
   const [batch, setBatch] = useState('')
   const [needsReview, setNeedsReview] = useState('')
+  const [advisoryCouncil, setAdvisoryCouncil] = useState('')
   const [loanStatus, setLoanStatus] = useState('')
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -124,10 +126,11 @@ const MarketingContactsGrid: React.FC = () => {
       city: city || undefined,
       batch: batch || undefined,
       needs_review: needsReview || undefined,
+      advisory_council: advisoryCouncil || undefined,
       loan_status: loanStatus || undefined,
       page,
     }),
-    [deferredQ, stage, source, city, batch, needsReview, loanStatus, page],
+    [deferredQ, stage, source, city, batch, needsReview, advisoryCouncil, loanStatus, page],
   )
 
   const { data, isLoading, isError, isFetching } = useMarketingContacts(filters)
@@ -265,6 +268,7 @@ const MarketingContactsGrid: React.FC = () => {
             if (city) params.set('city', city)
             if (batch) params.set('batch', batch)
             if (needsReview) params.set('needs_review', needsReview)
+            if (advisoryCouncil) params.set('advisory_council', advisoryCouncil)
             if (loanStatus) params.set('loan_status', loanStatus)
             window.open(`/api/marketing/contacts/export?${params.toString()}`, '_blank')
           }}
@@ -392,6 +396,21 @@ const MarketingContactsGrid: React.FC = () => {
           >
             <option value="">All contacts</option>
             <option value="true">⚑ Needs review</option>
+          </select>
+        </div>
+
+        <div className={styles.filterGroup}>
+          <label className={styles.filterLabel} htmlFor="marketing-advisory-filter">
+            Advisory council
+          </label>
+          <select
+            id="marketing-advisory-filter"
+            className={styles.filterSelect}
+            value={advisoryCouncil}
+            onChange={onFilter(setAdvisoryCouncil)}
+          >
+            <option value="">All contacts</option>
+            <option value="true">Members only</option>
           </select>
         </div>
       </div>

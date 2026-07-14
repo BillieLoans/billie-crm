@@ -1583,7 +1583,9 @@ export interface Contact {
   mobileE164?: string | null;
   city?: string | null;
   postcode?: string | null;
-  source?: ('meta' | 'google' | 'campus' | 'referral' | 'social_dm' | 'ai_search' | 'organic' | 'other') | null;
+  source?:
+    | ('meta' | 'google' | 'campus' | 'referral' | 'social_dm' | 'ai_search' | 'word_of_mouth' | 'organic' | 'other')
+    | null;
   utm?:
     | {
         [k: string]: unknown;

@@ -342,6 +342,19 @@ async def run() -> None:
     # Start processor in background
     processor_task = asyncio.create_task(processor.start())
 
+    # help@ mailbox connector — optional, enabled by HELP_MAILBOX_IMAP_HOST.
+    # Uses the processor's pg pool once it exists (poll interval >> startup).
+    mailbox_task: asyncio.Task | None = None
+    if settings.help_mailbox_imap_host:
+        from .help_mailbox import run_help_mailbox_loop
+
+        async def _mailbox_when_ready() -> None:
+            while processor.pool is None:
+                await asyncio.sleep(1)
+            await run_help_mailbox_loop(processor.pool)
+
+        mailbox_task = asyncio.create_task(_mailbox_when_ready())
+
     # Wait for shutdown signal
     await shutdown_event.wait()
 
@@ -355,6 +368,13 @@ async def run() -> None:
         await processor_task
     except asyncio.CancelledError:
         pass
+
+    if mailbox_task is not None:
+        mailbox_task.cancel()
+        try:
+            await mailbox_task
+        except asyncio.CancelledError:
+            pass
 
     logger.info("Processor shutdown complete")
 

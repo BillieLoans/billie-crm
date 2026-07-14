@@ -108,6 +108,9 @@ async def handle_contact_updated(pool: asyncpg.Pool, event: Any) -> None:
     if attributes_patch and "needs_review" in attributes_patch:
         # Mirror to the dedicated column so the grid can filter on it.
         changed["needs_review"] = bool(attributes_patch.get("needs_review"))
+    if attributes_patch and "advisory_council" in attributes_patch:
+        # Advisory-council membership mirrors to panel_member (same pattern).
+        changed["panel_member"] = bool(attributes_patch.get("advisory_council"))
 
     values = {"contact_id": p.contact_id, **changed, "updated_at": _now()}
     await upsert(

@@ -32,7 +32,7 @@ export const CreateContactSchema = z
   .object({
     ...assertedContactFields,
     source: z
-      .enum(['meta', 'google', 'campus', 'referral', 'social_dm', 'ai_search', 'organic', 'other'])
+      .enum(['meta', 'google', 'campus', 'referral', 'social_dm', 'ai_search', 'word_of_mouth', 'organic', 'other'])
       .default('other'),
   })
   .refine((d) => !!d.mobile || !!d.email, { message: 'mobile or email is required' })

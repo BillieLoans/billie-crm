@@ -238,6 +238,38 @@ export function useRecordConsent() {
   })
 }
 
+export interface SetAdvisoryCouncilVars {
+  contactId: string
+  member: boolean
+}
+
+/** Advisory-council membership — rides UpdateContact's attributes delta;
+ * the projections mirror attributes.advisory_council onto panel_member. */
+export function useSetAdvisoryCouncil() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (vars: SetAdvisoryCouncilVars) =>
+      fetch(`/api/marketing/contacts/${encodeURIComponent(vars.contactId)}`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attributes: { advisory_council: vars.member } }),
+      }).then(async (res) => {
+        if (!res.ok) {
+          const err = await res.json().catch(() => null)
+          throw new Error(err?.error?.message ?? `Command failed: ${res.status}`)
+        }
+        return res.json()
+      }),
+    onSuccess: (_res, vars) => {
+      toast.success(vars.member ? 'Added to Advisory council' : 'Removed from Advisory council')
+      invalidateWithLag(qc, [['marketing-contacts']])
+    },
+    onError: (e: Error) =>
+      toast.error('Failed to update Advisory council', { description: e.message }),
+  })
+}
+
 export interface MergeContactVars {
   survivorContactId: string
   mergedContactId: string

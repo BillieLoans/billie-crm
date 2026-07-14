@@ -10,6 +10,7 @@ export interface MarketingContactsFilters {
   city?: string
   batch?: string
   needs_review?: string
+  advisory_council?: string
   loan_status?: string
   page?: number
 }
@@ -32,6 +33,7 @@ function buildQueryString(filters: MarketingContactsFilters): string {
   if (filters.city) params.set('city', filters.city)
   if (filters.batch) params.set('batch', filters.batch)
   if (filters.needs_review) params.set('needs_review', filters.needs_review)
+  if (filters.advisory_council) params.set('advisory_council', filters.advisory_council)
   if (filters.loan_status) params.set('loan_status', filters.loan_status)
   if (filters.page) params.set('page', String(filters.page))
   const qs = params.toString()

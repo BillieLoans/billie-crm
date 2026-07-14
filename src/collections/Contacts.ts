@@ -35,6 +35,7 @@ export const Contacts: CollectionConfig = {
         'referral',
         'social_dm',
         'ai_search',
+        'word_of_mouth',
         'organic',
         'other',
       ],

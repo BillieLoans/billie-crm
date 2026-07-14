@@ -15,6 +15,7 @@ import * as migration_20260707_141505 from './20260707_141505';
 import * as migration_20260708_020322 from './20260708_020322';
 import * as migration_20260708_121539_contact_merged_into from './20260708_121539_contact_merged_into';
 import * as migration_20260709_120104_fraud_risk from './20260709_120104_fraud_risk';
+import * as migration_20260714_053341_word_of_mouth_source from './20260714_053341_word_of_mouth_source';
 
 export const migrations = [
   {
@@ -101,5 +102,10 @@ export const migrations = [
     up: migration_20260709_120104_fraud_risk.up,
     down: migration_20260709_120104_fraud_risk.down,
     name: '20260709_120104_fraud_risk',
+  },
+  {
+    up: migration_20260714_053341_word_of_mouth_source.up,
+    down: migration_20260714_053341_word_of_mouth_source.down,
+    name: '20260714_053341_word_of_mouth_source'
   },
 ];

@@ -36,6 +36,16 @@ class Settings(BaseSettings):
     max_utterances: int = 2000  # Cap utterances array per conversation
     max_noticeboard_entries: int = 500  # Cap noticeboard array per conversation
 
+    # help@ mailbox connector (Decision J) — polls an IMAP inbox and logs
+    # each email as an inbound interaction on the matching contact's
+    # timeline. Enabled only when a host is configured.
+    help_mailbox_imap_host: str = ""
+    help_mailbox_imap_port: int = 993
+    help_mailbox_user: str = ""
+    help_mailbox_password: str = ""
+    help_mailbox_folder: str = "INBOX"
+    help_mailbox_poll_seconds: int = 300
+
     # Logging
     log_level: str = "INFO"
 
