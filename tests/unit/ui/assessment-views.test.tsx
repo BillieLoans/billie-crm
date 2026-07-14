@@ -32,6 +32,14 @@ vi.mock('next/link', () => ({
   ),
 }))
 
+// AssessmentPanel transitively pulls the @payloadcms/ui client barrel in via the
+// `@/hooks` barrel (useLendingAccess → useAuth), which side-effect-imports
+// react-image-crop's CSS. Stub it (matching the repo pattern in nav-sidebar etc.)
+// so the suite can collect without the externalised .css import blowing up.
+vi.mock('@payloadcms/ui', () => ({
+  useAuth: () => ({ user: null }),
+}))
+
 vi.mock('@/hooks/queries/useAssessments', () => ({
   useAccountConductAssessment: vi.fn(),
   useServiceabilityAssessment: vi.fn(),
@@ -493,6 +501,154 @@ describe('AssessmentDetailView — serviceability financial metrics', () => {
 
     render(<AssessmentDetailView conversationId="conv-001" type="account-conduct" />)
     expect(screen.queryByText('Cash Flow Over Loan Term')).toBeNull()
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AssessmentDetailView — serviceability HEM floor (BTB-221)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('AssessmentDetailView — serviceability HEM floor (BTB-221)', () => {
+  afterEach(() => cleanup())
+
+  // v2 serviceability payload modelled on the reference application CA91F55B-716.
+  // The engine floors living expenses at the household HEM value and decides on
+  // the floored figure; the payload carries both the observed and floored numbers.
+  // Monthly values divide cleanly by the 10/30 loan term so the tiles land on the
+  // ticket's figures: income $666.50, floored living $733.05, repayment $31.50,
+  // net surplus -$98.05.
+  function makeSvcV2(overrides: Record<string, unknown> = {}, dataValue = -98.05) {
+    const details = {
+      avg_monthly_income: 1999.5,
+      avg_observed_living: 140.7,
+      hem_monthly: 2199.15,
+      hem_floor_binding: true,
+      monthly_living: 2199.15,
+      avg_monthly_debt: 0,
+      monthly_billie: 94.5,
+      loan_term_months: 0.3333, // engine rounds to 4dp; renderer recovers full precision
+      days_loan_term: 10,
+      cash_savings: 0,
+      // legacy daily fields (the real payload includes these alongside the v2 fields)
+      avg_daily_income: 66.65,
+      avg_daily_expenses: 4.69,
+      avg_daily_loan_repayment: 3.15,
+      ...overrides,
+    }
+    return {
+      application_number: 'CA91F55B-716',
+      decision: dataValue >= 0 ? 'PASS' : 'DECLINED',
+      assessment_date: '2026-07-07T00:00:00',
+      monthly_metrics: {
+        avg_daily_loan_repayment: details.avg_daily_loan_repayment,
+        days_loan_term: details.days_loan_term,
+        cash_savings: details.cash_savings,
+      },
+      rule_results: [
+        {
+          rule_id: 'SERVICEABILITY_RULE_001',
+          description: 'Net income surplus must be non-negative',
+          result: dataValue >= 0 ? 'pass' : 'fail',
+          data_value: dataValue,
+          condition: '>= 0',
+          hard_rule: true,
+          details,
+        },
+      ],
+      files_processed: [],
+    }
+  }
+
+  function renderSvc(assessment: Record<string, unknown>) {
+    vi.mocked(useServiceabilityAssessment).mockReturnValue({
+      data: assessment, isLoading: false, error: null,
+    } as ReturnType<typeof useServiceabilityAssessment>)
+    vi.mocked(useAccountConductAssessment).mockReturnValue({
+      data: undefined, isLoading: false, error: null,
+    } as ReturnType<typeof useAccountConductAssessment>)
+    return render(<AssessmentDetailView conversationId="conv-001" type="serviceability" />)
+  }
+
+  // Read a cash-flow tile's primary value by its label.
+  function tileValue(container: HTMLElement, label: string): number {
+    const labelEl = Array.from(container.querySelectorAll('[class*="cashLabel"]')).find(
+      (e) => e.textContent === label,
+    )
+    if (!labelEl) throw new Error(`tile "${label}" not found`)
+    const card = labelEl.closest('[class*="cashCard"]')!
+    const value = card.querySelector('[class*="cashValue"]')!.textContent ?? ''
+    return parseFloat(value.replace(/[^0-9.-]/g, ''))
+  }
+
+  it('shows the HEM-floored living figure and floor indicator when the floor binds', () => {
+    const { container } = renderSvc(makeSvcV2())
+    expect(tileValue(container, 'Living Expenses')).toBeCloseTo(733.05, 2)
+    expect(container.textContent).toContain('HEM floor applied')
+    // observed figure kept as secondary
+    expect(container.textContent).toContain('observed')
+    expect(container.textContent).toContain('$46.90')
+  })
+
+  it('shows the HEM band and monthly HEM floor value on the panel', () => {
+    const { container } = renderSvc(makeSvcV2())
+    expect(container.textContent).toContain('Single, 1 dependent')
+    expect(container.textContent).toContain('$2,199.15')
+    expect(container.textContent).toMatch(/\/mo/)
+  })
+
+  it('cash-flow tiles reconcile to the engine net surplus to the cent', () => {
+    const { container } = renderSvc(makeSvcV2())
+    const income = tileValue(container, 'Income')
+    const living = tileValue(container, 'Living Expenses')
+    const repayment = tileValue(container, 'Loan Repayment')
+    const savings = tileValue(container, 'Cash Savings')
+    const net = tileValue(container, 'Net Surplus')
+
+    expect(income).toBeCloseTo(666.5, 2)
+    expect(repayment).toBeCloseTo(31.5, 2)
+    expect(net).toBeCloseTo(-98.05, 2)
+    // the reconciliation invariant: income − living − repayment + savings = net surplus
+    expect(income - living - repayment + savings).toBeCloseTo(net, 2)
+  })
+
+  it('shows the observed figure and no floor indicator when observed exceeds the HEM floor', () => {
+    const { container } = renderSvc(
+      makeSvcV2({ avg_observed_living: 2737.2, monthly_living: 2737.2, hem_floor_binding: false }, -277.4),
+    )
+    expect(tileValue(container, 'Living Expenses')).toBeCloseTo(912.4, 2)
+    expect(container.textContent).not.toContain('HEM floor applied')
+    // band context is still visible (req #3)
+    expect(container.textContent).toContain('Single, 1 dependent')
+  })
+
+  it('falls back to daily rendering with no HEM lines for legacy payloads', () => {
+    const legacy = {
+      application_number: 'APP-OLD',
+      decision: 'DECLINED',
+      monthly_metrics: { avg_daily_loan_repayment: 20.48, days_loan_term: 10, cash_savings: 0 },
+      rule_results: [
+        {
+          rule_id: 'SERVICEABILITY_RULE_001',
+          description: 'Net income surplus must be non-negative',
+          result: 'fail',
+          data_value: -637.7,
+          condition: '>= 0',
+          hard_rule: true,
+          details: {
+            avg_daily_income: 92.04,
+            avg_daily_expenses: 135.33,
+            avg_daily_loan_repayment: 20.48,
+            days_loan_term: 10,
+            cash_savings: 0,
+          },
+        },
+      ],
+      files_processed: [],
+    }
+    const { container } = renderSvc(legacy)
+    expect(container.textContent).toContain('Living Expenses')
+    expect(container.textContent).not.toContain('HEM floor applied')
+    expect(container.textContent).not.toContain('HEM floor:')
   })
 })
 
