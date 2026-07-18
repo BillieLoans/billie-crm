@@ -8,6 +8,7 @@ import { Toaster, toast } from 'sonner'
 import {
   CommandPalette,
   Command,
+  ContactSearchResult,
   CustomerSearchResult,
   LoanAccountSearchResult,
 } from '@/components/ui/CommandPalette'
@@ -22,6 +23,7 @@ import { useLendingAccess } from '@/hooks/useLendingAccess'
 import { useReadOnlyMode } from '@/hooks/useReadOnlyMode'
 import { useCustomerSearch } from '@/hooks/queries/useCustomerSearch'
 import { useLoanAccountSearch } from '@/hooks/queries/useLoanAccountSearch'
+import { useMarketingContactSearch } from '@/hooks/queries/useMarketingContactSearch'
 import { SMART_VIEWS } from '@/lib/smart-views'
 
 /**
@@ -56,6 +58,10 @@ const GlobalCommandPalette: React.FC = () => {
 
   // Loan account search (Story 1.4)
   const accountSearch = useLoanAccountSearch(commandPaletteQuery)
+
+  // Marketing contacts (leads/waitlist) — returns empty for users without
+  // marketing access, so the group simply doesn't render for them.
+  const contactSearch = useMarketingContactSearch(commandPaletteQuery)
 
   // Combined loading state
   const isSearching =
@@ -107,9 +113,19 @@ const GlobalCommandPalette: React.FC = () => {
     }
   }, [hasError, commandPaletteQuery])
 
+  // Navigate to the marketing contact profile when a contact is selected.
+  const handleSelectContact = useCallback(
+    (contactId: string) => {
+      setCommandPaletteOpen(false)
+      window.location.href = `/admin/marketing/contacts/${contactId}`
+    },
+    [setCommandPaletteOpen],
+  )
+
   // Check if we have any results
   const hasCustomers = (customerSearch.data?.results.length ?? 0) > 0
   const hasAccounts = (accountSearch.data?.results.length ?? 0) > 0
+  const hasContacts = (contactSearch.data?.length ?? 0) > 0
 
   return (
     <CommandPalette
@@ -160,6 +176,19 @@ const GlobalCommandPalette: React.FC = () => {
               key={account.id}
               account={account}
               onSelect={() => handleSelectAccount(account.customerIdString)}
+            />
+          ))}
+        </Command.Group>
+      )}
+
+      {/* Marketing Contacts Group (leads/waitlist — after full customers) */}
+      {hasContacts && (
+        <Command.Group heading="Marketing Contacts">
+          {contactSearch.data?.map((contact) => (
+            <ContactSearchResult
+              key={contact.contactId}
+              contact={contact}
+              onSelect={() => handleSelectContact(contact.contactId)}
             />
           ))}
         </Command.Group>

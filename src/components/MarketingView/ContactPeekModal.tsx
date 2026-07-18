@@ -4,8 +4,8 @@ import React from 'react'
 import Link from 'next/link'
 import { useMarketingContact } from '@/hooks/queries/useMarketingContact'
 import { formatDateMedium } from '@/lib/formatters'
-import { getMarketingConsentGranted } from '@/lib/marketing'
-import { useEscapeClose } from '@/hooks/useModalA11y'
+import { CHANNEL_LABELS, sourceLabel, stageLabel, summariseConsent } from '@/lib/marketing-labels'
+import { Modal } from './Modal'
 import styles from './styles.module.css'
 
 interface ContactPeekModalProps {
@@ -13,18 +13,9 @@ interface ContactPeekModalProps {
   onClose: () => void
 }
 
-const STAGE_LABELS: Record<string, string> = {
-  lead: 'Lead',
-  waitlist: 'Waitlist',
-  invited: 'Invited',
-  applicant: 'Applicant',
-  customer: 'Customer',
-  former_customer: 'Former customer',
-}
-
 /**
- * Compact contact card opened from the feedback queue's Contact column —
- * enough context to triage without leaving the queue (and losing your place),
+ * Compact contact card opened from the feedback queue and the contacts grid —
+ * enough context to triage without leaving the list (and losing your place),
  * with a link out to the full profile. Fixed-layout rows: every field is
  * always present, empty values render as an em dash.
  */
@@ -32,9 +23,15 @@ export const ContactPeekModal: React.FC<ContactPeekModalProps> = ({ contactId, o
   const { data, isLoading, isError } = useMarketingContact(contactId)
   const contact = data?.contact
 
-  const consentGranted = contact ? getMarketingConsentGranted(contact.consent) : null
+  const consent = contact ? summariseConsent(contact.consent) : null
   const consentLabel =
-    consentGranted === true ? 'Granted' : consentGranted === false ? 'Declined' : '—'
+    consent?.granted === true
+      ? consent.channels
+        ? `Granted — ${consent.channels.map((c) => CHANNEL_LABELS[c]).join(', ')}`
+        : 'Granted'
+      : consent?.granted === false
+        ? 'Declined'
+        : '—'
 
   const rows: Array<{ label: string; value: React.ReactNode }> = [
     { label: 'Mobile', value: contact?.mobileE164 ?? '—' },
@@ -42,14 +39,12 @@ export const ContactPeekModal: React.FC<ContactPeekModalProps> = ({ contactId, o
     {
       label: 'Stage',
       value: contact?.derivedStage ? (
-        <span className={styles.badge}>
-          {STAGE_LABELS[contact.derivedStage] ?? contact.derivedStage}
-        </span>
+        <span className={styles.badge}>{stageLabel(contact.derivedStage)}</span>
       ) : (
         '—'
       ),
     },
-    { label: 'Source', value: contact?.source ?? '—' },
+    { label: 'Source', value: contact?.source ? sourceLabel(contact.source) : '—' },
     { label: 'City', value: contact?.city ?? '—' },
     { label: 'Consent', value: consentLabel },
     { label: 'Customer', value: contact?.customerId ? 'Linked' : 'Not linked' },
@@ -57,41 +52,12 @@ export const ContactPeekModal: React.FC<ContactPeekModalProps> = ({ contactId, o
     { label: 'Updated', value: contact?.updatedAt ? formatDateMedium(contact.updatedAt) : '—' },
   ]
 
-  useEscapeClose(onClose)
-
   return (
-    <div className={styles.modalOverlay} onClick={onClose}>
-      <div
-        className={styles.modal}
-        role="dialog"
-        aria-modal="true"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className={styles.modalHeader}>
-          <h2 className={styles.modalTitle}>
-            {isLoading ? 'Loading contact…' : (contact?.firstName ?? 'Unnamed contact')}
-          </h2>
-          <button type="button" className={styles.closeBtn} onClick={onClose} aria-label="Close">
-            ×
-          </button>
-        </div>
-
-        <div className={styles.modalBody}>
-          {isError ? (
-            <div className={styles.errorMessage}>Failed to load the contact. Please retry.</div>
-          ) : (
-            <div className={styles.panelBody}>
-              {rows.map((row) => (
-                <div key={row.label} className={styles.panelRow}>
-                  <span className={styles.panelRowLabel}>{row.label}</span>
-                  <span className={styles.panelRowValue}>{row.value}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className={styles.modalFooter}>
+    <Modal
+      title={isLoading ? 'Loading contact…' : (contact?.firstName ?? 'Unnamed contact')}
+      onClose={onClose}
+      footer={
+        <>
           <Link
             href={`/admin/marketing/contacts/${encodeURIComponent(contactId)}`}
             className={styles.btnSubmit}
@@ -101,9 +67,24 @@ export const ContactPeekModal: React.FC<ContactPeekModalProps> = ({ contactId, o
           <button type="button" className={styles.btnCancel} onClick={onClose}>
             Close
           </button>
-        </div>
+        </>
+      }
+    >
+      <div className={styles.modalBody}>
+        {isError ? (
+          <div className={styles.errorMessage}>Failed to load the contact. Please retry.</div>
+        ) : (
+          <div className={styles.panelBody}>
+            {rows.map((row) => (
+              <div key={row.label} className={styles.panelRow}>
+                <span className={styles.panelRowLabel}>{row.label}</span>
+                <span className={styles.panelRowValue}>{row.value}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-    </div>
+    </Modal>
   )
 }
 

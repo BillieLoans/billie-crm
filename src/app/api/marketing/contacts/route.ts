@@ -3,6 +3,9 @@
  *
  * GET  — list contacts from the read-only `contacts` projection, filterable
  *        by stage/source/city and a free-text `q` across name/email/mobile.
+ *        Supports a whitelisted `sort` param and an `ids_only=true` mode that
+ *        returns every matching contactId (capped at the AssignBatch max) so
+ *        the grid's "select all matching" can assign beyond one page.
  *        Gated on `canReadMarketing` (marketing role or admin, plus the
  *        existing servicing roles — see src/lib/access.ts).
  * POST — staff-initiated contact creation. Routes to the same
@@ -44,12 +47,42 @@ export async function GET(request: NextRequest) {
     ]
   }
 
+  // "Select all matching" support: return only the contactIds of every match
+  // (no pagination). Capped at the AssignBatchSchema max so the result is
+  // always a valid assign payload.
+  if (sp.get('ids_only') === 'true') {
+    const result = await payload.find({
+      collection: 'contacts',
+      where: where as never,
+      limit: 10_000,
+      depth: 0,
+      select: { contactId: true },
+      sort: '-updatedAt',
+      overrideAccess: false,
+      user,
+    })
+    return NextResponse.json({
+      contactIds: result.docs.map((d) => d.contactId).filter(Boolean),
+      totalDocs: result.totalDocs,
+      capped: result.totalDocs > result.docs.length,
+    })
+  }
+
+  // Sort is a whitelist — never pass user input straight into the query.
+  const SORTS: Record<string, string> = {
+    updated_desc: '-updatedAt',
+    updated_asc: 'updatedAt',
+    name_asc: 'firstName',
+    name_desc: '-firstName',
+  }
+  const sort = SORTS[sp.get('sort') ?? ''] ?? '-updatedAt'
+
   const result = await payload.find({
     collection: 'contacts',
     where: where as never,
     page: Number(sp.get('page') ?? 1),
     limit: 50,
-    sort: '-updatedAt',
+    sort,
     overrideAccess: false,
     user,
   })

@@ -12,6 +12,8 @@ export interface MarketingContactsFilters {
   needs_review?: string
   advisory_council?: string
   loan_status?: string
+  /** Whitelisted server-side sort key (updated_desc default). */
+  sort?: string
   page?: number
 }
 
@@ -35,9 +37,38 @@ function buildQueryString(filters: MarketingContactsFilters): string {
   if (filters.needs_review) params.set('needs_review', filters.needs_review)
   if (filters.advisory_council) params.set('advisory_council', filters.advisory_council)
   if (filters.loan_status) params.set('loan_status', filters.loan_status)
+  if (filters.sort) params.set('sort', filters.sort)
   if (filters.page) params.set('page', String(filters.page))
   const qs = params.toString()
   return qs ? `?${qs}` : ''
+}
+
+export interface MarketingContactIdsResponse {
+  contactIds: string[]
+  totalDocs: number
+  /** True when the match count exceeded the server cap (10k). */
+  capped: boolean
+}
+
+/**
+ * "Select all matching" support: every contactId matching the filter, without
+ * pagination (server-capped at the assign command's 10k max). Imperative on
+ * purpose — fired from the bulk-action bar, not a render-time query.
+ */
+export async function fetchMarketingContactIds(
+  filters: MarketingContactsFilters,
+): Promise<MarketingContactIdsResponse> {
+  const params = new URLSearchParams(buildQueryString(filters).replace(/^\?/, ''))
+  params.delete('page')
+  params.set('ids_only', 'true')
+  const res = await fetch(`/api/marketing/contacts?${params.toString()}`, {
+    credentials: 'include',
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => null)
+    throw new Error(err?.error?.message ?? `Contact id fetch failed: ${res.status}`)
+  }
+  return res.json()
 }
 
 async function fetchMarketingContacts(

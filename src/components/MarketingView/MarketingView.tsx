@@ -1,22 +1,27 @@
 'use client'
 
-import React, { useDeferredValue, useMemo, useState } from 'react'
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { useListKeyboardNav } from '@/hooks/useListKeyboardNav'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { useMarketingContacts } from '@/hooks/queries/useMarketingContacts'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { toast } from 'sonner'
+import { useMarketingContacts, fetchMarketingContactIds } from '@/hooks/queries/useMarketingContacts'
 import type { MarketingContactsFilters } from '@/hooks/queries/useMarketingContacts'
 import { useBatches } from '@/hooks/queries/useBatches'
 import {
   useAssignBatch,
   useMarketingCommandRetryListener,
-  useTriggerInvitations,
 } from '@/hooks/mutations/useMarketingCommands'
 import type { Contact } from '@/payload-types'
 import { formatDateShort } from '@/lib/formatters'
-import { getMarketingConsentGranted } from '@/lib/marketing'
+import { summariseConsent, stageLabel, sourceLabel } from '@/lib/marketing-labels'
 import { ContactDetail } from './ContactDetail'
 import { FeedbackQueueView } from './FeedbackQueueView'
+import { CampaignsView } from './CampaignsView'
+import { CampaignDetail } from './CampaignDetail'
+import { ContactPeekModal } from './ContactPeekModal'
+import { MarketingSubnav } from './MarketingSubnav'
+import { MarketingStats } from './MarketingStats'
 import { NewBatchModal } from './NewBatchModal'
 import { NewContactModal } from './NewContactModal'
 import styles from './styles.module.css'
@@ -24,6 +29,8 @@ import styles from './styles.module.css'
 export interface MarketingViewProps {
   contactId: string
   feedback?: boolean
+  campaigns?: boolean
+  campaignId?: string
 }
 
 const STAGE_OPTIONS: Array<{ value: Contact['derivedStage'] & string; label: string }> = [
@@ -47,11 +54,7 @@ const SOURCE_OPTIONS: Array<{ value: Contact['source'] & string; label: string }
   { value: 'other', label: 'Other' },
 ]
 
-// Free-text on the backend (a `like` filter) — this is a curated shortlist of
-// the cities marketing campaigns currently target, not an exhaustive enum.
-const CITY_OPTIONS = ['Sydney', 'Melbourne', 'Brisbane', 'Perth', 'Adelaide', 'Canberra']
-
-// Sentinel value for the assign dropdown's "＋ New batch…" option — never a
+// Sentinel value for the assign dropdown's "＋ New campaign…" option — never a
 // real batchId (batch ids are UUIDs minted by marketingService).
 const NEW_BATCH_SENTINEL = '__new_batch__'
 
@@ -59,20 +62,34 @@ const NEW_BATCH_SENTINEL = '__new_batch__'
 const BATCH_POLL_MAX_ATTEMPTS = 8
 const BATCH_POLL_INTERVAL_MS = 1500
 
-function stageLabel(stage: Contact['derivedStage']): string {
-  return STAGE_OPTIONS.find((o) => o.value === stage)?.label ?? stage ?? '—'
-}
-
-function sourceLabel(source: Contact['source']): string {
-  return SOURCE_OPTIONS.find((o) => o.value === source)?.label ?? source ?? '—'
-}
+/** URL params owned by the grid — everything the view needs to restore itself. */
+const FILTER_KEYS = [
+  'q',
+  'stage',
+  'source',
+  'city',
+  'batch',
+  'needs_review',
+  'advisory_council',
+  'loan_status',
+] as const
 
 function ConsentBadge({ consent }: { consent: Contact['consent'] }) {
-  const granted = getMarketingConsentGranted(consent)
-  if (granted === true) {
-    return <span className={`${styles.badge} ${styles.badgeConsentGranted}`}>Granted</span>
+  const summary = summariseConsent(consent)
+  if (summary.granted === true) {
+    const channels = summary.channels?.length
+      ? ` — ${summary.channels.map((c) => c.toUpperCase()).join(', ')}`
+      : ''
+    return (
+      <span
+        className={`${styles.badge} ${styles.badgeConsentGranted}`}
+        title={`Marketing consent granted${channels}`}
+      >
+        Granted
+      </span>
+    )
   }
-  if (granted === false) {
+  if (summary.granted === false) {
     return <span className={`${styles.badge} ${styles.badgeConsentDeclined}`}>Declined</span>
   }
   return <span className={styles.placeholder}>—</span>
@@ -81,13 +98,24 @@ function ConsentBadge({ consent }: { consent: Contact['consent'] }) {
 /**
  * MarketingView — Task C6 admin view.
  *
- * Renders the contact grid at `/admin/marketing`, or the contact-detail
- * timeline at `/admin/marketing/contacts/<contactId>` when a contactId is
- * supplied by the WithTemplate wrapper.
+ * Routes between the module's surfaces based on the URL segments the
+ * WithTemplate wrapper parses: contacts grid (default), contact detail,
+ * campaigns list/detail, and the feedback queue.
  */
-export const MarketingView: React.FC<MarketingViewProps> = ({ contactId, feedback }) => {
+export const MarketingView: React.FC<MarketingViewProps> = ({
+  contactId,
+  feedback,
+  campaigns,
+  campaignId,
+}) => {
   if (feedback) {
     return <FeedbackQueueView />
+  }
+  if (campaignId) {
+    return <CampaignDetail batchId={campaignId} />
+  }
+  if (campaigns) {
+    return <CampaignsView />
   }
   if (contactId) {
     return <ContactDetail contactId={contactId} />
@@ -97,26 +125,52 @@ export const MarketingView: React.FC<MarketingViewProps> = ({ contactId, feedbac
 
 const MarketingContactsGrid: React.FC = () => {
   const router = useRouter()
-  const [q, setQ] = useState('')
-  // Defer the search term so keystrokes don't fire a network request each —
-  // same treatment as useCustomerSearch (React prioritises typing).
+  const pathname = usePathname() ?? '/admin/marketing'
+  const searchParams = useSearchParams()
+
+  // All grid state lives in the URL so refresh/back/share restore the exact
+  // view (and the CSV export matches what's on screen). The search box keeps
+  // a local mirror for responsive typing; the deferred value syncs to the URL.
+  const stage = searchParams?.get('stage') ?? ''
+  const source = searchParams?.get('source') ?? ''
+  const city = searchParams?.get('city') ?? ''
+  const batch = searchParams?.get('batch') ?? ''
+  const needsReview = searchParams?.get('needs_review') ?? ''
+  const advisoryCouncil = searchParams?.get('advisory_council') ?? ''
+  const loanStatus = searchParams?.get('loan_status') ?? ''
+  const sort = searchParams?.get('sort') ?? ''
+  const urlQ = searchParams?.get('q') ?? ''
+  const page = Math.max(1, Number(searchParams?.get('page') ?? '1') || 1)
+
+  const [q, setQ] = useState(urlQ)
   const deferredQ = useDeferredValue(q)
-  const [stage, setStage] = useState('')
-  const [source, setSource] = useState('')
-  const [city, setCity] = useState('')
-  const [batch, setBatch] = useState('')
-  const [needsReview, setNeedsReview] = useState('')
-  const [advisoryCouncil, setAdvisoryCouncil] = useState('')
-  const [loanStatus, setLoanStatus] = useState('')
-  const [page, setPage] = useState(1)
+
+  const setParams = useCallback(
+    (updates: Record<string, string | null>) => {
+      const next = new URLSearchParams(searchParams?.toString() ?? '')
+      for (const [key, value] of Object.entries(updates)) {
+        if (value) next.set(key, value)
+        else next.delete(key)
+      }
+      const qs = next.toString()
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+    },
+    [router, pathname, searchParams],
+  )
+
+  // Deferred search → URL (resetting the page); skip when already in sync so
+  // this never loops with the param read above.
+  useEffect(() => {
+    if (deferredQ !== urlQ) setParams({ q: deferredQ || null, page: null })
+  }, [deferredQ, urlQ, setParams])
+
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [selectingAll, setSelectingAll] = useState(false)
   const [assignTarget, setAssignTarget] = useState('')
-  // Invitations get their OWN target — deliberately decoupled from the grid's
-  // Batch filter so a leftover filter can never silently prime a send.
-  const [inviteTarget, setInviteTarget] = useState('')
+  const [creatingBatch, setCreatingBatch] = useState(false)
   const [showNewContact, setShowNewContact] = useState(false)
   const [showNewBatch, setShowNewBatch] = useState(false)
-  const [showInviteConfirm, setShowInviteConfirm] = useState(false)
+  const [peekContactId, setPeekContactId] = useState<string | null>(null)
 
   const filters = useMemo<MarketingContactsFilters>(
     () => ({
@@ -128,16 +182,16 @@ const MarketingContactsGrid: React.FC = () => {
       needs_review: needsReview || undefined,
       advisory_council: advisoryCouncil || undefined,
       loan_status: loanStatus || undefined,
+      sort: sort || undefined,
       page,
     }),
-    [deferredQ, stage, source, city, batch, needsReview, advisoryCouncil, loanStatus, page],
+    [deferredQ, stage, source, city, batch, needsReview, advisoryCouncil, loanStatus, sort, page],
   )
 
   const { data, isLoading, isError, isFetching } = useMarketingContacts(filters)
   useMarketingCommandRetryListener()
   const { data: batchesData, refetch: refetchBatches } = useBatches()
   const assign = useAssignBatch()
-  const invite = useTriggerInvitations()
   const docs = data?.docs ?? []
   const batchOptions = batchesData?.docs ?? []
   const batchNameFor = (id?: string | null) =>
@@ -147,27 +201,42 @@ const MarketingContactsGrid: React.FC = () => {
       b.invitedAt ? ` · sent ${new Date(b.invitedAt).toLocaleDateString('en-AU')}` : ''
     }`
 
-  // Keyboard navigation (j/k + Enter to open, Space to toggle selection) —
-  // same convention as the Accounts browser.
+  // Keyboard navigation (j/k move · Enter opens · Space previews) — same
+  // convention as the Accounts browser; hinted in the table footer.
   const { index: focusedIndex, setIndex: setFocusedIndex } = useListKeyboardNav({
     count: docs.length,
     onOpen: (idx) => {
       const contact = docs[idx]
-      if (contact) router.push(`/admin/marketing/contacts/${contact.contactId}`)
+      if (contact) router.push(contactHref(contact))
     },
     onPeek: (idx) => {
       const contact = docs[idx]
-      if (contact?.contactId) toggleOne(contact.contactId)
+      if (contact?.contactId) setPeekContactId(contact.contactId)
     },
-    enabled: !showNewContact && !showNewBatch && !showInviteConfirm,
+    enabled: !showNewContact && !showNewBatch && !peekContactId,
   })
 
   const onFilter =
-    (setter: (v: string) => void) =>
-    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-      setter(e.target.value)
-      setPage(1)
-    }
+    (key: (typeof FILTER_KEYS)[number]) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+      setParams({ [key]: e.target.value || null, page: null })
+
+  const activeFilterChips: Array<{ key: string; label: string }> = []
+  if (stage) activeFilterChips.push({ key: 'stage', label: `Stage: ${stageLabel(stage)}` })
+  if (source) activeFilterChips.push({ key: 'source', label: `Source: ${sourceLabel(source)}` })
+  if (city) activeFilterChips.push({ key: 'city', label: `City: ${city}` })
+  if (batch) activeFilterChips.push({ key: 'batch', label: `Campaign: ${batchNameFor(batch)}` })
+  if (needsReview) activeFilterChips.push({ key: 'needs_review', label: 'Needs review' })
+  if (advisoryCouncil)
+    activeFilterChips.push({ key: 'advisory_council', label: 'Advisory council' })
+  if (loanStatus)
+    activeFilterChips.push({ key: 'loan_status', label: `Loan outcome: ${loanStatus}` })
+
+  const clearAllFilters = () => {
+    setQ('')
+    setParams(Object.fromEntries([...FILTER_KEYS, 'page'].map((k) => [k, null])))
+  }
+  const hasActiveFilters = activeFilterChips.length > 0 || !!urlQ
 
   const toggleOne = (contactId: string) =>
     setSelected((prev) => {
@@ -187,6 +256,27 @@ const MarketingContactsGrid: React.FC = () => {
       else pageContactIds.forEach((id) => next.add(id))
       return next
     })
+  const selectedOffPage = Array.from(selected).filter((id) => !pageContactIds.includes(id)).length
+
+  const handleSelectAllMatching = async () => {
+    setSelectingAll(true)
+    try {
+      const res = await fetchMarketingContactIds(filters)
+      setSelected(new Set(res.contactIds))
+      if (res.capped) {
+        toast.warning(
+          `Selected the first ${res.contactIds.length.toLocaleString('en-AU')} of ${res.totalDocs.toLocaleString('en-AU')} matches`,
+          { description: 'Assignments are capped at 10,000 contacts per action.' },
+        )
+      }
+    } catch (e) {
+      toast.error('Failed to select all matches', {
+        description: e instanceof Error ? e.message : undefined,
+      })
+    } finally {
+      setSelectingAll(false)
+    }
+  }
 
   const canAssign = selected.size > 0 && !!assignTarget && !assign.isPending
   const handleAssign = () => {
@@ -197,8 +287,6 @@ const MarketingContactsGrid: React.FC = () => {
         onSuccess: () => {
           setSelected(new Set())
           setAssignTarget('')
-          // The batch just assigned is the natural next invite target.
-          setInviteTarget(assignTarget)
         },
       },
     )
@@ -214,71 +302,97 @@ const MarketingContactsGrid: React.FC = () => {
 
   // The batch projection lags the CreateBatch 202 (command → event → projection).
   // Poll the batches list until the new id appears, then pre-select it as the
-  // assign target so "New batch… → Assign" is a single flow. Bounded: on
-  // timeout the batch still lands via the list's regular 30s refetch — the
-  // pre-selection is just skipped.
+  // assign target so "New campaign… → Assign" is a single flow. The picker
+  // shows an explicit "Creating campaign…" state while the poll runs; on
+  // timeout the batch still lands via the list's regular 30s refetch.
   const handleBatchCreated = async (batchId: string) => {
     setShowNewBatch(false)
-    for (let attempt = 0; attempt < BATCH_POLL_MAX_ATTEMPTS; attempt++) {
-      const res = await refetchBatches()
-      if (res.data?.docs?.some((b) => b.batchId === batchId)) {
-        setAssignTarget(batchId)
-        setInviteTarget(batchId)
-        return
+    setCreatingBatch(true)
+    try {
+      for (let attempt = 0; attempt < BATCH_POLL_MAX_ATTEMPTS; attempt++) {
+        const res = await refetchBatches()
+        if (res.data?.docs?.some((b) => b.batchId === batchId)) {
+          setAssignTarget(batchId)
+          return
+        }
+        await new Promise((resolve) => setTimeout(resolve, BATCH_POLL_INTERVAL_MS))
       }
-      await new Promise((resolve) => setTimeout(resolve, BATCH_POLL_INTERVAL_MS))
+      toast.info('The campaign is still syncing', {
+        description: 'It will appear in the campaign picker shortly.',
+      })
+    } finally {
+      setCreatingBatch(false)
     }
   }
 
   // Segment snapshot for a new batch: the grid's active filters, verbatim.
   const criteriaSnapshot = useMemo(() => {
     const snapshot: Record<string, string> = {}
-    if (q) snapshot.q = q
+    if (deferredQ) snapshot.q = deferredQ
     if (stage) snapshot.stage = stage
     if (source) snapshot.source = source
     if (city) snapshot.city = city
     if (batch) snapshot.batch = batch
+    if (needsReview) snapshot.needs_review = needsReview
+    if (advisoryCouncil) snapshot.advisory_council = advisoryCouncil
+    if (loanStatus) snapshot.loan_status = loanStatus
     return snapshot
-  }, [q, stage, source, city, batch])
-
-  const canInvite = !!inviteTarget && !invite.isPending
-  const handleInviteConfirm = () => {
-    if (!canInvite) return
-    invite.mutate(inviteTarget, { onSettled: () => setShowInviteConfirm(false) })
-  }
+  }, [deferredQ, stage, source, city, batch, needsReview, advisoryCouncil, loanStatus])
 
   const contactHref = (contact: Contact) => `/admin/marketing/contacts/${contact.contactId}`
 
+  const exportHref = useMemo(() => {
+    const params = new URLSearchParams()
+    for (const key of FILTER_KEYS) {
+      const value = key === 'q' ? deferredQ : searchParams?.get(key)
+      if (value) params.set(key, value)
+    }
+    return `/api/marketing/contacts/export?${params.toString()}`
+  }, [deferredQ, searchParams])
+
+  const toggleSort = (key: 'name' | 'updated') => {
+    const next =
+      key === 'updated'
+        ? sort === 'updated_asc'
+          ? null // back to the default (updated_desc)
+          : sort === ''
+            ? 'updated_asc'
+            : sort === 'updated_desc'
+              ? 'updated_asc'
+              : 'updated_desc'
+        : sort === 'name_asc'
+          ? 'name_desc'
+          : 'name_asc'
+    setParams({ sort: next, page: null })
+  }
+  const sortArrow = (key: 'name' | 'updated') => {
+    if (key === 'updated' && (sort === '' || sort === 'updated_desc')) return ' ↓'
+    if (key === 'updated' && sort === 'updated_asc') return ' ↑'
+    if (key === 'name' && sort === 'name_asc') return ' ↑'
+    if (key === 'name' && sort === 'name_desc') return ' ↓'
+    return ''
+  }
+
   return (
     <div className={styles.container}>
+      <MarketingSubnav />
+
       <div className={styles.header}>
-        <h1 className={styles.headerTitle}>Marketing</h1>
+        <h1 className={styles.headerTitle}>Contacts</h1>
         <button type="button" className={styles.pageButton} onClick={() => setShowNewContact(true)}>
           + New contact
         </button>
-        <button
-          type="button"
+        <a
           className={styles.pageButton}
           title="Download the current filter as CSV"
-          onClick={() => {
-            const params = new URLSearchParams()
-            if (deferredQ) params.set('q', deferredQ)
-            if (stage) params.set('stage', stage)
-            if (source) params.set('source', source)
-            if (city) params.set('city', city)
-            if (batch) params.set('batch', batch)
-            if (needsReview) params.set('needs_review', needsReview)
-            if (advisoryCouncil) params.set('advisory_council', advisoryCouncil)
-            if (loanStatus) params.set('loan_status', loanStatus)
-            window.open(`/api/marketing/contacts/export?${params.toString()}`, '_blank')
-          }}
+          href={exportHref}
+          download
         >
           Export CSV
-        </button>
-        <Link href="/admin/marketing/feedback" className={styles.backLink}>
-          Feedback queue →
-        </Link>
+        </a>
       </div>
+
+      <MarketingStats />
 
       <div className={styles.filters}>
         <input
@@ -286,7 +400,7 @@ const MarketingContactsGrid: React.FC = () => {
           className={styles.searchInput}
           placeholder="Search name, email, mobile"
           value={q}
-          onChange={onFilter(setQ)}
+          onChange={(e) => setQ(e.target.value)}
           aria-label="Search contacts"
         />
 
@@ -298,7 +412,7 @@ const MarketingContactsGrid: React.FC = () => {
             id="marketing-stage-filter"
             className={styles.filterSelect}
             value={stage}
-            onChange={onFilter(setStage)}
+            onChange={onFilter('stage')}
           >
             <option value="">All stages</option>
             {STAGE_OPTIONS.map((opt) => (
@@ -317,7 +431,7 @@ const MarketingContactsGrid: React.FC = () => {
             id="marketing-source-filter"
             className={styles.filterSelect}
             value={source}
-            onChange={onFilter(setSource)}
+            onChange={onFilter('source')}
           >
             <option value="">All sources</option>
             {SOURCE_OPTIONS.map((opt) => (
@@ -332,32 +446,35 @@ const MarketingContactsGrid: React.FC = () => {
           <label className={styles.filterLabel} htmlFor="marketing-city-filter">
             City
           </label>
-          <select
+          <input
             id="marketing-city-filter"
+            type="text"
             className={styles.filterSelect}
+            placeholder="Any city"
             value={city}
-            onChange={onFilter(setCity)}
-          >
-            <option value="">All cities</option>
-            {CITY_OPTIONS.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
+            onChange={onFilter('city')}
+            list="marketing-city-suggestions"
+          />
+          {/* Free-text on the backend (a `like` filter) — the datalist offers
+              the cities campaigns usually target without locking others out. */}
+          <datalist id="marketing-city-suggestions">
+            {['Sydney', 'Melbourne', 'Brisbane', 'Perth', 'Adelaide', 'Canberra'].map((c) => (
+              <option key={c} value={c} />
             ))}
-          </select>
+          </datalist>
         </div>
 
         <div className={styles.filterGroup}>
           <label className={styles.filterLabel} htmlFor="marketing-batch-filter">
-            Batch
+            Campaign
           </label>
           <select
             id="marketing-batch-filter"
             className={styles.filterSelect}
             value={batch}
-            onChange={onFilter(setBatch)}
+            onChange={onFilter('batch')}
           >
-            <option value="">All batches</option>
+            <option value="">All campaigns</option>
             {batchOptions.map((b) => (
               <option key={b.batchId} value={b.batchId}>
                 {b.name ?? b.batchId}
@@ -374,7 +491,7 @@ const MarketingContactsGrid: React.FC = () => {
             id="marketing-loan-outcome-filter"
             className={styles.filterSelect}
             value={loanStatus}
-            onChange={onFilter(setLoanStatus)}
+            onChange={onFilter('loan_status')}
             title="Win-back segments should target Repaid — written-off customers never re-enter"
           >
             <option value="">Any outcome</option>
@@ -392,7 +509,7 @@ const MarketingContactsGrid: React.FC = () => {
             id="marketing-review-filter"
             className={styles.filterSelect}
             value={needsReview}
-            onChange={onFilter(setNeedsReview)}
+            onChange={onFilter('needs_review')}
           >
             <option value="">All contacts</option>
             <option value="true">⚑ Needs review</option>
@@ -407,7 +524,7 @@ const MarketingContactsGrid: React.FC = () => {
             id="marketing-advisory-filter"
             className={styles.filterSelect}
             value={advisoryCouncil}
-            onChange={onFilter(setAdvisoryCouncil)}
+            onChange={onFilter('advisory_council')}
           >
             <option value="">All contacts</option>
             <option value="true">Members only</option>
@@ -415,76 +532,97 @@ const MarketingContactsGrid: React.FC = () => {
         </div>
       </div>
 
-      {/* Assign-to-batch bar — always present (fixed layout); controls disable
-          until a selection + target batch exist. Invitations get their OWN
-          batch selector (seeded by assign/create) — deliberately independent
-          of the grid filter so a leftover filter never primes a send. */}
-      <div className={styles.filters}>
-        <span className={styles.pageStatus}>{selected.size} selected</span>
-        <div className={styles.filterGroup}>
-          <label className={styles.filterLabel} htmlFor="marketing-assign-batch">
-            Assign to batch
-          </label>
-          <select
-            id="marketing-assign-batch"
-            className={styles.filterSelect}
-            value={assignTarget}
-            onChange={handleAssignTargetChange}
-            disabled={selected.size === 0}
-          >
-            <option value="">Choose a batch…</option>
-            {batchOptions.map((b) => (
-              <option key={b.batchId} value={b.batchId}>
-                {batchLabelWithCount(b)}
-              </option>
-            ))}
-            <option value={NEW_BATCH_SENTINEL}>＋ New batch…</option>
-          </select>
+      {hasActiveFilters && (
+        <div className={styles.activeFilters}>
+          {urlQ && (
+            <button
+              type="button"
+              className={styles.filterChip}
+              onClick={() => setQ('')}
+              title="Remove this filter"
+            >
+              “{urlQ}” ×
+            </button>
+          )}
+          {activeFilterChips.map((chip) => (
+            <button
+              key={chip.key}
+              type="button"
+              className={styles.filterChip}
+              onClick={() => setParams({ [chip.key]: null, page: null })}
+              title="Remove this filter"
+            >
+              {chip.label} ×
+            </button>
+          ))}
+          <button type="button" className={styles.clearFiltersButton} onClick={clearAllFilters}>
+            Clear all
+          </button>
         </div>
-        <button
-          type="button"
-          className={styles.pageButton}
-          onClick={handleAssign}
-          disabled={!canAssign}
-          title={
-            selected.size === 0
-              ? 'Select contacts first'
-              : !assignTarget
-                ? 'Choose a target batch'
-                : undefined
-          }
-        >
-          {assign.isPending ? 'Assigning…' : 'Assign'}
-        </button>
-        <div className={styles.spacer} />
-        <div className={styles.filterGroup}>
-          <label className={styles.filterLabel} htmlFor="marketing-invite-batch">
-            Send invitations to
-          </label>
-          <select
-            id="marketing-invite-batch"
-            className={styles.filterSelect}
-            value={inviteTarget}
-            onChange={(e) => setInviteTarget(e.target.value)}
+      )}
+
+      {/* Contextual bulk-action bar — appears only while contacts are
+          selected. Sending invitations now lives on the campaign's page
+          (with a pre-flight summary), not next to the grid filters. */}
+      {selected.size > 0 && (
+        <div className={styles.bulkBar}>
+          <span className={styles.bulkBarCount}>
+            {selected.size.toLocaleString('en-AU')} selected
+          </span>
+          {selectedOffPage > 0 && (
+            <span className={styles.bulkBarMeta}>({selectedOffPage} on other pages)</span>
+          )}
+          {data && data.totalDocs > selected.size && (
+            <button
+              type="button"
+              className={styles.clearFiltersButton}
+              onClick={handleSelectAllMatching}
+              disabled={selectingAll}
+            >
+              {selectingAll
+                ? 'Selecting…'
+                : `Select all ${data.totalDocs.toLocaleString('en-AU')} matching`}
+            </button>
+          )}
+          <div className={styles.spacer} />
+          <div className={styles.filterGroup}>
+            <label className={styles.filterLabel} htmlFor="marketing-assign-batch">
+              Assign to campaign
+            </label>
+            <select
+              id="marketing-assign-batch"
+              className={styles.filterSelect}
+              value={assignTarget}
+              onChange={handleAssignTargetChange}
+              disabled={creatingBatch}
+            >
+              <option value="">{creatingBatch ? 'Creating campaign…' : 'Choose a campaign…'}</option>
+              {batchOptions.map((b) => (
+                <option key={b.batchId} value={b.batchId}>
+                  {batchLabelWithCount(b)}
+                </option>
+              ))}
+              <option value={NEW_BATCH_SENTINEL}>＋ New campaign…</option>
+            </select>
+          </div>
+          <button
+            type="button"
+            className={styles.btnSubmit}
+            onClick={handleAssign}
+            disabled={!canAssign}
+            title={!assignTarget ? 'Choose a target campaign' : undefined}
           >
-            <option value="">Choose a batch…</option>
-            {batchOptions.map((b) => (
-              <option key={b.batchId} value={b.batchId}>
-                {batchLabelWithCount(b)}
-              </option>
-            ))}
-          </select>
+            {assign.isPending ? 'Assigning…' : 'Assign'}
+          </button>
+          <button
+            type="button"
+            className={styles.pageButton}
+            onClick={() => setSelected(new Set())}
+          >
+            Clear selection
+          </button>
         </div>
-        <button
-          type="button"
-          className={styles.pageButton}
-          onClick={() => setShowInviteConfirm(true)}
-          disabled={!canInvite}
-          title={!inviteTarget ? 'Choose the batch to invite' : undefined}
-        >
-          {invite.isPending ? 'Sending…' : 'Send invitations'}
-        </button>
-      </div>
+      )}
 
       <div className={styles.tableWrapper}>
         {isError ? (
@@ -502,27 +640,66 @@ const MarketingContactsGrid: React.FC = () => {
                       aria-label="Select all on page"
                     />
                   </th>
-                  <th>Name</th>
-                  <th>Mobile</th>
+                  <th>
+                    <button
+                      type="button"
+                      className={styles.sortButton}
+                      onClick={() => toggleSort('name')}
+                      title="Sort by name"
+                    >
+                      Contact{sortArrow('name')}
+                    </button>
+                  </th>
                   <th>Stage</th>
                   <th>Source</th>
-                  <th>Batch</th>
+                  <th>Campaign</th>
                   <th>Flags</th>
                   <th>Consent</th>
-                  <th>Updated</th>
+                  <th>
+                    <button
+                      type="button"
+                      className={styles.sortButton}
+                      onClick={() => toggleSort('updated')}
+                      title="Sort by last update"
+                    >
+                      Updated{sortArrow('updated')}
+                    </button>
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading && docs.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className={styles.emptyCell}>
+                    <td colSpan={8} className={styles.emptyCell}>
                       Loading contacts…
                     </td>
                   </tr>
                 ) : docs.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className={styles.emptyCell}>
-                      No contacts match the current filters.
+                    <td colSpan={8} className={styles.emptyCell}>
+                      {hasActiveFilters ? (
+                        <>
+                          No contacts match the current filters.{' '}
+                          <button
+                            type="button"
+                            className={styles.clearFiltersButton}
+                            onClick={clearAllFilters}
+                          >
+                            Clear all filters
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          No contacts yet.{' '}
+                          <button
+                            type="button"
+                            className={styles.clearFiltersButton}
+                            onClick={() => setShowNewContact(true)}
+                          >
+                            Create the first contact
+                          </button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ) : (
@@ -544,15 +721,20 @@ const MarketingContactsGrid: React.FC = () => {
                         />
                       </td>
                       <td>
-                        <Link
-                          href={contactHref(contact)}
-                          className={styles.nameLink}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {contact.firstName ?? '—'}
-                        </Link>
+                        <div className={styles.identityCell}>
+                          <Link
+                            href={contactHref(contact)}
+                            className={styles.nameLink}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {contact.firstName ?? 'Unnamed contact'}
+                          </Link>
+                          <span className={styles.identitySecondary}>
+                            {[contact.mobileE164, contact.email].filter(Boolean).join(' · ') ||
+                              '—'}
+                          </span>
+                        </div>
                       </td>
-                      <td>{contact.mobileE164 ?? '—'}</td>
                       <td>
                         {contact.derivedStage ? (
                           <span className={styles.badge}>{stageLabel(contact.derivedStage)}</span>
@@ -563,17 +745,13 @@ const MarketingContactsGrid: React.FC = () => {
                       <td>{contact.source ? sourceLabel(contact.source) : '—'}</td>
                       <td onClick={(e) => e.stopPropagation()}>
                         {contact.batchId ? (
-                          <button
-                            type="button"
-                            className={styles.linkButton}
-                            title="Filter the grid to this batch"
-                            onClick={() => {
-                              setBatch(contact.batchId!)
-                              setPage(1)
-                            }}
+                          <Link
+                            href={`/admin/marketing/campaigns/${contact.batchId}`}
+                            className={styles.nameLink}
+                            title="Open this campaign"
                           >
                             {batchNameFor(contact.batchId)}
-                          </button>
+                          </Link>
                         ) : (
                           '—'
                         )}
@@ -604,7 +782,7 @@ const MarketingContactsGrid: React.FC = () => {
               <button
                 type="button"
                 className={styles.pageButton}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                onClick={() => setParams({ page: String(Math.max(1, page - 1)) })}
                 disabled={!data || !data.hasPrevPage}
               >
                 ← Previous
@@ -616,11 +794,23 @@ const MarketingContactsGrid: React.FC = () => {
               <button
                 type="button"
                 className={styles.pageButton}
-                onClick={() => setPage((p) => p + 1)}
+                onClick={() => setParams({ page: String(page + 1) })}
                 disabled={!data || !data.hasNextPage}
               >
                 Next →
               </button>
+            </div>
+
+            <div className={styles.kbdHint}>
+              <span>
+                <span className={styles.kbd}>j</span>/<span className={styles.kbd}>k</span> navigate
+              </span>
+              <span>
+                <span className={styles.kbd}>⏎</span> open
+              </span>
+              <span>
+                <span className={styles.kbd}>space</span> preview
+              </span>
             </div>
           </>
         )}
@@ -641,50 +831,8 @@ const MarketingContactsGrid: React.FC = () => {
         />
       )}
 
-      {showInviteConfirm && (
-        <div className={styles.modalOverlay} onClick={() => setShowInviteConfirm(false)}>
-          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <div className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>Send invitations</h2>
-              <button
-                type="button"
-                className={styles.closeBtn}
-                onClick={() => setShowInviteConfirm(false)}
-                aria-label="Close"
-              >
-                ×
-              </button>
-            </div>
-            <div className={styles.modalBody}>
-              <p>
-                Send invitations to all consented members of{' '}
-                <strong>{batchNameFor(inviteTarget)}</strong>?
-              </p>
-              <p className={styles.formHint}>
-                Members without marketing consent are skipped automatically. Repeating the send for
-                this batch is deduplicated platform-side, so a double-click can&apos;t fan out a
-                second wave.
-              </p>
-            </div>
-            <div className={styles.modalFooter}>
-              <button
-                type="button"
-                className={styles.btnCancel}
-                onClick={() => setShowInviteConfirm(false)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className={styles.btnSubmit}
-                onClick={handleInviteConfirm}
-                disabled={!canInvite}
-              >
-                {invite.isPending ? 'Sending…' : 'Send invitations'}
-              </button>
-            </div>
-          </div>
-        </div>
+      {peekContactId && (
+        <ContactPeekModal contactId={peekContactId} onClose={() => setPeekContactId(null)} />
       )}
     </div>
   )

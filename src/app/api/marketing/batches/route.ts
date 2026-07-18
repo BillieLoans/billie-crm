@@ -20,8 +20,14 @@ export async function GET(request: NextRequest) {
   const { payload, user } = auth
 
   const sp = request.nextUrl.searchParams
+  // Single-batch lookup for the campaign detail page — same enriched shape,
+  // just filtered to one batchId.
+  const where = sp.get('batch_id')
+    ? ({ batchId: { equals: sp.get('batch_id') } } as never)
+    : undefined
   const result = await payload.find({
     collection: 'batches',
+    ...(where ? { where } : {}),
     page: Number(sp.get('page') ?? 1),
     limit: 50,
     sort: '-batchCreatedAt',

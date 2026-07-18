@@ -4,6 +4,116 @@
   padding: 24px;
   max-width: 1400px;
   margin: 0 auto;
+  /* Single action-accent token for the module. The previous styles leaned on
+     --theme-success-* with BLUE fallbacks, which produced green buttons under
+     Payload theming and blue ones without it. Success tokens are now reserved
+     for genuine success states (consent granted). */
+  --m-accent: #2563eb;
+  --m-accent-strong: #1d4ed8;
+  --m-accent-soft: rgba(37, 99, 235, 0.12);
+}
+
+/* Sub-navigation tabs (Contacts · Campaigns · Feedback) */
+.subnav {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--theme-elevation-100, #e5e5e5);
+}
+
+.subnavTab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--theme-elevation-600, #666);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.subnavTab:hover {
+  color: var(--theme-text, #1a1a1a);
+}
+
+.subnavTabActive {
+  color: var(--theme-text, #1a1a1a);
+  border-bottom-color: var(--m-accent);
+}
+
+.subnavBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--theme-elevation-150, #ececec);
+  color: var(--theme-elevation-700, #444);
+}
+
+.subnavBadgeUrgent {
+  background: var(--theme-error-500, #dc2626);
+  color: #fff;
+}
+
+/* Overview stats strip */
+.statsStrip {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.statChip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 14px;
+  border: 1px solid var(--theme-elevation-100, #e5e5e5);
+  border-radius: 8px;
+  background: var(--theme-elevation-0, #fff);
+  text-decoration: none;
+  min-width: 84px;
+}
+
+a.statChip:hover {
+  border-color: var(--theme-elevation-300, #ccc);
+}
+
+.statValue {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--theme-text, #1a1a1a);
+  line-height: 1.1;
+}
+
+.statLabel {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--theme-elevation-500, #666);
+  white-space: nowrap;
+}
+
+.statChipUrgent {
+  border-color: var(--theme-error-500, #dc2626);
+}
+
+.statChipUrgent .statValue {
+  color: var(--theme-error-600, #dc2626);
+}
+
+.statDivider {
+  width: 1px;
+  background: var(--theme-elevation-100, #e5e5e5);
+  margin: 4px 4px;
 }
 
 .header {
@@ -68,6 +178,68 @@
   min-width: 140px;
 }
 
+/* Active-filter chips row. */
+.activeFilters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: -12px 0 16px 0;
+}
+
+.filterChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 14px;
+  font-size: 12px;
+  background: var(--m-accent-soft);
+  color: var(--m-accent-strong);
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.filterChip:hover {
+  text-decoration: line-through;
+}
+
+.clearFiltersButton {
+  background: none;
+  border: none;
+  padding: 3px 6px;
+  font-size: 12px;
+  color: var(--theme-elevation-500, #666);
+  cursor: pointer;
+  text-decoration: underline;
+  font-family: inherit;
+}
+
+/* Contextual bulk-action bar — appears only while rows are selected. */
+.bulkBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  margin-bottom: 16px;
+  border: 1px solid var(--m-accent);
+  border-radius: 8px;
+  background: var(--m-accent-soft);
+}
+
+.bulkBarCount {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--m-accent-strong);
+}
+
+.bulkBarMeta {
+  font-size: 12px;
+  color: var(--theme-elevation-600, #666);
+}
+
 /* Table */
 .tableWrapper {
   background: var(--theme-elevation-0, #fff);
@@ -112,8 +284,62 @@
 /* Keyboard cursor row (j/k navigation). */
 .rowFocused {
   background: var(--theme-elevation-100, #ececec);
-  outline: 2px solid var(--theme-success-500, #2563eb);
+  outline: 2px solid var(--m-accent);
   outline-offset: -2px;
+}
+
+/* Identity cell: name over contact details. */
+.identityCell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.identitySecondary {
+  font-size: 12px;
+  color: var(--theme-elevation-500, #666);
+}
+
+/* Sortable column header. */
+.sortButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+
+.sortButton:hover {
+  color: var(--theme-text, #1a1a1a);
+}
+
+/* Keyboard shortcuts hint under the table. */
+.kbdHint {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  font-size: 12px;
+  color: var(--theme-elevation-400, #999);
+  border-top: 1px solid var(--theme-elevation-50, #f5f5f5);
+}
+
+.kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  border: 1px solid var(--theme-elevation-200, #d5d5d5);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--theme-elevation-600, #666);
+  background: var(--theme-elevation-50, #f5f5f5);
 }
 
 .emptyCell {
@@ -164,6 +390,47 @@
 .badgeConsentDeclined {
   background: var(--theme-error-50, #fef2f2);
   color: var(--theme-error-600, #dc2626);
+}
+
+/* Feedback triage status colours: new = needs attention, acknowledged =
+   in progress, resolved = muted history. */
+.badgeStatusNew {
+  background: var(--theme-warning-50, #fef3c7);
+  color: var(--theme-warning-800, #92400e);
+}
+
+.badgeStatusAcknowledged {
+  background: var(--m-accent-soft);
+  color: var(--m-accent-strong);
+}
+
+.badgeStatusResolved {
+  background: var(--theme-elevation-50, #f5f5f5);
+  color: var(--theme-elevation-500, #666);
+}
+
+/* Per-channel consent chips (SMS ✓ / WhatsApp ✓ / Email ✗). */
+.channelChips {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.channelChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--theme-success-50, #f0fdf4);
+  color: var(--theme-success-700, #15803d);
+}
+
+.channelChipOff {
+  background: var(--theme-elevation-50, #f5f5f5);
+  color: var(--theme-elevation-400, #999);
+  text-decoration: line-through;
 }
 
 .badgeLinked {
@@ -322,11 +589,15 @@
   padding: 8px 16px;
   border: none;
   border-radius: 6px;
-  background: var(--theme-success-500, #16a34a);
+  background: var(--m-accent);
   color: #fff;
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
+}
+
+.noteButton:hover:not(:disabled) {
+  background: var(--m-accent-strong);
 }
 
 .noteButton:disabled {
@@ -506,8 +777,116 @@
 }
 
 .searchResultSelected {
-  border-color: var(--theme-success-500, #2563eb);
+  border-color: var(--m-accent);
   background: var(--theme-elevation-50, #f5f5f5);
+}
+
+/* Grouped right-rail sections on the contact detail page. */
+.railGroupTitle {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--theme-elevation-400, #999);
+  margin: 8px 0 -8px 0;
+}
+
+.dangerZone {
+  border-color: var(--theme-error-200, #fecaca);
+}
+
+.dangerZone .panelTitle {
+  color: var(--theme-error-600, #dc2626);
+}
+
+/* Copy-to-clipboard affordance next to identity values. */
+.copyButton {
+  background: none;
+  border: none;
+  padding: 0 4px;
+  font-size: 12px;
+  color: var(--theme-elevation-400, #999);
+  cursor: pointer;
+}
+
+.copyButton:hover {
+  color: var(--theme-text, #1a1a1a);
+}
+
+/* Timeline kind-filter chips. */
+.timelineFilters {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.timelineFilterChip {
+  padding: 3px 10px;
+  border-radius: 14px;
+  font-size: 12px;
+  border: 1px solid var(--theme-elevation-150, #ececec);
+  background: var(--theme-elevation-0, #fff);
+  color: var(--theme-elevation-600, #666);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.timelineFilterChipActive {
+  background: var(--m-accent-soft);
+  border-color: var(--m-accent);
+  color: var(--m-accent-strong);
+}
+
+.showMoreButton {
+  align-self: center;
+  background: none;
+  border: none;
+  padding: 8px;
+  font-size: 13px;
+  color: var(--m-accent-strong);
+  cursor: pointer;
+  text-decoration: underline;
+  font-family: inherit;
+}
+
+/* Campaign detail: send results grid. */
+.sendResults {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Pre-flight partition rows in the send confirmation. */
+.preflightRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 6px 0;
+  font-size: 14px;
+  border-bottom: 1px solid var(--theme-elevation-50, #f5f5f5);
+}
+
+.preflightValue {
+  font-weight: 600;
+}
+
+.preflightHighlight {
+  color: var(--theme-success-700, #15803d);
+}
+
+/* Expandable feedback body row. */
+.expandedBody {
+  white-space: pre-wrap;
+  font-size: 13px;
+  color: var(--theme-elevation-700, #444);
+  background: var(--theme-elevation-50, #f5f5f5);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.modalWide {
+  max-width: 640px;
 }
 
 /* Truncated resolution note in the feedback queue (full text in title). */
@@ -627,8 +1006,8 @@
 .formInput:focus,
 .formSelect:focus {
   outline: none;
-  border-color: var(--theme-success-500, #2563eb);
-  box-shadow: 0 0 0 3px var(--theme-success-100, rgba(37, 99, 235, 0.1));
+  border-color: var(--m-accent);
+  box-shadow: 0 0 0 3px var(--m-accent-soft);
 }
 
 .formHint {
@@ -663,7 +1042,7 @@
   display: inline-flex;
   align-items: center;
   padding: 0.625rem 1.25rem;
-  background: var(--theme-success-500, #2563eb);
+  background: var(--m-accent);
   color: white;
   border: none;
   border-radius: 6px;
@@ -674,7 +1053,7 @@
 }
 
 .btnSubmit:hover:not(:disabled) {
-  background: var(--theme-success-600, #1d4ed8);
+  background: var(--m-accent-strong);
 }
 
 .btnSubmit:disabled {

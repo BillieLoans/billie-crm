@@ -28,6 +28,84 @@ function invalidateWithLag(qc: QueryClient, keys: string[][]) {
   LAG_RETRIES_MS.forEach((ms) => setTimeout(run, ms))
 }
 
+// ── Optimistic cache patching ───────────────────────────────────────────────
+//
+// Deterministic commands (flags, consent, council, feedback status) know
+// their end state, so the cache is patched immediately and the lag-tolerant
+// invalidation merely confirms it. Snapshots are restored on error.
+
+interface ContactLike {
+  contactId?: string | null
+  [key: string]: unknown
+}
+
+interface ContactListLike {
+  docs: ContactLike[]
+  [key: string]: unknown
+}
+
+interface ContactDetailLike {
+  contact: ContactLike
+  [key: string]: unknown
+}
+
+type CacheSnapshot = Array<[readonly unknown[], unknown]>
+
+/** Patch a contact everywhere it appears (grid pages + detail). */
+function patchContactCaches(
+  qc: QueryClient,
+  contactId: string,
+  patch: (contact: ContactLike) => ContactLike,
+): CacheSnapshot {
+  const snapshot = qc.getQueriesData({ queryKey: ['marketing-contacts'] }) as CacheSnapshot
+  qc.setQueriesData({ queryKey: ['marketing-contacts', 'list'] }, (old: unknown) => {
+    const list = old as ContactListLike | undefined
+    if (!list?.docs) return old
+    return {
+      ...list,
+      docs: list.docs.map((d) => (d.contactId === contactId ? patch(d) : d)),
+    }
+  })
+  qc.setQueriesData({ queryKey: ['marketing-contacts', 'detail', contactId] }, (old: unknown) => {
+    const detail = old as ContactDetailLike | undefined
+    if (!detail?.contact) return old
+    return { ...detail, contact: patch(detail.contact) }
+  })
+  return snapshot
+}
+
+interface FeedbackLike {
+  feedbackId?: string | null
+  [key: string]: unknown
+}
+
+interface FeedbackListLike {
+  docs: FeedbackLike[]
+  [key: string]: unknown
+}
+
+/** Patch a feedback item across every cached queue page. */
+function patchFeedbackCaches(
+  qc: QueryClient,
+  feedbackId: string,
+  patch: (feedback: FeedbackLike) => FeedbackLike,
+): CacheSnapshot {
+  const snapshot = qc.getQueriesData({ queryKey: ['marketing-feedback'] }) as CacheSnapshot
+  qc.setQueriesData({ queryKey: ['marketing-feedback'] }, (old: unknown) => {
+    const list = old as FeedbackListLike | undefined
+    if (!list?.docs) return old
+    return {
+      ...list,
+      docs: list.docs.map((d) => (d.feedbackId === feedbackId ? patch(d) : d)),
+    }
+  })
+  return snapshot
+}
+
+function restoreSnapshot(qc: QueryClient, snapshot: CacheSnapshot | undefined) {
+  snapshot?.forEach(([queryKey, data]) => qc.setQueryData(queryKey as readonly unknown[], data))
+}
+
 async function postCommand<T = unknown>(url: string, body?: unknown): Promise<T> {
   const res = await fetch(url, {
     method: 'POST',
@@ -100,6 +178,7 @@ export function useAssignBatch() {
 }
 
 export function useTriggerInvitations() {
+  const qc = useQueryClient()
   return useMutation({
     mutationFn: (batchId: string) =>
       postCommand<{
@@ -116,6 +195,8 @@ export function useTriggerInvitations() {
         `Invited ${res.invitedCount} member(s)` +
           (skipped.length ? ` — skipped ${skipped.join(', ')}` : ''),
       )
+      // Campaign pages show the send outcome — refresh them past the lag.
+      invalidateWithLag(qc, [['marketing-batches']])
     },
     onError: (e: Error, batchId) => {
       toast.error('Failed to trigger invitations', { description: e.message })
@@ -145,11 +226,24 @@ export function useSetFeedbackStatus() {
         status: vars.status,
         ...(vars.note ? { note: vars.note } : {}),
       }),
+    // Deterministic end state → optimistic: the row flips immediately instead
+    // of appearing to ignore the click for the projection-lag window.
+    onMutate: async (vars) => {
+      await qc.cancelQueries({ queryKey: ['marketing-feedback'] })
+      return patchFeedbackCaches(qc, vars.feedbackId, (f) => ({
+        ...f,
+        status: vars.status,
+        ...(vars.note ? { statusNote: vars.note } : {}),
+      }))
+    },
     onSuccess: () => {
       toast.success('Feedback status updated')
-      invalidateWithLag(qc, [['marketing-feedback']])
+      invalidateWithLag(qc, [['marketing-feedback'], ['marketing-overview']])
     },
-    onError: (e: Error) => toast.error('Failed to update status', { description: e.message }),
+    onError: (e: Error, _vars, snapshot) => {
+      restoreSnapshot(qc, snapshot)
+      toast.error('Failed to update status', { description: e.message })
+    },
   })
 }
 
@@ -216,11 +310,26 @@ export function useRecordConsent() {
         method: vars.method,
         ...(vars.evidence ? { evidence: vars.evidence } : {}),
       }),
+    onMutate: async (vars) => {
+      await qc.cancelQueries({ queryKey: ['marketing-contacts'] })
+      return patchContactCaches(qc, vars.contactId, (c) => ({
+        ...c,
+        consent: {
+          ...((c.consent as Record<string, unknown> | null) ?? {}),
+          marketing: {
+            granted: vars.granted,
+            channels: vars.channels,
+            method: vars.method,
+          },
+        },
+      }))
+    },
     onSuccess: (_res, vars) => {
       toast.success(vars.granted ? 'Consent recorded' : 'Consent withdrawal recorded')
       invalidateWithLag(qc, [['marketing-contacts']])
     },
-    onError: (e: Error, vars) => {
+    onError: (e: Error, vars, snapshot) => {
+      restoreSnapshot(qc, snapshot)
       toast.error('Failed to record consent', { description: e.message })
       recordMarketingFailure(
         vars.granted ? 'Record consent' : 'Record consent withdrawal',
@@ -261,12 +370,18 @@ export function useSetAdvisoryCouncil() {
         }
         return res.json()
       }),
+    onMutate: async (vars) => {
+      await qc.cancelQueries({ queryKey: ['marketing-contacts'] })
+      return patchContactCaches(qc, vars.contactId, (c) => ({ ...c, panelMember: vars.member }))
+    },
     onSuccess: (_res, vars) => {
       toast.success(vars.member ? 'Added to Advisory council' : 'Removed from Advisory council')
       invalidateWithLag(qc, [['marketing-contacts']])
     },
-    onError: (e: Error) =>
-      toast.error('Failed to update Advisory council', { description: e.message }),
+    onError: (e: Error, _vars, snapshot) => {
+      restoreSnapshot(qc, snapshot)
+      toast.error('Failed to update Advisory council', { description: e.message })
+    },
   })
 }
 
@@ -326,11 +441,25 @@ export function useSetReviewFlag() {
         needs_review: vars.needsReview,
         ...(vars.reason ? { reason: vars.reason } : {}),
       }),
+    onMutate: async (vars) => {
+      await qc.cancelQueries({ queryKey: ['marketing-contacts'] })
+      return patchContactCaches(qc, vars.contactId, (c) => ({
+        ...c,
+        needsReview: vars.needsReview,
+        attributes: {
+          ...((c.attributes as Record<string, unknown> | null) ?? {}),
+          needs_review_reason: vars.needsReview ? (vars.reason ?? null) : null,
+        },
+      }))
+    },
     onSuccess: (_res, vars) => {
       toast.success(vars.needsReview ? 'Contact flagged for review' : 'Review flag cleared')
       invalidateWithLag(qc, [['marketing-contacts']])
     },
-    onError: (e: Error) => toast.error('Failed to update review flag', { description: e.message }),
+    onError: (e: Error, _vars, snapshot) => {
+      restoreSnapshot(qc, snapshot)
+      toast.error('Failed to update review flag', { description: e.message })
+    },
   })
 }
 
@@ -384,11 +513,16 @@ export function useCreateContact() {
         vars,
       ),
     onSuccess: (res) => {
-      toast.success(
-        res.created === false
-          ? 'Existing contact updated — changes appearing shortly'
-          : 'Contact created — appearing in the grid shortly',
-      )
+      toast.success(res.created === false ? 'Existing contact updated' : 'Contact created', {
+        description:
+          res.created === false ? 'Changes are syncing to the grid.' : 'Syncing to the grid now.',
+        action: {
+          label: 'View contact',
+          onClick: () => {
+            window.location.href = `/admin/marketing/contacts/${res.contactId}`
+          },
+        },
+      })
       invalidateWithLag(qc, [['marketing-contacts']])
     },
     onError: (e: Error) => toast.error('Failed to create contact', { description: e.message }),

@@ -5,6 +5,8 @@ import type { Batch } from '@/payload-types'
 
 export interface BatchesFilters {
   page?: number
+  /** Single-batch lookup (campaign detail page). */
+  batch_id?: string
 }
 
 /** Batch enriched server-side with its contact member count. */
@@ -23,6 +25,7 @@ export interface BatchesResponse {
 function buildQueryString(filters: BatchesFilters): string {
   const params = new URLSearchParams()
   if (filters.page) params.set('page', String(filters.page))
+  if (filters.batch_id) params.set('batch_id', filters.batch_id)
   const qs = params.toString()
   return qs ? `?${qs}` : ''
 }
@@ -52,5 +55,20 @@ export function useBatches(filters: BatchesFilters = {}) {
     queryFn: () => fetchBatches(filters),
     placeholderData: (prev) => prev,
     refetchInterval: 30_000,
+  })
+}
+
+/**
+ * Single campaign lookup for the detail page. Polls faster while the batch is
+ * missing — a just-created campaign's projection may not have landed yet, and
+ * the detail page shows a syncing state until it does.
+ */
+export function useBatch(batchId: string) {
+  return useQuery({
+    queryKey: batchesQueryKey({ batch_id: batchId }),
+    queryFn: () => fetchBatches({ batch_id: batchId }),
+    enabled: !!batchId,
+    select: (res) => res.docs[0] ?? null,
+    refetchInterval: (query) => (query.state.data?.docs?.length ? 30_000 : 3_000),
   })
 }
