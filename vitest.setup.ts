@@ -6,7 +6,19 @@ import 'dotenv/config'
 // Add testing-library jest-dom matchers
 import '@testing-library/jest-dom/vitest'
 
-import { vi } from 'vitest'
+import { afterEach, vi } from 'vitest'
+
+// Unmount rendered components after EVERY test. Test files here mostly use
+// beforeEach(cleanup), which cleans before each test within a file but leaves
+// the file's LAST render mounted — and with the shared single-fork worker
+// that DOM leaks into the next file, causing order-dependent "found multiple
+// elements" failures. A global afterEach(cleanup) removes the whole class.
+// Guarded like scrollIntoView above so node-environment test files can share
+// this setup.
+if (typeof document !== 'undefined') {
+  const { cleanup } = await import('@testing-library/react')
+  afterEach(() => cleanup())
+}
 
 // Mock ResizeObserver for tests (not available in JSDOM)
 // Required by cmdk and other resize-aware libraries
