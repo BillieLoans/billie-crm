@@ -1,0 +1,97 @@
+name: crm ci
+
+# Node-side CI for the Payload CRM: lint, unit + integration tests, and the
+# marketing-module Playwright e2e suite. The Python event processor has its
+# own workflow (event-processor-tests.yml), so its tree is ignored here.
+
+on:
+  pull_request:
+    paths-ignore:
+      - 'event-processor/**'
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'event-processor/**'
+
+concurrency:
+  group: crm-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: eslint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+
+  test:
+    name: vitest (unit + integration)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # globalSetup spins up Postgres via testcontainers (Docker is available
+      # on ubuntu-latest) and runs Payload's push schema sync before tests.
+      - run: pnpm test:int
+
+  e2e:
+    name: playwright (marketing module)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: billie_crm
+          POSTGRES_PASSWORD: billie_crm
+          POSTGRES_DB: billie_crm_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U billie_crm"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URI: postgresql://billie_crm:billie_crm@localhost:5432/billie_crm_e2e
+      PAYLOAD_SECRET: ci-e2e-secret-not-for-production
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      # Seed pushes the Payload schema into the service Postgres and creates
+      # the admin user + marketing fixtures the spec expects.
+      - name: Seed marketing fixtures
+        run: pnpm exec tsx tests/e2e/seed-marketing.ts
+      # Playwright's webServer config boots `pnpm dev` and waits for :3000.
+      - name: Run marketing e2e
+        run: pnpm exec playwright test tests/e2e/marketing.e2e.spec.ts
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

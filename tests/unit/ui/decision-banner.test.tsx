@@ -1,5 +1,18 @@
-import { describe, test, expect, afterEach } from 'vitest'
+import { describe, test, expect, afterEach, vi } from 'vitest'
 import { render, screen, cleanup } from '@testing-library/react'
+
+// Mock @payloadcms/ui (same pattern as ClearBlockButton.test) — importing the
+// real package pulls a .css file through Node's ESM loader, which jsdom tests
+// cannot load. DecisionBanner reaches it via ClearBlockButton's useAuth.
+// Readonly role: these tests cover the banner copy, not the clear-block
+// action, and the button's react-query tree needs a provider these renders
+// don't have (ClearBlockButton has its own dedicated test file).
+vi.mock('@payloadcms/ui', () => ({
+  useAuth: vi.fn(() => ({
+    user: { id: 'ro-1', role: 'readonly' },
+  })),
+}))
+
 import { DecisionBanner } from '@/components/ConversationDetailView/DecisionBanner'
 import type { ConversationDetail } from '@/lib/schemas/conversations'
 

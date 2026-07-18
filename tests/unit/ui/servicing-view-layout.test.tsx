@@ -35,6 +35,14 @@ const customer = {
   loanAccounts: [acc('over', { accountStatus: 'in_arrears' }), acc('paid', { accountStatus: 'paid_off' })],
 }
 
+// Mock @payloadcms/ui (same pattern as ClearBlockButton.test) — the real
+// package imports a .css file Node's ESM loader cannot handle in jsdom tests.
+vi.mock('@payloadcms/ui', () => ({
+  useAuth: vi.fn(() => ({
+    user: { id: 'ops-1', role: 'operations' },
+  })),
+}))
+
 vi.mock('@/hooks/queries/useCustomer', () => ({
   useCustomer: () => ({ data: customer, isLoading: false, isError: false, isFetching: false, refetch: vi.fn() }),
 }))
