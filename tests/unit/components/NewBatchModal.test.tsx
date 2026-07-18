@@ -34,10 +34,10 @@ beforeEach(() => {
 describe('NewBatchModal', () => {
   it('disables Create until a name is entered', () => {
     renderWithProviders(<NewBatchModal criteria={{}} onClose={vi.fn()} onSuccess={vi.fn()} />)
-    const submit = screen.getByRole('button', { name: 'Create batch' })
+    const submit = screen.getByRole('button', { name: 'Create campaign' })
     expect(submit).toBeDisabled()
 
-    fireEvent.change(screen.getByLabelText('Batch name'), { target: { value: 'Campus wave 2' } })
+    fireEvent.change(screen.getByLabelText('Campaign name'), { target: { value: 'Campus wave 2' } })
     expect(submit).not.toBeDisabled()
   })
 
@@ -49,12 +49,12 @@ describe('NewBatchModal', () => {
         onSuccess={vi.fn()}
       />,
     )
-    expect(screen.getByText('source: campus')).toBeInTheDocument()
-    expect(screen.getByText('city: Sydney')).toBeInTheDocument()
+    expect(screen.getByText('Source: Campus')).toBeInTheDocument()
+    expect(screen.getByText('City: Sydney')).toBeInTheDocument()
     unmount()
 
     renderWithProviders(<NewBatchModal criteria={{}} onClose={vi.fn()} onSuccess={vi.fn()} />)
-    expect(screen.getByText('None — no grid filters are active.')).toBeInTheDocument()
+    expect(screen.getByText(/No grid filters are active/)).toBeInTheDocument()
   })
 
   it('POSTs name + criteria and hands the new batchId to onSuccess', async () => {
@@ -63,8 +63,8 @@ describe('NewBatchModal', () => {
       <NewBatchModal criteria={{ source: 'campus' }} onClose={vi.fn()} onSuccess={onSuccess} />,
     )
 
-    fireEvent.change(screen.getByLabelText('Batch name'), { target: { value: 'Campus wave 2' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Create batch' }))
+    fireEvent.change(screen.getByLabelText('Campaign name'), { target: { value: 'Campus wave 2' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create campaign' }))
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalledWith('batch-123'))
 
@@ -89,8 +89,8 @@ describe('NewBatchModal', () => {
     const onSuccess = vi.fn()
     renderWithProviders(<NewBatchModal criteria={{}} onClose={vi.fn()} onSuccess={onSuccess} />)
 
-    fireEvent.change(screen.getByLabelText('Batch name'), { target: { value: 'Doomed' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Create batch' }))
+    fireEvent.change(screen.getByLabelText('Campaign name'), { target: { value: 'Doomed' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create campaign' }))
 
     await waitFor(() =>
       expect(screen.getByText('Creating the batch failed. Please retry.')).toBeInTheDocument(),

@@ -343,3 +343,33 @@ this codebase (badge counts, command palette, SSE realtime events, template labe
 
 *Prepared as part of the marketing module UX review, July 2026. File references are to
 the state of the `main` branch at commit `9571210`.*
+
+---
+
+## Implementation status (July 2026)
+
+Everything above except the two backend-dependent strategic items has been implemented on
+this branch. Decisions taken during implementation:
+
+- **"Campaign" is a UI label only** — the API, collections and event vocabulary keep
+  `batch`/`batchId`, so no schema or platform changes were needed.
+- **The send pre-flight** is computed from the `contacts` projection by a new read-only
+  route (`GET /api/marketing/batches/[batchId]/preflight`) that applies the same
+  consent/review/erased partition MarketingService applies at send time.
+- **"Select all N matching"** uses a new `ids_only=true` mode on the contacts list route,
+  capped at 10,000 ids (the `AssignBatchSchema` maximum).
+- **The overview strip** (`GET /api/marketing/overview`) reuses the dashboard-feed
+  aggregation SQL behind staff-session auth instead of the BI service key.
+- **Feedback's "Open" default** is a server-side synthetic status (`status=open` → not
+  resolved) shared by the list and CSV-export routes, so exports always match the screen.
+- **Perceived projection lag** was addressed with optimistic cache updates for the
+  deterministic commands (review flag, advisory council, consent, feedback status, note
+  logging) with rollback on error; the lag-tolerant re-invalidation now merely confirms.
+- **Channel preference stays SMS/WhatsApp** (the platform's UpsertContact contract);
+  the form now explains that email consent is a separate per-channel record.
+
+Deferred (require changes outside this repo):
+
+1. **SSE projection-update push** — needs the Python event processor to emit
+   UI-refresh notifications; would remove the residual lag-polling entirely.
+2. **Campaign scheduling / wizard** — needs a platform-side scheduled-send command.

@@ -73,10 +73,10 @@ export const FeedbackQueueView: React.FC = () => {
     }),
     [status, type, overdue, page],
   )
-  const { data, isLoading, isError } = useFeedbackQueue(filters)
-  // Clock snapshot for the Age column, refreshed with each fetch — memoised
-  // against `data` so ages stay stable between fetches (render-pure).
-  const now = useMemo(() => Date.now(), [data])
+  const { data, isLoading, isError, dataUpdatedAt } = useFeedbackQueue(filters)
+  // Clock snapshot for the Age column: the fetch timestamp React Query
+  // already tracks — refreshed with each fetch, pure during render.
+  const now = dataUpdatedAt
   const setStatusMutation = useSetFeedbackStatus()
   const docs = data?.docs ?? []
 
