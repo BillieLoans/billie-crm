@@ -8,7 +8,8 @@ import {
   type ContactMatch,
   type CreateContactVars,
 } from '@/hooks/mutations/useMarketingCommands'
-import { useEscapeClose } from '@/hooks/useModalA11y'
+import { normaliseAuMobile } from '@/lib/marketing'
+import { Modal } from './Modal'
 import styles from './styles.module.css'
 
 interface NewContactModalProps {
@@ -56,6 +57,11 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ onClose, onSuc
   const create = useCreateContact()
   const canSubmit = (!!mobile.trim() || !!email.trim()) && !create.isPending && !checking
 
+  // Live E.164 preview — the same normalisation the platform applies, so what
+  // the staff member sees is exactly what will be stored.
+  const normalisedMobile = mobile.trim() ? normaliseAuMobile(mobile) : null
+  const mobileLooksInvalid = !!mobile.trim() && !normalisedMobile
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!canSubmit) return
@@ -73,9 +79,7 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ onClose, onSuc
           email: email.trim() || undefined,
         })
       } catch (err) {
-        setCheckError(
-          err instanceof Error ? err.message : 'Duplicate check failed. Please retry.',
-        )
+        setCheckError(err instanceof Error ? err.message : 'Duplicate check failed. Please retry.')
         return
       } finally {
         setChecking(false)
@@ -109,166 +113,162 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ onClose, onSuc
     setMatch(null)
   }
 
-  useEscapeClose(onClose)
-
   return (
-    <div className={styles.modalOverlay} onClick={onClose}>
-      <div
-        className={styles.modal}
-        role="dialog"
-        aria-modal="true"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className={styles.modalHeader}>
-          <h2 className={styles.modalTitle}>New contact</h2>
-          <button type="button" className={styles.closeBtn} onClick={onClose} aria-label="Close">
-            ×
-          </button>
+    <Modal title="New contact" onClose={onClose}>
+      <form onSubmit={handleSubmit}>
+        <div className={styles.modalBody}>
+          {create.isError && (
+            <div className={styles.errorMessage}>
+              {create.error instanceof Error ? create.error.message : 'Failed to create contact'}
+            </div>
+          )}
+          {checkError && <div className={styles.errorMessage}>{checkError}</div>}
+          {match && (
+            <div className={styles.warningMessage} data-testid="duplicate-warning">
+              This {match.matchedOn} already belongs to{' '}
+              <strong>{match.firstName ?? 'an unnamed contact'}</strong>
+              {match.derivedStage ? ` (${match.derivedStage})` : ''}. Saving will{' '}
+              <strong>update that contact</strong> — it will not create a new person.{' '}
+              <Link
+                href={`/admin/marketing/contacts/${match.contactId}`}
+                className={styles.nameLink}
+              >
+                View contact
+              </Link>
+            </div>
+          )}
+
+          <div className={styles.formGroup}>
+            <label className={styles.formLabel} htmlFor="new-contact-first-name">
+              First name
+            </label>
+            <input
+              id="new-contact-first-name"
+              autoFocus
+              type="text"
+              className={styles.formInput}
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+            />
+          </div>
+
+          <div className={styles.formGroup}>
+            <label className={styles.formLabel} htmlFor="new-contact-mobile">
+              Mobile
+            </label>
+            <input
+              id="new-contact-mobile"
+              type="tel"
+              className={styles.formInput}
+              value={mobile}
+              onChange={(e) => handleMobileChange(e.target.value)}
+              placeholder="04xx xxx xxx or +614xx xxx xxx"
+            />
+            {mobileLooksInvalid ? (
+              <p className={styles.formHint} style={{ color: 'var(--theme-error-600, #dc2626)' }}>
+                That doesn&apos;t look like an Australian mobile — double-check the number.
+              </p>
+            ) : normalisedMobile && normalisedMobile !== mobile.trim() ? (
+              <p className={styles.formHint}>Will be saved as {normalisedMobile}.</p>
+            ) : (
+              <p className={styles.formHint}>Mobile or email is required.</p>
+            )}
+          </div>
+
+          <div className={styles.formGroup}>
+            <label className={styles.formLabel} htmlFor="new-contact-email">
+              Email
+            </label>
+            <input
+              id="new-contact-email"
+              type="email"
+              className={styles.formInput}
+              value={email}
+              onChange={(e) => handleEmailChange(e.target.value)}
+            />
+          </div>
+
+          <div className={styles.formGroup}>
+            <label className={styles.formLabel} htmlFor="new-contact-source">
+              Source
+            </label>
+            <select
+              id="new-contact-source"
+              className={styles.formSelect}
+              value={source}
+              onChange={(e) => setSource(e.target.value)}
+            >
+              {SOURCE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className={styles.formGroup}>
+            <label className={styles.formLabel} htmlFor="new-contact-channel">
+              Preferred message channel
+            </label>
+            <select
+              id="new-contact-channel"
+              className={styles.formSelect}
+              value={channelPreference}
+              onChange={(e) => setChannelPreference(e.target.value)}
+            >
+              <option value="">—</option>
+              <option value="sms">SMS</option>
+              <option value="whatsapp">WhatsApp</option>
+            </select>
+            <p className={styles.formHint}>
+              Which channel outbound messages should use. Email consent is a separate,
+              per-channel record — capture it via “Record consent” on the contact.
+            </p>
+          </div>
+
+          <div className={styles.formGroup}>
+            <label className={styles.formLabel} htmlFor="new-contact-city">
+              City
+            </label>
+            <input
+              id="new-contact-city"
+              type="text"
+              className={styles.formInput}
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+            />
+          </div>
+
+          <div className={styles.formGroup}>
+            <label className={styles.formLabel} htmlFor="new-contact-postcode">
+              Postcode
+            </label>
+            <input
+              id="new-contact-postcode"
+              type="text"
+              className={styles.formInput}
+              value={postcode}
+              onChange={(e) => setPostcode(e.target.value)}
+            />
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit}>
-          <div className={styles.modalBody}>
-            {create.isError && (
-              <div className={styles.errorMessage}>
-                {create.error instanceof Error ? create.error.message : 'Failed to create contact'}
-              </div>
-            )}
-            {checkError && <div className={styles.errorMessage}>{checkError}</div>}
-            {match && (
-              <div className={styles.warningMessage} data-testid="duplicate-warning">
-                This {match.matchedOn} already belongs to{' '}
-                <strong>{match.firstName ?? 'an unnamed contact'}</strong>
-                {match.derivedStage ? ` (${match.derivedStage})` : ''}. Saving will{' '}
-                <strong>update that contact</strong> — it will not create a new person.{' '}
-                <Link
-                  href={`/admin/marketing/contacts/${match.contactId}`}
-                  className={styles.nameLink}
-                >
-                  View contact
-                </Link>
-              </div>
-            )}
-
-            <div className={styles.formGroup}>
-              <label className={styles.formLabel} htmlFor="new-contact-first-name">
-                First name
-              </label>
-              <input
-                id="new-contact-first-name"
-                autoFocus
-                type="text"
-                className={styles.formInput}
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-              />
-            </div>
-
-            <div className={styles.formGroup}>
-              <label className={styles.formLabel} htmlFor="new-contact-mobile">
-                Mobile
-              </label>
-              <input
-                id="new-contact-mobile"
-                type="tel"
-                className={styles.formInput}
-                value={mobile}
-                onChange={(e) => handleMobileChange(e.target.value)}
-                placeholder="+61…"
-              />
-              <p className={styles.formHint}>Mobile or email is required.</p>
-            </div>
-
-            <div className={styles.formGroup}>
-              <label className={styles.formLabel} htmlFor="new-contact-email">
-                Email
-              </label>
-              <input
-                id="new-contact-email"
-                type="email"
-                className={styles.formInput}
-                value={email}
-                onChange={(e) => handleEmailChange(e.target.value)}
-              />
-            </div>
-
-            <div className={styles.formGroup}>
-              <label className={styles.formLabel} htmlFor="new-contact-source">
-                Source
-              </label>
-              <select
-                id="new-contact-source"
-                className={styles.formSelect}
-                value={source}
-                onChange={(e) => setSource(e.target.value)}
-              >
-                {SOURCE_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className={styles.formGroup}>
-              <label className={styles.formLabel} htmlFor="new-contact-channel">
-                Channel preference
-              </label>
-              <select
-                id="new-contact-channel"
-                className={styles.formSelect}
-                value={channelPreference}
-                onChange={(e) => setChannelPreference(e.target.value)}
-              >
-                <option value="">—</option>
-                <option value="sms">SMS</option>
-                <option value="whatsapp">WhatsApp</option>
-              </select>
-            </div>
-
-            <div className={styles.formGroup}>
-              <label className={styles.formLabel} htmlFor="new-contact-city">
-                City
-              </label>
-              <input
-                id="new-contact-city"
-                type="text"
-                className={styles.formInput}
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-              />
-            </div>
-
-            <div className={styles.formGroup}>
-              <label className={styles.formLabel} htmlFor="new-contact-postcode">
-                Postcode
-              </label>
-              <input
-                id="new-contact-postcode"
-                type="text"
-                className={styles.formInput}
-                value={postcode}
-                onChange={(e) => setPostcode(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className={styles.modalFooter}>
-            <button type="button" className={styles.btnCancel} onClick={onClose}>
-              Cancel
-            </button>
-            <button type="submit" className={styles.btnSubmit} disabled={!canSubmit}>
-              {checking
-                ? 'Checking…'
-                : create.isPending
-                  ? 'Saving…'
-                  : match
-                    ? 'Update existing contact'
-                    : 'Create contact'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div className={styles.modalFooter}>
+          <button type="button" className={styles.btnCancel} onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" className={styles.btnSubmit} disabled={!canSubmit}>
+            {checking
+              ? 'Checking…'
+              : create.isPending
+                ? 'Saving…'
+                : match
+                  ? 'Update existing contact'
+                  : 'Create contact'}
+          </button>
+        </div>
+      </form>
+    </Modal>
   )
 }
 

@@ -3,7 +3,7 @@
 import React, { useState } from 'react'
 import { useSetFeedbackStatus } from '@/hooks/mutations/useMarketingCommands'
 import type { FeedbackWithContact } from '@/hooks/queries/useFeedbackQueue'
-import { useEscapeClose } from '@/hooks/useModalA11y'
+import { Modal } from './Modal'
 import styles from './styles.module.css'
 
 interface ResolveFeedbackModalProps {
@@ -35,25 +35,10 @@ export const ResolveFeedbackModal: React.FC<ResolveFeedbackModalProps> = ({
     )
   }
 
-  useEscapeClose(onClose)
-
   return (
-    <div className={styles.modalOverlay} onClick={onClose}>
-      <div
-        className={styles.modal}
-        role="dialog"
-        aria-modal="true"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className={styles.modalHeader}>
-          <h2 className={styles.modalTitle}>Resolve feedback</h2>
-          <button type="button" className={styles.closeBtn} onClick={onClose} aria-label="Close">
-            ×
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit}>
-          <div className={styles.modalBody}>
+    <Modal title="Resolve feedback" onClose={onClose}>
+      <form onSubmit={handleSubmit}>
+        <div className={styles.modalBody}>
             {setStatusMutation.isError && (
               <div className={styles.errorMessage}>
                 {setStatusMutation.error instanceof Error
@@ -82,17 +67,16 @@ export const ResolveFeedbackModal: React.FC<ResolveFeedbackModalProps> = ({
             </div>
           </div>
 
-          <div className={styles.modalFooter}>
-            <button type="button" className={styles.btnCancel} onClick={onClose}>
-              Cancel
-            </button>
-            <button type="submit" className={styles.btnSubmit} disabled={!canSubmit}>
-              {setStatusMutation.isPending ? 'Resolving…' : 'Resolve'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div className={styles.modalFooter}>
+          <button type="button" className={styles.btnCancel} onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" className={styles.btnSubmit} disabled={!canSubmit}>
+            {setStatusMutation.isPending ? 'Resolving…' : 'Resolve'}
+          </button>
+        </div>
+      </form>
+    </Modal>
   )
 }
 

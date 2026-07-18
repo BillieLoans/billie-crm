@@ -25,7 +25,15 @@ export async function GET(request: NextRequest) {
 
   const sp = request.nextUrl.searchParams
   const where: Record<string, unknown> = {}
-  if (sp.get('status')) where.status = { equals: sp.get('status') }
+  const status = sp.get('status')
+  if (status === 'open') {
+    // Mirror the list route's synthetic "open" (= not resolved) status so the
+    // export always matches what's on screen.
+    where.or = [{ status: { not_equals: 'resolved' } }, { status: { exists: false } }]
+  } else if (status) {
+    where.status = { equals: status }
+  }
+  if (sp.get('type')) where.feedbackType = { like: sp.get('type') }
   if (sp.get('product_area')) where.productArea = { equals: sp.get('product_area') }
 
   const lines = [

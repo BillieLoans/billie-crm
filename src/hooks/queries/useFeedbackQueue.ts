@@ -4,7 +4,12 @@ import { useQuery } from '@tanstack/react-query'
 import type { Feedback } from '@/payload-types'
 
 export interface FeedbackQueueFilters {
+  /** Triage status — includes the synthetic `open` (= not resolved). */
   status?: string
+  /** Feedback type substring match (e.g. `complaint`). */
+  type?: string
+  /** Unresolved complaints older than the IDR threshold. */
+  overdue?: string
   product_area?: string
   contact_id?: string
   page?: number
@@ -26,6 +31,8 @@ export interface FeedbackQueueResponse {
 function buildQueryString(filters: FeedbackQueueFilters): string {
   const params = new URLSearchParams()
   if (filters.status) params.set('status', filters.status)
+  if (filters.type) params.set('type', filters.type)
+  if (filters.overdue) params.set('overdue', filters.overdue)
   if (filters.product_area) params.set('product_area', filters.product_area)
   if (filters.contact_id) params.set('contact_id', filters.contact_id)
   if (filters.page) params.set('page', String(filters.page))

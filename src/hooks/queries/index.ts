@@ -129,10 +129,24 @@ export {
 } from './useCollectionsCasesByCustomer'
 
 // Marketing hooks (Task C6)
-export { useMarketingContacts, marketingContactsQueryKey } from './useMarketingContacts'
-export type { MarketingContactsFilters, MarketingContactsResponse } from './useMarketingContacts'
+export {
+  useMarketingContacts,
+  marketingContactsQueryKey,
+  fetchMarketingContactIds,
+} from './useMarketingContacts'
+export type {
+  MarketingContactsFilters,
+  MarketingContactsResponse,
+  MarketingContactIdsResponse,
+} from './useMarketingContacts'
 export { useMarketingContact, marketingContactQueryKey } from './useMarketingContact'
 export type { MarketingContactDetailResponse } from './useMarketingContact'
+export { useMarketingOverview, marketingOverviewQueryKey } from './useMarketingOverview'
+export type { MarketingOverview } from './useMarketingOverview'
+export { useBatchPreflight, batchPreflightQueryKey } from './useBatchPreflight'
+export type { BatchPreflight } from './useBatchPreflight'
+export { useMarketingContactSearch } from './useMarketingContactSearch'
+export type { MarketingContactHit } from './useMarketingContactSearch'
 
 // Re-export types from canonical location
 export type {
