@@ -2,7 +2,9 @@
  * API Route: GET /api/marketing/feedback
  *
  * Lists the feedback queue from the read-only `feedback` projection, filterable
- * by `status` and `product_area`. Gated on `canReadMarketing`.
+ * by `status` (including the synthetic `open` = not resolved), `type`,
+ * `product_area` and `overdue=true` (unresolved complaints older than the IDR
+ * threshold). Gated on `canReadMarketing`.
  *
  * The projection stores only `contactIdString`; the queue UI wants a human
  * name, so each page is enriched with `contactName` via one batched contacts
@@ -13,6 +15,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
 import { canReadMarketing } from '@/lib/access'
+import { OVERDUE_COMPLAINT_DAYS } from '@/lib/marketing-labels'
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(canReadMarketing)
@@ -21,9 +24,25 @@ export async function GET(request: NextRequest) {
 
   const sp = request.nextUrl.searchParams
   const where: Record<string, unknown> = {}
-  if (sp.get('status')) where.status = { equals: sp.get('status') }
+  const status = sp.get('status')
+  if (status === 'open') {
+    // Triage default: everything not yet resolved. The projection's status is
+    // free text; a missing status means "new", so include null too.
+    where.or = [{ status: { not_equals: 'resolved' } }, { status: { exists: false } }]
+  } else if (status) {
+    where.status = { equals: status }
+  }
+  if (sp.get('type')) where.feedbackType = { like: sp.get('type') }
   if (sp.get('product_area')) where.productArea = { equals: sp.get('product_area') }
   if (sp.get('contact_id')) where.contactIdString = { equals: sp.get('contact_id') }
+  if (sp.get('overdue') === 'true') {
+    const threshold = new Date(Date.now() - OVERDUE_COMPLAINT_DAYS * 86_400_000).toISOString()
+    where.and = [
+      { status: { not_equals: 'resolved' } },
+      { feedbackType: { like: 'complaint' } },
+      { receivedAt: { less_than: threshold } },
+    ]
+  }
 
   const result = await payload.find({
     collection: 'feedback',
