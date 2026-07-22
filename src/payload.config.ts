@@ -42,6 +42,11 @@ export default buildConfig({
     },
     components: {
       providers: ['@/providers'],
+      // Replace Payload's default wordmark on the login / create-first-user
+      // screens with the Billie logo.
+      graphics: {
+        Logo: '@/components/graphics/BillieLogo#BillieLogo',
+      },
       // Replace Payload's built-in logout button with one that points at our
       // custom /api/auth/logout route, which deterministically clears the
       // custom (Google OAuth) `payload-token` cookie. Payload's built-in client
