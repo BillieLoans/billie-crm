@@ -6,6 +6,7 @@ import { getPayload } from 'payload'
 import React from 'react'
 
 import config from '@/payload.config'
+import billieLogo from './billie-logo-icon.png'
 import './styles.css'
 
 /**
@@ -30,15 +31,13 @@ export default async function HomePage() {
   return (
     <div className="home">
       <div className="content">
-        <picture>
-          <source srcSet="https://raw.githubusercontent.com/payloadcms/payload/main/packages/ui/src/assets/payload-favicon.svg" />
-          <Image
-            alt="Billie Logo"
-            height={65}
-            src="https://raw.githubusercontent.com/payloadcms/payload/main/packages/ui/src/assets/payload-favicon.svg"
-            width={65}
-          />
-        </picture>
+        <Image
+          alt="Billie Logo"
+          height={72}
+          priority
+          src={billieLogo}
+          width={72}
+        />
         <h1>Welcome to Billie CRM</h1>
         <p className="subtitle">Customer servicing and support platform</p>
         <div className="links">
