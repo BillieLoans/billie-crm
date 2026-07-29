@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState, useCallback, useMemo, useEffect } from 'react'
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { formatCurrency } from '@/lib/formatters'
 import { useClosedPeriods } from '@/hooks/queries/useClosedPeriods'
@@ -22,6 +23,12 @@ const STEPS: { id: WizardStep; label: string; number: number }[] = [
   { id: 'anomalies', label: 'Anomaly Review', number: 4 },
   { id: 'finalize', label: 'Finalize', number: 5 },
 ]
+
+/** Linear step order derived from STEPS — single source of truth for goNext/goBack. */
+const STEP_ORDER: WizardStep[] = STEPS.map((step) => step.id)
+
+/** sessionStorage key for a period's in-progress wizard state (BTB-192 session resume). */
+const storageKeyFor = (period: string) => `periodClose:${period}`
 
 export interface PeriodCloseWizardProps {
   /** Current user ID for audit trail */
@@ -61,8 +68,17 @@ export const PeriodCloseWizard: React.FC<PeriodCloseWizardProps> = ({
   const { acknowledgeAnomaly, isPending: isAcknowledging } = useAcknowledgeAnomaly()
   const { finalizePeriodClose, isPending: isFinalizing, error: finalizeError } = useFinalizePeriodClose()
 
+  // Set when a session restore explicitly restores localAnomalies, so the
+  // sync-from-preview effect below doesn't immediately clobber restored
+  // acknowledgments with the original (unacknowledged) preview.anomalies.
+  const justRestoredAnomaliesRef = useRef(false)
+
   // Sync local anomalies when preview changes
   useEffect(() => {
+    if (justRestoredAnomaliesRef.current) {
+      justRestoredAnomaliesRef.current = false
+      return
+    }
     if (preview?.anomalies) {
       setLocalAnomalies(preview.anomalies)
     }
@@ -92,6 +108,111 @@ export const PeriodCloseWizard: React.FC<PeriodCloseWizardProps> = ({
     const interval = setInterval(updateTimer, 60_000)
     return () => clearInterval(interval)
   }, [preview?.expiresAt])
+
+  // URL + session resume (BTB-192): step/period are reflected in the query
+  // string (never preview data — privacy rule: no data in query strings)
+  // and the wizard's in-progress state is mirrored to sessionStorage so
+  // navigating away and back resumes where the operator left off.
+  const pathname = usePathname()
+  const router = useRouter()
+  const searchParams = useSearchParams()
+
+  const goToStep = useCallback(
+    (step: WizardStep) => {
+      setCurrentStep(step)
+      if (step === 'success' || !periodDate) {
+        router.replace(pathname, { scroll: false })
+        return
+      }
+      const qs = new URLSearchParams({ step, period: periodDate }).toString()
+      router.replace(`${pathname}?${qs}`, { scroll: false })
+    },
+    [periodDate, pathname, router]
+  )
+
+  // Persist wizard state on every change. The 'success' step means the
+  // close is complete — nothing left to resume — so drop the entry instead
+  // of writing it.
+  useEffect(() => {
+    if (!periodDate) return
+    const key = storageKeyFor(periodDate)
+    if (currentStep === 'success') {
+      sessionStorage.removeItem(key)
+      return
+    }
+    try {
+      sessionStorage.setItem(key, JSON.stringify({ currentStep, preview, localAnomalies, periodDate }))
+    } catch {
+      // sessionStorage unavailable/full — resume just won't be offered.
+    }
+  }, [periodDate, currentStep, preview, localAnomalies])
+
+  // Restore once on mount, only when the URL carries a step+period pair.
+  useEffect(() => {
+    const stepParam = searchParams?.get('step')
+    const periodParam = searchParams?.get('period')
+    if (!stepParam || !periodParam || !STEP_ORDER.includes(stepParam as WizardStep)) {
+      return
+    }
+
+    const key = storageKeyFor(periodParam)
+    let raw: string | null = null
+    try {
+      raw = sessionStorage.getItem(key)
+    } catch {
+      raw = null
+    }
+
+    if (!raw) {
+      router.replace(pathname, { scroll: false })
+      return
+    }
+
+    let stored: {
+      currentStep?: WizardStep
+      preview?: PeriodClosePreview | null
+      localAnomalies?: PeriodCloseAnomaly[]
+      periodDate?: string
+    } | null = null
+    try {
+      stored = JSON.parse(raw)
+    } catch {
+      stored = null
+    }
+
+    if (!stored) {
+      try {
+        sessionStorage.removeItem(key)
+      } catch {
+        // ignore
+      }
+      router.replace(pathname, { scroll: false })
+      return
+    }
+
+    const expiresAt = stored.preview?.expiresAt
+    if (expiresAt && new Date(expiresAt).getTime() <= Date.now()) {
+      try {
+        sessionStorage.removeItem(key)
+      } catch {
+        // ignore
+      }
+      toast.error('Your period close preview has expired. Please start again.')
+      router.replace(pathname, { scroll: false })
+      return
+    }
+
+    setPeriodDate(periodParam)
+    if (stored.preview) setPreview(stored.preview)
+    if (stored.localAnomalies) {
+      justRestoredAnomaliesRef.current = true
+      setLocalAnomalies(stored.localAnomalies)
+    }
+    setCurrentStep(stepParam as WizardStep)
+    // Restore is a one-time mount effect — intentionally does not react to
+    // later changes in searchParams/pathname/router.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Calculate expected confirm text
   const expectedConfirmText = useMemo(() => {
@@ -160,11 +281,11 @@ export const PeriodCloseWizard: React.FC<PeriodCloseWizardProps> = ({
         requestedBy: userId,
       })
       setPreview(result)
-      setCurrentStep('preview')
+      goToStep('preview')
     } catch {
       // Error handled by mutation
     }
-  }, [periodDate, periodError, generatePreview, userId, resetPreview])
+  }, [periodDate, periodError, generatePreview, userId, resetPreview, goToStep])
 
   const handleAcknowledge = useCallback(
     async (anomalyId: string) => {
@@ -210,11 +331,11 @@ export const PeriodCloseWizard: React.FC<PeriodCloseWizardProps> = ({
         })),
         finalizedAt: result.finalizedAt,
       })
-      setCurrentStep('success')
+      goToStep('success')
     } catch {
       // Error handled by mutation
     }
-  }, [preview, confirmText, expectedConfirmText, finalizePeriodClose, userId])
+  }, [preview, confirmText, expectedConfirmText, finalizePeriodClose, userId, goToStep])
 
   const handleStartNew = useCallback(() => {
     setCurrentStep('select')
@@ -223,7 +344,10 @@ export const PeriodCloseWizard: React.FC<PeriodCloseWizardProps> = ({
     setLocalAnomalies([])
     setConfirmText('')
     setFinalizeResult(null)
-  }, [])
+    // Defensive: the 'success' step transition already strips the query
+    // params, but a full reset should never leave a stale URL behind.
+    router.replace(pathname, { scroll: false })
+  }, [pathname, router])
 
   // Navigation
   const canProceed = useMemo(() => {
@@ -244,20 +368,18 @@ export const PeriodCloseWizard: React.FC<PeriodCloseWizardProps> = ({
   }, [currentStep, periodDate, periodError, preview, localAnomalies, confirmText, expectedConfirmText])
 
   const goNext = useCallback(() => {
-    const stepOrder: WizardStep[] = ['select', 'preview', 'movement', 'anomalies', 'finalize']
-    const currentIndex = stepOrder.indexOf(currentStep)
-    if (currentIndex < stepOrder.length - 1) {
-      setCurrentStep(stepOrder[currentIndex + 1])
+    const currentIndex = STEP_ORDER.indexOf(currentStep)
+    if (currentIndex < STEP_ORDER.length - 1) {
+      goToStep(STEP_ORDER[currentIndex + 1])
     }
-  }, [currentStep])
+  }, [currentStep, goToStep])
 
   const goBack = useCallback(() => {
-    const stepOrder: WizardStep[] = ['select', 'preview', 'movement', 'anomalies', 'finalize']
-    const currentIndex = stepOrder.indexOf(currentStep)
+    const currentIndex = STEP_ORDER.indexOf(currentStep)
     if (currentIndex > 0) {
-      setCurrentStep(stepOrder[currentIndex - 1])
+      goToStep(STEP_ORDER[currentIndex - 1])
     }
-  }, [currentStep])
+  }, [currentStep, goToStep])
 
   // Render step content
   const renderStepContent = () => {
