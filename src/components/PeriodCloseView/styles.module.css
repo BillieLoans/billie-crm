@@ -429,6 +429,14 @@
   border-left: 4px solid var(--theme-elevation-200, #333);
 }
 
+.anomalyCard.severityinfo {
+  border-left-color: #60a5fa;
+}
+
+.anomalyCard.severitywarning {
+  border-left-color: #fbbf24;
+}
+
 .anomalyCard.severitylow {
   border-left-color: #60a5fa;
 }
@@ -459,6 +467,16 @@
   padding: 0.125rem 0.5rem;
   border-radius: 4px;
   text-transform: uppercase;
+}
+
+.severityBadge.info {
+  background: rgba(96, 165, 250, 0.2);
+  color: #60a5fa;
+}
+
+.severityBadge.warning {
+  background: rgba(251, 191, 36, 0.2);
+  color: #fbbf24;
 }
 
 .severityBadge.low {
