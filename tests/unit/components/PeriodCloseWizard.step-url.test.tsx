@@ -215,4 +215,134 @@ describe('PeriodCloseWizard — URL-addressable step + session resume (BTB-192)'
 
     expect(await screen.findByText(/Acknowledged by Test User/)).toBeInTheDocument()
   })
+
+  it('regression: a restored preview:null/localAnomalies:[] snapshot must not swallow the next real preview\'s anomaly resync (ack gate stays honest)', async () => {
+    // Reproduces the reviewer-found bug: restoring from a 'select'-step
+    // snapshot (no preview generated yet) used to arm the "skip next
+    // resync" guard on an empty localAnomalies array. When a real preview
+    // with anomalies was then generated, the sync effect's one-shot skip
+    // consumed itself on that resync instead of populating localAnomalies —
+    // leaving it empty (and the un-acknowledged-anomaly gate silently
+    // satisfied) even though the preview had a real, unacknowledged anomaly.
+    mockSearch = `step=select&period=${PERIOD}`
+    sessionStorage.setItem(
+      storageKey(PERIOD),
+      JSON.stringify({ currentStep: 'select', preview: null, localAnomalies: [], periodDate: PERIOD })
+    )
+    mockGeneratePreview.mockResolvedValueOnce(buildPreview({ anomalies: [ANOMALY], anomalyCount: 1 }))
+
+    renderWizard()
+
+    // Restored onto 'select' with the period already chosen from storage.
+    const generateBtn = await screen.findByTestId('generate-preview-btn')
+    await waitFor(() => expect(generateBtn).not.toBeDisabled())
+    fireEvent.click(generateBtn)
+
+    // preview step
+    let continueBtn = await screen.findByRole('button', { name: 'Continue →' })
+    await waitFor(() => expect(continueBtn).not.toBeDisabled())
+    fireEvent.click(continueBtn)
+
+    // movement step
+    continueBtn = await screen.findByRole('button', { name: 'Continue →' })
+    await waitFor(() => expect(continueBtn).not.toBeDisabled())
+    fireEvent.click(continueBtn)
+
+    // anomalies step — the real preview's anomaly must render...
+    expect(await screen.findByText('Balance mismatch detected')).toBeInTheDocument()
+    expect(screen.getByText('Acknowledged: 0 of 1')).toBeInTheDocument()
+
+    // ...and the ack gate must NOT be silently satisfied by the stale
+    // (empty) restored localAnomalies.
+    continueBtn = screen.getByRole('button', { name: 'Continue →' })
+    expect(continueBtn).toBeDisabled()
+  })
+
+  it('(low-1) cleans the URL when the query carries an unrecognized step id', async () => {
+    mockSearch = `step=bogus&period=${PERIOD}`
+
+    renderWizard()
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith(PATHNAME, { scroll: false }))
+  })
+
+  it('(low-2a) treats an unparsable expiresAt on a stored preview as expired (fail closed)', async () => {
+    mockSearch = `step=anomalies&period=${PERIOD}`
+    seedStorage({ preview: buildPreview({ expiresAt: 'not-a-real-date' }) })
+
+    renderWizard()
+
+    expect(await screen.findByLabelText('Select Period End Date')).toBeInTheDocument()
+    expect(sessionStorage.getItem(storageKey(PERIOD))).toBeNull()
+    expect(toast.error).toHaveBeenCalled()
+  })
+
+  it('(low-2b) treats a missing expiresAt on a stored preview as expired (fail closed)', async () => {
+    mockSearch = `step=anomalies&period=${PERIOD}`
+    // JSON.stringify drops keys whose value is `undefined`, so this
+    // genuinely omits expiresAt from the serialized preview — simulating a
+    // corrupted/older storage entry rather than merely setting it falsy.
+    const previewMissingExpiry = { ...buildPreview(), expiresAt: undefined }
+    sessionStorage.setItem(
+      storageKey(PERIOD),
+      JSON.stringify({
+        currentStep: 'anomalies',
+        preview: previewMissingExpiry,
+        localAnomalies: [ANOMALY],
+        periodDate: PERIOD,
+      })
+    )
+
+    renderWizard()
+
+    expect(await screen.findByLabelText('Select Period End Date')).toBeInTheDocument()
+    expect(sessionStorage.getItem(storageKey(PERIOD))).toBeNull()
+    expect(toast.error).toHaveBeenCalled()
+  })
+
+  it('(low-3) persists the expected shape to sessionStorage after advancing a step', async () => {
+    mockSearch = ''
+    const preview = buildPreview()
+    mockGeneratePreview.mockResolvedValueOnce(preview)
+
+    renderWizard()
+
+    const select = screen.getByTestId('period-select') as HTMLSelectElement
+    const periodOption = Array.from(select.querySelectorAll('option')).find(
+      (opt) => opt.value && !opt.hasAttribute('disabled')
+    ) as HTMLOptionElement
+    expect(periodOption).toBeTruthy()
+    const periodValue = periodOption.value
+
+    fireEvent.change(select, { target: { value: periodValue } })
+
+    const generateBtn = await screen.findByTestId('generate-preview-btn')
+    await waitFor(() => expect(generateBtn).not.toBeDisabled())
+    fireEvent.click(generateBtn)
+
+    // Wait for the transition to the 'preview' step to land.
+    await screen.findByRole('button', { name: 'Continue →' })
+
+    // The preview → localAnomalies sync runs in its own effect pass (one
+    // render behind the step transition), so poll rather than reading
+    // sessionStorage on the first write.
+    await waitFor(() => {
+      const raw = sessionStorage.getItem(storageKey(periodValue))
+      expect(raw).toBeTruthy()
+      const parsed = JSON.parse(raw as string)
+      expect(parsed.localAnomalies).toHaveLength(1)
+    })
+
+    const raw = sessionStorage.getItem(storageKey(periodValue))
+    const parsed = JSON.parse(raw as string)
+    expect(parsed).toMatchObject({
+      currentStep: 'preview',
+      periodDate: periodValue,
+      localAnomalies: [ANOMALY],
+    })
+    expect(parsed.preview).toMatchObject({
+      previewId: preview.previewId,
+      anomalyCount: preview.anomalyCount,
+    })
+  })
 })

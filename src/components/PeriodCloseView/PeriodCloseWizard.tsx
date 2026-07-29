@@ -151,7 +151,14 @@ export const PeriodCloseWizard: React.FC<PeriodCloseWizardProps> = ({
   useEffect(() => {
     const stepParam = searchParams?.get('step')
     const periodParam = searchParams?.get('period')
+    if (!stepParam && !periodParam) {
+      // Normal fresh load — no deep link attempted, nothing to clean.
+      return
+    }
     if (!stepParam || !periodParam || !STEP_ORDER.includes(stepParam as WizardStep)) {
+      // Malformed/partial deep link (e.g. unknown step id) — don't leave
+      // garbage in the URL.
+      router.replace(pathname, { scroll: false })
       return
     }
 
@@ -190,23 +197,33 @@ export const PeriodCloseWizard: React.FC<PeriodCloseWizardProps> = ({
       return
     }
 
-    const expiresAt = stored.preview?.expiresAt
-    if (expiresAt && new Date(expiresAt).getTime() <= Date.now()) {
-      try {
-        sessionStorage.removeItem(key)
-      } catch {
-        // ignore
+    // Fail closed: a stored preview with a missing/unparsable expiresAt is
+    // treated as expired rather than silently restored as valid. Absence of
+    // a preview entirely (e.g. still on 'select') isn't an expiry concern.
+    if (stored.preview) {
+      const expiresAtMs = new Date(stored.preview.expiresAt ?? '').getTime()
+      if (Number.isNaN(expiresAtMs) || expiresAtMs <= Date.now()) {
+        try {
+          sessionStorage.removeItem(key)
+        } catch {
+          // ignore
+        }
+        toast.error('Your period close preview has expired. Please start again.')
+        router.replace(pathname, { scroll: false })
+        return
       }
-      toast.error('Your period close preview has expired. Please start again.')
-      router.replace(pathname, { scroll: false })
-      return
     }
 
     setPeriodDate(periodParam)
     if (stored.preview) setPreview(stored.preview)
-    if (stored.localAnomalies) {
+    if (stored.localAnomalies) setLocalAnomalies(stored.localAnomalies)
+    // Only arm the "skip the next resync" guard when we restored BOTH a
+    // preview and its localAnomalies together — otherwise the guard can get
+    // stuck armed (preview stays null/undefined so the sync effect's deps
+    // never change to consume it) and silently swallow the next *real*
+    // preview's anomaly resync, satisfying the ack gate without any acks.
+    if (stored.preview && stored.localAnomalies) {
       justRestoredAnomaliesRef.current = true
-      setLocalAnomalies(stored.localAnomalies)
     }
     setCurrentStep(stepParam as WizardStep)
     // Restore is a one-time mount effect — intentionally does not react to
