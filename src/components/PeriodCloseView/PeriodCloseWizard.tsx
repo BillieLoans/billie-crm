@@ -231,13 +231,15 @@ export const PeriodCloseWizard: React.FC<PeriodCloseWizardProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Calculate expected confirm text
+  // Calculate expected confirm text. Journals post on a movement basis
+  // computed live at finalization — the phrase says so explicitly rather
+  // than implying the reviewed balances above are what gets posted.
   const expectedConfirmText = useMemo(() => {
     if (!periodDate) return ''
     const date = new Date(periodDate)
     const month = date.toLocaleString('en-US', { month: 'short' }).toUpperCase()
     const year = date.getFullYear()
-    return `CLOSE ${month} ${year}`
+    return `I CONFIRM FINALIZATION OF PERIOD ${month} ${year}; JOURNALS WILL POST ON A MOVEMENT BASIS`
   }, [periodDate])
 
   // Validation
@@ -748,8 +750,11 @@ export const PeriodCloseWizard: React.FC<PeriodCloseWizardProps> = ({
               </div>
             </div>
 
-            {/* Summary */}
+            {/* Closing balances — these are the preview snapshot for review only.
+                The ledger computes movement-basis journals live at finalize,
+                so these are NOT the amounts that will be posted. */}
             <div className={styles.finalSummary}>
+              <h4 className={styles.sectionTitle}>Closing balances (for review — not the posted amounts)</h4>
               <div className={styles.summaryRow}>
                 <span>Total ECL Allowance:</span>
                 <strong>{formatCurrency(preview.totalECLAllowance)}</strong>
@@ -764,30 +769,24 @@ export const PeriodCloseWizard: React.FC<PeriodCloseWizardProps> = ({
               </div>
             </div>
 
-            {/* Journal Entries Preview */}
-            {preview.journalEntries && preview.journalEntries.length > 0 && (
-              <div className={styles.section}>
-                <h4 className={styles.sectionTitle}>Journal Entries to Generate</h4>
-                <table className={styles.table}>
-                  <thead>
-                    <tr>
-                      <th>Type</th>
-                      <th>Description</th>
-                      <th className={styles.numericCol}>Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {preview.journalEntries.map((entry, idx) => (
-                      <tr key={idx}>
-                        <td>{entry.type}</td>
-                        <td>{entry.description}</td>
-                        <td className={styles.numericCol}>{formatCurrency(entry.amount)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            {/* What will actually post: the ECL provision movement, computed
+                live at finalization (movement-basis journals), not the
+                closing balances above. */}
+            <div className={styles.section}>
+              <h4 className={styles.sectionTitle}>To be posted (movement basis)</h4>
+              <div className={styles.summaryRow}>
+                <span>ECL provision movement ({(preview.eclChange ?? 0) >= 0 ? 'charge' : 'release'}):</span>
+                <strong
+                  className={(preview.eclChange ?? 0) >= 0 ? styles.changePositive : styles.changeNegative}
+                >
+                  {formatCurrency(Math.abs(preview.eclChange ?? 0))}
+                </strong>
               </div>
-            )}
+              <p className={styles.notes}>
+                Final amounts are computed at finalization from live state; write-off utilisation and
+                late-arrival accruals may adjust them.
+              </p>
+            </div>
 
             {/* Type to Confirm */}
             <div className={styles.confirmSection}>
