@@ -128,6 +128,7 @@ export const ApprovalsList: React.FC<ApprovalsListProps> = ({
           className={styles.sortSelect}
           value={sort}
           onChange={handleSortChange}
+          aria-label="Sort approvals"
           data-testid="approvals-sort"
         >
           <option value="oldest">Oldest First</option>

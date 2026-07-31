@@ -6,6 +6,7 @@ import { useExportJobs, type ExportJob, type ExportJobType, type ExportFormat } 
 import { useCreateExportJob } from '@/hooks/mutations/useCreateExportJob'
 import { useRetryExport } from '@/hooks/mutations/useRetryExport'
 import { useClosedPeriods } from '@/hooks/queries/useClosedPeriods'
+import { Modal } from '@/components/ui/Modal'
 import styles from './styles.module.css'
 
 export interface ExportCenterViewProps {
@@ -500,14 +501,7 @@ export const ExportCenterView: React.FC<ExportCenterViewProps> = ({ userId = 'un
       {/* Export Wizard Modal */}
       {wizardOpen && (
         <>
-          <div className={styles.modalOverlay} onClick={closeWizard} />
-          <div className={styles.modal} role="dialog" aria-modal="true" data-testid="export-wizard">
-            <div className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>Create Export</h2>
-              <button type="button" className={styles.closeBtn} onClick={closeWizard}>
-                ×
-              </button>
-            </div>
+          <Modal title="Create Export" onClose={closeWizard} testId="export-wizard" maxWidth="500px">
             <div className={styles.modalBody}>{renderWizardContent()}</div>
             <div className={styles.modalFooter}>
               {wizardStep === 'options' && (
@@ -546,7 +540,7 @@ export const ExportCenterView: React.FC<ExportCenterViewProps> = ({ userId = 'un
                 </>
               )}
             </div>
-          </div>
+          </Modal>
         </>
       )}
     </div>

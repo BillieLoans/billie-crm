@@ -6,6 +6,7 @@ import { CLEARABLE_REASONS, REASONS_REQUIRING_APPROVAL } from '@/lib/events/conf
 import type { ClearableReason } from '@/lib/events/config'
 import { formatBlockReason } from '@/lib/reapplicationBlock'
 import { useRequestBlockClear } from '@/hooks/mutations/useRequestBlockClear'
+import { Modal } from '@/components/ui/Modal'
 import styles from './BlockClear.module.css'
 
 export interface ClearBlockModalProps {
@@ -39,7 +40,6 @@ export function ClearBlockModal({
   customerName,
 }: ClearBlockModalProps) {
   const { requestAsync, isPending } = useRequestBlockClear()
-  const modalRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const [justification, setJustification] = useState('')
@@ -52,15 +52,7 @@ export function ClearBlockModal({
     }
   }, [isOpen])
 
-  // Keyboard handler: Escape closes the modal (unless a submission is in-flight).
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === 'Escape' && !isPending) {
-        onClose()
-      }
-    },
-    [isPending, onClose],
-  )
+  // Escape handling now comes from the shared Modal primitive, gated on isPending.
 
   // The button only mounts this modal for a clearable reason; guard defensively anyway.
   const reasonToClear =
@@ -110,36 +102,15 @@ export function ClearBlockModal({
   if (!isOpen || reasonToClear == null) return null
 
   return (
-    <div
-      className={styles.modalOverlay}
-      onClick={isPending ? undefined : onClose}
-      onKeyDown={handleKeyDown}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="clear-block-modal-title"
-      data-testid="clear-block-modal"
+    <Modal
+      title="Clear Re-application Block"
+      onClose={onClose}
+      dismissOnBackdropClick={!isPending}
+      dismissOnEscape={!isPending}
+      closeDisabled={isPending}
+      testId="clear-block-modal"
+      maxWidth="520px"
     >
-      <div
-        ref={modalRef}
-        className={styles.modalContent}
-        onClick={(e) => e.stopPropagation()}
-        role="document"
-      >
-        <div className={styles.modalHeader}>
-          <h2 id="clear-block-modal-title" className={styles.modalTitle}>
-            Clear Re-application Block
-          </h2>
-          <button
-            type="button"
-            className={styles.modalCloseBtn}
-            onClick={onClose}
-            disabled={isPending}
-            aria-label="Close modal"
-          >
-            ✕
-          </button>
-        </div>
-
         <form onSubmit={handleSubmit}>
           <div className={styles.modalBody}>
             {requiresApproval && (
@@ -150,7 +121,9 @@ export function ClearBlockModal({
             )}
 
             <div className={styles.fieldGroup}>
-              <label className={styles.fieldLabel}>This will clear</label>
+              {/* Caption for a read-only display, not a control — a <label> with no
+                  associated control is invalid HTML and announces nothing useful. */}
+              <span className={styles.fieldLabel}>This will clear</span>
               <div className={styles.checkboxList} data-testid="reason-to-clear">
                 <span>
                   <strong>{formatBlockReason(reasonToClear)}</strong>
@@ -202,7 +175,6 @@ export function ClearBlockModal({
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   )
 }

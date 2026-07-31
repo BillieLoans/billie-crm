@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import { Modal } from '@/components/ui/Modal'
 import styles from './styles.module.css'
 
 interface WriteOffModalProps {
@@ -72,12 +73,12 @@ export const WriteOffModal: React.FC<WriteOffModalProps> = ({
   }
 
   return (
-    <div className={styles.modalOverlay} onClick={onClose}>
-      <div className={styles.modal} onClick={e => e.stopPropagation()}>
-        <div className={styles.modalHeader}>
-          <h2 className={styles.modalTitle}>❌ Write Off Account</h2>
-          <button className={styles.closeBtn} onClick={onClose}>×</button>
-        </div>
+    <Modal
+      title="Write Off Account"
+      icon="❌"
+      onClose={onClose}
+      dismissOnBackdropClick={!loading}
+    >
 
         <form onSubmit={handleSubmit}>
           <div className={styles.modalBody}>
@@ -107,8 +108,11 @@ export const WriteOffModal: React.FC<WriteOffModalProps> = ({
                 </div>
 
                 <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Reason *</label>
+                  <label className={styles.formLabel} htmlFor="write-off-reason">
+                    Reason *
+                  </label>
                   <textarea
+                    id="write-off-reason"
                     className={styles.formTextarea}
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
@@ -118,8 +122,11 @@ export const WriteOffModal: React.FC<WriteOffModalProps> = ({
                 </div>
 
                 <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Approved By (Manager) *</label>
+                  <label className={styles.formLabel} htmlFor="write-off-approved-by">
+                    Approved By (Manager) *
+                  </label>
                   <input
+                    id="write-off-approved-by"
                     type="text"
                     className={styles.formInput}
                     value={approvedBy}
@@ -133,10 +140,11 @@ export const WriteOffModal: React.FC<WriteOffModalProps> = ({
                 </div>
 
                 <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>
+                  <label className={styles.formLabel} htmlFor="write-off-confirm">
                     Type &quot;WRITE OFF&quot; to confirm *
                   </label>
                   <input
+                    id="write-off-confirm"
                     type="text"
                     className={styles.formInput}
                     value={confirmText}
@@ -163,9 +171,8 @@ export const WriteOffModal: React.FC<WriteOffModalProps> = ({
               </button>
             )}
           </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </Modal>
   )
 }
 

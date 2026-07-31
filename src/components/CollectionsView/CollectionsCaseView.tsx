@@ -12,6 +12,7 @@ import { useAdvanceToNextStep } from '@/hooks/mutations/useAdvanceToNextStep'
 import { ContactNotesPanel } from '@/components/ServicingView/ContactNotes'
 import type { CollectionsCaseRow } from '@/types/collections'
 import { stateInfoFor } from './CollectionsView'
+import { Modal } from '@/components/ui/Modal'
 import styles from './styles.module.css'
 
 // =============================================================================
@@ -206,29 +207,15 @@ function FlagHardshipDialog({
   const [reason, setReason] = useState('')
 
   return (
-    <div
-      className={styles.modalOverlay}
-      onClick={isLoading ? undefined : onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="flag-hardship-title"
-      data-testid="flag-hardship-dialog"
+    <Modal
+      title="Flag hardship"
+      onClose={onClose}
+      dismissOnBackdropClick={!isLoading}
+      dismissOnEscape={!isLoading}
+      closeDisabled={isLoading}
+      testId="flag-hardship-dialog"
+      maxWidth="520px"
     >
-      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <div className={styles.modalHeader}>
-          <h2 id="flag-hardship-title" className={styles.modalTitle}>
-            Flag hardship
-          </h2>
-          <button
-            type="button"
-            className={styles.closeBtn}
-            onClick={onClose}
-            disabled={isLoading}
-            aria-label="Close"
-          >
-            ×
-          </button>
-        </div>
         <div className={styles.modalBody}>
           <div className={styles.formGroup}>
             <label className={styles.formLabel} htmlFor="hardship-reason">
@@ -259,8 +246,7 @@ function FlagHardshipDialog({
             {isLoading ? 'Flagging…' : 'Flag hardship'}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -276,29 +262,15 @@ function StopContactDialog({
   const [reason, setReason] = useState('')
 
   return (
-    <div
-      className={styles.modalOverlay}
-      onClick={isLoading ? undefined : onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="stop-contact-title"
-      data-testid="stop-contact-dialog"
+    <Modal
+      title="Stop contact"
+      onClose={onClose}
+      dismissOnBackdropClick={!isLoading}
+      dismissOnEscape={!isLoading}
+      closeDisabled={isLoading}
+      testId="stop-contact-dialog"
+      maxWidth="520px"
     >
-      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <div className={styles.modalHeader}>
-          <h2 id="stop-contact-title" className={styles.modalTitle}>
-            Stop contact
-          </h2>
-          <button
-            type="button"
-            className={styles.closeBtn}
-            onClick={onClose}
-            disabled={isLoading}
-            aria-label="Close"
-          >
-            ×
-          </button>
-        </div>
         <div className={styles.modalBody}>
           <p>This halts all further collection contact for this case.</p>
           <div className={styles.formGroup}>
@@ -330,8 +302,7 @@ function StopContactDialog({
             {isLoading ? 'Stopping…' : 'Stop contact'}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -347,29 +318,15 @@ function AdvanceConfirmModal({
   isLoading: boolean
 }) {
   return (
-    <div
-      className={styles.modalOverlay}
-      onClick={isLoading ? undefined : onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="advance-title"
-      data-testid="advance-confirm-modal"
+    <Modal
+      title="Advance to next step"
+      onClose={onClose}
+      dismissOnBackdropClick={!isLoading}
+      dismissOnEscape={!isLoading}
+      closeDisabled={isLoading}
+      testId="advance-confirm-modal"
+      maxWidth="520px"
     >
-      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <div className={styles.modalHeader}>
-          <h2 id="advance-title" className={styles.modalTitle}>
-            Advance to next step
-          </h2>
-          <button
-            type="button"
-            className={styles.closeBtn}
-            onClick={onClose}
-            disabled={isLoading}
-            aria-label="Close"
-          >
-            ×
-          </button>
-        </div>
         <div className={styles.modalBody}>
           <p>What the customer will experience at rung {preview.rung}:</p>
           <div className={styles.previewCard} data-testid="advance-preview-card">
@@ -401,8 +358,7 @@ function AdvanceConfirmModal({
             {isLoading ? 'Advancing…' : 'Confirm advance'}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }
 

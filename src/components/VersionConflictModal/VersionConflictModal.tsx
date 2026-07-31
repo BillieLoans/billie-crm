@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useEffect, useRef, useCallback } from 'react'
+import React, { useEffect, useRef } from 'react'
+import { Modal } from '@/components/ui/Modal'
 import { ERROR_MESSAGES } from '@/lib/errors/messages'
 import styles from './styles.module.css'
 
@@ -54,84 +55,31 @@ export const VersionConflictModal: React.FC<VersionConflictModalProps> = ({
   isRefreshing = false,
   preservedChanges,
 }) => {
-  const modalRef = useRef<HTMLDivElement>(null)
   const refreshBtnRef = useRef<HTMLButtonElement>(null)
 
-  // Focus refresh button when modal opens
+  // Refresh & Retry is the recommended action, so it takes initial focus rather
+  // than the first control. Focus trapping, Escape and focus restoration all come
+  // from the shared Modal primitive.
   useEffect(() => {
     if (isOpen) {
-      setTimeout(() => refreshBtnRef.current?.focus(), 0)
+      const id = setTimeout(() => refreshBtnRef.current?.focus(), 0)
+      return () => clearTimeout(id)
     }
   }, [isOpen])
-
-  // Focus trap: keep focus within modal
-  useEffect(() => {
-    if (!isOpen) return
-
-    const handleTabKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Tab' || !modalRef.current) return
-
-      const focusableElements = modalRef.current.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), [tabindex]:not([tabindex="-1"])'
-      )
-      const firstElement = focusableElements[0]
-      const lastElement = focusableElements[focusableElements.length - 1]
-
-      if (e.shiftKey && document.activeElement === firstElement) {
-        e.preventDefault()
-        lastElement?.focus()
-      } else if (!e.shiftKey && document.activeElement === lastElement) {
-        e.preventDefault()
-        firstElement?.focus()
-      }
-    }
-
-    document.addEventListener('keydown', handleTabKey)
-    return () => document.removeEventListener('keydown', handleTabKey)
-  }, [isOpen])
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === 'Escape' && !isRefreshing) {
-        onClose()
-      }
-    },
-    [isRefreshing, onClose]
-  )
 
   if (!isOpen) return null
 
   return (
-    <div
-      className={styles.modalOverlay}
-      onClick={isRefreshing ? undefined : onClose}
-      onKeyDown={handleKeyDown}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="version-conflict-title"
-      data-testid="version-conflict-modal"
+    <Modal
+      title="Data Changed"
+      icon="⚠️"
+      onClose={onClose}
+      dismissOnBackdropClick={!isRefreshing}
+      dismissOnEscape={!isRefreshing}
+      closeDisabled={isRefreshing}
+      testId="version-conflict-modal"
+      maxWidth="480px"
     >
-      <div
-        ref={modalRef}
-        className={styles.modalContent}
-        onClick={(e) => e.stopPropagation()}
-        role="document"
-      >
-        <div className={styles.modalHeader}>
-          <h2 id="version-conflict-title" className={styles.modalTitle}>
-            <span className={styles.warningIcon}>⚠️</span>
-            Data Changed
-          </h2>
-          <button
-            type="button"
-            className={styles.modalCloseBtn}
-            onClick={onClose}
-            disabled={isRefreshing}
-            aria-label="Close modal"
-          >
-            ✕
-          </button>
-        </div>
 
         <div className={styles.modalBody}>
           <p className={styles.modalMessage}>{ERROR_MESSAGES.VERSION_CONFLICT}</p>
@@ -170,8 +118,7 @@ export const VersionConflictModal: React.FC<VersionConflictModalProps> = ({
             {isRefreshing ? '🔄 Refreshing...' : '🔄 Refresh & Retry'}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }
 

@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
+import { Modal } from '@/components/ui/Modal'
 import styles from './styles.module.css'
 
 interface AdjustmentModalProps {
@@ -64,12 +65,12 @@ export const AdjustmentModal: React.FC<AdjustmentModalProps> = ({
   }
 
   return (
-    <div className={styles.modalOverlay} onClick={onClose}>
-      <div className={styles.modal} onClick={e => e.stopPropagation()}>
-        <div className={styles.modalHeader}>
-          <h2 className={styles.modalTitle}>⚖️ Manual Adjustment</h2>
-          <button className={styles.closeBtn} onClick={onClose}>×</button>
-        </div>
+    <Modal
+      title="Manual Adjustment"
+      icon="⚖️"
+      onClose={onClose}
+      dismissOnBackdropClick={!loading}
+    >
 
         <form onSubmit={handleSubmit}>
           <div className={styles.modalBody}>
@@ -84,8 +85,11 @@ export const AdjustmentModal: React.FC<AdjustmentModalProps> = ({
             ) : (
               <>
                 <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Adjustment Type *</label>
+                  <label className={styles.formLabel} htmlFor="adjustment-type">
+                    Adjustment Type *
+                  </label>
                   <select
+                    id="adjustment-type"
                     className={styles.formSelect}
                     value={adjustmentType}
                     onChange={(e) => setAdjustmentType(e.target.value as 'principal' | 'fee')}
@@ -97,8 +101,16 @@ export const AdjustmentModal: React.FC<AdjustmentModalProps> = ({
                 </div>
 
                 <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Direction *</label>
-                  <div style={{ display: 'flex', gap: '1rem' }}>
+                  {/* A group of radios has no single control to label, so the caption is
+                      a span and the group carries the accessible name (ARIA APG radiogroup). */}
+                  <span className={styles.formLabel} id="adjustment-direction-label">
+                    Direction *
+                  </span>
+                  <div
+                    role="radiogroup"
+                    aria-labelledby="adjustment-direction-label"
+                    style={{ display: 'flex', gap: '1rem' }}
+                  >
                     <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
                       <input
                         type="radio"
@@ -121,8 +133,11 @@ export const AdjustmentModal: React.FC<AdjustmentModalProps> = ({
                 </div>
 
                 <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Amount *</label>
+                  <label className={styles.formLabel} htmlFor="adjustment-amount">
+                    Amount *
+                  </label>
                   <input
+                    id="adjustment-amount"
                     type="number"
                     className={styles.formInput}
                     value={amount}
@@ -135,8 +150,11 @@ export const AdjustmentModal: React.FC<AdjustmentModalProps> = ({
                 </div>
 
                 <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Reason *</label>
+                  <label className={styles.formLabel} htmlFor="adjustment-reason">
+                    Reason *
+                  </label>
                   <textarea
+                    id="adjustment-reason"
                     className={styles.formInput}
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
@@ -148,8 +166,11 @@ export const AdjustmentModal: React.FC<AdjustmentModalProps> = ({
                 </div>
 
                 <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Authorized By</label>
+                  <label className={styles.formLabel} htmlFor="adjustment-authorized-by">
+                    Authorized By
+                  </label>
                   <input
+                    id="adjustment-authorized-by"
                     type="text"
                     className={styles.formInput}
                     value={authorizedBy}
@@ -179,9 +200,8 @@ export const AdjustmentModal: React.FC<AdjustmentModalProps> = ({
               </button>
             )}
           </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </Modal>
   )
 }
 

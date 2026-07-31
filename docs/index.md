@@ -31,6 +31,7 @@
 
 -   [**Product Requirements (PRD)**](./prd.md) - User journeys, FRs, NFRs
 -   [**UX Design Specification**](./ux-design-specification.md) - Design system, patterns, flows
+-   [**UX Standards (conformance)**](./ux-standards.md) - WCAG 2.2 AA floor, ARIA APG contracts, review checklist
 -   [**Architecture Decision Document**](./architecture.md) - Technology decisions, patterns, structure
 -   [**Project Context (AI Agents)**](./project_context.md) - Critical rules for implementation
 -   [**Epics & User Stories**](./epics.md) - Implementation backlog (22 stories, 5 epics)

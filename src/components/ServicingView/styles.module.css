@@ -780,7 +780,9 @@
   z-index: 100;
 }
 
-.txBackButton:hover::after {
+/* SC 1.4.13: the tooltip must also appear on keyboard focus, not hover alone. */
+.txBackButton:hover::after,
+.txBackButton:focus-visible::after {
   opacity: 1;
   visibility: visible;
   transition-delay: 0.2s; /* 200ms delay - much faster than native ~500ms */

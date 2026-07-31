@@ -81,7 +81,9 @@ Payload's pg adapter generates child tables for `type: 'array'` fields and flatt
 
 **Role-based access**: Four roles — `admin`, `supervisor`, `operations`, `readonly`. Access helpers in `src/lib/access.ts`. Non-admin users cannot see raw Payload collections in the sidebar (`hideFromNonAdmins`). Approval actions require `hasApprovalAuthority` (admin or supervisor).
 
-**Middleware workaround**: `src/middleware.ts` intercepts `/admin` and `/admin/login` to fix a Payload 3.45.0 redirect loop bug. Routes authenticated users to `/admin/dashboard`. TODO in code to remove when Payload is upgraded.
+**Edge proxy**: `src/proxy.ts` (renamed from `middleware.ts` in Next 16 — there is no `src/middleware.ts`) handles Cloudflare origin verification plus the `/admin` and `/admin/login` interception that routes authenticated users to `/admin/dashboard`.
+
+**Reserved admin paths**: Payload owns `/admin/collections/*` for its built-in database-collection screens. A custom view registered at `/collections` is shadowed by it, and hitting `/admin/collections` bare produces a redirect loop. The collections queue therefore lives at `/admin/collections-queue` — see the note on the `collections` view in `payload.config.ts`. Check for the same collision before adding any new custom view path.
 
 **Locale**: Australian locale throughout — AUD currency, en-AU date formats. Use shared formatters from `src/lib/formatters.ts`.
 
@@ -108,6 +110,7 @@ Ledger operations live under `api/ledger/` (repayment, waive-fee, write-off, lat
 - **Test files**: Unit tests in `tests/unit/**/*.test.ts(x)`, integration tests in `tests/int/**/*.int.spec.ts`, e2e in `tests/e2e/`. Test helpers in `tests/utils/`.
 - **Vitest config**: `tests/utils/globalSetup.ts` spins up a real Postgres container via `@testcontainers/postgresql` and runs Payload's `push:true` schema sync before any test executes. Tests run sequentially (no file parallelism) since the pg pool is shared. Uses jsdom environment.
 - **Generated files**: `src/payload-types.ts` and `src/app/(payload)/admin/importMap.js` are auto-generated — run `pnpm generate:types` and `pnpm generate:importmap` after changing collections or registered components
+- **UI work**: `docs/ux-standards.md` is the conformance floor for any change touching UI — WCAG 2.2 AA, ARIA APG patterns for custom widgets, error-summary + stepped flows for irreversible money movement, and a PR checklist. It overrides `docs/ux-design-specification.md` (a design brief) wherever the two conflict on conformance.
 
 ## Environment
 

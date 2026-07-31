@@ -3,6 +3,7 @@
 import { useState, useCallback, useMemo } from 'react'
 import { useTransactions, TRANSACTION_TYPES, type Transaction } from '@/hooks/queries/useTransactions'
 import { CopyButton } from '@/components/ui'
+import { formatCurrency } from '@/lib/formatters'
 import styles from './styles.module.css'
 
 export interface TransactionHistoryProps {
@@ -18,11 +19,6 @@ export interface TransactionHistoryProps {
 }
 
 // Hoisted for performance
-const currencyFormatter = new Intl.NumberFormat('en-AU', {
-  style: 'currency',
-  currency: 'AUD',
-  signDisplay: 'exceptZero',
-})
 
 const dateFormatter = new Intl.DateTimeFormat('en-AU', {
   day: '2-digit',
@@ -41,11 +37,6 @@ function formatDate(dateString: string): string {
   } catch {
     return '—'
   }
-}
-
-function formatCurrency(amount: string): string {
-  const num = parseFloat(amount || '0')
-  return currencyFormatter.format(num)
 }
 
 const TYPE_COLORS: Record<string, string> = {

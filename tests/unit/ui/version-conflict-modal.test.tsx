@@ -104,7 +104,7 @@ describe('VersionConflictModal', () => {
     it('should call onClose when X button is clicked', () => {
       render(<VersionConflictModal {...defaultProps} />)
 
-      fireEvent.click(screen.getByRole('button', { name: 'Close modal' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }))
 
       expect(defaultProps.onClose).toHaveBeenCalledTimes(1)
     })
@@ -122,14 +122,14 @@ describe('VersionConflictModal', () => {
 
       expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
       expect(screen.getByTestId('refresh-button')).toBeDisabled()
-      expect(screen.getByRole('button', { name: 'Close modal' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Close' })).toBeDisabled()
     })
 
     it('should not call onClose on overlay click when isRefreshing', () => {
       render(<VersionConflictModal {...defaultProps} isRefreshing />)
 
-      // Click overlay
-      fireEvent.click(screen.getByTestId('version-conflict-modal'))
+      // Click the backdrop, which is the dialog's parent element
+      fireEvent.click(screen.getByTestId('version-conflict-modal').parentElement!)
 
       expect(defaultProps.onClose).not.toHaveBeenCalled()
     })
@@ -139,7 +139,7 @@ describe('VersionConflictModal', () => {
     it('should close on Escape key press', async () => {
       render(<VersionConflictModal {...defaultProps} />)
 
-      fireEvent.keyDown(screen.getByTestId('version-conflict-modal'), { key: 'Escape' })
+      fireEvent.keyDown(document, { key: 'Escape' })
 
       expect(defaultProps.onClose).toHaveBeenCalledTimes(1)
     })
@@ -147,7 +147,7 @@ describe('VersionConflictModal', () => {
     it('should not close on Escape when isRefreshing', async () => {
       render(<VersionConflictModal {...defaultProps} isRefreshing />)
 
-      fireEvent.keyDown(screen.getByTestId('version-conflict-modal'), { key: 'Escape' })
+      fireEvent.keyDown(document, { key: 'Escape' })
 
       expect(defaultProps.onClose).not.toHaveBeenCalled()
     })
@@ -157,8 +157,8 @@ describe('VersionConflictModal', () => {
     it('should close when clicking overlay', () => {
       render(<VersionConflictModal {...defaultProps} />)
 
-      // Click the overlay (not the modal content)
-      fireEvent.click(screen.getByTestId('version-conflict-modal'))
+      // Click the backdrop (not the modal content)
+      fireEvent.click(screen.getByTestId('version-conflict-modal').parentElement!)
 
       expect(defaultProps.onClose).toHaveBeenCalledTimes(1)
     })
@@ -180,7 +180,9 @@ describe('VersionConflictModal', () => {
       const modal = screen.getByTestId('version-conflict-modal')
       expect(modal).toHaveAttribute('role', 'dialog')
       expect(modal).toHaveAttribute('aria-modal', 'true')
-      expect(modal).toHaveAttribute('aria-labelledby', 'version-conflict-title')
+      expect(modal).toHaveAccessibleName('Data Changed')
+      // The backdrop must not carry the dialog role.
+      expect(modal.parentElement).toHaveAttribute('role', 'presentation')
     })
 
     it('should have refresh button focusable when modal opens', () => {

@@ -1,0 +1,26 @@
+/**
+ * Admin-scoped design token overrides.
+ *
+ * Muted-text contrast — docs/ux-standards.md §1.2 (WCAG SC 1.4.3).
+ *
+ * Payload's `--theme-elevation-500` is #808080 in the light theme. Used as a
+ * text colour it measures 3.94:1 on white and 3.31:1 on the #ebebeb tile
+ * background — both short of the 4.5:1 required for body text. axe flagged it
+ * on every custom view (dashboard, accounts, approvals, collections, exports,
+ * investigation, ecl-config, period-close).
+ *
+ * 229 of its 242 uses in this app are `color:` declarations (the other 4 are
+ * borders), so the token itself is the defect rather than the 52 components
+ * that consume it. Overriding it here fixes every failing site at once.
+ *
+ * #6a6a6a is the lightest grey clearing 4.5:1 against the darkest background it
+ * sits on (#ebebeb → 4.53:1); on white it gives 5.63:1. Going darker would cost
+ * more visual hierarchy than the standard requires.
+ *
+ * Scoped to the light theme only: Payload defines its own dark-theme value and
+ * that palette has not been measured. Verify dark mode separately.
+ */
+:root:not([data-theme='dark']),
+:root[data-theme='light'] {
+  --theme-elevation-500: #6a6a6a;
+}

@@ -3,6 +3,7 @@
 import React, { useState } from 'react'
 import { useECLAllowance } from '@/hooks/queries/useECLAllowance'
 import { CarryingAmountModal } from './CarryingAmountModal'
+import { formatCurrency } from '@/lib/formatters'
 import styles from './ecl-tab.module.css'
 
 export interface ECLTabProps {
@@ -13,14 +14,6 @@ export interface ECLTabProps {
 /**
  * Format currency for display
  */
-function formatCurrency(amount: string): string {
-  const num = parseFloat(amount)
-  return new Intl.NumberFormat('en-AU', {
-    style: 'currency',
-    currency: 'AUD',
-  }).format(num)
-}
-
 /**
  * Format percentage for display
  */

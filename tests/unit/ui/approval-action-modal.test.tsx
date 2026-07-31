@@ -131,7 +131,7 @@ describe('ApprovalActionModal', () => {
       const onClose = vi.fn()
       render(<ApprovalActionModal {...defaultProps} onClose={onClose} />)
       
-      fireEvent.click(screen.getByLabelText('Close modal'))
+      fireEvent.click(screen.getByLabelText('Close'))
       
       expect(onClose).toHaveBeenCalled()
     })

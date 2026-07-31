@@ -140,6 +140,13 @@ export const AddNoteDrawer: React.FC<AddNoteDrawerProps> = ({
     ],
     immediatelyRender: false,
     editable: !isPending,
+    editorProps: {
+      attributes: {
+        role: 'textbox',
+        'aria-multiline': 'true',
+        'aria-labelledby': 'add-note-content-label',
+      },
+    },
     onUpdate: ({ editor: ed }) => {
       const text = ed.getText().trim()
       setContentJSON(ed.getJSON())
@@ -280,7 +287,7 @@ export const AddNoteDrawer: React.FC<AddNoteDrawerProps> = ({
       >
         {/* Customer — read-only display */}
         <div className={styles.addNoteField}>
-          <label className={styles.addNoteLabel}>Customer</label>
+          <span className={styles.addNoteLabel}>Customer</span>
           <div className={styles.addNoteReadOnly} data-testid="customer-display">
             {customerName || customerId}
           </div>
@@ -414,9 +421,11 @@ export const AddNoteDrawer: React.FC<AddNoteDrawerProps> = ({
 
         {/* Content (Tiptap rich-text editor) */}
         <div className={styles.addNoteField}>
-          <label className={styles.addNoteLabel}>
+          {/* Tiptap renders a contenteditable, not a form control, so it is named via
+              aria-labelledby from editorProps below rather than htmlFor. */}
+          <span className={styles.addNoteLabel} id="add-note-content-label">
             Content <span className={styles.required}>*</span>
-          </label>
+          </span>
           <div className={styles.editorWrapper}>
             <div className={styles.editorToolbar} data-testid="content-toolbar" aria-label="Formatting toolbar">
               <button

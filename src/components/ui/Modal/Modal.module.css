@@ -1,0 +1,72 @@
+/**
+ * Modal primitive styles — composed from the shared modal tokens so migrated
+ * modals keep their existing appearance.
+ */
+
+.backdrop {
+  composes: modalOverlay from '../modal.module.css';
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.panel {
+  composes: modal from '../modal.module.css';
+  /* The shared .modal centres itself with position/transform; inside the flex
+     backdrop that is redundant and fights the padding, so lay it out normally. */
+  position: relative;
+  top: auto;
+  left: auto;
+  transform: none;
+  animation: modalIn 140ms ease-out;
+}
+
+/* The panel is focus target of last resort (tabIndex -1); never show a ring for
+   that, but keep rings on everything the operator actually tabs to. */
+.panel:focus {
+  outline: none;
+}
+
+.panel:focus-visible {
+  outline: 2px solid var(--theme-elevation-800, #1f2937);
+  outline-offset: 2px;
+}
+
+@keyframes modalIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel {
+    animation: none;
+  }
+}
+
+.header {
+  composes: modalHeader from '../modal.module.css';
+}
+
+.title {
+  composes: modalTitle from '../modal.module.css';
+}
+
+.icon {
+  margin-right: 0.5rem;
+}
+
+
+
+.close {
+  composes: closeBtn from '../modal.module.css';
+  /* SC 2.5.8 Target Size (Minimum): icon-only controls need 24x24 CSS px. */
+  min-width: 24px;
+  min-height: 24px;
+}
