@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, act, cleanup } from '@testing-library/react'
 import { LiveAnnouncer } from '@/components/ui/LiveAnnouncer'
 import { useAnnouncerStore } from '@/stores/announcer'
@@ -7,6 +7,11 @@ describe('LiveAnnouncer', () => {
   beforeEach(() => {
     cleanup()
     useAnnouncerStore.setState({ polite: '', assertive: '', politeSeq: 0, assertiveSeq: 0 })
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('exposes a polite status region and an assertive alert region', () => {
@@ -18,6 +23,7 @@ describe('LiveAnnouncer', () => {
   it('routes a polite announcement to the status region only', () => {
     render(<LiveAnnouncer />)
     act(() => useAnnouncerStore.getState().announce('Waive fee confirmed.', 'polite'))
+    act(() => vi.advanceTimersByTime(0))
     expect(screen.getByRole('status').textContent).toBe('Waive fee confirmed.')
     expect(screen.getByRole('alert').textContent).toBe('')
   })
@@ -25,24 +31,36 @@ describe('LiveAnnouncer', () => {
   it('routes a failure to the assertive region only', () => {
     render(<LiveAnnouncer />)
     act(() => useAnnouncerStore.getState().announce('Waive fee failed.', 'assertive'))
+    act(() => vi.advanceTimersByTime(0))
     expect(screen.getByRole('alert').textContent).toBe('Waive fee failed.')
     expect(screen.getByRole('status').textContent).toBe('')
   })
 
-  it('re-announces an identical consecutive message', () => {
-    // Screen readers ignore an unchanged region, so a second identical failure
-    // would otherwise be silent — the case where silence is most dangerous.
-    // A changed textContent alone doesn't guarantee a re-read: some screen
-    // readers only re-announce a live region on DOM node remount, which is
-    // why the region is keyed on its own lane's seq. Assert the node identity
-    // actually changes, not just the store's seq counter.
+  it('re-announces an identical consecutive message on the same stable node', () => {
+    // Node identity must be STABLE (no `key` remount) — a region inserted
+    // simultaneously with its content is unreliably announced by some screen
+    // readers, so the region must already exist in the DOM before its text
+    // changes. To still get a re-read on an unchanged string, the lane clears
+    // its text to '' and re-sets the real text on a later tick: a genuine
+    // two-phase mutation of the SAME node, not a remount that happens to
+    // already contain the text.
     render(<LiveAnnouncer />)
+
     act(() => useAnnouncerStore.getState().announce('Ledger unavailable.', 'assertive'))
-    const first = useAnnouncerStore.getState().assertiveSeq
+    act(() => vi.advanceTimersByTime(0))
     const firstNode = screen.getByRole('alert')
+    expect(firstNode.textContent).toBe('Ledger unavailable.')
+
     act(() => useAnnouncerStore.getState().announce('Ledger unavailable.', 'assertive'))
-    expect(useAnnouncerStore.getState().assertiveSeq).toBeGreaterThan(first)
-    expect(screen.getByRole('alert')).not.toBe(firstNode)
+    // Identity is unchanged, and the text has been cleared but not yet
+    // re-set — proving this is a real mutation in two steps, not a remount
+    // that lands with the text already attached.
+    expect(screen.getByRole('alert')).toBe(firstNode)
+    expect(screen.getByRole('alert').textContent).toBe('')
+
+    act(() => vi.advanceTimersByTime(0))
+    expect(screen.getByRole('alert')).toBe(firstNode)
+    expect(screen.getByRole('alert').textContent).toBe('Ledger unavailable.')
   })
 
   it('keeps the regions out of the visual layout', () => {
@@ -55,7 +73,9 @@ describe('LiveAnnouncer', () => {
   it('does not blank the assertive lane when a polite announcement follows it', () => {
     render(<LiveAnnouncer />)
     act(() => useAnnouncerStore.getState().announce('Write off failed.', 'assertive'))
+    act(() => vi.advanceTimersByTime(0))
     act(() => useAnnouncerStore.getState().announce('Repayment confirmed.', 'polite'))
+    act(() => vi.advanceTimersByTime(0))
     expect(screen.getByRole('alert').textContent).toBe('Write off failed.')
     expect(screen.getByRole('status').textContent).toBe('Repayment confirmed.')
   })
@@ -70,7 +90,9 @@ describe('LiveAnnouncer', () => {
     act(() =>
       useAnnouncerStore.getState().announce('Write off failed: Ledger unavailable.', 'assertive'),
     )
+    act(() => vi.advanceTimersByTime(0))
     act(() => useAnnouncerStore.getState().announce('Waive fee confirmed. $25.00.', 'polite'))
+    act(() => vi.advanceTimersByTime(0))
     expect(screen.getByRole('alert').textContent).toBe('Write off failed: Ledger unavailable.')
     expect(screen.getByRole('status').textContent).toBe('Waive fee confirmed. $25.00.')
   })
@@ -78,9 +100,11 @@ describe('LiveAnnouncer', () => {
   it('does not lose a confirmation when a failure follows it (confirmed-then-failed)', () => {
     render(<LiveAnnouncer />)
     act(() => useAnnouncerStore.getState().announce('Waive fee confirmed. $25.00.', 'polite'))
+    act(() => vi.advanceTimersByTime(0))
     act(() =>
       useAnnouncerStore.getState().announce('Write off failed: Ledger unavailable.', 'assertive'),
     )
+    act(() => vi.advanceTimersByTime(0))
     expect(screen.getByRole('status').textContent).toBe('Waive fee confirmed. $25.00.')
     expect(screen.getByRole('alert').textContent).toBe('Write off failed: Ledger unavailable.')
   })
@@ -89,12 +113,15 @@ describe('LiveAnnouncer', () => {
     // Guards against the "stale re-read" failure mode: a shared seq would
     // remount the (unchanged) polite region on every assertive announcement,
     // forcing a screen reader to re-read old, unchanged text as if it were
-    // new. Each lane must own its own seq.
+    // new. Each lane must own its own seq — and, independently of seq, the
+    // region node itself now never remounts at all.
     render(<LiveAnnouncer />)
     act(() => useAnnouncerStore.getState().announce('Waive fee confirmed.', 'polite'))
+    act(() => vi.advanceTimersByTime(0))
     const politeNode = screen.getByRole('status')
     const politeSeqBefore = useAnnouncerStore.getState().politeSeq
     act(() => useAnnouncerStore.getState().announce('Write off failed.', 'assertive'))
+    act(() => vi.advanceTimersByTime(0))
     expect(useAnnouncerStore.getState().politeSeq).toBe(politeSeqBefore)
     expect(screen.getByRole('status')).toBe(politeNode)
     expect(screen.getByRole('status').textContent).toBe('Waive fee confirmed.')

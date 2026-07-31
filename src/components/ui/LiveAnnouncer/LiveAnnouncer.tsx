@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { useAnnouncerStore } from '@/stores/announcer'
 import { useOptimisticAnnouncements } from './useOptimisticAnnouncements'
 import styles from './LiveAnnouncer.module.css'
@@ -12,11 +12,23 @@ import styles from './LiveAnnouncer.module.css'
  * useAnnouncerStore.getState().announce(text, urgency); optimistic mutation
  * outcomes are wired automatically by useOptimisticAnnouncements.
  *
- * Each region is keyed off its own lane's seq (not a shared one) — see
- * src/stores/announcer.ts. That keeps the two regions fully independent: an
- * assertive announcement remounts only the alert region, never the status
- * region (which would otherwise force a stale, unchanged re-read), and vice
- * versa.
+ * Both region nodes are mounted ONCE, from first paint, and keep a stable
+ * identity — no `key` prop. A live region that enters the DOM already
+ * containing its text is the classic anti-pattern: because the node and its
+ * content appear in the same commit, some screen readers (NVDA+Firefox in
+ * particular) never notice it. role="alert" is a documented exception for
+ * the assertive lane, but the polite lane has no such exception and carries
+ * this feature's headline requirement ("Balance updated to $X") — see
+ * sonner's own live region for the in-repo counter-example: it mounts once
+ * and only ever mutates content inside it.
+ *
+ * To still re-announce an IDENTICAL consecutive message (a screen reader
+ * ignores a live region whose text content didn't change), each lane clears
+ * its own displayed text to '' when its own seq bumps, then re-sets the real
+ * text on a later tick — a genuine two-phase mutation of the already-mounted
+ * node, not a remount. The two lanes stay fully independent (own seq, own
+ * effect, own state) — see src/stores/announcer.ts for why a shared seq or
+ * cross-lane clear would be wrong.
  */
 export const LiveAnnouncer: React.FC = () => {
   const polite = useAnnouncerStore((s) => s.polite)
@@ -24,27 +36,32 @@ export const LiveAnnouncer: React.FC = () => {
   const assertive = useAnnouncerStore((s) => s.assertive)
   const assertiveSeq = useAnnouncerStore((s) => s.assertiveSeq)
 
+  const [politeText, setPoliteText] = useState('')
+  const [assertiveText, setAssertiveText] = useState('')
+
   useOptimisticAnnouncements()
+
+  useEffect(() => {
+    if (politeSeq === 0) return
+    setPoliteText('')
+    const id = window.setTimeout(() => setPoliteText(polite), 0)
+    return () => window.clearTimeout(id)
+  }, [politeSeq, polite])
+
+  useEffect(() => {
+    if (assertiveSeq === 0) return
+    setAssertiveText('')
+    const id = window.setTimeout(() => setAssertiveText(assertive), 0)
+    return () => window.clearTimeout(id)
+  }, [assertiveSeq, assertive])
 
   return (
     <>
-      <div
-        key={`polite-${politeSeq}`}
-        role="status"
-        aria-live="polite"
-        aria-atomic="true"
-        className={styles.visuallyHidden}
-      >
-        {polite}
+      <div role="status" aria-live="polite" aria-atomic="true" className={styles.visuallyHidden}>
+        {politeText}
       </div>
-      <div
-        key={`assertive-${assertiveSeq}`}
-        role="alert"
-        aria-live="assertive"
-        aria-atomic="true"
-        className={styles.visuallyHidden}
-      >
-        {assertive}
+      <div role="alert" aria-live="assertive" aria-atomic="true" className={styles.visuallyHidden}>
+        {assertiveText}
       </div>
     </>
   )
