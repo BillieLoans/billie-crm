@@ -136,6 +136,23 @@ async def handle_account_updated(pool: asyncpg.Pool, parsed_event: Any) -> None:
     - When a balance decrease arrives without an explicit last_payment_date,
       derive `last_payment_date`/`last_payment_amount` from the delta so the
       "Last payment" cell doesn't read "Never" forever.
+
+    Ordering (BTB-256 crm half / Task 40): account.updated.v1 carries NO
+    reliable monotonic ordering field by the time it reaches this handler.
+    ``triggered_by_transaction_id`` is an opaque ``str`` — usually the
+    ledger's globally-incrementing ``TXN-YYYY-NNNNNNNN`` id, but on the
+    disbursement path it falls back to a differently-shaped
+    ``conversation_id`` when ``disbursement_transaction_id`` is absent
+    (accountsService.event_handlers._publish_account_updated_event_from_disbursement),
+    so it isn't safely comparable across all publish sites. The chatLedger
+    envelope's ``seq`` is hardcoded to ``1`` for every domain event
+    (accountsService never passes an explicit ``seq`` for this event type),
+    so it's useless too. A hard-skip guard keyed on either would risk
+    silently dropping legitimate updates. So this only LOGS a staleness
+    warning (payload `timestamp` older than the stored projection's
+    `updated_at`) and always still applies the write — mirroring the DLQ
+    `extra_original_event_timestamp` staleness-triage convention from
+    Task 39/BTB-256 (platform half), where timestamp is informational only.
     """
     payload = parsed_event.payload
     account_id = payload.account_id
@@ -151,11 +168,37 @@ async def handle_account_updated(pool: asyncpg.Pool, parsed_event: Any) -> None:
         nonlocal existing
         if existing is None:
             existing = await pool.fetchrow(
-                "SELECT account_status, loan_terms_disbursed_date, balances_total_outstanding "
+                "SELECT account_status, loan_terms_disbursed_date, "
+                "balances_total_outstanding, updated_at "
                 "FROM loan_accounts WHERE loan_account_id = $1",
                 account_id,
             )
         return existing
+
+    # Log-only staleness warning — see the docstring's "Ordering" note for
+    # why this can't be a hard-skip guard. Never blocks/skips the write;
+    # any failure here (missing column, naive/aware datetime mismatch) is
+    # swallowed so staleness triage can never break projection updates.
+    incoming_timestamp = getattr(payload, "timestamp", None)
+    if isinstance(incoming_timestamp, datetime):
+        try:
+            row = await _load_existing()
+            stored_updated_at = row["updated_at"] if row is not None else None
+            if (
+                isinstance(stored_updated_at, datetime)
+                and incoming_timestamp < stored_updated_at
+            ):
+                log.warning(
+                    "Possible out-of-order account.updated.v1: event timestamp "
+                    "is older than the stored projection's updated_at. No "
+                    "reliable ordering field exists on this payload, so this "
+                    "is a log-only staleness warning — the write is still "
+                    "applied.",
+                    incoming_event_timestamp=incoming_timestamp.isoformat(),
+                    stored_updated_at=stored_updated_at.isoformat(),
+                )
+        except (KeyError, TypeError):
+            pass
 
     current_balance_value: float | None = None
     if payload.current_balance is not None:
