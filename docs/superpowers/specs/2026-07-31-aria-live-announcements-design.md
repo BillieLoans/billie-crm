@@ -20,14 +20,28 @@ announced.** The real gap is narrower:
 
 | Surface | State |
 |---|---|
-| 20 of 33 mutation hooks | Toast → already announced |
-| 12 mutation hooks with no toast | **Silent** |
+| 24 of 32 mutation hooks | Toast → already announced (20 directly, 4 via `useCollectionsAction`) |
+| 8 mutation hooks with no toast | **Silent** |
 | Optimistic stage transitions | **Silent** — `MutationStage` is tracked but never announced |
 | Read / loading transitions | Silent (out of scope, see below) |
 
-The silent hooks are the sharper risk: `useFlagHardship`, `useApplyStopContact`,
-`useResumeHardship` and `useAdvanceToNextStep` are **collections actions** carrying
-regulatory weight, where an operator needs certainty the action registered.
+The eight silent hooks:
+
+```
+useAcknowledgeAnomaly    useCancelConfigChange    useFinalizePeriodClose
+useRetryExport           useScheduleConfigChange  useBatchQuery
+useRandomSample          usePeriodClosePreview
+```
+
+`useFinalizePeriodClose` is the notable one — an irreversible month-end action that
+currently completes without a word.
+
+> **Correction.** An earlier draft of this spec claimed four regulated *collections*
+> actions were silent (`useFlagHardship`, `useApplyStopContact`, `useResumeHardship`,
+> `useAdvanceToNextStep`). That was wrong: they contain no literal `toast.` call
+> because they delegate to the `useCollectionsAction` factory, which toasts on both
+> success and failure. They are already announced and are **out of scope**. Counting
+> hooks by grepping for `toast.` misses factory delegation.
 
 A toast and a data announcement are different information. A toast reports the
 **event** ("Payment posted"); the spec asks for the **data consequence** ("Balance
@@ -38,7 +52,7 @@ silent rollback is otherwise invisible.
 
 | Decision | Choice | Rationale |
 |---|---|---|
-| Scope | Silent hooks + Truth Scale | Closes the regulated-action gap and delivers the spec's requirement. Reads excluded. |
+| Scope | Silent hooks + Truth Scale | Gives the 8 silent hooks a voice and delivers the spec's data-announcement requirement. Reads excluded. |
 | Which stages announce | **Settled only** (`confirmed`, `failed`) | One clear outcome per action. Announcing all four stages triples verbosity for a single click. |
 | Toast vs announcer | **Both**, data only when it changed | Toast = event, announcer = data consequence. Complementary, not duplicate. |
 | Failure urgency | **Assertive** | A silent rollback is the case that actually harms an operator. |
@@ -114,13 +128,14 @@ TDD throughout, mirroring the approach used for the Modal primitive.
    repeated identical messages still announce.
 3. **Subscriber**: fires on `confirmed` and `failed`; silent on `optimistic` and
    `submitted`; never announces the same mutation id twice.
-4. **Hooks**: the 12 silent hooks surface success and failure toasts.
+4. **Hooks**: the 8 silent hooks surface success and failure toasts.
 5. **axe**: the existing `tests/e2e/accessibility.e2e.spec.ts` covers the new markup.
 
 ## Out of scope
 
 Read and loading announcements ("13 accounts loaded") — chatty live regions get
-switched off, and reads were explicitly excluded. The 20 hooks that already toast.
+switched off, and reads were explicitly excluded. The 24 hooks that already toast,
+including the four collections actions that toast via `useCollectionsAction`.
 Overriding sonner's live region. Per-component `aria-live` on data elements: that
 would touch ~57 components and fire on every unrelated refetch.
 
