@@ -562,11 +562,42 @@ export const PeriodCloseWizard: React.FC<PeriodCloseWizardProps> = ({
               </div>
             )}
 
-            {/* Reconciliation Status */}
-            <div className={preview.reconciled ? styles.successBox : styles.warningBox}>
-              {preview.reconciled ? '✓ Reconciliation check passed' : '⚠️ Reconciliation check pending'}
-              {preview.reconciliationNotes && <p className={styles.notes}>{preview.reconciliationNotes}</p>}
-            </div>
+            {/* Reconciliation Status (BTB-249). When the platform reports the
+                dollar-integrity result (preview.integrity is defined), split it
+                from account-set parity: integrity is the authoritative
+                pass/fail signal, parity drift is informational-only routine
+                noise (accrual rows are removed when fee accrual completes).
+                Against a platform server that predates BTB-249,
+                preview.integrity is undefined and we fall back to today's
+                single banner. */}
+            {preview.integrity ? (
+              <>
+                <div
+                  className={preview.integrity.passed ? styles.integrityPassedBox : styles.integrityFailedBox}
+                >
+                  {preview.integrity.passed
+                    ? '✓ Dollar integrity: PASSED'
+                    : `Dollar integrity: FAILED (${preview.integrity.discrepancyCount} discrepanc${
+                        preview.integrity.discrepancyCount === 1 ? 'y' : 'ies'
+                      })`}
+                </div>
+                {(preview.accountSetDiscrepancyCount ?? 0) > 0 && (
+                  <div className={styles.accountSetParityBox}>
+                    Account-set parity: {preview.accountSetDiscrepancyCount} account-set discrepanc
+                    {preview.accountSetDiscrepancyCount === 1 ? 'y' : 'ies'}
+                    <p className={styles.notes}>
+                      Informational only — accrual rows are removed once fee accrual completes, so this drifts
+                      routinely and does not indicate a dollar-level problem.
+                    </p>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className={preview.reconciled ? styles.successBox : styles.warningBox}>
+                {preview.reconciled ? '✓ Reconciliation check passed' : '⚠️ Reconciliation check pending'}
+                {preview.reconciliationNotes && <p className={styles.notes}>{preview.reconciliationNotes}</p>}
+              </div>
+            )}
           </div>
         )
 

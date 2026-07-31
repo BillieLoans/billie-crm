@@ -660,6 +660,15 @@ export interface ReconciliationResult {
   accrualOnly: string[]
   isReconciled: boolean
   discrepancyCount: number
+  // BTB-249: dollar-level GL integrity check (Σ customer sub-ledger balances vs
+  // portfolio control accounts), distinct from the account-SET parity captured by
+  // isReconciled/discrepancyCount above. Plain proto3 scalars — no presence
+  // tracking, so a pre-BTB-249 platform server's unset fields decode identically
+  // to explicit integrityPassed=false/integrityDiscrepancyCount=0. See the
+  // legacy-discriminator comment in period-close-mapper.ts before reading these
+  // directly.
+  integrityPassed: boolean
+  integrityDiscrepancyCount: number
 }
 
 export interface PreviewPeriodCloseResponse {

@@ -1200,6 +1200,8 @@ message ReconciliationResult {
   repeated string accrual_only = 5;  // Account IDs only in accruals (max 100)
   bool is_reconciled = 6;        // True if all accounts match
   int32 discrepancy_count = 7;   // Total discrepancy count
+  bool integrity_passed = 8;     // True if dollar-level GL integrity check passed
+  int32 integrity_discrepancy_count = 9;  // Count of dollar-mismatch discrepancies
 }
 
 // Period close preview response
