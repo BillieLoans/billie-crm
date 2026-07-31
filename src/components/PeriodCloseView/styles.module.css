@@ -94,15 +94,23 @@
   color: var(--theme-elevation-500, #888);
 }
 
+/* Position in sequence + the numeral/checkmark glyph already carry the
+   "current"/"completed" meaning, so these badges were judged fine to keep
+   as-is — but the original white-on-#3b82f6 (3.68:1) and white-on-#22c55e
+   (2.28:1) both failed WCAG AA for text. Darkened to existing hover-state
+   tokens already used elsewhere in this file (#2563eb, #15803d is one step
+   past .finalizeBtn:hover's #16a34a) to clear 4.5:1 while staying
+   recognisably blue/green. Self-contained opaque backgrounds, so no
+   dark-theme override is needed here (unlike .progressLabel below). */
 .progressStep.current .progressNumber {
-  background: #3b82f6;
-  border-color: #3b82f6;
+  background: #2563eb;
+  border-color: #2563eb;
   color: white;
 }
 
 .progressStep.completed .progressNumber {
-  background: #22c55e;
-  border-color: #22c55e;
+  background: #15803d;
+  border-color: #15803d;
   color: white;
 }
 
@@ -113,13 +121,16 @@
   white-space: nowrap;
 }
 
+/* Plain coloured text on the theme's progressBar background (not an opaque
+   badge of its own) — needs the dark-theme override below since a single
+   colour can't hit 4.5:1 on both a near-white and a near-black surface. */
 .progressStep.current .progressLabel {
-  color: #3b82f6;
+  color: #2563eb;
   font-weight: 500;
 }
 
 .progressStep.completed .progressLabel {
-  color: #22c55e;
+  color: #15803d;
 }
 
 /* Step Content */
@@ -288,9 +299,11 @@
 .expiryBadge {
   font-size: 0.8125rem;
   padding: 0.25rem 0.75rem;
-  background: rgba(251, 191, 36, 0.2);
-  color: #fbbf24;
+  background: #fef3c7;
+  color: #78350f;
+  border-left: 4px solid #b45309;
   border-radius: 999px;
+  font-weight: 600;
 }
 
 /* Summary Cards */
@@ -327,11 +340,16 @@
 }
 
 /* Boxes */
+/* Alert boxes use opaque (non-alpha) pale backgrounds with dark, saturated
+   text so contrast is guaranteed regardless of the surrounding Payload
+   theme (light/dark) — see :global([data-theme='dark']) note below for why
+   this module can't rely on rgba-over-theme-bg tricks. */
 .warningBox {
   padding: 1rem;
-  background: rgba(251, 191, 36, 0.15);
-  color: #fbbf24;
-  border: 1px solid rgba(251, 191, 36, 0.3);
+  background: #fef3c7;
+  color: #78350f;
+  border: none;
+  border-left: 4px solid #b45309;
   border-radius: 6px;
   font-size: 0.875rem;
   margin-bottom: 1rem;
@@ -339,9 +357,10 @@
 
 .successBox {
   padding: 1rem;
-  background: rgba(52, 211, 153, 0.15);
-  color: #34d399;
-  border: 1px solid rgba(52, 211, 153, 0.3);
+  background: #ecfdf5;
+  color: #065f46;
+  border: none;
+  border-left: 4px solid #059669;
   border-radius: 6px;
   font-size: 0.875rem;
   margin-bottom: 1rem;
@@ -349,19 +368,26 @@
 
 .errorBox {
   padding: 1rem;
-  background: rgba(248, 113, 113, 0.15);
-  color: #f87171;
-  border: 1px solid rgba(248, 113, 113, 0.3);
+  background: #fef2f2;
+  color: #7f1d1d;
+  border: none;
+  border-left: 4px solid #b91c1c;
   border-radius: 6px;
   font-size: 0.875rem;
   margin-bottom: 1rem;
 }
 
+.errorBox::before {
+  content: '✕ ';
+  font-weight: 700;
+}
+
 .infoBox {
   padding: 1rem;
-  background: rgba(96, 165, 250, 0.15);
-  color: #60a5fa;
-  border: 1px solid rgba(96, 165, 250, 0.3);
+  background: #eff6ff;
+  color: #1e3a8a;
+  border: none;
+  border-left: 4px solid #2563eb;
   border-radius: 6px;
   font-size: 0.875rem;
   margin-bottom: 1rem;
@@ -385,12 +411,22 @@
   composes: summaryCard;
 }
 
+/* Movement charge/release — colour-blind-safe pair (orange vs blue, never
+   red/green, the exact confusion pair a red/green colour-blind operator
+   reported). The "+"/"-" sign and "(charge)"/"(release)" text label carry
+   the semantic; colour is a secondary reinforcement only. Text sits
+   directly on the theme's card background (no opaque box of its own), so
+   the dark-theme override below keeps it readable when --theme-elevation-*
+   flips to a near-black surface. Renders in two real elevations
+   (.movementCard = elevation-50, the finalize <strong> = elevation-100 via
+   .wizard) — colour picked to clear AAA (7:1) on the worst of the two in
+   both themes. */
 .changePositive {
-  color: #f87171;
+  color: #7c2d12;
 }
 
 .changeNegative {
-  color: #34d399;
+  color: #1e40af;
 }
 
 .changePercent {
@@ -429,29 +465,22 @@
   border-left: 4px solid var(--theme-elevation-200, #333);
 }
 
-.anomalyCard.severityinfo {
-  border-left-color: #60a5fa;
-}
-
-.anomalyCard.severitywarning {
-  border-left-color: #fbbf24;
-}
-
+/* severitylow/medium/high are legacy aliases for info/warning/critical —
+   kept in lock-step with the current pair so nothing regresses. */
+.anomalyCard.severityinfo,
 .anomalyCard.severitylow {
-  border-left-color: #60a5fa;
+  border-left-color: #2563eb;
 }
 
+.anomalyCard.severitywarning,
 .anomalyCard.severitymedium {
-  border-left-color: #fbbf24;
+  border-left-color: #b45309;
 }
 
-.anomalyCard.severityhigh {
-  border-left-color: #f87171;
-}
-
+.anomalyCard.severityhigh,
 .anomalyCard.severitycritical {
-  border-left-color: #ef4444;
-  background: rgba(248, 113, 113, 0.1);
+  border-left-color: #b91c1c;
+  background: rgba(185, 28, 28, 0.08);
 }
 
 .anomalyMeta {
@@ -469,30 +498,27 @@
   text-transform: uppercase;
 }
 
-.severityBadge.info {
-  background: rgba(96, 165, 250, 0.2);
-  color: #60a5fa;
-}
-
-.severityBadge.warning {
-  background: rgba(251, 191, 36, 0.2);
-  color: #fbbf24;
-}
-
+/* low/medium/high are legacy severity aliases for info/warning/critical —
+   kept identical to the current pair so nothing regresses. Critical/high
+   additionally get font-weight 700 so severity reads as text+weight, not
+   hue alone. */
+.severityBadge.info,
 .severityBadge.low {
-  background: rgba(96, 165, 250, 0.2);
-  color: #60a5fa;
+  background: #eff6ff;
+  color: #1e3a8a;
 }
 
+.severityBadge.warning,
 .severityBadge.medium {
-  background: rgba(251, 191, 36, 0.2);
-  color: #fbbf24;
+  background: #fffbeb;
+  color: #713f12;
 }
 
 .severityBadge.high,
 .severityBadge.critical {
-  background: rgba(248, 113, 113, 0.2);
-  color: #f87171;
+  background: #fef2f2;
+  color: #7f1d1d;
+  font-weight: 700;
 }
 
 .anomalyType {
@@ -547,9 +573,12 @@
   cursor: not-allowed;
 }
 
+/* "✓ Acknowledged by {name}" text — icon + name already carry the meaning;
+   colour is reinforcement. Plain text on the anomalyCard's theme background,
+   so it gets the same dark-theme override treatment as .progressLabel. */
 .acknowledgedBadge {
   font-size: 0.8125rem;
-  color: #34d399;
+  color: #065f46;
 }
 
 /* Finalize Step */
@@ -568,8 +597,13 @@
   color: var(--theme-text, #fff);
 }
 
+/* "✓" glyph next to a full text description — same theme-background caveat
+   as .progressLabel/.acknowledgedBadge above. Sits on elevation-100 (via
+   .wizard, .stepContent has no bg of its own) — #15803d only cleared
+   4.21:1 there (fails AA); #166534 clears 5.98:1 on elevation-100 and
+   6.54:1 on elevation-50. */
 .checkIcon {
-  color: #22c55e;
+  color: #166534;
 }
 
 .finalSummary {
@@ -795,4 +829,43 @@
   padding: 1.5rem;
   overflow-y: auto;
   max-height: calc(100vh - 60px);
+}
+
+/* Dark-theme overrides (BTB a11y fix) ---------------------------------
+   This module is otherwise theme-blind: it's written for Payload's light
+   admin theme (the actual application default — @payloadcms/ui's
+   `defaultTheme` is 'light'), which is also where the reported low-contrast
+   bug showed up (amber-on-pale-amber, ~1.6:1). The alert boxes/badges/chip
+   above were switched to opaque pale backgrounds with dark text, so their
+   contrast is fixed regardless of theme and needs no override here.
+   What's left are elements that render plain coloured TEXT directly on one
+   of Payload's --theme-elevation-* surfaces (no opaque box of their own) —
+   for those, a single colour cannot hit 4.5:1 on both a near-white light
+   background and this module's near-black dark background, so they need a
+   light-safe base + a dark override. Real token values, confirmed against
+   node_modules/@payloadcms/ui/dist/scss/colors.scss (not eyeballed):
+   light elevation-50 #f5f5f5 / elevation-100 #ebebeb;
+   dark  elevation-50 #222222 / elevation-100 #2f2f2f. */
+:global([data-theme='dark']) .changePositive {
+  color: #fdba74;
+}
+
+:global([data-theme='dark']) .changeNegative {
+  color: #93c5fd;
+}
+
+:global([data-theme='dark']) .progressStep.current .progressLabel {
+  color: #60a5fa;
+}
+
+:global([data-theme='dark']) .progressStep.completed .progressLabel {
+  color: #22c55e;
+}
+
+:global([data-theme='dark']) .checkIcon {
+  color: #22c55e;
+}
+
+:global([data-theme='dark']) .acknowledgedBadge {
+  color: #34d399;
 }
