@@ -9,23 +9,26 @@ export interface Announcement {
 }
 
 /**
- * Human phrase for each optimistic action. Unmapped actions fall back to
- * "Action", which keeps a new mutation silent-but-safe rather than crashing or
- * announcing a raw slug.
+ * Human phrase for each optimistic action. An unmapped action makes
+ * describeSettledMutation return null, which keeps a new mutation
+ * silent-but-safe (carried by its toast alone) rather than announcing a
+ * misleading generic "Action" or a raw slug.
  */
 const ACTION_PHRASES: Record<string, string> = {
   'waive-fee': 'Waive fee',
   'record-repayment': 'Record repayment',
-  'apply-fee': 'Apply fee',
-  'write-off': 'Write off',
-  adjustment: 'Adjustment',
-  disburse: 'Disbursement',
+  'flag-hardship': 'Flag hardship',
+  'stop-contact': 'Stop contact',
+  'resume-hardship': 'Resume hardship',
+  'advance-step': 'Advance step',
 }
 
 export function describeSettledMutation(mutation: PendingMutation): Announcement | null {
   if (mutation.stage !== 'confirmed' && mutation.stage !== 'failed') return null
 
-  const subject = ACTION_PHRASES[mutation.action] ?? 'Action'
+  const subject = ACTION_PHRASES[mutation.action]
+  if (!subject) return null
+
   const failed = mutation.stage === 'failed'
   const parts: string[] = []
 

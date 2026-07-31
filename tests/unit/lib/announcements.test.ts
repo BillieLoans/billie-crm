@@ -58,9 +58,20 @@ describe('describeSettledMutation', () => {
     })
   })
 
-  it('falls back to a generic phrase for an unmapped action', () => {
-    expect(describeSettledMutation({ ...base, action: 'some-new-thing', amount: undefined }))
-      .toEqual({ text: 'Action confirmed.', urgency: 'polite' })
+  it('returns null for an unmapped action, leaving it silent-but-safe (toast-only)', () => {
+    expect(
+      describeSettledMutation({ ...base, action: 'some-new-thing', amount: undefined }),
+    ).toBeNull()
+  })
+
+  it('announces a real collections action slug with its proper phrase', () => {
+    expect(
+      describeSettledMutation({
+        ...base,
+        action: 'flag-hardship',
+        amount: undefined,
+      }),
+    ).toEqual({ text: 'Flag hardship confirmed.', urgency: 'polite' })
   })
 
   it('omits the amount clause when there is no amount', () => {
