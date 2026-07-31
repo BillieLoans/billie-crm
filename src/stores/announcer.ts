@@ -5,20 +5,30 @@ import type { AnnouncementUrgency } from '@/lib/announcements'
 
 interface AnnouncerState {
   polite: string
+  /** Bumped only when a polite announcement fires — independent of the assertive lane. */
+  politeSeq: number
   assertive: string
-  /** Bumped on every announce so an identical consecutive message still re-reads. */
-  seq: number
+  /** Bumped only when an assertive announcement fires — independent of the polite lane. */
+  assertiveSeq: number
   announce: (text: string, urgency: AnnouncementUrgency) => void
 }
 
+/**
+ * Two fully independent lanes. Each carries its own text and its own seq so
+ * that announcing on one lane can never blank or remount the other: a failed
+ * write-off followed immediately by an unrelated confirmed repayment (or
+ * vice versa) must not lose either message — see the Task 3 review for the
+ * silent-failure regression this fixes.
+ */
 export const useAnnouncerStore = create<AnnouncerState>((set) => ({
   polite: '',
+  politeSeq: 0,
   assertive: '',
-  seq: 0,
+  assertiveSeq: 0,
   announce: (text, urgency) =>
-    set((state) => ({
-      seq: state.seq + 1,
-      polite: urgency === 'polite' ? text : '',
-      assertive: urgency === 'assertive' ? text : '',
-    })),
+    set((state) =>
+      urgency === 'polite'
+        ? { polite: text, politeSeq: state.politeSeq + 1 }
+        : { assertive: text, assertiveSeq: state.assertiveSeq + 1 },
+    ),
 }))

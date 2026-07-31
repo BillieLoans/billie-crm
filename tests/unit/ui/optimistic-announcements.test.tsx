@@ -18,7 +18,7 @@ const mutation = (over: Partial<PendingMutation> = {}): PendingMutation => ({
 describe('useOptimisticAnnouncements', () => {
   beforeEach(() => {
     cleanup()
-    useAnnouncerStore.setState({ polite: '', assertive: '', seq: 0 })
+    useAnnouncerStore.setState({ polite: '', assertive: '', politeSeq: 0, assertiveSeq: 0 })
     useOptimisticStore.setState({ pendingByAccount: new Map() })
   })
 
@@ -47,8 +47,28 @@ describe('useOptimisticAnnouncements', () => {
     render(<LiveAnnouncer />)
     act(() => useOptimisticStore.getState().setPending('acc-1', mutation()))
     act(() => useOptimisticStore.getState().setStage('acc-1', 'm1', 'confirmed'))
-    const seqAfterFirst = useAnnouncerStore.getState().seq
+    const seqAfterFirst = useAnnouncerStore.getState().politeSeq
     act(() => useOptimisticStore.getState().setStage('acc-1', 'm1', 'confirmed'))
-    expect(useAnnouncerStore.getState().seq).toBe(seqAfterFirst)
+    expect(useAnnouncerStore.getState().politeSeq).toBe(seqAfterFirst)
+  })
+
+  it('does not re-announce a settled mutation still resident after unmount and remount', () => {
+    // Task 3 review, finding 2: settled mutations linger in the store for
+    // ~2s (useWaiveFee's delayed clearPending call). If the dedupe record
+    // lived on a per-instance useRef, an unmount/remount inside that window
+    // (e.g. a providers-tree remount) would start from an empty Set and
+    // re-announce an outcome the user already heard.
+    const { unmount } = render(<LiveAnnouncer />)
+    act(() => useOptimisticStore.getState().setPending('acc-1', mutation()))
+    act(() => useOptimisticStore.getState().setStage('acc-1', 'm1', 'confirmed'))
+    const seqAfterFirst = useAnnouncerStore.getState().politeSeq
+
+    unmount()
+    render(<LiveAnnouncer />)
+
+    // The mutation is still resident (never cleared) — a subsequent store
+    // write must not re-trigger the announcement.
+    act(() => useOptimisticStore.getState().setStage('acc-1', 'm1', 'confirmed'))
+    expect(useAnnouncerStore.getState().politeSeq).toBe(seqAfterFirst)
   })
 })
