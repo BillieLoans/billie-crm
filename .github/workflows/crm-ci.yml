@@ -49,7 +49,13 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # globalSetup spins up Postgres via testcontainers (Docker is available
       # on ubuntu-latest) and runs Payload's push schema sync before tests.
+      # Writes vitest-int-report.json (vitest's json reporter) alongside the
+      # human-readable output — the next step asserts a minimum test count
+      # against it so a run that silently exits 0 having tested nothing
+      # cannot pass CI. See scripts/check-test-count.mjs.
       - run: pnpm test:int
+      - name: Guard against a silent zero-test run
+        run: pnpm test:int:check-count
 
   e2e:
     name: playwright (marketing module)
