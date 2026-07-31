@@ -129,11 +129,22 @@ export function useRecordRepayment(loanAccountId?: string, accountLabel?: string
       setPending(params.loanAccountId, pendingMutation)
 
       // Return context for rollback
-      return { mutationId, loanAccountId: params.loanAccountId }
+      return { mutationId, loanAccountId: params.loanAccountId, pendingMutation }
     },
 
     onSuccess: (data, params, context) => {
       if (!context) return
+
+      // Report the settled balance so the announcer can say "Balance updated
+      // to $X" instead of just naming the action. amount is validated as
+      // strictly positive, so a successful repayment always moves the total.
+      const settledBalance = data.transaction.totalAfter
+      if (settledBalance !== undefined) {
+        setPending(context.loanAccountId, {
+          ...context.pendingMutation,
+          balanceAfter: Number(settledBalance),
+        })
+      }
 
       // Update stage to confirmed
       setStage(context.loanAccountId, context.mutationId, 'confirmed')

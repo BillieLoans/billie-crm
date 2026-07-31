@@ -1,0 +1,116 @@
+/**
+ * Task 5: useRecordRepayment must report the settled balance
+ * (transaction.totalAfter) on the pending mutation once the repayment is
+ * confirmed — and must NOT report one when nothing settled (the mutation
+ * failed and the balance is unchanged).
+ */
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { renderHook, act } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import React from 'react'
+import { useRecordRepayment } from '@/hooks/mutations/useRecordRepayment'
+import { useOptimisticStore } from '@/stores/optimistic'
+
+vi.mock('sonner', () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+    warning: vi.fn(),
+  },
+}))
+
+function createWrapper() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  })
+  return function Wrapper({ children }: { children: React.ReactNode }) {
+    return React.createElement(QueryClientProvider, { client: queryClient }, children)
+  }
+}
+
+describe('useRecordRepayment balanceAfter wiring', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.useFakeTimers()
+    global.fetch = vi.fn()
+    useOptimisticStore.setState({ pendingByAccount: new Map() })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('reports the settled totalAfter balance once the repayment is confirmed', async () => {
+    ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          success: true,
+          transaction: {
+            id: 'tx-1',
+            accountId: 'LA-1',
+            type: 'REPAYMENT',
+            typeLabel: 'Repayment',
+            date: '2026-07-31T00:00:00Z',
+            principalDelta: -40,
+            feeDelta: -10,
+            totalDelta: -50,
+            principalAfter: 400,
+            feeAfter: 0,
+            totalAfter: 400,
+            description: 'Repayment applied',
+          },
+          eventId: 'evt-1',
+          allocation: { allocatedToFees: 10, allocatedToPrincipal: 40, overpayment: 0 },
+        }),
+    })
+
+    const { result } = renderHook(() => useRecordRepayment('LA-1'), { wrapper: createWrapper() })
+
+    await act(async () => {
+      await result.current.recordRepaymentAsync({
+        loanAccountId: 'LA-1',
+        amount: 50,
+        paymentReference: 'ref-1',
+        paymentMethod: 'direct_debit',
+      })
+    })
+
+    const confirmed = useOptimisticStore
+      .getState()
+      .getPendingForAccount('LA-1')
+      .find((m) => m.action === 'record-repayment')
+
+    expect(confirmed?.stage).toBe('confirmed')
+    expect(confirmed?.balanceAfter).toBe(400)
+  })
+
+  it('does not report a balance on failure — nothing settled to report (discrimination guard)', async () => {
+    ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      json: () => Promise.resolve({ error: 'ledger_unavailable', message: 'Ledger unavailable' }),
+    })
+
+    const { result } = renderHook(() => useRecordRepayment('LA-2'), { wrapper: createWrapper() })
+
+    await act(async () => {
+      await expect(
+        result.current.recordRepaymentAsync({
+          loanAccountId: 'LA-2',
+          amount: 10,
+          paymentReference: 'ref-2',
+          paymentMethod: 'direct_debit',
+        }),
+      ).rejects.toThrow()
+    })
+
+    const failed = useOptimisticStore
+      .getState()
+      .getPendingForAccount('LA-2')
+      .find((m) => m.action === 'record-repayment')
+
+    expect(failed?.stage).toBe('failed')
+    expect(failed?.balanceAfter).toBeUndefined()
+  })
+})
