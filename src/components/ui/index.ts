@@ -22,3 +22,5 @@ export type { CopyButtonProps } from './CopyButton'
 
 export { Modal } from './Modal'
 export type { ModalProps } from './Modal'
+
+export { LiveAnnouncer } from './LiveAnnouncer'

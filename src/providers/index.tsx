@@ -12,6 +12,7 @@ import {
   CustomerSearchResult,
   LoanAccountSearchResult,
 } from '@/components/ui/CommandPalette'
+import { LiveAnnouncer } from '@/components/ui/LiveAnnouncer'
 import { LedgerStatusIndicator } from '@/components/LedgerStatus'
 import { ReadOnlyBanner } from '@/components/ReadOnlyBanner'
 import { FailedActionsBadge } from '@/components/FailedActions'
@@ -43,12 +44,8 @@ const ReadOnlyModeSync: React.FC = () => {
  * Registered inside Providers to appear on all Payload admin pages.
  */
 const GlobalCommandPalette: React.FC = () => {
-  const {
-    commandPaletteOpen,
-    setCommandPaletteOpen,
-    commandPaletteQuery,
-    setCommandPaletteQuery,
-  } = useUIStore()
+  const { commandPaletteOpen, setCommandPaletteOpen, commandPaletteQuery, setCommandPaletteQuery } =
+    useUIStore()
 
   // Register global hotkeys (Cmd+K, Ctrl+K, F7, Escape)
   useCommandPaletteHotkeys(commandPaletteOpen, setCommandPaletteOpen)
@@ -72,38 +69,48 @@ const GlobalCommandPalette: React.FC = () => {
 
   // Navigate to ServicingView when customer is selected (Story 2.1)
   // Uses window.location for full page load to ensure Payload admin template renders
-  const handleSelectCustomer = useCallback((customerId: string) => {
-    setCommandPaletteOpen(false)
-    window.location.href = `/admin/servicing/${customerId}`
-  }, [setCommandPaletteOpen])
+  const handleSelectCustomer = useCallback(
+    (customerId: string) => {
+      setCommandPaletteOpen(false)
+      window.location.href = `/admin/servicing/${customerId}`
+    },
+    [setCommandPaletteOpen],
+  )
 
   // Navigate to customer's ServicingView when account is selected
   // Uses window.location for full page load to ensure Payload admin template renders
-  const handleSelectAccount = useCallback((customerIdString: string | null) => {
-    setCommandPaletteOpen(false)
-    if (customerIdString) {
-      window.location.href = `/admin/servicing/${customerIdString}`
-    }
-  }, [setCommandPaletteOpen])
+  const handleSelectAccount = useCallback(
+    (customerIdString: string | null) => {
+      setCommandPaletteOpen(false)
+      if (customerIdString) {
+        window.location.href = `/admin/servicing/${customerIdString}`
+      }
+    },
+    [setCommandPaletteOpen],
+  )
 
   // Navigate to the Browse Accounts page with the chosen Smart View applied.
   // Full page load so the Payload admin template wraps the view correctly.
-  const handleSelectBrowseView = useCallback((viewId: string) => {
-    setCommandPaletteOpen(false)
-    window.location.href = `/admin/accounts?view=${encodeURIComponent(viewId)}`
-  }, [setCommandPaletteOpen])
+  const handleSelectBrowseView = useCallback(
+    (viewId: string) => {
+      setCommandPaletteOpen(false)
+      window.location.href = `/admin/accounts?view=${encodeURIComponent(viewId)}`
+    },
+    [setCommandPaletteOpen],
+  )
 
   // Filter Browse entries by the palette query (cheap — 8 items).
   // When the user hasn't typed anything, all Browse entries are shown.
   const browseQuery = commandPaletteQuery.trim().toLowerCase()
-  const browseEntries = browseQuery.length === 0
-    ? SMART_VIEWS
-    : SMART_VIEWS.filter(
-        (v) =>
-          v.label.toLowerCase().includes(browseQuery) ||
-          v.id.toLowerCase().includes(browseQuery) ||
-          'browse'.includes(browseQuery),
-      )
+  const browseEntries =
+    browseQuery.length === 0
+      ? SMART_VIEWS
+      : SMART_VIEWS.filter(
+          (v) =>
+            v.label.toLowerCase().includes(browseQuery) ||
+            v.id.toLowerCase().includes(browseQuery) ||
+            'browse'.includes(browseQuery),
+        )
 
   // Show error toast if search fails (in useEffect to avoid render-time side effects)
   const hasError = customerSearch.isError || accountSearch.isError
@@ -218,9 +225,7 @@ const AuthenticatedIndicators: React.FC = () => {
   )
 }
 
-export const Providers: React.FC<{ children: React.ReactNode }> = ({
-  children,
-}) => {
+export const Providers: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return (
     <QueryClientProvider>
       {/* SECURITY: Detect user changes and clear session data to prevent cross-user data leakage */}
@@ -228,9 +233,8 @@ export const Providers: React.FC<{ children: React.ReactNode }> = ({
       <AuthenticatedIndicators />
       {children}
       <Toaster position="top-right" richColors />
-      {process.env.NODE_ENV === 'development' && (
-        <ReactQueryDevtools initialIsOpen={false} />
-      )}
+      <LiveAnnouncer />
+      {process.env.NODE_ENV === 'development' && <ReactQueryDevtools initialIsOpen={false} />}
     </QueryClientProvider>
   )
 }
