@@ -399,6 +399,43 @@
   opacity: 0.9;
 }
 
+/* Dollar-integrity vs account-set-parity boxes (BTB-249) ------------------
+   `.errorBox` already is exactly the "critical" style the failed-integrity
+   case needs (opaque #fef2f2/#7f1d1d pair, ✕ glyph via ::before) — composed
+   here under a domain-specific name for call-site clarity. `.infoBox`
+   likewise already fits the parity note (opaque pale blue, non-alarming).
+   `.integrityPassedBox` is new: the operator is red/green colour-blind
+   (see the .changePositive/.changeNegative note above), so PASSED must NOT
+   use `.successBox`'s green. It uses a neutral pale-grey opaque background —
+   the same #f5f5f5 value documented as Payload's real light-theme
+   elevation-50 token in the dark-theme-overrides comment near the bottom of
+   this file — with dark, desaturated text, fixed regardless of theme like
+   the other alert boxes (no rgba-over-theme-bg, so no dark-mode override is
+   needed). Contrast ratios (WCAG relative-luminance formula, background vs
+   text):
+     .integrityPassedBox  #f5f5f5 / #1f2937  -> 13.46:1 (AAA)
+     .integrityFailedBox  #fef2f2 / #7f1d1d  ->  9.16:1 (AAA, pre-existing .errorBox pair)
+     .accountSetParityBox #eff6ff / #1e3a8a  ->  9.52:1 (AAA, pre-existing .infoBox pair)
+   All three clear WCAG AA (4.5:1 normal text) with margin. */
+.integrityPassedBox {
+  padding: 1rem;
+  background: #f5f5f5;
+  color: #1f2937;
+  border: none;
+  border-left: 4px solid #6b7280;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+}
+
+.integrityFailedBox {
+  composes: errorBox;
+}
+
+.accountSetParityBox {
+  composes: infoBox;
+}
+
 /* Movement Summary */
 .movementSummary {
   display: grid;

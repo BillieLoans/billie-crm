@@ -121,6 +121,12 @@ describe('mapPreviewResponse', () => {
     expect(result.reconciliationNotes).toBeUndefined()
     expect(result.journalEntries).toEqual([])
 
+    // This fixture's `reconciliation` object predates BTB-249 (no
+    // integrityPassed/integrityDiscrepancyCount keys) — the legacy
+    // discriminator must map `integrity` to undefined, not assert a failure.
+    expect(result.integrity).toBeUndefined()
+    expect(result.accountSetDiscrepancyCount).toBe(0)
+
     expect(result.anomalyCount).toBe(2)
     expect(result.acknowledgedCount).toBe(1)
     expect(result.anomalies).toHaveLength(2)
@@ -198,6 +204,98 @@ describe('mapPreviewResponse', () => {
     expect(result.anomalies[0].customerIdString).toBe('cust_100')
     expect(result.anomalies[1].customerIdString).toBe('cust_200')
     expect(payload.find).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('mapPreviewResponse — BTB-249 dollar-integrity vs account-set-parity split', () => {
+  const baseReconciliation = {
+    eclCount: 100,
+    accrualCount: 100,
+    inBoth: 100,
+    eclOnly: [] as string[],
+    accrualOnly: [] as string[],
+    isReconciled: true,
+    discrepancyCount: 0,
+  }
+
+  it('maps a genuine PASS: integrityPassed=true, count=0 -> integrity.passed=true', async () => {
+    const payload = mockPayload()
+    const result = await mapPreviewResponse(
+      { reconciliation: { ...baseReconciliation, integrityPassed: true, integrityDiscrepancyCount: 0 } },
+      payload,
+    )
+
+    expect(result.integrity).toEqual({ passed: true, discrepancyCount: 0 })
+  })
+
+  it('maps a genuine FAILURE: integrityPassed=false, count>=1 -> integrity.passed=false with the count carried through', async () => {
+    const payload = mockPayload()
+    const result = await mapPreviewResponse(
+      {
+        reconciliation: {
+          ...baseReconciliation,
+          isReconciled: false,
+          integrityPassed: false,
+          integrityDiscrepancyCount: 3,
+        },
+      },
+      payload,
+    )
+
+    expect(result.integrity).toEqual({ passed: false, discrepancyCount: 3 })
+  })
+
+  it('treats integrityPassed=false + count=0 as the legacy/unset discriminator -> integrity undefined', async () => {
+    // Per the platform invariant, a genuine integrity failure always carries
+    // discrepancyCount >= 1 (IntegrityResult.is_valid=False requires >= 1
+    // discrepancy; the platform sets count=len(discrepancies)). integrityPassed
+    // === false && integrityDiscrepancyCount === 0 is therefore only reachable
+    // via a pre-BTB-249 platform server whose absent proto3 scalar fields decode
+    // to their zero-values (no presence tracking) — never a real failure.
+    const payload = mockPayload()
+    const result = await mapPreviewResponse(
+      { reconciliation: { ...baseReconciliation, integrityPassed: false, integrityDiscrepancyCount: 0 } },
+      payload,
+    )
+
+    expect(result.integrity).toBeUndefined()
+  })
+
+  it('treats a reconciliation object entirely missing the new fields as legacy -> integrity undefined', async () => {
+    const payload = mockPayload()
+    const result = await mapPreviewResponse({ reconciliation: { ...baseReconciliation } }, payload)
+
+    expect(result.integrity).toBeUndefined()
+  })
+
+  it('treats a response with no reconciliation object at all as legacy -> integrity undefined, reconciled false', async () => {
+    const payload = mockPayload()
+    const result = await mapPreviewResponse({}, payload)
+
+    expect(result.integrity).toBeUndefined()
+    expect(result.reconciled).toBe(false)
+    expect(result.accountSetDiscrepancyCount).toBe(0)
+  })
+
+  it('maps accountSetDiscrepancyCount from reconciliation.discrepancyCount independently of integrity', async () => {
+    const payload = mockPayload()
+    const result = await mapPreviewResponse(
+      {
+        reconciliation: {
+          ...baseReconciliation,
+          isReconciled: false,
+          discrepancyCount: 5,
+          integrityPassed: true,
+          integrityDiscrepancyCount: 0,
+        },
+      },
+      payload,
+    )
+
+    // Set-parity drifted (5 account-set discrepancies) even though the dollar
+    // integrity check passed cleanly — these two signals are independent.
+    expect(result.accountSetDiscrepancyCount).toBe(5)
+    expect(result.integrity).toEqual({ passed: true, discrepancyCount: 0 })
   })
 })
 
