@@ -10,6 +10,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useScheduleWithStatus } from '@/hooks/queries'
 import { useUIStore } from '@/stores/ui'
+import { formatCurrency } from '@/lib/formatters'
 import styles from './styles.module.css'
 
 // =============================================================================
@@ -27,10 +28,6 @@ export interface EnhancedScheduleListProps {
 // Formatters
 // =============================================================================
 
-const currencyFormatter = new Intl.NumberFormat('en-AU', {
-  style: 'currency',
-  currency: 'AUD',
-})
 
 const dateFormatter = new Intl.DateTimeFormat('en-AU', {
   day: 'numeric',
@@ -45,12 +42,6 @@ function formatDate(dateString: string | null | undefined): string {
   } catch {
     return '—'
   }
-}
-
-function formatCurrency(value: string | number | null | undefined): string {
-  if (value === null || value === undefined) return '—'
-  const num = typeof value === 'string' ? parseFloat(value) : value
-  return isNaN(num) ? '—' : currencyFormatter.format(num)
 }
 
 // =============================================================================

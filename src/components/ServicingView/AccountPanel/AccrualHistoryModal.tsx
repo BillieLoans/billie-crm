@@ -2,6 +2,8 @@
 
 import React, { useState, useCallback } from 'react'
 import { useAccrualHistory, type AccrualEvent } from '@/hooks/queries/useAccruedYield'
+import { Modal } from '@/components/ui/Modal'
+import { formatCurrency } from '@/lib/formatters'
 import styles from './styles.module.css'
 
 // =============================================================================
@@ -23,16 +25,6 @@ export interface AccrualHistoryModalProps {
 // Formatters
 // =============================================================================
 
-const currencyFormatter = new Intl.NumberFormat('en-AU', {
-  style: 'currency',
-  currency: 'AUD',
-})
-
-function formatCurrency(value: string | undefined | null): string {
-  if (value === undefined || value === null || value === '') return '—'
-  const num = parseFloat(value)
-  return isNaN(num) ? '—' : currencyFormatter.format(num)
-}
 
 function formatDate(dateString: string | undefined): string {
   if (!dateString) return '—'
@@ -135,39 +127,16 @@ export const AccrualHistoryModal: React.FC<AccrualHistoryModalProps> = ({
   if (!isOpen) return null
 
   return (
-    <div
-      className={styles.modalOverlay}
-      onClick={onClose}
-      onKeyDown={handleKeyDown}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="accrual-history-title"
-      tabIndex={-1}
+    <Modal
+      title="Accrual History"
+      onClose={onClose}
+      testId="accrual-history-modal"
+      maxWidth="560px"
+      className={styles.accrualHistoryModalContent}
     >
-      <div
-        className={styles.accrualHistoryModalContent}
-        onClick={(e) => e.stopPropagation()}
-        data-testid="accrual-history-modal"
-      >
-        {/* Header */}
-        <div className={styles.modalHeader}>
-          <div>
-            <h2 id="accrual-history-title" className={styles.modalTitle}>
-              Accrual History
-            </h2>
-            {accountNumber && (
-              <p className={styles.accrualHistorySubtitle}>Account {accountNumber}</p>
-            )}
-          </div>
-          <button
-            type="button"
-            className={styles.modalCloseBtn}
-            onClick={onClose}
-            aria-label="Close modal"
-          >
-            ×
-          </button>
-        </div>
+        {accountNumber && (
+          <p className={styles.accrualHistorySubtitle}>Account {accountNumber}</p>
+        )}
 
         {/* Body */}
         <div className={styles.modalBody}>
@@ -273,8 +242,7 @@ export const AccrualHistoryModal: React.FC<AccrualHistoryModalProps> = ({
             </button>
           </div>
         )}
-      </div>
-    </div>
+    </Modal>
   )
 }
 

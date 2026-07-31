@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
+import { formatCurrency } from '@/lib/formatters'
 import styles from './styles.module.css'
 
 interface BalanceData {
@@ -45,14 +46,6 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({ loanAccountId, refresh
   useEffect(() => {
     fetchBalance()
   }, [fetchBalance, refreshKey])
-
-  const formatCurrency = (amount: string) => {
-    const num = parseFloat(amount || '0')
-    return new Intl.NumberFormat('en-AU', {
-      style: 'currency',
-      currency: 'AUD',
-    }).format(num)
-  }
 
   const formatDate = (timestamp: { seconds: string; nanos: number }) => {
     const date = new Date(parseInt(timestamp.seconds) * 1000)

@@ -2,6 +2,8 @@
 
 import { useState, useCallback } from 'react'
 import { useCarryingAmountBreakdown, type CarryingAmountBreakdownResponse } from '@/hooks/queries'
+import { Modal } from '@/components/ui/Modal'
+import { formatCurrency } from '@/lib/formatters'
 import styles from './styles.module.css'
 
 // =============================================================================
@@ -30,12 +32,6 @@ const dateFormatter = new Intl.DateTimeFormat('en-AU', {
   hour: '2-digit',
   minute: '2-digit',
 })
-
-function formatCurrency(value: string | undefined): string {
-  if (!value) return '—'
-  const num = parseFloat(value)
-  return isNaN(num) ? '—' : currencyFormatter.format(num)
-}
 
 function formatDate(dateString: string | undefined): string {
   if (!dateString) return '—'
@@ -119,34 +115,12 @@ export const CarryingAmountModal: React.FC<CarryingAmountModalProps> = ({
   if (!isOpen) return null
 
   return (
-    <div
-      className={styles.modalOverlay}
-      onClick={onClose}
-      onKeyDown={handleKeyDown}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="carrying-amount-title"
-      tabIndex={-1}
+    <Modal
+      title="Carrying Amount Breakdown"
+      onClose={onClose}
+      testId="carrying-amount-modal"
+      maxWidth="560px"
     >
-      <div
-        className={styles.modalContent}
-        onClick={(e) => e.stopPropagation()}
-        data-testid="carrying-amount-modal"
-      >
-        {/* Header */}
-        <div className={styles.modalHeader}>
-          <h2 id="carrying-amount-title" className={styles.modalTitle}>
-            Carrying Amount Breakdown
-          </h2>
-          <button
-            type="button"
-            className={styles.modalCloseBtn}
-            onClick={onClose}
-            aria-label="Close modal"
-          >
-            ×
-          </button>
-        </div>
 
         {/* Body */}
         <div className={styles.modalBody}>
@@ -304,8 +278,7 @@ export const CarryingAmountModal: React.FC<CarryingAmountModalProps> = ({
             </button>
           </div>
         )}
-      </div>
-    </div>
+    </Modal>
   )
 }
 

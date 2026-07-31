@@ -9,6 +9,9 @@ import 'dotenv/config'
 /**
  * See https://playwright.dev/docs/test-configuration.
  */
+const TARGET_URL = process.env.BASE_URL ?? 'http://localhost:3000'
+const TARGET_IS_LOCAL = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/.test(TARGET_URL)
+
 export default defineConfig({
   testDir: './tests/e2e',
   /* Fail the build on CI if you accidentally left test.only in the source code. */
@@ -33,9 +36,16 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-  webServer: {
-    command: 'pnpm dev',
-    reuseExistingServer: true,
-    url: 'http://localhost:3000',
-  },
+  // Only boot a local dev server when the suite is actually pointed at localhost.
+  // Previously this was unconditional, so `BASE_URL=https://demo… playwright test`
+  // would start `pnpm dev` and block waiting for it instead of running anything.
+  ...(TARGET_IS_LOCAL
+    ? {
+        webServer: {
+          command: 'pnpm dev',
+          reuseExistingServer: true,
+          url: 'http://localhost:3000',
+        },
+      }
+    : {}),
 })

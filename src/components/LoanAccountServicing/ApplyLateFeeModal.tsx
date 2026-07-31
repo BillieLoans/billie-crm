@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
+import { Modal } from '@/components/ui/Modal'
 import styles from './styles.module.css'
 
 interface ApplyLateFeeModalProps {
@@ -56,12 +57,7 @@ export const ApplyLateFeeModal: React.FC<ApplyLateFeeModalProps> = ({
   }
 
   return (
-    <div className={styles.modalOverlay} onClick={onClose}>
-      <div className={styles.modal} onClick={e => e.stopPropagation()}>
-        <div className={styles.modalHeader}>
-          <h2 className={styles.modalTitle}>⚠️ Apply Late Fee</h2>
-          <button className={styles.closeBtn} onClick={onClose}>×</button>
-        </div>
+    <Modal title="Apply Late Fee" icon="⚠️" onClose={onClose} dismissOnBackdropClick={!loading}>
 
         <form onSubmit={handleSubmit}>
           <div className={styles.modalBody}>
@@ -75,8 +71,11 @@ export const ApplyLateFeeModal: React.FC<ApplyLateFeeModalProps> = ({
             {!success && (
               <>
                 <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Fee Amount *</label>
+                  <label className={styles.formLabel} htmlFor="late-fee-amount">
+                    Fee Amount *
+                  </label>
                   <input
+                    id="late-fee-amount"
                     type="number"
                     className={styles.formInput}
                     value={feeAmount}
@@ -92,8 +91,11 @@ export const ApplyLateFeeModal: React.FC<ApplyLateFeeModalProps> = ({
                 </div>
 
                 <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Days Past Due *</label>
+                  <label className={styles.formLabel} htmlFor="late-fee-days-past-due">
+                    Days Past Due *
+                  </label>
                   <input
+                    id="late-fee-days-past-due"
                     type="number"
                     className={styles.formInput}
                     value={daysPastDue}
@@ -105,8 +107,11 @@ export const ApplyLateFeeModal: React.FC<ApplyLateFeeModalProps> = ({
                 </div>
 
                 <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Reason (Optional)</label>
+                  <label className={styles.formLabel} htmlFor="late-fee-reason">
+                    Reason (Optional)
+                  </label>
                   <textarea
+                    id="late-fee-reason"
                     className={styles.formTextarea}
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
@@ -132,9 +137,8 @@ export const ApplyLateFeeModal: React.FC<ApplyLateFeeModalProps> = ({
               </button>
             )}
           </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </Modal>
   )
 }
 

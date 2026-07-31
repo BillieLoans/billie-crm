@@ -36,6 +36,7 @@ export const ContactNoteFilters: React.FC<ContactNoteFiltersProps> = ({
         data-testid="note-topic-filter"
         value={topicFilter ?? ''}
         onChange={(e) => onTopicChange(e.target.value === '' ? null : e.target.value)}
+        aria-label="Filter notes by topic"
       >
         <option value="">All Topics</option>
         {Object.entries(NOTE_TOPIC_LABELS).map(([value, label]) => (
@@ -50,6 +51,7 @@ export const ContactNoteFilters: React.FC<ContactNoteFiltersProps> = ({
           data-testid="account-filter"
           value={accountFilter ?? ''}
           onChange={(e) => onAccountChange(e.target.value === '' ? null : e.target.value)}
+          aria-label="Filter notes by account"
         >
           <option value="">All Accounts</option>
           {accounts.map((a) => (

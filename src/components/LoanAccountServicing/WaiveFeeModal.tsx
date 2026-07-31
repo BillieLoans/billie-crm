@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import { Modal } from '@/components/ui/Modal'
 import styles from './styles.module.css'
 
 interface WaiveFeeModalProps {
@@ -74,14 +75,8 @@ export const WaiveFeeModal: React.FC<WaiveFeeModalProps> = ({
   }
 
   return (
-    <div className={styles.modalOverlay} onClick={onClose}>
-      <div className={styles.modal} onClick={e => e.stopPropagation()}>
-        <div className={styles.modalHeader}>
-          <h2 className={styles.modalTitle}>🎁 Waive Fee</h2>
-          <button className={styles.closeBtn} onClick={onClose}>×</button>
-        </div>
-
-        <form onSubmit={handleSubmit}>
+    <Modal title="Waive Fee" icon="🎁" onClose={onClose} dismissOnBackdropClick={!loading}>
+      <form onSubmit={handleSubmit}>
           <div className={styles.modalBody}>
             {error && <div className={styles.errorMessage}>{error}</div>}
             {success && (
@@ -100,8 +95,11 @@ export const WaiveFeeModal: React.FC<WaiveFeeModalProps> = ({
                 </div>
 
                 <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Waiver Amount *</label>
+                  <label className={styles.formLabel} htmlFor="waive-fee-amount">
+                    Waiver Amount *
+                  </label>
                   <input
+                    id="waive-fee-amount"
                     type="number"
                     className={styles.formInput}
                     value={waiverAmount}
@@ -118,8 +116,11 @@ export const WaiveFeeModal: React.FC<WaiveFeeModalProps> = ({
                 </div>
 
                 <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Reason *</label>
+                  <label className={styles.formLabel} htmlFor="waive-fee-reason">
+                    Reason *
+                  </label>
                   <textarea
+                    id="waive-fee-reason"
                     className={styles.formTextarea}
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
@@ -129,8 +130,11 @@ export const WaiveFeeModal: React.FC<WaiveFeeModalProps> = ({
                 </div>
 
                 <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Approved By *</label>
+                  <label className={styles.formLabel} htmlFor="waive-fee-approved-by">
+                    Approved By *
+                  </label>
                   <input
+                    id="waive-fee-approved-by"
                     type="text"
                     className={styles.formInput}
                     value={approvedBy}
@@ -161,9 +165,8 @@ export const WaiveFeeModal: React.FC<WaiveFeeModalProps> = ({
               </button>
             )}
           </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </Modal>
   )
 }
 

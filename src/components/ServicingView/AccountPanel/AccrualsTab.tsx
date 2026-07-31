@@ -4,6 +4,7 @@ import React, { useState } from 'react'
 import { useAccruedYield, useAccrualHistory } from '@/hooks/queries/useAccruedYield'
 import { useCarryingAmountBreakdown } from '@/hooks/queries/useCarryingAmountBreakdown'
 import { AccrualHistoryModal } from './AccrualHistoryModal'
+import { formatCurrency } from '@/lib/formatters'
 import styles from './accruals-tab.module.css'
 
 export interface AccrualsTabProps {
@@ -16,20 +17,6 @@ export interface AccrualsTabProps {
 /**
  * Format currency for display
  */
-function formatCurrency(amount: string | undefined | null): string {
-  if (amount === undefined || amount === null || amount === '') {
-    return '—'
-  }
-  const num = parseFloat(amount)
-  if (isNaN(num)) {
-    return '—'
-  }
-  return new Intl.NumberFormat('en-AU', {
-    style: 'currency',
-    currency: 'AUD',
-  }).format(num)
-}
-
 /**
  * Format date for display
  */

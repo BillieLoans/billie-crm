@@ -3,21 +3,12 @@
 import React from 'react'
 import { usePortfolioECL } from '@/hooks/queries/usePortfolioECL'
 import { SectionCard } from './primitives/SectionCard'
+import { formatCurrency } from '@/lib/formatters'
 import styles from './widgets.module.css'
 
 /**
  * Format currency for display
  */
-function formatCurrency(amount: string): string {
-  const num = parseFloat(amount)
-  return new Intl.NumberFormat('en-AU', {
-    style: 'currency',
-    currency: 'AUD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(num)
-}
-
 /**
  * Calculate ECL percentage of carrying amount
  */
@@ -72,7 +63,7 @@ export function ECLSummaryWidget() {
         ) : (
           <>
             <div className={styles.eclMain}>
-              <span className={styles.eclAmount}>{formatCurrency(totalEcl)}</span>
+              <span className={styles.eclAmount}>{formatCurrency(totalEcl, { fractionDigits: 0 })}</span>
               <span className={styles.eclPercent}>{eclPercent}% of portfolio</span>
             </div>
             <div className={styles.eclMeta}>

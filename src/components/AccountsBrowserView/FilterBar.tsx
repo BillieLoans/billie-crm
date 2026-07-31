@@ -16,6 +16,7 @@ import {
   type PaymentFrequency,
 } from '@/lib/account-filters'
 import { formatCurrency } from '@/lib/formatters'
+import { Modal } from '@/components/ui/Modal'
 import styles from './styles.module.css'
 
 const STATUS_LABEL: Record<AccountStatus, string> = {
@@ -401,33 +402,21 @@ const FilterModal: React.FC<FilterModalProps> = ({ initial, onApply, onClose }) 
   }
 
   return (
-    <div
-      className={styles.modalOverlay}
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Filters"
-    >
-      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <div className={styles.modalHeader}>
-          <h2 className={styles.modalTitle}>Filters</h2>
-          <button
-            type="button"
-            className={styles.modalClose}
-            onClick={onClose}
-            aria-label="Close filters"
-          >
-            ×
-          </button>
-        </div>
+    <Modal title="Filters" onClose={onClose} maxWidth="520px">
 
         <div className={styles.modalGroup}>
-          <label className={styles.modalLabel}>Status</label>
-          <div className={styles.statusChoices}>
+          {/* Toggle-button groups have no single control to label, so the caption is a
+              span and the group carries the accessible name. Selection state is exposed
+              via aria-pressed — colour alone would fail SC 1.4.1. */}
+          <span className={styles.modalLabel} id="filter-status-label">
+            Status
+          </span>
+          <div className={styles.statusChoices} role="group" aria-labelledby="filter-status-label">
             {ACCOUNT_STATUSES.map((s) => (
               <button
                 key={s}
                 type="button"
+                aria-pressed={status.includes(s)}
                 className={`${styles.statusChoice} ${status.includes(s) ? styles.selected : ''}`}
                 onClick={() => toggleStatus(s)}
               >
@@ -438,12 +427,15 @@ const FilterModal: React.FC<FilterModalProps> = ({ initial, onApply, onClose }) 
         </div>
 
         <div className={styles.modalGroup}>
-          <label className={styles.modalLabel}>Arrears state (from aging service)</label>
-          <div className={styles.statusChoices}>
+          <span className={styles.modalLabel} id="filter-arrears-label">
+            Arrears state (from aging service)
+          </span>
+          <div className={styles.statusChoices} role="group" aria-labelledby="filter-arrears-label">
             {(['any', 'true', 'false'] as const).map((choice) => (
               <button
                 key={choice}
                 type="button"
+                aria-pressed={inArrearsChoice === choice}
                 className={`${styles.statusChoice} ${inArrearsChoice === choice ? styles.selected : ''}`}
                 onClick={() => setInArrearsChoice(choice)}
               >
@@ -454,12 +446,19 @@ const FilterModal: React.FC<FilterModalProps> = ({ initial, onApply, onClose }) 
         </div>
 
         <div className={styles.modalGroup}>
-          <label className={styles.modalLabel}>Aging bucket</label>
-          <div className={styles.statusChoices}>
+          <span className={styles.modalLabel} id="filter-aging-bucket-label">
+            Aging bucket
+          </span>
+          <div
+            className={styles.statusChoices}
+            role="group"
+            aria-labelledby="filter-aging-bucket-label"
+          >
             {AGING_BUCKETS.map((b) => (
               <button
                 key={b}
                 type="button"
+                aria-pressed={agingBucket.includes(b)}
                 className={`${styles.statusChoice} ${agingBucket.includes(b) ? styles.selected : ''}`}
                 onClick={() => toggleBucket(b)}
               >
@@ -470,8 +469,11 @@ const FilterModal: React.FC<FilterModalProps> = ({ initial, onApply, onClose }) 
         </div>
 
         <div className={styles.modalGroup}>
-          <label className={styles.modalLabel}>Minimum DPD</label>
+          <label className={styles.modalLabel} htmlFor="filter-min-dpd">
+            Minimum DPD
+          </label>
           <input
+            id="filter-min-dpd"
             className={styles.modalInput}
             type="number"
             inputMode="numeric"
@@ -483,8 +485,12 @@ const FilterModal: React.FC<FilterModalProps> = ({ initial, onApply, onClose }) 
         </div>
 
         <div className={styles.modalGroup}>
-          <label className={styles.modalLabel}>Outstanding balance</label>
-          <div className={styles.modalInputs}>
+          {/* A from/to pair needs a name per input — a placeholder is not an
+              accessible name, so both fields previously announced as "edit text". */}
+          <span className={styles.modalLabel} id="filter-balance-label">
+            Outstanding balance
+          </span>
+          <div className={styles.modalInputs} role="group" aria-labelledby="filter-balance-label">
             <input
               className={styles.modalInput}
               type="number"
@@ -492,6 +498,7 @@ const FilterModal: React.FC<FilterModalProps> = ({ initial, onApply, onClose }) 
               min="0"
               step="0.01"
               placeholder="Min $"
+              aria-label="Minimum outstanding balance"
               value={minBalance}
               onChange={(e) => setMinBalance(e.target.value)}
             />
@@ -502,6 +509,7 @@ const FilterModal: React.FC<FilterModalProps> = ({ initial, onApply, onClose }) 
               min="0"
               step="0.01"
               placeholder="Max $"
+              aria-label="Maximum outstanding balance"
               value={maxBalance}
               onChange={(e) => setMaxBalance(e.target.value)}
             />
@@ -509,17 +517,21 @@ const FilterModal: React.FC<FilterModalProps> = ({ initial, onApply, onClose }) 
         </div>
 
         <div className={styles.modalGroup}>
-          <label className={styles.modalLabel}>Opened date range</label>
-          <div className={styles.modalInputs}>
+          <span className={styles.modalLabel} id="filter-opened-label">
+            Opened date range
+          </span>
+          <div className={styles.modalInputs} role="group" aria-labelledby="filter-opened-label">
             <input
               className={styles.modalInput}
               type="date"
+              aria-label="Opened from"
               value={openedFrom}
               onChange={(e) => setOpenedFrom(e.target.value)}
             />
             <input
               className={styles.modalInput}
               type="date"
+              aria-label="Opened to"
               value={openedTo}
               onChange={(e) => setOpenedTo(e.target.value)}
             />
@@ -527,17 +539,21 @@ const FilterModal: React.FC<FilterModalProps> = ({ initial, onApply, onClose }) 
         </div>
 
         <div className={styles.modalGroup}>
-          <label className={styles.modalLabel}>Disbursed date range</label>
-          <div className={styles.modalInputs}>
+          <span className={styles.modalLabel} id="filter-disbursed-label">
+            Disbursed date range
+          </span>
+          <div className={styles.modalInputs} role="group" aria-labelledby="filter-disbursed-label">
             <input
               className={styles.modalInput}
               type="date"
+              aria-label="Disbursed from"
               value={disbursedFrom}
               onChange={(e) => setDisbursedFrom(e.target.value)}
             />
             <input
               className={styles.modalInput}
               type="date"
+              aria-label="Disbursed to"
               value={disbursedTo}
               onChange={(e) => setDisbursedTo(e.target.value)}
             />
@@ -545,17 +561,21 @@ const FilterModal: React.FC<FilterModalProps> = ({ initial, onApply, onClose }) 
         </div>
 
         <div className={styles.modalGroup}>
-          <label className={styles.modalLabel}>Closed date range</label>
-          <div className={styles.modalInputs}>
+          <span className={styles.modalLabel} id="filter-closed-label">
+            Closed date range
+          </span>
+          <div className={styles.modalInputs} role="group" aria-labelledby="filter-closed-label">
             <input
               className={styles.modalInput}
               type="date"
+              aria-label="Closed from"
               value={closedFrom}
               onChange={(e) => setClosedFrom(e.target.value)}
             />
             <input
               className={styles.modalInput}
               type="date"
+              aria-label="Closed to"
               value={closedTo}
               onChange={(e) => setClosedTo(e.target.value)}
             />
@@ -563,8 +583,11 @@ const FilterModal: React.FC<FilterModalProps> = ({ initial, onApply, onClose }) 
         </div>
 
         <div className={styles.modalGroup}>
-          <label className={styles.modalLabel}>Last payment before</label>
+          <label className={styles.modalLabel} htmlFor="filter-last-payment-before">
+            Last payment before
+          </label>
           <input
+            id="filter-last-payment-before"
             className={styles.modalInput}
             type="date"
             value={lastPmtBefore}
@@ -573,8 +596,11 @@ const FilterModal: React.FC<FilterModalProps> = ({ initial, onApply, onClose }) 
         </div>
 
         <div className={styles.modalGroup}>
-          <label className={styles.modalLabel}>Closure reason</label>
+          <label className={styles.modalLabel} htmlFor="filter-closure-reason">
+            Closure reason
+          </label>
           <select
+            id="filter-closure-reason"
             className={styles.modalInput}
             value={closureReason}
             onChange={(e) => setClosureReason((e.target.value || '') as ClosureReason | '')}
@@ -589,8 +615,11 @@ const FilterModal: React.FC<FilterModalProps> = ({ initial, onApply, onClose }) 
         </div>
 
         <div className={styles.modalGroup}>
-          <label className={styles.modalLabel}>Customer status</label>
+          <label className={styles.modalLabel} htmlFor="filter-customer-status">
+            Customer status
+          </label>
           <select
+            id="filter-customer-status"
             className={styles.modalInput}
             value={customerStatus}
             onChange={(e) =>
@@ -607,8 +636,11 @@ const FilterModal: React.FC<FilterModalProps> = ({ initial, onApply, onClose }) 
         </div>
 
         <div className={styles.modalGroup}>
-          <label className={styles.modalLabel}>Payment frequency</label>
+          <label className={styles.modalLabel} htmlFor="filter-payment-frequency">
+            Payment frequency
+          </label>
           <select
+            id="filter-payment-frequency"
             className={styles.modalInput}
             value={paymentFrequency}
             onChange={(e) =>
@@ -642,7 +674,6 @@ const FilterModal: React.FC<FilterModalProps> = ({ initial, onApply, onClose }) 
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }

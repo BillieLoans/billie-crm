@@ -10,6 +10,7 @@ import { useUpdatePDRate } from '@/hooks/mutations/useUpdatePDRate'
 import { useScheduleConfigChange } from '@/hooks/mutations/useScheduleConfigChange'
 import { useCancelConfigChange } from '@/hooks/mutations/useCancelConfigChange'
 import { useTriggerPortfolioRecalc } from '@/hooks/mutations/useTriggerPortfolioRecalc'
+import { Modal } from '@/components/ui/Modal'
 import styles from './styles.module.css'
 
 export interface ECLConfigViewProps {
@@ -404,17 +405,13 @@ export const ECLConfigView: React.FC<ECLConfigViewProps> = ({
       {/* Edit Modal */}
       {editModal && (
         <>
-          <div className={styles.modalOverlay} onClick={closeEditModal} />
-          <div className={styles.modal} role="dialog" aria-modal="true" data-testid="edit-modal">
-            <div className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>
-                {modalMode === 'edit' ? 'Edit' : 'Schedule'}{' '}
-                {editModal === 'overlay' ? 'Overlay Multiplier' : `PD Rate (${editBucket})`}
-              </h2>
-              <button type="button" className={styles.closeBtn} onClick={closeEditModal}>
-                ×
-              </button>
-            </div>
+          <Modal
+            title={`${modalMode === 'edit' ? 'Edit' : 'Schedule'} ${
+              editModal === 'overlay' ? 'Overlay Multiplier' : `PD Rate (${editBucket})`
+            }`}
+            onClose={closeEditModal}
+            testId="edit-modal" maxWidth="500px"
+          >
             <div className={styles.modalBody}>
               {/* Mode Toggle */}
               <div className={styles.modeToggle}>
@@ -436,7 +433,7 @@ export const ECLConfigView: React.FC<ECLConfigViewProps> = ({
 
               {/* Current Value */}
               <div className={styles.fieldGroup}>
-                <label className={styles.fieldLabel}>Current Value</label>
+                <span className={styles.fieldLabel}>Current Value</span>
                 <p className={styles.currentValue}>
                   {editModal === 'overlay'
                     ? `${config?.overlayMultiplier.toFixed(2)}x`
@@ -520,7 +517,7 @@ export const ECLConfigView: React.FC<ECLConfigViewProps> = ({
                 </button>
               )}
             </div>
-          </div>
+          </Modal>
         </>
       )}
 
@@ -543,6 +540,7 @@ export const ECLConfigView: React.FC<ECLConfigViewProps> = ({
               value={historyFilter}
               onChange={(e) => setHistoryFilter(e.target.value)}
               className={styles.filterSelect}
+              aria-label="Filter history by parameter"
             >
               <option value="">All Parameters</option>
               <option value="overlay_multiplier">Overlay Multiplier</option>
@@ -600,14 +598,7 @@ export const ECLConfigView: React.FC<ECLConfigViewProps> = ({
       {/* Recalc Modal */}
       {recalcModalOpen && (
         <>
-          <div className={styles.modalOverlay} onClick={() => setRecalcModalOpen(false)} />
-          <div className={styles.modal} role="dialog" aria-modal="true" data-testid="recalc-modal">
-            <div className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>Recalculate Portfolio ECL</h2>
-              <button type="button" className={styles.closeBtn} onClick={() => setRecalcModalOpen(false)}>
-                ×
-              </button>
-            </div>
+          <Modal title="Recalculate Portfolio ECL" onClose={() => setRecalcModalOpen(false)} testId="recalc-modal" maxWidth="500px">
             <div className={styles.modalBody}>
               {recalcProgress === 'idle' && (
                 <>
@@ -663,7 +654,7 @@ export const ECLConfigView: React.FC<ECLConfigViewProps> = ({
                 </button>
               )}
             </div>
-          </div>
+          </Modal>
         </>
       )}
     </div>

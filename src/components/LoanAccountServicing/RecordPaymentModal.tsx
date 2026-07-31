@@ -1,6 +1,8 @@
 'use client'
 
 import React, { useState } from 'react'
+import { Modal } from '@/components/ui/Modal'
+import { formatCurrency } from '@/lib/formatters'
 import styles from './styles.module.css'
 
 interface RecordPaymentModalProps {
@@ -61,21 +63,8 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
     }
   }
 
-  const formatCurrency = (value: string) => {
-    const num = parseFloat(value || '0')
-    return new Intl.NumberFormat('en-AU', {
-      style: 'currency',
-      currency: 'AUD',
-    }).format(num)
-  }
-
   return (
-    <div className={styles.modalOverlay} onClick={onClose}>
-      <div className={styles.modal} onClick={e => e.stopPropagation()}>
-        <div className={styles.modalHeader}>
-          <h2 className={styles.modalTitle}>💳 Record Payment</h2>
-          <button className={styles.closeBtn} onClick={onClose}>×</button>
-        </div>
+    <Modal title="Record Payment" icon="💳" onClose={onClose} dismissOnBackdropClick={!loading}>
 
         <form onSubmit={handleSubmit}>
           <div className={styles.modalBody}>
@@ -108,8 +97,11 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
             {!success && (
               <>
                 <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Payment Amount *</label>
+                  <label className={styles.formLabel} htmlFor="record-payment-amount">
+                    Payment Amount *
+                  </label>
                   <input
+                    id="record-payment-amount"
                     type="number"
                     className={styles.formInput}
                     value={amount}
@@ -125,8 +117,11 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
                 </div>
 
                 <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Payment Reference *</label>
+                  <label className={styles.formLabel} htmlFor="record-payment-reference">
+                    Payment Reference *
+                  </label>
                   <input
+                    id="record-payment-reference"
                     type="text"
                     className={styles.formInput}
                     value={paymentReference}
@@ -137,8 +132,11 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
                 </div>
 
                 <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Payment Method</label>
+                  <label className={styles.formLabel} htmlFor="record-payment-method">
+                    Payment Method
+                  </label>
                   <select
+                    id="record-payment-method"
                     className={styles.formSelect}
                     value={paymentMethod}
                     onChange={(e) => setPaymentMethod(e.target.value)}
@@ -168,9 +166,8 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
               </button>
             )}
           </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </Modal>
   )
 }
 

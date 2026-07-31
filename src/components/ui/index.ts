@@ -19,3 +19,6 @@ export type { ContextDrawerProps } from './ContextDrawer'
 
 export { CopyButton } from './CopyButton'
 export type { CopyButtonProps } from './CopyButton'
+
+export { Modal } from './Modal'
+export type { ModalProps } from './Modal'

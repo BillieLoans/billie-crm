@@ -52,7 +52,10 @@
   pointer-events: none;
 }
 
-.status:hover .tooltip {
+/* SC 1.4.13: hover-only reveal is unreachable by keyboard and touch. LedgerStatus
+   is the reference implementation for this pairing. */
+.status:hover .tooltip,
+.status:focus-within .tooltip {
   opacity: 1;
   visibility: visible;
 }

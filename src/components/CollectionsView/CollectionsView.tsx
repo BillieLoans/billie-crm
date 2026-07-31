@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { useCollectionsCases, type CollectionsCasesFilters } from '@/hooks/queries/useCollectionsCases'
 import type { CollectionsCaseRow } from '@/types/collections'
+import { formatCurrency } from '@/lib/formatters'
 import styles from './styles.module.css'
 
 /**
@@ -118,14 +119,6 @@ function useEconomicsSort(accountIds: string[], enabled: boolean, accountIdsKey:
 /**
  * Format currency for display
  */
-function formatCurrency(amount: string): string {
-  const num = parseFloat(amount)
-  return new Intl.NumberFormat('en-AU', {
-    style: 'currency',
-    currency: 'AUD',
-  }).format(num)
-}
-
 /**
  * Get DPD badge class based on days past due
  */
@@ -256,7 +249,9 @@ export function CollectionsView() {
   }, [displayedCases])
 
   return (
-    <div className={styles.container}>
+    // Root test id matches the convention used by every other custom view
+    // (dashboard-view, accounts-browser-view, …) — this one was missing.
+    <div className={styles.container} data-testid="collections-view">
       {/* Header */}
       <div className={styles.header}>
         <h1 className={styles.title}>Collections Queue</h1>

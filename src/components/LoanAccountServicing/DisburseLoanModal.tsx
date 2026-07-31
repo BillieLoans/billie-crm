@@ -1,6 +1,8 @@
 'use client'
 
 import React, { useState, useRef } from 'react'
+import { Modal } from '@/components/ui/Modal'
+import { formatCurrency } from '@/lib/formatters'
 import styles from './styles.module.css'
 
 interface DisburseLoanModalProps {
@@ -159,23 +161,8 @@ export const DisburseLoanModal: React.FC<DisburseLoanModalProps> = ({
     }
   }
 
-  const formatCurrency = (value: string) => {
-    const num = parseFloat(value || '0')
-    return new Intl.NumberFormat('en-AU', {
-      style: 'currency',
-      currency: 'AUD',
-    }).format(num)
-  }
-
   return (
-    <div className={styles.modalOverlay} onClick={onClose}>
-      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <div className={styles.modalHeader}>
-          <h2 className={styles.modalTitle}>🏦 Disburse Loan</h2>
-          <button className={styles.closeBtn} onClick={onClose}>
-            ×
-          </button>
-        </div>
+    <Modal title="Disburse Loan" icon="🏦" onClose={onClose} dismissOnBackdropClick={!loading}>
 
         <form onSubmit={handleSubmit}>
           <div className={styles.modalBody}>
@@ -225,8 +212,11 @@ export const DisburseLoanModal: React.FC<DisburseLoanModalProps> = ({
                   </div>
                 )}
                 <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Disbursement Amount</label>
+                  <label className={styles.formLabel} htmlFor="disburse-amount">
+                    Disbursement Amount
+                  </label>
                   <input
+                    id="disburse-amount"
                     type="number"
                     className={styles.formInput}
                     value={disbursementAmount}
@@ -242,8 +232,11 @@ export const DisburseLoanModal: React.FC<DisburseLoanModalProps> = ({
                 </div>
 
                 <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Bank Reference *</label>
+                  <label className={styles.formLabel} htmlFor="disburse-bank-reference">
+                    Bank Reference *
+                  </label>
                   <input
+                    id="disburse-bank-reference"
                     type="text"
                     className={styles.formInput}
                     value={bankReference}
@@ -257,8 +250,11 @@ export const DisburseLoanModal: React.FC<DisburseLoanModalProps> = ({
                 </div>
 
                 <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Payment Method</label>
+                  <label className={styles.formLabel} htmlFor="disburse-payment-method">
+                    Payment Method
+                  </label>
                   <select
+                    id="disburse-payment-method"
                     className={styles.formSelect}
                     value={paymentMethod}
                     onChange={(e) => setPaymentMethod(e.target.value)}
@@ -270,8 +266,11 @@ export const DisburseLoanModal: React.FC<DisburseLoanModalProps> = ({
                 </div>
 
                 <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Proof of Payment</label>
+                  <label className={styles.formLabel} htmlFor="disburse-proof-of-payment">
+                    Proof of Payment
+                  </label>
                   <input
+                    id="disburse-proof-of-payment"
                     ref={fileInputRef}
                     type="file"
                     className={styles.formInput}
@@ -290,8 +289,11 @@ export const DisburseLoanModal: React.FC<DisburseLoanModalProps> = ({
                 </div>
 
                 <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Notes</label>
+                  <label className={styles.formLabel} htmlFor="disburse-notes">
+                    Notes
+                  </label>
                   <textarea
+                    id="disburse-notes"
                     className={styles.formInput}
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
@@ -324,8 +326,7 @@ export const DisburseLoanModal: React.FC<DisburseLoanModalProps> = ({
               </button>
             )}
           </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </Modal>
   )
 }

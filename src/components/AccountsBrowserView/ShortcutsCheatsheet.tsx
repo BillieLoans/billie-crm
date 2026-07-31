@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect } from 'react'
+import { Modal } from '@/components/ui/Modal'
 import styles from './styles.module.css'
 
 const SHORTCUTS: { keys: string[]; label: string }[] = [
@@ -36,25 +37,7 @@ export const ShortcutsCheatsheet: React.FC<ShortcutsCheatsheetProps> = ({ isOpen
   if (!isOpen) return null
 
   return (
-    <div
-      className={styles.modalOverlay}
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Keyboard shortcuts"
-    >
-      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <div className={styles.modalHeader}>
-          <h2 className={styles.modalTitle}>Keyboard shortcuts</h2>
-          <button
-            type="button"
-            className={styles.modalClose}
-            onClick={onClose}
-            aria-label="Close shortcuts"
-          >
-            ×
-          </button>
-        </div>
+    <Modal title="Keyboard shortcuts" onClose={onClose} maxWidth="520px">
         <div className={styles.cheatsheet}>
           {SHORTCUTS.map((shortcut) => (
             <div key={shortcut.label} className={styles.cheatsheetRow}>
@@ -69,7 +52,6 @@ export const ShortcutsCheatsheet: React.FC<ShortcutsCheatsheetProps> = ({ isOpen
             </div>
           ))}
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }

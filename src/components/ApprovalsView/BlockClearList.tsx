@@ -127,6 +127,7 @@ export const BlockClearList: React.FC<BlockClearListProps> = ({
           className={styles.sortSelect}
           value={sort}
           onChange={handleSortChange}
+          aria-label="Sort block clear requests"
           data-testid="block-clears-sort"
         >
           <option value="oldest">Oldest First</option>

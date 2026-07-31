@@ -7,6 +7,7 @@ import { useTraceECL } from '@/hooks/queries/useTraceECL'
 import { useTraceAccrual } from '@/hooks/queries/useTraceAccrual'
 import { useBatchQuery, type BatchQueryAccountResult } from '@/hooks/mutations/useBatchQuery'
 import { useRandomSample } from '@/hooks/mutations/useRandomSample'
+import { Modal } from '@/components/ui/Modal'
 import styles from './styles.module.css'
 
 export interface InvestigationViewProps {
@@ -178,6 +179,7 @@ export const InvestigationView: React.FC<InvestigationViewProps> = ({
           className={styles.filterSelect}
           value={eventStreamFilter}
           onChange={(e) => setEventStreamFilter(e.target.value)}
+          aria-label="Filter events by stream"
         >
           <option value="">All Streams</option>
           <option value="loan-account">Loan Account</option>
@@ -189,6 +191,7 @@ export const InvestigationView: React.FC<InvestigationViewProps> = ({
           className={styles.filterSelect}
           value={eventTypeFilter}
           onChange={(e) => setEventTypeFilter(e.target.value)}
+          aria-label="Filter events by type"
         >
           <option value="">All Event Types</option>
           <option value="disbursed">Disbursed</option>
@@ -545,18 +548,7 @@ export const InvestigationView: React.FC<InvestigationViewProps> = ({
       {/* Batch Query Modal */}
       {batchModalOpen && (
         <>
-          <div className={styles.modalOverlay} onClick={() => setBatchModalOpen(false)} />
-          <div className={styles.modal} role="dialog" aria-modal="true" data-testid="batch-modal">
-            <div className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>Batch Account Query</h2>
-              <button
-                type="button"
-                className={styles.closeBtn}
-                onClick={() => setBatchModalOpen(false)}
-              >
-                ×
-              </button>
-            </div>
+          <Modal title="Batch Account Query" onClose={() => setBatchModalOpen(false)} testId="batch-modal" maxWidth="600px">
             <div className={styles.modalBody}>
               {!batchResults ? (
                 <>
@@ -579,8 +571,10 @@ export const InvestigationView: React.FC<InvestigationViewProps> = ({
                     </p>
                   </div>
                   <div className={styles.fieldGroup}>
-                    <label className={styles.fieldLabel}>Include Data</label>
-                    <div className={styles.checkboxGroup}>
+                    <span className={styles.fieldLabel} id="batch-include-data-label">
+                      Include Data
+                    </span>
+                    <div className={styles.checkboxGroup} role="group" aria-labelledby="batch-include-data-label">
                       <label className={styles.checkboxLabel}>
                         <input
                           type="checkbox"
@@ -692,25 +686,14 @@ export const InvestigationView: React.FC<InvestigationViewProps> = ({
                 </>
               )}
             </div>
-          </div>
+          </Modal>
         </>
       )}
 
       {/* Random Sample Modal */}
       {sampleModalOpen && (
         <>
-          <div className={styles.modalOverlay} onClick={() => setSampleModalOpen(false)} />
-          <div className={styles.modal} role="dialog" aria-modal="true" data-testid="sample-modal">
-            <div className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>Random Sample Generator</h2>
-              <button
-                type="button"
-                className={styles.closeBtn}
-                onClick={() => setSampleModalOpen(false)}
-              >
-                ×
-              </button>
-            </div>
+          <Modal title="Random Sample Generator" onClose={() => setSampleModalOpen(false)} testId="sample-modal" maxWidth="600px">
             <div className={styles.modalBody}>
               {!sampleResults ? (
                 <>
@@ -843,7 +826,7 @@ export const InvestigationView: React.FC<InvestigationViewProps> = ({
                 </>
               )}
             </div>
-          </div>
+          </Modal>
         </>
       )}
     </div>

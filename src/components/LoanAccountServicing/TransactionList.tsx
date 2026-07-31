@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
+import { formatCurrency } from '@/lib/formatters'
 import styles from './styles.module.css'
 
 interface Transaction {
@@ -73,15 +74,6 @@ export const TransactionList: React.FC<TransactionListProps> = ({ loanAccountId,
     fetchTransactions()
   }, [fetchTransactions, refreshKey, offset])
 
-  const formatCurrency = (amount: string) => {
-    const num = parseFloat(amount || '0')
-    return new Intl.NumberFormat('en-AU', {
-      style: 'currency',
-      currency: 'AUD',
-      signDisplay: 'exceptZero',
-    }).format(num)
-  }
-
   const formatDate = (timestamp: { seconds: string; nanos: number }) => {
     const date = new Date(parseInt(timestamp.seconds) * 1000)
     return date.toLocaleDateString('en-AU', {
@@ -126,6 +118,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({ loanAccountId,
         <div className={styles.filterGroup}>
           <select 
             className={styles.filterSelect}
+            aria-label="Filter transactions by type"
             value={typeFilter}
             onChange={(e) => {
               setTypeFilter(e.target.value)

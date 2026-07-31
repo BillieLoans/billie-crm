@@ -2,6 +2,7 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { MIN_APPROVAL_COMMENT_LENGTH } from '@/lib/constants'
+import { Modal } from '@/components/ui/Modal'
 import styles from './styles.module.css'
 
 export type ActionType = 'approve' | 'reject'
@@ -111,35 +112,15 @@ export const ApprovalActionModal: React.FC<ApprovalActionModalProps> = ({
   const isValid = charCount >= MIN_APPROVAL_COMMENT_LENGTH
 
   return (
-    <div
-      className={styles.modalOverlay}
-      onClick={isPending ? undefined : onClose}
-      onKeyDown={handleKeyDown}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="modal-title"
-      data-testid="approval-action-modal"
+    <Modal
+      title={title}
+      onClose={onClose}
+      dismissOnBackdropClick={!isPending}
+      dismissOnEscape={!isPending}
+      closeDisabled={isPending}
+      testId="approval-action-modal"
+      maxWidth="480px"
     >
-      <div
-        ref={modalRef}
-        className={styles.modalContent}
-        onClick={(e) => e.stopPropagation()}
-        role="document"
-      >
-        <div className={styles.modalHeader}>
-          <h2 id="modal-title" className={styles.modalTitle}>
-            {title}
-          </h2>
-          <button
-            type="button"
-            className={styles.modalCloseBtn}
-            onClick={onClose}
-            disabled={isPending}
-            aria-label="Close modal"
-          >
-            ✕
-          </button>
-        </div>
 
         <form onSubmit={handleSubmit}>
           <div className={styles.modalBody}>
@@ -192,8 +173,7 @@ export const ApprovalActionModal: React.FC<ApprovalActionModalProps> = ({
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   )
 }
 
