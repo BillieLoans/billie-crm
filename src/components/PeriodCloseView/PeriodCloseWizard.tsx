@@ -325,8 +325,8 @@ export const PeriodCloseWizard: React.FC<PeriodCloseWizardProps> = ({
               : a
           )
         )
-      } catch (err) {
-        toast.error('Could not acknowledge anomaly. Please try again or contact support.')
+      } catch {
+        // Error handled by mutation (toast fired from useAcknowledgeAnomaly's onError)
       }
     },
     [preview, acknowledgeAnomaly, userId, userName]

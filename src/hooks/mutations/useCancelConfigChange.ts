@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { pendingConfigChangesQueryKey } from '@/hooks/queries/usePendingConfigChanges'
 
 interface CancelConfigChangeRequest {
@@ -46,6 +47,13 @@ export function useCancelConfigChange() {
     onSuccess: () => {
       // Invalidate pending changes to refresh list
       queryClient.invalidateQueries({ queryKey: pendingConfigChangesQueryKey })
+
+      toast.success('Scheduled change cancelled', {
+        description: 'This change will no longer take effect.',
+      })
+    },
+    onError: (error) => {
+      toast.error('Failed to cancel scheduled change', { description: error.message })
     },
   })
 

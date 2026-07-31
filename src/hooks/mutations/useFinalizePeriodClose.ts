@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 
 interface FinalizeRequest {
   previewId: string
@@ -57,9 +58,16 @@ export function useFinalizePeriodClose() {
       }
       return res.json()
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       // Invalidate closed periods to refresh history
       queryClient.invalidateQueries({ queryKey: ['period-close', 'history'] })
+
+      toast.success('Period closed', {
+        description: `Period ${data.periodDate} is now closed.`,
+      })
+    },
+    onError: (error) => {
+      toast.error('Failed to close period', { description: error.message })
     },
   })
 

@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { exportJobsQueryKey } from '@/hooks/queries/useExportJobs'
 
 export interface RetryExportResponse {
@@ -33,8 +34,15 @@ export function useRetryExport() {
       }
       return res.json()
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: exportJobsQueryKey })
+
+      toast.success('Export retry started', {
+        description: `Export ${data.jobId} has been queued for retry.`,
+      })
+    },
+    onError: (error) => {
+      toast.error('Failed to retry export', { description: error.message })
     },
   })
 

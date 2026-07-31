@@ -1,4 +1,5 @@
 import { useMutation } from '@tanstack/react-query'
+import { toast } from 'sonner'
 
 export interface RandomSampleRequest {
   sampleSize: number
@@ -51,6 +52,15 @@ export function useRandomSample() {
         throw new Error(error.message || 'Failed to generate sample')
       }
       return res.json()
+    },
+    onSuccess: (data) => {
+      const count = data.accountIds.length
+      toast.success('Sample generated', {
+        description: `${count} of ${data.matchingAccountCount} matching accounts sampled.`,
+      })
+    },
+    onError: (error) => {
+      toast.error('Failed to generate sample', { description: error.message })
     },
   })
 

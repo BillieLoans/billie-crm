@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { pendingConfigChangesQueryKey } from '@/hooks/queries/usePendingConfigChanges'
 
 interface ScheduleConfigChangeRequest {
@@ -55,9 +56,16 @@ export function useScheduleConfigChange() {
       }
       return res.json()
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       // Invalidate pending changes to refresh list
       queryClient.invalidateQueries({ queryKey: pendingConfigChangesQueryKey })
+
+      toast.success('Change scheduled', {
+        description: `Takes effect ${data.effectiveDate}.`,
+      })
+    },
+    onError: (error) => {
+      toast.error('Failed to schedule change', { description: error.message })
     },
   })
 
