@@ -32,11 +32,17 @@ describe('LiveAnnouncer', () => {
   it('re-announces an identical consecutive message', () => {
     // Screen readers ignore an unchanged region, so a second identical failure
     // would otherwise be silent — the case where silence is most dangerous.
+    // A changed textContent alone doesn't guarantee a re-read: some screen
+    // readers only re-announce a live region on DOM node remount, which is
+    // why the region is keyed on seq. Assert the node identity actually
+    // changes, not just the store's seq counter.
     render(<LiveAnnouncer />)
     act(() => useAnnouncerStore.getState().announce('Ledger unavailable.', 'assertive'))
     const first = useAnnouncerStore.getState().seq
+    const firstNode = screen.getByRole('alert')
     act(() => useAnnouncerStore.getState().announce('Ledger unavailable.', 'assertive'))
     expect(useAnnouncerStore.getState().seq).toBeGreaterThan(first)
+    expect(screen.getByRole('alert')).not.toBe(firstNode)
   })
 
   it('keeps the regions out of the visual layout', () => {
