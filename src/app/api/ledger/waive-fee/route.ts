@@ -69,6 +69,7 @@ export async function POST(request: NextRequest) {
         typeLabel: getTransactionTypeLabel(tx.type),
         date: timestampToDate(tx.transactionDate).toISOString(),
         feeDelta: parseFloat(tx.feeDelta),
+        totalDelta: parseFloat(tx.totalDelta),
         feeAfter: parseFloat(tx.feeAfter),
         totalAfter: parseFloat(tx.totalAfter),
         description: tx.description,

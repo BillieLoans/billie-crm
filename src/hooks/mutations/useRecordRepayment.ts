@@ -136,13 +136,16 @@ export function useRecordRepayment(loanAccountId?: string, accountLabel?: string
       if (!context) return
 
       // Report the settled balance so the announcer can say "Balance updated
-      // to $X" instead of just naming the action. amount is validated as
-      // strictly positive, so a successful repayment always moves the total.
-      const settledBalance = data.transaction.totalAfter
-      if (settledBalance !== undefined) {
+      // to $X" instead of just naming the action — but only when the payment
+      // actually moved the total. A repayment against an account that is
+      // already fully paid off allocates entirely to overpayment
+      // (allocatedToFees === allocatedToPrincipal === 0), so totalDelta is 0
+      // and totalAfter === totalBefore; reporting it there would be a true
+      // number wrapped in a false "updated to" claim.
+      if (data.transaction.totalDelta !== 0) {
         setPending(context.loanAccountId, {
           ...context.pendingMutation,
-          balanceAfter: Number(settledBalance),
+          balanceAfter: Number(data.transaction.totalAfter),
         })
       }
 

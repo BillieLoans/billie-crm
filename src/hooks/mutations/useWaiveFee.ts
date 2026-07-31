@@ -39,6 +39,7 @@ export interface WaiveFeeResponse {
     typeLabel: string
     date: string
     feeDelta: number
+    totalDelta: number
     feeAfter: number
     totalAfter: number
     description: string
@@ -119,13 +120,15 @@ export function useWaiveFee(loanAccountId?: string, accountLabel?: string) {
       if (!context) return
 
       // Report the settled balance so the announcer can say "Balance updated
-      // to $X" instead of just naming the action. waiverAmount is validated
-      // as strictly positive, so a successful waiver always moves the total.
-      const settledBalance = data.transaction.totalAfter
-      if (settledBalance !== undefined) {
+      // to $X" instead of just naming the action — but only when the waiver
+      // actually moved the total. A duplicate/idempotent-replay waiver against
+      // an account whose fee balance is already zero settles with
+      // totalDelta === 0; reporting totalAfter there would be a true number
+      // wrapped in a false "updated to" claim.
+      if (data.transaction.totalDelta !== 0) {
         setPending(context.loanAccountId, {
           ...context.pendingMutation,
-          balanceAfter: Number(settledBalance),
+          balanceAfter: Number(data.transaction.totalAfter),
         })
       }
 

@@ -1,8 +1,11 @@
 /**
  * Task 5: useRecordRepayment must report the settled balance
  * (transaction.totalAfter) on the pending mutation once the repayment is
- * confirmed — and must NOT report one when nothing settled (the mutation
- * failed and the balance is unchanged).
+ * confirmed AND the payment actually moved the total (transaction.totalDelta
+ * !== 0) — and must NOT report one when nothing settled (the mutation
+ * failed) or when the response settled with a zero delta (e.g. a late or
+ * duplicate payment against an account that is already fully paid off,
+ * which allocates entirely to overpayment).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
@@ -112,5 +115,59 @@ describe('useRecordRepayment balanceAfter wiring', () => {
 
     expect(failed?.stage).toBe('failed')
     expect(failed?.balanceAfter).toBeUndefined()
+  })
+
+  it('does not report a balance for a zero-allocation repayment (discrimination guard)', async () => {
+    // A late or duplicate payment recorded against an account that is already
+    // fully paid off allocates entirely to overpayment: allocatedToFees and
+    // allocatedToPrincipal are both 0, totalDelta is 0, and totalAfter equals
+    // totalBefore. RecordRepaymentDrawer's isOverpayment check
+    // (`numAmount > totalOutstanding && totalOutstanding > 0`) is false when
+    // totalOutstanding is exactly 0, so this path submits without a
+    // confirmation dialog — it is reachable, not hypothetical. balanceAfter
+    // must stay undefined so the announcer never claims the balance
+    // "updated" when it did not move.
+    ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          success: true,
+          transaction: {
+            id: 'tx-2',
+            accountId: 'LA-4',
+            type: 'REPAYMENT',
+            typeLabel: 'Repayment',
+            date: '2026-07-31T00:00:00Z',
+            principalDelta: 0,
+            feeDelta: 0,
+            totalDelta: 0,
+            principalAfter: 0,
+            feeAfter: 0,
+            totalAfter: 0,
+            description: 'Repayment applied (fully overpayment)',
+          },
+          eventId: 'evt-2',
+          allocation: { allocatedToFees: 0, allocatedToPrincipal: 0, overpayment: 50 },
+        }),
+    })
+
+    const { result } = renderHook(() => useRecordRepayment('LA-4'), { wrapper: createWrapper() })
+
+    await act(async () => {
+      await result.current.recordRepaymentAsync({
+        loanAccountId: 'LA-4',
+        amount: 50,
+        paymentReference: 'ref-4',
+        paymentMethod: 'direct_debit',
+      })
+    })
+
+    const confirmed = useOptimisticStore
+      .getState()
+      .getPendingForAccount('LA-4')
+      .find((m) => m.action === 'record-repayment')
+
+    expect(confirmed?.stage).toBe('confirmed')
+    expect(confirmed?.balanceAfter).toBeUndefined()
   })
 })
