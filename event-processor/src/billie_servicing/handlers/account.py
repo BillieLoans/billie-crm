@@ -179,6 +179,9 @@ async def handle_account_updated(pool: asyncpg.Pool, parsed_event: Any) -> None:
     # why this can't be a hard-skip guard. Never blocks/skips the write;
     # any failure here (missing column, naive/aware datetime mismatch) is
     # swallowed so staleness triage can never break projection updates.
+    # Strict `<` (not `<=`) is deliberate: an incoming timestamp exactly equal
+    # to the stored projection's updated_at (e.g. same-instant redelivery of
+    # the same event) is not stale and must not warn.
     incoming_timestamp = getattr(payload, "timestamp", None)
     if isinstance(incoming_timestamp, datetime):
         try:
