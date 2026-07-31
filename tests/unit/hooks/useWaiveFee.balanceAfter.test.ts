@@ -158,4 +158,52 @@ describe('useWaiveFee balanceAfter wiring', () => {
     expect(confirmed?.stage).toBe('confirmed')
     expect(confirmed?.balanceAfter).toBeUndefined()
   })
+
+  it('does not report a balance when totalDelta/totalAfter arrive as null (discrimination guard)', async () => {
+    // The route parseFloat()s proto3 string fields; an unset proto string is
+    // "", parseFloat("") is NaN, and JSON.stringify(NaN) emits null. So the
+    // client can receive totalDelta: null — the OLD gate (`totalDelta !== 0`)
+    // is true for null, and Number(null) is 0, so it would have reported
+    // balanceAfter: 0, making the announcer say "Balance updated to $0.00"
+    // for a field the server never actually sent.
+    ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          success: true,
+          transaction: {
+            id: 'tx-3',
+            accountId: 'LA-5',
+            type: 'FEE_WAIVER',
+            typeLabel: 'Fee Waiver',
+            date: '2026-07-31T00:00:00Z',
+            feeDelta: null,
+            totalDelta: null,
+            feeAfter: null,
+            totalAfter: null,
+            description: 'Waived (missing proto fields)',
+          },
+          eventId: 'evt-3',
+        }),
+    })
+
+    const { result } = renderHook(() => useWaiveFee('LA-5'), { wrapper: createWrapper() })
+
+    await act(async () => {
+      await result.current.waiveFeeAsync({
+        loanAccountId: 'LA-5',
+        waiverAmount: 25,
+        reason: 'test',
+        approvedBy: 'admin',
+      })
+    })
+
+    const confirmed = useOptimisticStore
+      .getState()
+      .getPendingForAccount('LA-5')
+      .find((m) => m.action === 'waive-fee')
+
+    expect(confirmed?.stage).toBe('confirmed')
+    expect(confirmed?.balanceAfter).toBeUndefined()
+  })
 })

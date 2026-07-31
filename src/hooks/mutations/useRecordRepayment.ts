@@ -142,10 +142,19 @@ export function useRecordRepayment(loanAccountId?: string, accountLabel?: string
       // (allocatedToFees === allocatedToPrincipal === 0), so totalDelta is 0
       // and totalAfter === totalBefore; reporting it there would be a true
       // number wrapped in a false "updated to" claim.
-      if (data.transaction.totalDelta !== 0) {
+      //
+      // The route parseFloat()s proto3 string fields; an unset proto string is
+      // "", parseFloat("") is NaN, and JSON.stringify(NaN) emits null. So
+      // totalDelta can arrive as null — `null !== 0` is true, which would open
+      // the gate — and Number(null) is 0, so the operator would be told
+      // "Balance updated to $0.00" for a field the server never actually sent.
+      // Number.isFinite() on both values closes that hole.
+      const settled = Number(data.transaction.totalAfter)
+      const delta = Number(data.transaction.totalDelta)
+      if (Number.isFinite(settled) && Number.isFinite(delta) && delta !== 0) {
         setPending(context.loanAccountId, {
           ...context.pendingMutation,
-          balanceAfter: Number(data.transaction.totalAfter),
+          balanceAfter: settled,
         })
       }
 

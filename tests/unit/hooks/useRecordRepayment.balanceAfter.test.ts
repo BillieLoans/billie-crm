@@ -170,4 +170,55 @@ describe('useRecordRepayment balanceAfter wiring', () => {
     expect(confirmed?.stage).toBe('confirmed')
     expect(confirmed?.balanceAfter).toBeUndefined()
   })
+
+  it('does not report a balance when totalDelta/totalAfter arrive as null (discrimination guard)', async () => {
+    // The route parseFloat()s proto3 string fields; an unset proto string is
+    // "", parseFloat("") is NaN, and JSON.stringify(NaN) emits null. So the
+    // client can receive totalDelta: null — the OLD gate (`totalDelta !== 0`)
+    // is true for null, and Number(null) is 0, so it would have reported
+    // balanceAfter: 0, making the announcer say "Balance updated to $0.00"
+    // for a field the server never actually sent.
+    ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          success: true,
+          transaction: {
+            id: 'tx-5',
+            accountId: 'LA-6',
+            type: 'REPAYMENT',
+            typeLabel: 'Repayment',
+            date: '2026-07-31T00:00:00Z',
+            principalDelta: null,
+            feeDelta: null,
+            totalDelta: null,
+            principalAfter: null,
+            feeAfter: null,
+            totalAfter: null,
+            description: 'Repayment applied (missing proto fields)',
+          },
+          eventId: 'evt-5',
+          allocation: { allocatedToFees: 0, allocatedToPrincipal: 0, overpayment: 0 },
+        }),
+    })
+
+    const { result } = renderHook(() => useRecordRepayment('LA-6'), { wrapper: createWrapper() })
+
+    await act(async () => {
+      await result.current.recordRepaymentAsync({
+        loanAccountId: 'LA-6',
+        amount: 50,
+        paymentReference: 'ref-6',
+        paymentMethod: 'direct_debit',
+      })
+    })
+
+    const confirmed = useOptimisticStore
+      .getState()
+      .getPendingForAccount('LA-6')
+      .find((m) => m.action === 'record-repayment')
+
+    expect(confirmed?.stage).toBe('confirmed')
+    expect(confirmed?.balanceAfter).toBeUndefined()
+  })
 })
