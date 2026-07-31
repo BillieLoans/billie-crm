@@ -49,7 +49,12 @@ export function useRandomSample() {
       })
       if (!res.ok) {
         const error = await res.json().catch(() => ({}))
-        throw new Error(error.message || 'Failed to generate sample')
+        const errorMessage =
+          (typeof error.details === 'string' && error.details) ||
+          error.error ||
+          error.message ||
+          'Failed to generate sample'
+        throw new Error(errorMessage)
       }
       return res.json()
     },

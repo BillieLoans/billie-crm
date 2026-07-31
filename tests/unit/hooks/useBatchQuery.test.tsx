@@ -70,6 +70,47 @@ describe('useBatchQuery', () => {
     ).rejects.toThrow('Too many accounts')
   })
 
+  it('prefers the route detail sentence over the duplicate error title on a 500', async () => {
+    // Real route shape (api/investigation/batch-query/route.ts) is { error, details }, never
+    // { message } — before the fix, error.message was always undefined so the hook's
+    // hardcoded fallback always fired instead of the server's actual reason.
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      json: () =>
+        Promise.resolve({
+          error: 'Failed to batch query accounts',
+          details: 'An internal error occurred. Please try again.',
+        }),
+    })
+
+    const { result } = renderHook(() => useBatchQuery(), { wrapper: createWrapper() })
+
+    await expect(
+      act(async () => {
+        await result.current.batchQuery({ accountIds: ['acc-1'] })
+      })
+    ).rejects.toThrow('An internal error occurred. Please try again.')
+  })
+
+  it('falls back to error.error when details is a validation field-errors object, not a string', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      json: () =>
+        Promise.resolve({
+          error: 'Validation failed',
+          details: { accountIds: ['Required'] },
+        }),
+    })
+
+    const { result } = renderHook(() => useBatchQuery(), { wrapper: createWrapper() })
+
+    await expect(
+      act(async () => {
+        await result.current.batchQuery({ accountIds: [] })
+      })
+    ).rejects.toThrow('Validation failed')
+  })
+
   it('should send correct request body', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,

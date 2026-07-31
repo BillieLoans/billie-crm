@@ -39,7 +39,12 @@ export function useAcknowledgeAnomaly() {
       })
       if (!res.ok) {
         const error = await res.json().catch(() => ({}))
-        throw new Error(error.message || 'Failed to acknowledge anomaly')
+        const errorMessage =
+          (typeof error.details === 'string' && error.details) ||
+          error.error ||
+          error.message ||
+          'Failed to acknowledge anomaly'
+        throw new Error(errorMessage)
       }
       const body: AcknowledgeResponse = await res.json()
       if (body.success === false) {

@@ -61,7 +61,12 @@ export function useFinalizePeriodClose() {
       })
       if (!res.ok) {
         const error = await res.json().catch(() => ({}))
-        throw new Error(error.message || 'Failed to finalize period close')
+        const errorMessage =
+          (typeof error.details === 'string' && error.details) ||
+          error.error ||
+          error.message ||
+          'Failed to finalize period close'
+        throw new Error(errorMessage)
       }
       return res.json()
     },

@@ -66,7 +66,12 @@ export function useBatchQuery() {
       })
       if (!res.ok) {
         const error = await res.json().catch(() => ({}))
-        throw new Error(error.message || 'Failed to execute batch query')
+        const errorMessage =
+          (typeof error.details === 'string' && error.details) ||
+          error.error ||
+          error.message ||
+          'Failed to execute batch query'
+        throw new Error(errorMessage)
       }
       return res.json()
     },

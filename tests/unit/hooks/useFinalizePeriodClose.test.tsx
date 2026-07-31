@@ -83,6 +83,33 @@ describe('useFinalizePeriodClose', () => {
     ).rejects.toThrow('Preview has expired')
   })
 
+  it('prefers the route detail sentence over the duplicate error title on a 500', async () => {
+    // Real route shape (api/period-close/finalize/route.ts) is { error, details }, never
+    // { message } — before the fix, error.message was always undefined so the hook's
+    // hardcoded fallback always fired instead of the server's actual reason.
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      json: () =>
+        Promise.resolve({
+          error: 'Failed to finalize period close',
+          details: 'An internal error occurred. Please try again.',
+        }),
+    })
+
+    const { result } = renderHook(() => useFinalizePeriodClose(), {
+      wrapper: createWrapper(),
+    })
+
+    await expect(
+      act(async () => {
+        await result.current.finalizePeriodClose({
+          previewId: 'preview-123',
+          finalizedBy: 'user-1',
+        })
+      })
+    ).rejects.toThrow('An internal error occurred. Please try again.')
+  })
+
   it('should handle unacknowledged anomalies error', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: false,

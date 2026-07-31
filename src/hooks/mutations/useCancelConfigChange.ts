@@ -40,7 +40,12 @@ export function useCancelConfigChange() {
       })
       if (!res.ok) {
         const error = await res.json().catch(() => ({}))
-        throw new Error(error.message || 'Failed to cancel config change')
+        const errorMessage =
+          (typeof error.details === 'string' && error.details) ||
+          error.error ||
+          error.message ||
+          'Failed to cancel config change'
+        throw new Error(errorMessage)
       }
       return res.json()
     },
