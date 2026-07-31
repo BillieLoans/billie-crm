@@ -55,7 +55,9 @@ export function useAcknowledgeAnomaly() {
       })
     },
     onError: (error) => {
-      toast.error('Failed to acknowledge anomaly', { description: error.message })
+      toast.error('Failed to acknowledge anomaly', {
+        description: `${error.message} — try again, or contact support if it persists.`,
+      })
     },
   })
 

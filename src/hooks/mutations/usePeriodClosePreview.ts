@@ -129,7 +129,9 @@ export function usePeriodClosePreview() {
       // the wizard already advances to a full "Preview Summary" step on success — an
       // unprompted success toast on every intermediate step of this flow would just be
       // noise a screen-reader user learns to tune out before the Finalize step matters.
-      toast.error('Failed to load preview', { description: error.message })
+      toast.error('Failed to load preview', {
+        description: `${error.message} — choose a different period, or try again.`,
+      })
     },
   })
 

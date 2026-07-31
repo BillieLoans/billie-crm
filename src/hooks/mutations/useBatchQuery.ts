@@ -76,7 +76,9 @@ export function useBatchQuery() {
       })
     },
     onError: (error) => {
-      toast.error('Batch query failed', { description: error.message })
+      toast.error('Batch query failed', {
+        description: `${error.message} — check the account IDs and try again.`,
+      })
     },
   })
 

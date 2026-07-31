@@ -53,7 +53,9 @@ export function useCancelConfigChange() {
       })
     },
     onError: (error) => {
-      toast.error('Failed to cancel scheduled change', { description: error.message })
+      toast.error('Failed to cancel scheduled change', {
+        description: `${error.message} — try again.`,
+      })
     },
   })
 

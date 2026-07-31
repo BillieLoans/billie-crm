@@ -42,7 +42,9 @@ export function useRetryExport() {
       })
     },
     onError: (error) => {
-      toast.error('Failed to retry export', { description: error.message })
+      toast.error('Failed to retry export', {
+        description: `${error.message} — try again, or contact support if it persists.`,
+      })
     },
   })
 

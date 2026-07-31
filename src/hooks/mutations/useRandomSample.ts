@@ -60,7 +60,9 @@ export function useRandomSample() {
       })
     },
     onError: (error) => {
-      toast.error('Failed to generate sample', { description: error.message })
+      toast.error('Failed to generate sample', {
+        description: `${error.message} — check the sample size and filters, then try again.`,
+      })
     },
   })
 
