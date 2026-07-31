@@ -417,9 +417,12 @@
    the semantic; colour is a secondary reinforcement only. Text sits
    directly on the theme's card background (no opaque box of its own), so
    the dark-theme override below keeps it readable when --theme-elevation-*
-   flips to a near-black surface. */
+   flips to a near-black surface. Renders in two real elevations
+   (.movementCard = elevation-50, the finalize <strong> = elevation-100 via
+   .wizard) — colour picked to clear AAA (7:1) on the worst of the two in
+   both themes. */
 .changePositive {
-  color: #9a3412;
+  color: #7c2d12;
 }
 
 .changeNegative {
@@ -595,9 +598,12 @@
 }
 
 /* "✓" glyph next to a full text description — same theme-background caveat
-   as .progressLabel/.acknowledgedBadge above. */
+   as .progressLabel/.acknowledgedBadge above. Sits on elevation-100 (via
+   .wizard, .stepContent has no bg of its own) — #15803d only cleared
+   4.21:1 there (fails AA); #166534 clears 5.98:1 on elevation-100 and
+   6.54:1 on elevation-50. */
 .checkIcon {
-  color: #15803d;
+  color: #166534;
 }
 
 .finalSummary {
@@ -835,11 +841,13 @@
    What's left are elements that render plain coloured TEXT directly on one
    of Payload's --theme-elevation-* surfaces (no opaque box of their own) —
    for those, a single colour cannot hit 4.5:1 on both a near-white light
-   background and this module's near-black dark background
-   (--theme-elevation-50/100 fallbacks of #222/#1a1a1a give a sense of the
-   real dark values), so they need a light-safe base + a dark override. */
+   background and this module's near-black dark background, so they need a
+   light-safe base + a dark override. Real token values, confirmed against
+   node_modules/@payloadcms/ui/dist/scss/colors.scss (not eyeballed):
+   light elevation-50 #f5f5f5 / elevation-100 #ebebeb;
+   dark  elevation-50 #222222 / elevation-100 #2f2f2f. */
 :global([data-theme='dark']) .changePositive {
-  color: #fb923c;
+  color: #fdba74;
 }
 
 :global([data-theme='dark']) .changeNegative {
