@@ -8,8 +8,8 @@ interface AcknowledgeRequest {
 
 interface AcknowledgeResponse {
   success: boolean
-  anomalyId: string
-  acknowledgedAt: string
+  errorMessage?: string
+  allAnomaliesAcknowledged: boolean
 }
 
 /**
@@ -40,7 +40,11 @@ export function useAcknowledgeAnomaly() {
         const error = await res.json().catch(() => ({}))
         throw new Error(error.message || 'Failed to acknowledge anomaly')
       }
-      return res.json()
+      const body: AcknowledgeResponse = await res.json()
+      if (body.success === false) {
+        throw new Error(body.errorMessage || 'Failed to acknowledge anomaly')
+      }
+      return body
     },
   })
 
