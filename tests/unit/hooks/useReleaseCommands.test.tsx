@@ -18,7 +18,9 @@ function wrapper({ children }: { children: React.ReactNode }) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>
 }
 
-beforeEach(() => fetchMock.mockReset())
+beforeEach(() => {
+  fetchMock.mockReset()
+})
 
 describe('useCreateRelease', () => {
   test('POSTs the command and resolves the 202 body', async () => {
@@ -71,5 +73,24 @@ describe('useRevokeRelease', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(fetchMock.mock.calls[0][0]).toBe('/api/marketing/releases/rel_12345678/revoke')
     expect(JSON.parse(fetchMock.mock.calls[0][1].body).reason).toBe('duplicate')
+  })
+
+  test('encodes special characters in releaseId correctly', async () => {
+    const releaseIdWithSpecials = 'rel/with+odd'
+    const encodedId = encodeURIComponent(releaseIdWithSpecials)
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: async () => ({ error: { message: 'Server error' } }),
+    })
+    const { result } = renderHook(() => useRevokeRelease(), { wrapper })
+    result.current.mutate({ releaseId: releaseIdWithSpecials, reason: 'test' })
+    await waitFor(() => expect(result.current.isError).toBe(true))
+    // Verify the fetch was called with encoded URL containing encoded special characters
+    const fetchUrl = fetchMock.mock.calls[0][0]
+    expect(fetchUrl).toBe(`/api/marketing/releases/${encodedId}/revoke`)
+    // The URL should contain the encoded form (/ becomes %2F, + becomes %2B)
+    expect(fetchUrl).toContain('%2F')
+    expect(fetchUrl).toContain('%2B')
   })
 })

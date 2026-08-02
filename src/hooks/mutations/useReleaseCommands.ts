@@ -46,24 +46,18 @@ export function useCreateRelease() {
 export function useRevokeRelease() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (vars: { releaseId: string; reason?: string }) =>
-      postCommand<{ releaseId: string; eventId: string }>(
-        `/api/marketing/releases/${encodeURIComponent(vars.releaseId)}/revoke`,
-        { reason: vars.reason },
-      ),
+    mutationFn: (vars: { releaseId: string; reason?: string }) => {
+      const url = `/api/marketing/releases/${encodeURIComponent(vars.releaseId)}/revoke`
+      return postCommand<{ releaseId: string; eventId: string }>(url, { reason: vars.reason })
+    },
     onSuccess: () => {
       toast.success('Release revoked — remaining grants cancelled')
       invalidateWithLag(qc, [['marketing-releases']])
     },
     onError: (e: Error, vars) => {
+      const url = `/api/marketing/releases/${encodeURIComponent(vars.releaseId)}/revoke`
       toast.error('Failed to revoke release', { description: e.message })
-      recordMarketingFailure(
-        `Revoke release ${vars.releaseId}`,
-        vars.releaseId,
-        `/api/marketing/releases/${vars.releaseId}/revoke`,
-        vars,
-        e,
-      )
+      recordMarketingFailure(`Revoke release ${vars.releaseId}`, vars.releaseId, url, vars, e)
     },
   })
 }
