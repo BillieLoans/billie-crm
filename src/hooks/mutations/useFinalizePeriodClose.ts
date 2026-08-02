@@ -1,4 +1,12 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import { formatDateOnly } from '@/lib/formatters'
+
+/** Guards formatDateOnly, which throws on '' / unparseable input (Intl.DateTimeFormat
+ *  rejects an Invalid Date) — period-close-mapper.ts defaults periodDate to '' when the
+ *  gRPC response omits it, so this is a reachable case, not just defensive paranoia. */
+const isValidDateString = (value: string): boolean =>
+  value !== '' && !Number.isNaN(new Date(value).getTime())
 
 interface FinalizeRequest {
   previewId: string
@@ -53,13 +61,30 @@ export function useFinalizePeriodClose() {
       })
       if (!res.ok) {
         const error = await res.json().catch(() => ({}))
-        throw new Error(error.message || 'Failed to finalize period close')
+        const errorMessage =
+          (typeof error.details === 'string' && error.details) ||
+          (typeof error.error === 'string' && error.error) ||
+          (typeof error.error?.message === 'string' && error.error.message) ||
+          error.message ||
+          'Failed to finalize period close'
+        throw new Error(errorMessage)
       }
       return res.json()
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       // Invalidate closed periods to refresh history
       queryClient.invalidateQueries({ queryKey: ['period-close', 'history'] })
+
+      toast.success('Period closed', {
+        description: isValidDateString(data.periodDate)
+          ? `Period ${formatDateOnly(data.periodDate)} is now closed.`
+          : 'The period is now closed.',
+      })
+    },
+    onError: (error) => {
+      toast.error('Failed to close period', {
+        description: `${error.message} — check the preview and anomaly status, then retry.`,
+      })
     },
   })
 

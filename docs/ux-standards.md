@@ -1,6 +1,6 @@
 # UX Standards — Billie CRM
 
-**Status:** Adopted · **Owner:** Rohan · **Last reviewed:** 2026-07-31
+**Status:** Adopted · **Owner:** Rohan · **Last reviewed:** 2026-08-01
 
 This is a **conformance document**. It states what any screen in Billie CRM must
 satisfy before it ships. It is deliberately separate from
@@ -321,7 +321,9 @@ These are follow-up work, not claimed as done.
 
 ## 9. Audit findings (2026-07-31)
 
-Full sweep of `src/components` against §1–§5. Fixed items landed in the same change.
+Full sweep of `src/components` against §1–§5. The first three Fixed items landed in the
+same change as the sweep; the `aria-live` item was the top open finding and was closed in
+a follow-up branch — see the 2026-08-01 change-log row.
 
 ### Fixed
 
@@ -330,26 +332,23 @@ Full sweep of `src/components` against §1–§5. Fixed items landed in the same
 | **1.4.13** hover-only reveals | `NavSystemStatus` tooltip and `ServicingView.txBackButton` revealed content on `:hover` with no focus equivalent — unreachable by keyboard and touch. Both now pair `:focus-within` / `:focus-visible`. `LedgerStatus` was already correct and is the reference. |
 | **§5** ad-hoc money formatting | **12** components had grown their own `formatCurrency`, bypassing `lib/formatters`. They disagreed: most rendered 2 dp, `ECLSummaryWidget` whole dollars, and nullish handling ranged from an em-dash to **`$NaN` reaching the UI**. `formatCurrency` now accepts `string \| number \| null \| undefined` with an explicit em-dash fallback and a `fractionDigits` option; all 12 duplicates deleted. |
 | **1.3.1 / 4.1.2** form labels | 40 labels not associated with their control, incl. 12 in `FilterBar`. Date-range pairs announced as two anonymous "edit text" fields; they now carry per-input names inside a named `role="group"`, and toggle groups expose `aria-pressed`. |
+| **4.1.3** `aria-live` / status messages | The original **"19 of 76 components"** figure counted explicit `aria-live` markup only and gave no credit to the toast layer — **sonner v2.0.7 renders `aria-live="polite"` on its container, so every toast was already announced.** That correction is part of this finding: the framing overstated the gap. The real gap was narrower: **8 mutation hooks** (`useAcknowledgeAnomaly`, `useCancelConfigChange`, `useFinalizePeriodClose`, `useRetryExport`, `useScheduleConfigChange`, `useBatchQuery`, `useRandomSample`, `usePeriodClosePreview`) that never toasted at all, plus optimistic stage transitions (`MutationStage`) that were tracked in the optimistic store but never spoken. Both are now closed. A single `LiveAnnouncer` (`src/components/ui/LiveAnnouncer`) mounts once, in `src/providers/index.tsx`, rendering two visually-hidden regions — `role="status"`/`aria-live="polite"` and `role="alert"`/`aria-live="assertive"` — each with its own sequence counter, so one lane's announcement never blanks or remounts the other; the clear-then-reset that lets an identical consecutive message re-announce runs on a 100ms timer (not 0 — Chromium/Firefox coalesce accessibility-tree notifications within the same frame, so a 0ms clear is often never observed). A Zustand store (`src/stores/announcer.ts`) exposes `announce()`; message text is pure-function composition in `src/lib/announcements.ts`; a subscriber on the optimistic store (`useOptimisticAnnouncements`) announces **settled stages only** — `confirmed`/`failed`, never `optimistic`/`submitted` — with a dedupe record that survives component unmount/remount. `PendingMutation` gained an optional `balanceAfter`, populated by `useWaiveFee` and `useRecordRepayment` and gated on `totalDelta !== 0` **and** on both `totalAfter`/`totalDelta` actually being numbers (not just finite after coercion — the two fields are parsed independently, so one can be a valid number while the other silently arrives as `null`, which `Number(null)` would otherwise launder into a false `$0.00`), so an unchanged or unreported balance is never announced as "updated". Seven of the eight now toast on both success and failure; `usePeriodClosePreview` is error-only by design — generating a preview is a read, not a commitment, and the wizard already advances visibly to a "Preview Summary" step on success, so a success toast there would be intermediate-step noise. **A failure with no `balanceAfter` is not spoken by `LiveAnnouncer` at all** — `describeSettledMutation` returns `null` for it, deliberately, because the failure toast already says the same thing, and duplicating it into the assertive lane means the lane reserved for the most urgent messages interrupts the user with an echo of what they were just told. The assertive lane is reserved for a failure that *also* carries a rolled-back balance ("… failed: reason. Balance restored to $X."); **no failure handler sets `balanceAfter` yet**, so as of this writing the assertive lane is dormant in production — it fires in tests only, pending a future rollback-balance wiring. **Not verified:** actual screen-reader output (NVDA/VoiceOver/JAWS) — the test suite proves DOM remount and store transitions, not what a screen reader speaks aloud; that check remains a manual step. |
 
 ### Open, in priority order
 
-1. **`aria-live` coverage (4.1.3).** Only **19 of 76** components with async or optimistic
-   state announce it. The design spec's "Truth Scale" — optimistic → synced → error — is
-   silent to a screen-reader user on most surfaces. This is the largest remaining gap and
-   the one that most directly undermines a stated product requirement.
-2. **Error summary pattern (§3) is implemented nowhere.** Validation errors are inline
+1. **Error summary pattern (§3) is implemented nowhere.** Validation errors are inline
    only. Required for every form under the GOV.UK pattern this standard adopts.
-3. **Row-click keyboard access.** `TransactionList`, `RepaymentScheduleList` and
+2. **Row-click keyboard access.** `TransactionList`, `RepaymentScheduleList` and
    `EnhancedScheduleList` put click handlers on non-interactive rows. These are the
    `click-events-have-key-events` warnings that are *not* backdrop noise — real keyboard
    dead-ends in the densest, most-used surfaces. Fix with the APG Grid pattern.
-4. **Drawer backdrops.** `ApplyFeeDrawer`, `BulkWaiveFeeDrawer`, `WriteOffRequestDrawer`,
+3. **Drawer backdrops.** `ApplyFeeDrawer`, `BulkWaiveFeeDrawer`, `WriteOffRequestDrawer`,
    `AddNoteDrawer`, `ContextDrawer` repeat the backdrop idiom the `<Modal>` primitive
    solved. A sibling `<Drawer>` primitive would close these out.
-5. **`autoFocus` (7 sites, all `MarketingView`).** The design spec's "modal focuses first
+4. **`autoFocus` (7 sites, all `MarketingView`).** The design spec's "modal focuses first
    input" is right, but should be programmatic — `<Modal>` already does this, so these can
    simply be dropped once those dialogs adopt it.
-6. **Stepped flows for irreversible money movement (§3)** are still single modals.
+5. **Stepped flows for irreversible money movement (§3)** are still single modals.
    `WriteOffModal` mitigates with a type-to-confirm field; the others do not.
 
 ## 10. Change log
@@ -358,3 +357,5 @@ Full sweep of `src/components` against §1–§5. Fixed items landed in the same
 |---|---|
 | 2026-07-31 | Initial adoption. WCAG target raised 2.1 AA → 2.2 AA. Resolved target-size and hover-action conflicts in the design spec. |
 | 2026-07-31 | Remediation: Tier 1 lint enforced (40 label fixes), shared `<Modal>` primitive added, 21 of 23 dialogs migrated, `formatCurrency` consolidated (12 duplicates, `$NaN` bug), 2 hover-only tooltips fixed, axe spec + PR template added. jsx-a11y findings 134 → 29. See §8.2a and §9. |
+| 2026-08-01 | Closed §9's largest open finding (4.1.3): added `LiveAnnouncer` (two visually-hidden live regions), an announcer store, pure message composition, and a subscriber that announces settled optimistic mutations with `balanceAfter` support; gave toasts to the 8 previously-silent mutation hooks. Corrected the "19 of 76 components" framing — sonner already announced every toast; the real gap was the 8 hooks plus unannounced optimistic transitions. Screen-reader output not yet verified with a real AT. Moved from Open to Fixed in §9. |
+| 2026-08-02 | Final fix wave before merge: (1) guarded `requireAuth`'s `{ code, message }` error shape in all 8 Task-6 hooks (`useAcknowledgeAnomaly`, `useCancelConfigChange`, `useFinalizePeriodClose`, `useRetryExport`, `useScheduleConfigChange`, `useBatchQuery`, `useRandomSample`, `usePeriodClosePreview` — `useScheduleConfigChange` was missed in the first pass of this fix and closed in a follow-up commit the same day) so a 401/403 no longer throws `new Error(<object>)` — literal `"[object Object]"` — and now surfaces the server's real reason instead; (2) raised `LiveAnnouncer`'s clear-then-reset timer from 0ms to a named 100ms constant, since a 0ms timer commonly lands inside the same coalesced accessibility-tree notification and the re-announcement is never observed; (3) tightened the `balanceAfter` guard in `useWaiveFee`/`useRecordRepayment` to require `typeof === 'number'` ahead of `Number.isFinite`, closing a hole where an asymmetric null `totalAfter` (with a valid non-zero `totalDelta`) coerced to a false `$0.00`; (4) `describeSettledMutation` now returns `null` for a plain failure (no `balanceAfter`) instead of duplicating the failure toast into the assertive lane — the assertive lane is reserved for failure-with-balance announcements, which no failure handler produces yet, so it is currently dormant in production. §9's finding row updated to describe all four accurately. |

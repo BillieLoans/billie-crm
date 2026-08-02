@@ -94,4 +94,58 @@ describe('useAcknowledgeAnomaly', () => {
       })
     ).rejects.toThrow('Internal server error')
   })
+
+  it('prefers the route detail sentence over the duplicate error title on a 500', async () => {
+    // The route's real 500 shape (see api/period-close/acknowledge-anomaly/route.ts) is
+    // { error: 'Failed to acknowledge anomaly', details: 'An internal error occurred...' } —
+    // never { message }. Before the fix, error.message was always undefined so the hook's
+    // hardcoded fallback fired regardless of what the route actually sent.
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      json: () =>
+        Promise.resolve({
+          error: 'Failed to acknowledge anomaly',
+          details: 'An internal error occurred. Please try again.',
+        }),
+    })
+
+    const { result } = renderHook(() => useAcknowledgeAnomaly(), {
+      wrapper: createWrapper(),
+    })
+
+    await expect(
+      act(async () => {
+        await result.current.acknowledgeAnomaly({
+          previewId: 'preview-123',
+          anomalyId: 'anomaly-1',
+          acknowledgedBy: 'user-1',
+        })
+      })
+    ).rejects.toThrow('An internal error occurred. Please try again.')
+  })
+
+  it('falls back to error.error when details is a validation field-errors object, not a string', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      json: () =>
+        Promise.resolve({
+          error: 'Validation failed',
+          details: { previewId: ['Required'] },
+        }),
+    })
+
+    const { result } = renderHook(() => useAcknowledgeAnomaly(), {
+      wrapper: createWrapper(),
+    })
+
+    await expect(
+      act(async () => {
+        await result.current.acknowledgeAnomaly({
+          previewId: '',
+          anomalyId: 'anomaly-1',
+          acknowledgedBy: 'user-1',
+        })
+      })
+    ).rejects.toThrow('Validation failed')
+  })
 })

@@ -1,4 +1,5 @@
 import { useMutation } from '@tanstack/react-query'
+import { toast } from 'sonner'
 
 interface AcknowledgeRequest {
   previewId: string
@@ -38,13 +39,31 @@ export function useAcknowledgeAnomaly() {
       })
       if (!res.ok) {
         const error = await res.json().catch(() => ({}))
-        throw new Error(error.message || 'Failed to acknowledge anomaly')
+        const errorMessage =
+          (typeof error.details === 'string' && error.details) ||
+          (typeof error.error === 'string' && error.error) ||
+          (typeof error.error?.message === 'string' && error.error.message) ||
+          error.message ||
+          'Failed to acknowledge anomaly'
+        throw new Error(errorMessage)
       }
       const body: AcknowledgeResponse = await res.json()
       if (body.success === false) {
         throw new Error(body.errorMessage || 'Failed to acknowledge anomaly')
       }
       return body
+    },
+    onSuccess: (data) => {
+      toast.success('Anomaly acknowledged', {
+        description: data.allAnomaliesAcknowledged
+          ? 'All anomalies have been reviewed — the period is ready to finalise.'
+          : 'This anomaly will no longer block finalising the period.',
+      })
+    },
+    onError: (error) => {
+      toast.error('Failed to acknowledge anomaly', {
+        description: `${error.message} — try again, or contact support if it persists.`,
+      })
     },
   })
 

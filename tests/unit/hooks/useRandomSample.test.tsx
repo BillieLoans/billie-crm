@@ -66,6 +66,28 @@ describe('useRandomSample', () => {
     ).rejects.toThrow('Sample size exceeds limit')
   })
 
+  it('prefers the route detail sentence over the duplicate error title on a 500', async () => {
+    // Real route shape (api/investigation/sample/route.ts) is { error, details }, never
+    // { message } — before the fix, error.message was always undefined so the hook's
+    // hardcoded fallback always fired instead of the server's actual reason.
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      json: () =>
+        Promise.resolve({
+          error: 'Failed to generate sample',
+          details: 'An internal error occurred. Please try again.',
+        }),
+    })
+
+    const { result } = renderHook(() => useRandomSample(), { wrapper: createWrapper() })
+
+    await expect(
+      act(async () => {
+        await result.current.generateSample({ sampleSize: 1000 })
+      })
+    ).rejects.toThrow('An internal error occurred. Please try again.')
+  })
+
   it('should send filters and seed', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,

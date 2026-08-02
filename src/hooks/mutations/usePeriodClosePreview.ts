@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 
 /**
  * Anomaly detected during period close preview
@@ -148,13 +149,28 @@ export function usePeriodClosePreview() {
       })
       if (!res.ok) {
         const error = await res.json().catch(() => ({}))
-        throw new Error(error.message || 'Failed to generate preview')
+        const errorMessage =
+          (typeof error.details === 'string' && error.details) ||
+          (typeof error.error === 'string' && error.error) ||
+          (typeof error.error?.message === 'string' && error.error.message) ||
+          error.message ||
+          'Failed to generate preview'
+        throw new Error(errorMessage)
       }
       return res.json()
     },
     onSuccess: () => {
       // Invalidate closed periods in case this affects display
       queryClient.invalidateQueries({ queryKey: ['period-close'] })
+    },
+    onError: (error) => {
+      // No success toast here: generating a preview is a read, not a commitment, and
+      // the wizard already advances to a full "Preview Summary" step on success — an
+      // unprompted success toast on every intermediate step of this flow would just be
+      // noise a screen-reader user learns to tune out before the Finalize step matters.
+      toast.error('Failed to load preview', {
+        description: `${error.message} — choose a different period, or try again.`,
+      })
     },
   })
 

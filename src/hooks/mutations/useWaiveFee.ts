@@ -39,6 +39,7 @@ export interface WaiveFeeResponse {
     typeLabel: string
     date: string
     feeDelta: number
+    totalDelta: number
     feeAfter: number
     totalAfter: number
     description: string
@@ -112,11 +113,39 @@ export function useWaiveFee(loanAccountId?: string, accountLabel?: string) {
       setPending(params.loanAccountId, pendingMutation)
 
       // Return context for rollback
-      return { mutationId, loanAccountId: params.loanAccountId }
+      return { mutationId, loanAccountId: params.loanAccountId, pendingMutation }
     },
 
     onSuccess: (data, params, context) => {
       if (!context) return
+
+      // Report the settled balance so the announcer can say "Balance updated
+      // to $X" instead of just naming the action — but only when the waiver
+      // actually moved the total. A duplicate/idempotent-replay waiver against
+      // an account whose fee balance is already zero settles with
+      // totalDelta === 0; reporting totalAfter there would be a true number
+      // wrapped in a false "updated to" claim.
+      //
+      // The route parseFloat()s proto3 string fields; an unset proto string is
+      // "", parseFloat("") is NaN, and JSON.stringify(NaN) emits null. So either
+      // field can arrive as null despite the WaiveFeeResponse type claiming
+      // `number` — and totalAfter/totalDelta are independently parsed, so one
+      // can be a valid number while the other is null (an asymmetric unset).
+      // `Number(null)` is 0, which passes `Number.isFinite`, so a bare
+      // isFinite check lets a null totalAfter through as a false "Balance
+      // updated to $0.00". Requiring `typeof === 'number'` first closes that
+      // hole: null (or any other non-number JSON value) is rejected outright,
+      // it doesn't get coerced to a misleading 0.
+      const totalAfter = data.transaction.totalAfter
+      const totalDelta = data.transaction.totalDelta
+      const totalAfterIsNumber = typeof totalAfter === 'number' && Number.isFinite(totalAfter)
+      const totalDeltaIsNumber = typeof totalDelta === 'number' && Number.isFinite(totalDelta)
+      if (totalAfterIsNumber && totalDeltaIsNumber && totalDelta !== 0) {
+        setPending(context.loanAccountId, {
+          ...context.pendingMutation,
+          balanceAfter: totalAfter,
+        })
+      }
 
       // Update stage to confirmed
       setStage(context.loanAccountId, context.mutationId, 'confirmed')

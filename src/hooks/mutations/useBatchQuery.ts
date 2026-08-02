@@ -1,4 +1,5 @@
 import { useMutation } from '@tanstack/react-query'
+import { toast } from 'sonner'
 
 export interface BatchQueryRequest {
   accountIds: string[]
@@ -65,9 +66,25 @@ export function useBatchQuery() {
       })
       if (!res.ok) {
         const error = await res.json().catch(() => ({}))
-        throw new Error(error.message || 'Failed to execute batch query')
+        const errorMessage =
+          (typeof error.details === 'string' && error.details) ||
+          (typeof error.error === 'string' && error.error) ||
+          (typeof error.error?.message === 'string' && error.error.message) ||
+          error.message ||
+          'Failed to execute batch query'
+        throw new Error(errorMessage)
       }
       return res.json()
+    },
+    onSuccess: (data) => {
+      toast.success('Batch query complete', {
+        description: `${data.foundCount} found, ${data.notFoundCount} not found.`,
+      })
+    },
+    onError: (error) => {
+      toast.error('Batch query failed', {
+        description: `${error.message} — check the account IDs and try again.`,
+      })
     },
   })
 
