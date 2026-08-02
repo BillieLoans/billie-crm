@@ -13,14 +13,17 @@ export interface Announcement {
  * describeSettledMutation return null, which keeps a new mutation
  * silent-but-safe (carried by its toast alone) rather than announcing a
  * misleading generic "Action" or a raw slug.
+ *
+ * The four collections slugs (flag-hardship, stop-contact, resume-hardship,
+ * advance-step) are DELIBERATELY absent. Those hooks toast via
+ * useCollectionsAction (sonner announces the toast), and they never carry a
+ * balanceAfter — so an announcement here would say exactly what the toast
+ * says, twice. The design spec scopes them out for that reason. Do not add
+ * them back without also giving the announcement information the toast lacks.
  */
 const ACTION_PHRASES: Record<string, string> = {
   'waive-fee': 'Waive fee',
   'record-repayment': 'Record repayment',
-  'flag-hardship': 'Flag hardship',
-  'stop-contact': 'Stop contact',
-  'resume-hardship': 'Resume hardship',
-  'advance-step': 'Advance step',
 }
 
 export function describeSettledMutation(mutation: PendingMutation): Announcement | null {

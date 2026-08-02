@@ -5,6 +5,7 @@ import { useAuth } from '@payloadcms/ui'
 import { useRecentCustomersStore } from '@/stores/recentCustomers'
 import { useFailedActionsStore } from '@/stores/failed-actions'
 import { useVersionStore } from '@/stores/version'
+import { useAnnouncerStore } from '@/stores/announcer'
 import {
   SESSION_USER_STORAGE_KEY,
   RECENT_CUSTOMERS_STORAGE_KEY,
@@ -20,6 +21,9 @@ function clearUserSessionData(): void {
   useRecentCustomersStore.getState().clearHistory()
   useFailedActionsStore.getState().clearAll()
   useVersionStore.getState().clearAllVersions()
+  // In-memory only, but its text is the previous user's last announced financial
+  // outcome (can include a balance figure) — same rationale as versionStore above.
+  useAnnouncerStore.getState().reset()
 
   // Clear the persisted localStorage data directly
   // (in case store clear doesn't immediately sync)

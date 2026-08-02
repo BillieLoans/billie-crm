@@ -11,6 +11,13 @@ interface AnnouncerState {
   /** Bumped only when an assertive announcement fires — independent of the polite lane. */
   assertiveSeq: number
   announce: (text: string, urgency: AnnouncementUrgency) => void
+  /**
+   * Cross-user session clear (UserSessionGuard). Resets both lanes to their
+   * initial state — seqs return to 0, which LiveAnnouncer treats as "clear the
+   * rendered text without announcing", so the previous user's last announcement
+   * (it can contain a balance figure) never survives an in-SPA user switch.
+   */
+  reset: () => void
 }
 
 /**
@@ -31,4 +38,5 @@ export const useAnnouncerStore = create<AnnouncerState>((set) => ({
         ? { polite: text, politeSeq: state.politeSeq + 1 }
         : { assertive: text, assertiveSeq: state.assertiveSeq + 1 },
     ),
+  reset: () => set({ polite: '', politeSeq: 0, assertive: '', assertiveSeq: 0 }),
 }))

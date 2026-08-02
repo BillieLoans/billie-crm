@@ -149,3 +149,25 @@ refetches, making verbosity nearly impossible to control.
 **Announce from each mutation hook.** Message authored next to the action. Rejected:
 33 hooks, largely duplicates what toasts already say, and misses transitions that
 happen outside hooks — notably rollbacks, the announcements that matter most.
+
+## Deviations from this spec (as merged)
+
+Review during implementation changed three contracts stated above. The shipped code
+is authoritative; this section exists so the spec does not misdescribe it.
+
+- **Unmapped actions announce nothing.** The "falls back to `Action confirmed` /
+  `Action failed`" contract under Error handling was reversed: an unmapped action now
+  returns `null` and is carried by its toast alone. A generic "Action" phrase was
+  judged more misleading than silence.
+- **The four collections actions stay out of the announcer entirely** — as this spec's
+  own scoping intended. They were briefly mapped during a fix round (to stop them
+  announcing the literal word "Action"), which produced verbatim duplication of their
+  toasts; the final review removed them again once the null fallback made that safe.
+- **Failures announce only when they carry a rolled-back balance.** The worked example
+  "Payment failed: ledger unavailable. Balance restored to $150.00." requires rollback
+  balance wiring that does not exist yet, so the assertive lane is dormant in
+  production; a plain failure is announced by its toast alone. See the comment in
+  `src/lib/announcements.ts`.
+- The plan's Task 1/Task 2 reference code (the `?? 'Action'` fallback and the keyed
+  live regions) is superseded by the above and by the stable-node two-phase
+  re-announce mechanism in `LiveAnnouncer.tsx`.

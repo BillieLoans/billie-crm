@@ -145,4 +145,20 @@ describe('LiveAnnouncer', () => {
     expect(screen.getByRole('status')).toBe(politeNode)
     expect(screen.getByRole('status').textContent).toBe('Waive fee confirmed.')
   })
+  it('reset() clears both rendered regions without announcing (cross-user session clear)', () => {
+    // UserSessionGuard calls reset() when a different user authenticates in the same
+    // tab. The previous user's last announcement can contain a balance figure, so it
+    // must leave the DOM — and seq returning to 0 must not itself speak anything.
+    render(<LiveAnnouncer />)
+    act(() => useAnnouncerStore.getState().announce('Balance updated to $475.50.', 'polite'))
+    act(() => useAnnouncerStore.getState().announce('Write off failed.', 'assertive'))
+    act(() => vi.advanceTimersByTime(100))
+    expect(screen.getByRole('status').textContent).toBe('Balance updated to $475.50.')
+    expect(screen.getByRole('alert').textContent).toBe('Write off failed.')
+
+    act(() => useAnnouncerStore.getState().reset())
+    act(() => vi.advanceTimersByTime(200))
+    expect(screen.getByRole('status').textContent).toBe('')
+    expect(screen.getByRole('alert').textContent).toBe('')
+  })
 })

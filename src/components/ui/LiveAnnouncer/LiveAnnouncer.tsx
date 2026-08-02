@@ -50,14 +50,22 @@ export const LiveAnnouncer: React.FC = () => {
   useOptimisticAnnouncements()
 
   useEffect(() => {
-    if (politeSeq === 0) return
+    if (politeSeq === 0) {
+      // seq 0 is both "first mount" (no-op) and "store reset by UserSessionGuard" —
+      // clear the rendered text without announcing anything.
+      setPoliteText('')
+      return
+    }
     setPoliteText('')
     const id = window.setTimeout(() => setPoliteText(polite), REANNOUNCE_DELAY_MS)
     return () => window.clearTimeout(id)
   }, [politeSeq, polite])
 
   useEffect(() => {
-    if (assertiveSeq === 0) return
+    if (assertiveSeq === 0) {
+      setAssertiveText('')
+      return
+    }
     setAssertiveText('')
     const id = window.setTimeout(() => setAssertiveText(assertive), REANNOUNCE_DELAY_MS)
     return () => window.clearTimeout(id)

@@ -65,15 +65,14 @@ describe('describeSettledMutation', () => {
     ).toBeNull()
   })
 
-  it('announces a real collections action slug with its proper phrase', () => {
-    expect(
-      describeSettledMutation({
-        ...base,
-        action: 'flag-hardship',
-        amount: undefined,
-      }),
-    ).toEqual({ text: 'Flag hardship confirmed.', urgency: 'polite' })
-  })
+  it.each([['flag-hardship'], ['stop-contact'], ['resume-hardship'], ['advance-step']])(
+    'stays silent for collections action %s — its toast is the announcement',
+    (action) => {
+      // These hooks toast via useCollectionsAction and never carry a balance, so an
+      // announcement here would duplicate the toast verbatim. Spec scopes them out.
+      expect(describeSettledMutation({ ...base, action, amount: undefined })).toBeNull()
+    },
+  )
 
   it('omits the amount clause when there is no amount', () => {
     expect(describeSettledMutation({ ...base, amount: undefined })).toEqual({
