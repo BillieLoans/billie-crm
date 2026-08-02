@@ -16,7 +16,8 @@
     "start": "cross-env NODE_OPTIONS=--no-deprecation next start",
     "test": "pnpm run test:int && pnpm run test:e2e",
     "test:e2e": "cross-env NODE_OPTIONS=\"--no-deprecation --no-experimental-strip-types\" pnpm exec playwright test",
-    "test:int": "cross-env NODE_OPTIONS=--no-deprecation vitest run --config ./vitest.config.mts",
+    "test:int": "cross-env NODE_OPTIONS=--no-deprecation vitest run --config ./vitest.config.mts --reporter=default --reporter=json --outputFile=./vitest-int-report.json",
+    "test:int:check-count": "node scripts/check-test-count.mjs",
     "e2e:auth": "node scripts/e2e-auth.mjs"
   },
   "dependencies": {
