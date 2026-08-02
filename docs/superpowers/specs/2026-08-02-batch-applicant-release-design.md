@@ -25,6 +25,7 @@ Everyone arriving at chat.billie.loans passes a front-door gate: verify your mob
 | Grant lifetime? | **Per-release expiry window**, default 14 days, editable per release. Re-entry allowed within the window. Releases are revocable. |
 | Invite SMS? | **Optional per release** (checkbox). Sending is done by billieChat, not the CRM (the CRM's NotificationDispatcher gRPC client is read/suppression-only). |
 | SMS consent policy | **Marketing consent required for the SMS.** Unconsented (or unmatched pasted) numbers still get the grant — they can enter if they show up — but receive no message. |
+| On/off control | **Two-level.** Operational switch: runtime gate mode (`open` \| `gated`) in billieChat Redis, flipped instantly (no deploy) by an ops CLI that publishes a `gate_mode.set` event; CRM shows the current mode. Engineering guard: `ENABLE_APPLICATION_GATE` env flag for dark-shipping and hard kill. Default mode is `open` — fully-rolled-out production simply leaves it there. |
 | Architecture | **Approach A: CRM commands it, billieChat enforces it.** A new small "applicant release" domain; marketing data is only *read* for targeting; the entry decision is mastered on the lending side. Preserves the marketing spec's privacy wall (marketing never authors a lending decision) and keeps `billie-platform-services` untouched. |
 
 Rejected approaches: extending the platform `marketingService` (out of scope repo; puts a lending-entry decision inside marketing, against the privacy-wall invariants in `docs/superpowers/specs/2026-07-02-marketing-crm-customer-lifecycle-design.md` §1); billieChat-masters-with-sync-CRM-read-API (new synchronous runtime coupling; breaks the CRM's projection convention).
@@ -81,11 +82,15 @@ billie-crm (Payload admin)                     billieChat (FastAPI + Svelte)
 
 **`applicant_release.revoked.v1`** — `{ release_id, revoked_by, reason? }`. Kills all remaining grants and any remaining quota. Stops new entries; does not terminate in-flight conversations.
 
+**`applicant_release.gate_mode.set.v1`** — `{ mode: "open" | "gated", set_by, reason? }`. Published by the gate CLI (below), not the CRM. applicantReleaseService applies it to Redis and emits the fact.
+
 ### billieChat → CRM (facts)
 
 **`applicant_release.grant_claimed.v1`** — `{ release_id, mobile_e164, source: "targeted" | "quota", claimed_at, conversation_id }`. Emitted on first successful gate entry per grant.
 
 **`applicant_release.invites_sent.v1`** — `{ release_id, sent: ["+614…"], failed: [{ mobile_e164, reason }] }`. One retry per failed send, then reported for manual follow-up.
+
+**`applicant_release.gate_mode.changed.v1`** — `{ mode, set_by, changed_at }`. Projected by the CRM so the Releases UI shows the live mode.
 
 Parsing on the CRM side uses local Pydantic models in `billie_servicing` (like the write-off events), not the external SDKs.
 
@@ -119,14 +124,14 @@ Each release also logs a "released to apply" interaction on matched contacts via
 
 ### UI (extends `src/components/MarketingView/`)
 
-- **Releases tab** in the marketing sub-nav (`/admin/marketing/releases`): summary line ("open capacity right now: X unclaimed grants + Y quota slots"), table of releases (name, type, status pill, released, granted, claimed, remaining, expires).
+- **Releases tab** in the marketing sub-nav (`/admin/marketing/releases`): summary line ("open capacity right now: X unclaimed grants + Y quota slots"), table of releases (name, type, status pill, released, granted, claimed, remaining, expires). When gate mode is `open`, a persistent banner reads "Application gate is OFF — releases are not being enforced" (mode comes from a single-row `release-gate-status` projection written from `gate_mode.changed.v1`).
 - **New release modal**, two steps (ux-standards stepped-flow pattern): **Define** (name, type as three radio cards, count *or* paste-area for phone lists, validity days, SMS checkbox — disabled for open quota) → **Preflight & confirm** (partition with counts; confirm states the SMS consequence explicitly). Fixed layout: switching type swaps only the count/paste field.
 - **Release detail**: header (status, audit line, Revoke button with typed-confirmation modal), five fixed stat tiles (granted / claimed / unclaimed / SMS sent / SMS failed), grant table (mobile, contact link, source, status, SMS, claimed at) — same columns for every type.
 - Hooks follow the marketing pattern: `useReleases` / `useRelease` / `useReleasePreflight` (staleTime 0) queries; mutations in `useMarketingCommands.ts` style with lag-tolerant invalidation and failed-action capture.
 
 ### Python processor (`event-processor/`)
 
-New `handlers/applicant_release.py`: `released.v1` → upsert `release_batches` + insert `release_grants` (targeted); `revoked.v1` → statuses; `grant_claimed.v1` → grant row upsert (mints quota rows) + counters; `invites_sent.v1` → sms statuses + counters. Registered in `main.py`; prefix `applicant_release.` added to the parser dispatch with local models.
+New `handlers/applicant_release.py`: `released.v1` → upsert `release_batches` + insert `release_grants` (targeted); `revoked.v1` → statuses; `grant_claimed.v1` → grant row upsert (mints quota rows) + counters; `invites_sent.v1` → sms statuses + counters; `gate_mode.changed.v1` → single-row `release_gate_status`. Registered in `main.py`; prefix `applicant_release.` added to the parser dispatch with local models.
 
 ## 6. billieChat
 
@@ -137,6 +142,11 @@ New `backend/backend/src/services/applicantRelease/` mirroring `reapplicationBlo
 - `applicant_release_service.py` — `BaseAgent` on new `inbox:applicantReleaseService` (add to `agent_inbox_mapping`, `routes.json` sender rules, and a `ProcessSpec` in `__main__.py`). Handles `released.v1` (store grants/quota; send invite SMS where `send_sms` via existing ClickSend utils; emit `invites_sent.v1`) and `revoked.v1` (sweep).
 - `repository.py` / `postgres_repository.py` / `dual_write.py` behind `APPLICANT_RELEASE_PROJECTION_STORE` (`redis` | `dual` | `pg`), new Alembic migration for shadow tables.
 - `gate.py` — the decision function; `messages.py` — copy from Redis hash `capacity_gate_messages` (→ config → hard-coded fallback, per `stop_messages.py`); `enums.py`.
+- `gate_cli.py` — the on/off configuration script: `python -m backend.src.services.applicantRelease.gate_cli {on|off|status} --env <env>` (mirrors the `feature_flags.cli` precedent). `on`/`off` publish `gate_mode.set.v1` to chatLedger with the operator's identity; `status` reads the Redis key and prints mode + active releases. A Make target wraps it for ops convenience.
+
+### Gate control (two levels)
+
+Effective gating = `ENABLE_APPLICATION_GATE` (env flag, code-level guard) **AND** runtime gate mode (`application_gate:mode` in Redis, default `open` when unset). Flag off → all gate code inert regardless of mode (dark-ship + hard kill, restart required). Flag on + mode `open` → door open exactly as today, `GET /gate/status` returns `off`, frontend never shows gate states; flipping to `gated` via the CLI takes effect within seconds (mode is read per gate check with a short in-process cache, ≤5 s). Fully-rolled-out production runs mode `open`; the service, collections and flag can later be deleted cleanly — nothing else depends on them.
 
 ### Storage (Redis primary)
 
@@ -150,7 +160,7 @@ New `backend/backend/src/services/applicantRelease/` mirroring `reapplicationBlo
 
 - `GET /gate/status` → `{ mode: "off" | "quota_open" | "invite_only" }` — tells the frontend whether mobile-entry (State 1) or capacity (State 3) leads.
 - `POST /gate/otp/initiate` `{mobile}` / `POST /gate/otp/verify` `{code}` — thin wrappers over the existing `otp_service` (existing TTL/attempt/rate limits, per-destination hashed keys). Verify runs the decision **in order**: (1) existing customer — mobile blind-index lookup via the identity attribute store (migration `0006_identity_blind_index`) → bypass, reapplication block unchanged; (2) active grant → enter; (3) open quota with slots → claim (mint grant, decrement, emit `grant_claimed.v1`) → enter; (4) → capacity result. Success stamps the session hash (`gate_passed`, `gate_mobile`, `release_id`).
-- **Enforcement**: `POST /chat/init` — when `ENABLE_APPLICATION_GATE` is on and the session lacks `gate_passed` → return a gate-required status (no agents start). The WS `s=true` welcome branch double-checks, mirroring `blocked_stop_message`. The Svelte pages are presentation only.
+- **Enforcement**: `POST /chat/init` — when gating is effective (flag AND mode `gated`) and the session lacks `gate_passed` → return a gate-required status (no agents start). The WS `s=true` welcome branch double-checks, mirroring `blocked_stop_message`. The Svelte pages are presentation only.
 - The mid-flow OTP step is **skipped** when the gate already verified the same mobile for this session; if the applicant later gives a different mobile in-chat, normal OTP verification runs for it.
 
 ### Frontend (App.svelte + new components)
@@ -180,6 +190,7 @@ Nobody is put through an OTP just to be refused unless they chose to check their
 
 ## 9. Rollout
 
-1. Ship both repos dark behind `ENABLE_APPLICATION_GATE` (billieChat) — flag off preserves today's open door exactly; it is also the instant kill switch.
-2. Rehearse in demo: create each release type, verify SMS, gate entry, quota exhaustion, revocation, CRM counts.
-3. Enable in prod during a low-traffic window with an open-quota release active so walk-ups are never hard-blocked on day one.
+1. Ship both repos dark: `ENABLE_APPLICATION_GATE` off in prod. Today's open door is preserved exactly.
+2. Rehearse in demo: flag on, then `gate_cli on` / `off`, each release type, SMS, gate entry, quota exhaustion, revocation, CRM counts and mode banner.
+3. Prod: enable the flag (deploy) with mode still `open` — zero behaviour change. During a low-traffic window, run `gate_cli on` with an open-quota release active so walk-ups are never hard-blocked on day one.
+4. Retire: `gate_cli off` returns to the open door instantly (this is the "fully rolled out" end state). The flag, service, and collections can be removed in a later cleanup with no data-model entanglement.
