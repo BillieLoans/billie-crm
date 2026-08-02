@@ -15,6 +15,12 @@ from .handlers import (
     handle_account_status_changed,
     handle_account_updated,
     handle_affordability_report_downloaded,
+    # Applicant release handlers (CRM-originated + billieChat facts — spec 2026-08-02)
+    handle_applicant_release_gate_mode_changed,
+    handle_applicant_release_grant_claimed,
+    handle_applicant_release_invites_sent,
+    handle_applicant_release_released,
+    handle_applicant_release_revoked,
     handle_application_detail_changed,
     handle_assessment,
     handle_basiq_job_created,
@@ -239,6 +245,27 @@ def setup_handlers(processor: EventProcessor) -> None:
     processor.register_handler("writeoff.approved.v1", handle_writeoff_approved)
     processor.register_handler("writeoff.rejected.v1", handle_writeoff_rejected)
     processor.register_handler("writeoff.cancelled.v1", handle_writeoff_cancelled)
+
+    # =========================================================================
+    # Applicant release (spec 2026-08-02) — CRM-originated + billieChat facts
+    # =========================================================================
+    processor.register_handler(
+        "applicant_release.released.v1", handle_applicant_release_released
+    )
+    processor.register_handler(
+        "applicant_release.revoked.v1", handle_applicant_release_revoked
+    )
+    processor.register_handler(
+        "applicant_release.grant_claimed.v1", handle_applicant_release_grant_claimed
+    )
+    processor.register_handler(
+        "applicant_release.invites_sent.v1", handle_applicant_release_invites_sent
+    )
+    processor.register_handler(
+        "applicant_release.gate_mode.changed.v1", handle_applicant_release_gate_mode_changed
+    )
+    # `applicant_release.gate_mode.set.v1` is deliberately NOT registered — it's
+    # billieChat's command; the processor ACKs-and-skips unregistered types.
 
     # =========================================================================
     # Block-clear approval events (CRM-originated, manual parsing)
