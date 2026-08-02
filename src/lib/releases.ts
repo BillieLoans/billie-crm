@@ -98,7 +98,7 @@ export async function computeReleasePartition({
         erased: { not_equals: true },
         mergedInto: { exists: false },
       } as never,
-      sort: 'waitlistPosition,waitlistJoinedAt',
+      sort: ['waitlistPosition', 'waitlistJoinedAt'],
       limit: WAITLIST_LIMIT,
       depth: 0,
       overrideAccess: false,

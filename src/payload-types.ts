@@ -1678,7 +1678,17 @@ export interface Interaction {
   contact?: (string | null) | Contact;
   occurredAt?: string | null;
   kind?:
-    | ('signup' | 'message_out' | 'message_in' | 'feedback_prompt' | 'referral' | 'stage_change' | 'note' | 'import')
+    | (
+        | 'signup'
+        | 'message_out'
+        | 'message_in'
+        | 'feedback_prompt'
+        | 'referral'
+        | 'stage_change'
+        | 'note'
+        | 'import'
+        | 'released_to_apply'
+      )
     | null;
   channel?: string | null;
   direction?: ('inbound' | 'outbound') | null;

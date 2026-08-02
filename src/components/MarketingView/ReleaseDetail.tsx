@@ -55,9 +55,11 @@ function smsStatusBadgeClass(status: string | null | undefined): string {
 /**
  * Release detail — stat tiles for capacity at a glance, the grant-level
  * table (who was targeted, what happened to them), and the revoke action.
- * Revoking is irreversible (remaining unclaimed grants are cancelled), so it
- * requires typing the release name exactly, mirroring the friction of the
- * other irreversible actions in this module (erase, merge).
+ * Revoking is irreversible (every remaining grant — granted AND claimed —
+ * is cancelled, blocking gate re-entry; only conversations already in
+ * progress continue), so it requires typing the release name exactly,
+ * mirroring the friction of the other irreversible actions in this module
+ * (erase, merge).
  */
 export const ReleaseDetail: React.FC<ReleaseDetailProps> = ({ releaseId }) => {
   const router = useRouter()
@@ -269,8 +271,9 @@ interface RevokeReleaseModalProps {
 /**
  * Typed-confirmation revoke dialog (ux-standards irreversible-action
  * pattern): the exact release name must be typed to enable the confirm
- * button. Remaining unclaimed grants are cancelled immediately — this can't
- * be undone.
+ * button. Every remaining grant — granted and claimed — is cancelled
+ * immediately, blocking gate re-entry; only conversations already in
+ * progress continue. This can't be undone.
  */
 const RevokeReleaseModal: React.FC<RevokeReleaseModalProps> = ({
   releaseId,
@@ -300,8 +303,8 @@ const RevokeReleaseModal: React.FC<RevokeReleaseModalProps> = ({
           )}
 
           <div className={styles.errorMessage}>
-            Remaining unclaimed grants are cancelled immediately and can no longer be used to apply.
-            Grants already claimed are unaffected. <strong>This cannot be undone.</strong>
+            Cancels every remaining grant — including claimed ones, blocking re-entry. Conversations
+            already in progress are not interrupted. <strong>This cannot be undone.</strong>
           </div>
 
           <div className={styles.formGroup}>

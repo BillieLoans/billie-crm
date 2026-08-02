@@ -128,6 +128,18 @@ describe('POST /api/marketing/releases', () => {
     expect(res.body.error.code).toBe('EVENT_PUBLISH_FAILED')
   })
 
+  test('422 PARTITION_TRUNCATED when the partition was truncated — does not publish', async () => {
+    partition.computeReleasePartition.mockResolvedValue({ ...basePartition, truncated: true })
+    const res = (await releasePost(req(command))) as {
+      body: { error: { code: string; message: string } }
+      status: number
+    }
+    expect(res.status).toBe(422)
+    expect(res.body.error.code).toBe('PARTITION_TRUNCATED')
+    expect(publisher.publishReleaseCommand).not.toHaveBeenCalled()
+    expect(grpc.logInteraction).not.toHaveBeenCalled()
+  })
+
   test('expires_at is approximately expiryDays in the future', async () => {
     const before = Date.now()
     await releasePost(req(command))

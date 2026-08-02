@@ -94,7 +94,7 @@ jobs:
         run: pnpm exec tsx tests/e2e/seed-marketing.ts
       # Playwright's webServer config boots `pnpm dev` and waits for :3000.
       - name: Run marketing e2e
-        run: pnpm exec playwright test tests/e2e/marketing.e2e.spec.ts
+        run: pnpm exec playwright test tests/e2e/marketing.e2e.spec.ts tests/e2e/releases.e2e.spec.ts
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

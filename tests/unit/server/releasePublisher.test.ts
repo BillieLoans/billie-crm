@@ -43,7 +43,11 @@ describe('publishReleaseCommand', () => {
     expect(fields.agt).toBe('billie-crm')
     expect(JSON.parse(fields.payload)).toEqual({ release_id: 'rel-1' })
     expect(internal.createAndPublishEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ typ: 'applicant_release.released.v1', userId: 'staff-1' }),
+      expect.objectContaining({
+        typ: 'applicant_release.released.v1',
+        userId: 'staff-1',
+        requestId: 'applicant-release:rel-1',
+      }),
     )
   })
 
@@ -52,5 +56,28 @@ describe('publishReleaseCommand', () => {
     await expect(
       publishReleaseCommand({ typ: 't', conv: 'c', usr: 'u', payload: {} }),
     ).rejects.toThrow()
+  })
+
+  test('logs divergence and rethrows when chatLedger commits but internal publish fails', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const internalError = new Error('redis down')
+    internal.createAndPublishEvent.mockRejectedValue(internalError)
+    await expect(
+      publishReleaseCommand({
+        typ: 'applicant_release.released.v1',
+        conv: 'applicant-release:rel-1',
+        usr: 'staff-1',
+        payload: { release_id: 'rel-1', mobiles: ['+61400000001'] },
+      }),
+    ).rejects.toThrow('redis down')
+    expect(redisMock.xadd).toHaveBeenCalledTimes(1) // chatLedger did commit
+    expect(consoleError).toHaveBeenCalledWith(
+      '[ReleasePublisher] chatLedger committed but internal publish failed — CRM projection lags billieChat',
+      { releaseTyp: 'applicant_release.released.v1', conv: 'applicant-release:rel-1' },
+    )
+    // No payload/mobiles in the log — only typ and conv.
+    const loggedArgs = consoleError.mock.calls[0]
+    expect(JSON.stringify(loggedArgs)).not.toContain('+61400000001')
+    consoleError.mockRestore()
   })
 })

@@ -68,7 +68,20 @@ export async function POST(request: NextRequest) {
     }
     const command = parsed.data
 
-    const { candidates, counts } = await computeReleasePartition({ payload, user, command })
+    const partition = await computeReleasePartition({ payload, user, command })
+    const { candidates, counts } = partition
+    if (partition.truncated) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'PARTITION_TRUNCATED',
+            message:
+              'Audience data was truncated — narrow the release or raise the caps before releasing.',
+          },
+        },
+        { status: 422 },
+      )
+    }
     const granted = candidates.filter(
       (c) => c.bucket === 'granted_sms' || c.bucket === 'granted_no_sms',
     )

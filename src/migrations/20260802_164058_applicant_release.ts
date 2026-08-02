@@ -2,7 +2,8 @@ import { MigrateUpArgs, MigrateDownArgs, sql } from '@payloadcms/db-postgres'
 
 export async function up({ db, payload, req }: MigrateUpArgs): Promise<void> {
   await db.execute(sql`
-   CREATE TYPE "public"."enum_release_batches_type" AS ENUM('waitlist', 'phone_list', 'open_quota');
+   ALTER TYPE "public"."enum_interactions_kind" ADD VALUE 'released_to_apply';
+  CREATE TYPE "public"."enum_release_batches_type" AS ENUM('waitlist', 'phone_list', 'open_quota');
   CREATE TYPE "public"."enum_release_batches_status" AS ENUM('active', 'revoked');
   CREATE TYPE "public"."enum_release_grants_source" AS ENUM('targeted', 'quota_claim');
   CREATE TYPE "public"."enum_release_grants_status" AS ENUM('granted', 'claimed', 'expired', 'revoked');
@@ -103,5 +104,9 @@ export async function down({ db, payload, req }: MigrateDownArgs): Promise<void>
   DROP TYPE "public"."enum_release_grants_source";
   DROP TYPE "public"."enum_release_grants_status";
   DROP TYPE "public"."enum_release_grants_sms_status";
-  DROP TYPE "public"."enum_release_gate_status_mode";`)
+  DROP TYPE "public"."enum_release_gate_status_mode";
+  ALTER TABLE "interactions" ALTER COLUMN "kind" SET DATA TYPE text;
+  DROP TYPE "public"."enum_interactions_kind";
+  CREATE TYPE "public"."enum_interactions_kind" AS ENUM('signup', 'message_out', 'message_in', 'feedback_prompt', 'referral', 'stage_change', 'note', 'import');
+  ALTER TABLE "interactions" ALTER COLUMN "kind" SET DATA TYPE "public"."enum_interactions_kind" USING "kind"::"public"."enum_interactions_kind";`)
 }
