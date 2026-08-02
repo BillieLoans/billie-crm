@@ -20,13 +20,17 @@ export const MarketingSubnav: React.FC = () => {
     {
       href: '/admin/marketing',
       label: 'Contacts',
-      active:
-        pathname === '/admin/marketing' || pathname.startsWith('/admin/marketing/contacts'),
+      active: pathname === '/admin/marketing' || pathname.startsWith('/admin/marketing/contacts'),
     },
     {
       href: '/admin/marketing/campaigns',
       label: 'Campaigns',
       active: pathname.startsWith('/admin/marketing/campaigns'),
+    },
+    {
+      href: '/admin/marketing/releases',
+      label: 'Releases',
+      active: pathname.startsWith('/admin/marketing/releases'),
     },
     {
       href: '/admin/marketing/feedback',
@@ -43,7 +47,9 @@ export const MarketingSubnav: React.FC = () => {
         <Link
           key={tab.href}
           href={tab.href}
-          className={tab.active ? `${styles.subnavTab} ${styles.subnavTabActive}` : styles.subnavTab}
+          className={
+            tab.active ? `${styles.subnavTab} ${styles.subnavTabActive}` : styles.subnavTab
+          }
           aria-current={tab.active ? 'page' : undefined}
         >
           {tab.label}
