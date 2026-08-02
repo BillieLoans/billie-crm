@@ -15,9 +15,13 @@ export const CreateReleaseCommandSchema = z
     expiryDays: z.number().int().min(1).max(90).default(14),
     sendInviteSms: z.boolean().default(false),
   })
-  .refine((d) => (d.type === 'phone_list' ? !!d.mobiles : d.count !== undefined), {
-    message: 'waitlist/open_quota need count; phone_list needs mobiles',
+  .refine((d) => d.type === 'phone_list' || d.count !== undefined, {
+    message: 'waitlist and open_quota releases need a count',
     path: ['count'],
+  })
+  .refine((d) => d.type !== 'phone_list' || !!d.mobiles, {
+    message: 'phone_list releases need mobiles',
+    path: ['mobiles'],
   })
   .refine((d) => !(d.type !== 'phone_list' && d.mobiles), {
     message: 'mobiles only applies to phone_list releases',
