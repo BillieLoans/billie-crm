@@ -10,6 +10,9 @@
  */
 
 import { describe, it, expect, vi } from 'vitest'
+import * as protoLoader from '@grpc/proto-loader'
+import * as grpc from '@grpc/grpc-js'
+import path from 'path'
 import type { Payload } from 'payload'
 import { mapPreviewResponse, mapFinalizeResponse } from '@/server/period-close-mapper'
 
@@ -19,6 +22,127 @@ function mockPayload(docs: any[] = []): Payload {
     find: vi.fn().mockResolvedValue({ docs }),
   } as unknown as Payload
 }
+
+// =============================================================================
+// I1 post-review fix (whole-branch review blocker): the mapper tests above all
+// feed mapPreviewResponse hand-built camelCase objects directly — they never
+// cross the actual gRPC wire boundary. src/server/grpc-client.ts loads the
+// CRM's OWN copy of proto/accounting_ledger.proto at runtime, and that copy's
+// ReconciliationResult had drifted from the platform's BTB-249 change: it was
+// missing `integrity_passed = 8` / `integrity_discrepancy_count = 9`.
+// protobufjs silently drops wire fields absent from the loaded schema, so
+// those two fields would decode as `undefined` on a real server response even
+// though the platform sent them — no exception, no visible failure. This test
+// loads the REAL .proto with the exact protoLoader.loadSync options
+// grpc-client.ts uses, serializes a response object carrying the new fields
+// through the actual proto descriptor, deserializes it back (exactly what a
+// gRPC client callback receives), and feeds THAT decoded object into the
+// mapper. It fails against a stale proto (fields dropped -> mapper falls back
+// to the legacy/undefined branch) and passes once ReconciliationResult
+// declares fields 8/9.
+// =============================================================================
+
+const PROTO_PATH = path.resolve(process.cwd(), 'proto/accounting_ledger.proto')
+
+// Mirror the EXACT protoLoader.loadSync options used by src/server/grpc-client.ts.
+const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
+  keepCase: false,
+  longs: String,
+  enums: String,
+  defaults: true,
+  oneofs: true,
+})
+
+const protoDescriptor = grpc.loadPackageDefinition(packageDefinition) as any
+const PreviewPeriodCloseResponseType = protoDescriptor.billie.ledger.v1.PreviewPeriodCloseResponse
+
+/** Builds a minimally-valid PreviewPeriodCloseResponse wire object, with the given reconciliation. */
+function buildPreviewWireResponse(reconciliation: Record<string, unknown>) {
+  return {
+    success: true,
+    errorMessage: '',
+    previewId: 'prev_wiretest',
+    periodDate: '2026-01-31',
+    createdAt: '2026-01-31T00:00:00Z',
+    expiresAt: '2026-01-31T14:00:00Z',
+    totalAccounts: 10,
+    totalAccruedYield: '100.00',
+    totalEclAllowance: '50.00',
+    totalCarryingAmount: '1000.00',
+    eclByBucket: [],
+    anomalies: [],
+    allAnomaliesAcknowledged: true,
+    eclMovement: {
+      priorTotalEcl: '0',
+      currentTotalEcl: '50.00',
+      netChange: '50.00',
+      changePercent: '0',
+      byCause: [],
+      byBucket: [],
+      priorPeriodDate: '',
+      isFirstClose: true,
+    },
+    processingTimeSeconds: 1.2,
+    reconciliation,
+  }
+}
+
+describe('mapPreviewResponse — BTB-249 integrity fields survive the real proto wire (I1)', () => {
+  it('sanity: ReconciliationResult declares integrity_passed (8) and integrity_discrepancy_count (9)', () => {
+    const reconFields = protoDescriptor.billie.ledger.v1.ReconciliationResult.type.field.map(
+      (f: { name: string }) => f.name,
+    )
+    expect(reconFields).toContain('integrityPassed')
+    expect(reconFields).toContain('integrityDiscrepancyCount')
+  })
+
+  it('genuine FAILURE round-trips through the real proto: integrity_passed=false, count=3 -> preview.integrity = {passed:false, discrepancyCount:3}', async () => {
+    const wireResponse = buildPreviewWireResponse({
+      eclCount: 10,
+      accrualCount: 10,
+      inBoth: 10,
+      eclOnly: [],
+      accrualOnly: [],
+      isReconciled: false,
+      discrepancyCount: 0,
+      integrityPassed: false,
+      integrityDiscrepancyCount: 3,
+    })
+
+    // Real wire-serialization boundary: encode with the actual proto descriptor,
+    // then decode it back — exactly what happens between the platform gRPC
+    // server and this client process.
+    const wire = PreviewPeriodCloseResponseType.serialize(wireResponse)
+    const decoded = PreviewPeriodCloseResponseType.deserialize(wire)
+
+    const payload = mockPayload()
+    const preview = await mapPreviewResponse(decoded, payload)
+
+    expect(preview.integrity).toEqual({ passed: false, discrepancyCount: 3 })
+  })
+
+  it('genuine PASS round-trips through the real proto: integrity_passed=true, count=0 -> preview.integrity = {passed:true, discrepancyCount:0}', async () => {
+    const wireResponse = buildPreviewWireResponse({
+      eclCount: 10,
+      accrualCount: 10,
+      inBoth: 10,
+      eclOnly: [],
+      accrualOnly: [],
+      isReconciled: true,
+      discrepancyCount: 0,
+      integrityPassed: true,
+      integrityDiscrepancyCount: 0,
+    })
+
+    const wire = PreviewPeriodCloseResponseType.serialize(wireResponse)
+    const decoded = PreviewPeriodCloseResponseType.deserialize(wire)
+
+    const payload = mockPayload()
+    const preview = await mapPreviewResponse(decoded, payload)
+
+    expect(preview.integrity).toEqual({ passed: true, discrepancyCount: 0 })
+  })
+})
 
 describe('mapPreviewResponse', () => {
   it('maps a full realistic camelCase gRPC preview response', async () => {
@@ -121,6 +245,12 @@ describe('mapPreviewResponse', () => {
     expect(result.reconciliationNotes).toBeUndefined()
     expect(result.journalEntries).toEqual([])
 
+    // This fixture's `reconciliation` object predates BTB-249 (no
+    // integrityPassed/integrityDiscrepancyCount keys) — the legacy
+    // discriminator must map `integrity` to undefined, not assert a failure.
+    expect(result.integrity).toBeUndefined()
+    expect(result.accountSetDiscrepancyCount).toBe(0)
+
     expect(result.anomalyCount).toBe(2)
     expect(result.acknowledgedCount).toBe(1)
     expect(result.anomalies).toHaveLength(2)
@@ -198,6 +328,98 @@ describe('mapPreviewResponse', () => {
     expect(result.anomalies[0].customerIdString).toBe('cust_100')
     expect(result.anomalies[1].customerIdString).toBe('cust_200')
     expect(payload.find).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('mapPreviewResponse — BTB-249 dollar-integrity vs account-set-parity split', () => {
+  const baseReconciliation = {
+    eclCount: 100,
+    accrualCount: 100,
+    inBoth: 100,
+    eclOnly: [] as string[],
+    accrualOnly: [] as string[],
+    isReconciled: true,
+    discrepancyCount: 0,
+  }
+
+  it('maps a genuine PASS: integrityPassed=true, count=0 -> integrity.passed=true', async () => {
+    const payload = mockPayload()
+    const result = await mapPreviewResponse(
+      { reconciliation: { ...baseReconciliation, integrityPassed: true, integrityDiscrepancyCount: 0 } },
+      payload,
+    )
+
+    expect(result.integrity).toEqual({ passed: true, discrepancyCount: 0 })
+  })
+
+  it('maps a genuine FAILURE: integrityPassed=false, count>=1 -> integrity.passed=false with the count carried through', async () => {
+    const payload = mockPayload()
+    const result = await mapPreviewResponse(
+      {
+        reconciliation: {
+          ...baseReconciliation,
+          isReconciled: false,
+          integrityPassed: false,
+          integrityDiscrepancyCount: 3,
+        },
+      },
+      payload,
+    )
+
+    expect(result.integrity).toEqual({ passed: false, discrepancyCount: 3 })
+  })
+
+  it('treats integrityPassed=false + count=0 as the legacy/unset discriminator -> integrity undefined', async () => {
+    // Per the platform invariant, a genuine integrity failure always carries
+    // discrepancyCount >= 1 (IntegrityResult.is_valid=False requires >= 1
+    // discrepancy; the platform sets count=len(discrepancies)). integrityPassed
+    // === false && integrityDiscrepancyCount === 0 is therefore only reachable
+    // via a pre-BTB-249 platform server whose absent proto3 scalar fields decode
+    // to their zero-values (no presence tracking) — never a real failure.
+    const payload = mockPayload()
+    const result = await mapPreviewResponse(
+      { reconciliation: { ...baseReconciliation, integrityPassed: false, integrityDiscrepancyCount: 0 } },
+      payload,
+    )
+
+    expect(result.integrity).toBeUndefined()
+  })
+
+  it('treats a reconciliation object entirely missing the new fields as legacy -> integrity undefined', async () => {
+    const payload = mockPayload()
+    const result = await mapPreviewResponse({ reconciliation: { ...baseReconciliation } }, payload)
+
+    expect(result.integrity).toBeUndefined()
+  })
+
+  it('treats a response with no reconciliation object at all as legacy -> integrity undefined, reconciled false', async () => {
+    const payload = mockPayload()
+    const result = await mapPreviewResponse({}, payload)
+
+    expect(result.integrity).toBeUndefined()
+    expect(result.reconciled).toBe(false)
+    expect(result.accountSetDiscrepancyCount).toBe(0)
+  })
+
+  it('maps accountSetDiscrepancyCount from reconciliation.discrepancyCount independently of integrity', async () => {
+    const payload = mockPayload()
+    const result = await mapPreviewResponse(
+      {
+        reconciliation: {
+          ...baseReconciliation,
+          isReconciled: false,
+          discrepancyCount: 5,
+          integrityPassed: true,
+          integrityDiscrepancyCount: 0,
+        },
+      },
+      payload,
+    )
+
+    // Set-parity drifted (5 account-set discrepancies) even though the dollar
+    // integrity check passed cleanly — these two signals are independent.
+    expect(result.accountSetDiscrepancyCount).toBe(5)
+    expect(result.integrity).toEqual({ passed: true, discrepancyCount: 0 })
   })
 })
 

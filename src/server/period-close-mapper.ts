@@ -15,6 +15,7 @@ const num = (v: unknown): number => {
  */
 export async function mapPreviewResponse(r: any, payload: Payload): Promise<PeriodClosePreview> {
   const m = r?.eclMovement
+  const recon = r?.reconciliation
   const anomalies = Array.isArray(r?.anomalies) ? r.anomalies : []
 
   // Enrich each anomaly with its account's customerIdString so the UI can link to the
@@ -38,6 +39,28 @@ export async function mapPreviewResponse(r: any, payload: Payload): Promise<Peri
     ...a,
     customerIdString: customerByAccount[a?.accountId] ?? undefined,
   }))
+
+  // BTB-249 dollar-integrity vs account-set-parity discriminator.
+  //
+  // `integrity_passed` / `integrity_discrepancy_count` (ReconciliationResult
+  // proto fields 8/9) are plain proto3 scalars with NO presence tracking, so a
+  // platform server that predates BTB-249 is wire-indistinguishable from one
+  // that explicitly reports integrityPassed=false, integrityDiscrepancyCount=0.
+  //
+  // The platform invariant (verified in the platform review) is: a genuine
+  // integrity failure always carries discrepancyCount >= 1 — integrity_passed
+  // is derived from IntegrityResult.is_valid, which is False only when there is
+  // at least one discrepancy, and the platform sets
+  // integrity_discrepancy_count = len(discrepancies). So a real failure can
+  // never report a count of 0.
+  //
+  // Therefore: `integrityPassed !== true && integrityDiscrepancyCount === 0` is
+  // only reachable via the legacy/unset default (old server, or field omitted
+  // in a hand-built response) — never a genuine failure — and is treated as
+  // LEGACY/UNKNOWN here (`integrity: undefined`), so the wizard falls back to
+  // today's single reconciliation banner instead of asserting a false failure.
+  const integrityDiscrepancyCount = num(recon?.integrityDiscrepancyCount)
+  const isKnownIntegrityResult = recon?.integrityPassed === true || integrityDiscrepancyCount > 0
 
   return {
     previewId: r?.previewId ?? '',
@@ -72,8 +95,12 @@ export async function mapPreviewResponse(r: any, payload: Payload): Promise<Peri
     anomalies: enrichedAnomalies, // gRPC anomaly objects already use anomalyId/anomalyType (matches PeriodCloseAnomaly)
     anomalyCount: anomalies.length,
     acknowledgedCount: anomalies.filter((a: any) => a?.acknowledged).length,
-    reconciled: r?.reconciliation?.isReconciled ?? false,
+    reconciled: recon?.isReconciled ?? false,
     reconciliationNotes: undefined,
+    accountSetDiscrepancyCount: num(recon?.discrepancyCount),
+    integrity: isKnownIntegrityResult
+      ? { passed: recon?.integrityPassed === true, discrepancyCount: integrityDiscrepancyCount }
+      : undefined,
     journalEntries: [], // ledger returns journal entries only at finalize, not preview
   }
 }
