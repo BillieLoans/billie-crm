@@ -83,6 +83,9 @@ export interface Config {
     'contact-audit-log': ContactAuditLog;
     batches: Batch;
     feedback: Feedback;
+    'release-batches': ReleaseBatch;
+    'release-grants': ReleaseGrant;
+    'release-gate-status': ReleaseGateStatus;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -106,6 +109,9 @@ export interface Config {
     'contact-audit-log': ContactAuditLogSelect<false> | ContactAuditLogSelect<true>;
     batches: BatchesSelect<false> | BatchesSelect<true>;
     feedback: FeedbackSelect<false> | FeedbackSelect<true>;
+    'release-batches': ReleaseBatchesSelect<false> | ReleaseBatchesSelect<true>;
+    'release-grants': ReleaseGrantsSelect<false> | ReleaseGrantsSelect<true>;
+    'release-gate-status': ReleaseGateStatusSelect<false> | ReleaseGateStatusSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -1782,6 +1788,72 @@ export interface Feedback {
   createdAt: string;
 }
 /**
+ * Applicant release batches — read-only projection of applicant_release events
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "release-batches".
+ */
+export interface ReleaseBatch {
+  id: string;
+  releaseId: string;
+  name?: string | null;
+  type?: ('waitlist' | 'phone_list' | 'open_quota') | null;
+  /**
+   * Expired is derived from expiresAt at read time
+   */
+  status?: ('active' | 'revoked') | null;
+  quotaCount?: number | null;
+  expiresAt?: string | null;
+  sendInviteSms?: boolean | null;
+  grantedCount?: number | null;
+  claimedCount?: number | null;
+  smsSentCount?: number | null;
+  smsFailedCount?: number | null;
+  skippedAlreadyCustomer?: number | null;
+  skippedInvalidNumber?: number | null;
+  skippedAlreadyReleased?: number | null;
+  skippedNeedsReview?: number | null;
+  createdByActor?: string | null;
+  releasedAt?: string | null;
+  revokedBy?: string | null;
+  revokedAt?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Per-person release grants — read-only projection, natural key (releaseId, mobileE164)
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "release-grants".
+ */
+export interface ReleaseGrant {
+  id: string;
+  releaseId: string;
+  mobileE164: string;
+  contactId?: string | null;
+  source?: ('targeted' | 'quota_claim') | null;
+  status?: ('granted' | 'claimed' | 'expired' | 'revoked') | null;
+  smsStatus?: ('sent' | 'failed' | 'not_sent') | null;
+  claimedAt?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Single-row projection of the billieChat application gate mode
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "release-gate-status".
+ */
+export interface ReleaseGateStatus {
+  id: string;
+  gateId: string;
+  mode?: ('open' | 'gated') | null;
+  setBy?: string | null;
+  changedAt?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
@@ -1868,6 +1940,18 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'feedback';
         value: string | Feedback;
+      } | null)
+    | ({
+        relationTo: 'release-batches';
+        value: string | ReleaseBatch;
+      } | null)
+    | ({
+        relationTo: 'release-grants';
+        value: string | ReleaseGrant;
+      } | null)
+    | ({
+        relationTo: 'release-gate-status';
+        value: string | ReleaseGateStatus;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -2630,6 +2714,60 @@ export interface FeedbackSelect<T extends boolean = true> {
   statusChangedAt?: T;
   statusActor?: T;
   statusNote?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "release-batches_select".
+ */
+export interface ReleaseBatchesSelect<T extends boolean = true> {
+  releaseId?: T;
+  name?: T;
+  type?: T;
+  status?: T;
+  quotaCount?: T;
+  expiresAt?: T;
+  sendInviteSms?: T;
+  grantedCount?: T;
+  claimedCount?: T;
+  smsSentCount?: T;
+  smsFailedCount?: T;
+  skippedAlreadyCustomer?: T;
+  skippedInvalidNumber?: T;
+  skippedAlreadyReleased?: T;
+  skippedNeedsReview?: T;
+  createdByActor?: T;
+  releasedAt?: T;
+  revokedBy?: T;
+  revokedAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "release-grants_select".
+ */
+export interface ReleaseGrantsSelect<T extends boolean = true> {
+  releaseId?: T;
+  mobileE164?: T;
+  contactId?: T;
+  source?: T;
+  status?: T;
+  smsStatus?: T;
+  claimedAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "release-gate-status_select".
+ */
+export interface ReleaseGateStatusSelect<T extends boolean = true> {
+  gateId?: T;
+  mode?: T;
+  setBy?: T;
+  changedAt?: T;
   updatedAt?: T;
   createdAt?: T;
 }
