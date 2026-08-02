@@ -2,17 +2,28 @@ import { describe, test, expect, vi } from 'vitest'
 import { computeReleasePartition } from '@/lib/releases'
 
 type Doc = Record<string, unknown>
+/** Plain array (totalDocs defaults to array length) or an explicit page shape
+ *  — the latter lets a test report a `totalDocs` that diverges from the
+ *  fetched page, to simulate a bulk read hitting its limit. */
+type CollectionStub = Doc[] | { docs: Doc[]; totalDocs: number }
+
+function normaliseStub(input: CollectionStub | undefined): { docs: Doc[]; totalDocs: number } {
+  if (!input) return { docs: [], totalDocs: 0 }
+  if (Array.isArray(input)) return { docs: input, totalDocs: input.length }
+  return input
+}
 
 /** Payload.find stub keyed by collection. */
-function payloadWith(docs: { contacts?: Doc[]; grants?: Doc[]; batches?: Doc[] }) {
+function payloadWith(docs: {
+  contacts?: CollectionStub
+  grants?: CollectionStub
+  batches?: CollectionStub
+}) {
   return {
     find: vi.fn(async ({ collection }: { collection: string }) => {
-      if (collection === 'contacts')
-        return { docs: docs.contacts ?? [], totalDocs: (docs.contacts ?? []).length }
-      if (collection === 'release-grants')
-        return { docs: docs.grants ?? [], totalDocs: (docs.grants ?? []).length }
-      if (collection === 'release-batches')
-        return { docs: docs.batches ?? [], totalDocs: (docs.batches ?? []).length }
+      if (collection === 'contacts') return normaliseStub(docs.contacts)
+      if (collection === 'release-grants') return normaliseStub(docs.grants)
+      if (collection === 'release-batches') return normaliseStub(docs.batches)
       return { docs: [], totalDocs: 0 }
     }),
   } as never
@@ -169,6 +180,100 @@ describe('computeReleasePartition — phone_list', () => {
     expect(
       candidates.filter((c) => c.bucket === 'granted_no_sms').map((c) => c.mobileE164),
     ).toEqual(['+61400000001', '+61400000002'])
+  })
+
+  test('a pasted number matching a consented contact is granted with SMS', async () => {
+    const payload = payloadWith({
+      contacts: [
+        {
+          contactId: 'c9',
+          mobileE164: '+61400000009',
+          consent: consented,
+          needsReview: false,
+          customerId: null,
+        },
+      ],
+    })
+    const { candidates, counts } = await computeReleasePartition({
+      payload,
+      user: { id: 'staff-1' } as never,
+      command: {
+        releaseId: 'rel_12345678',
+        name: 'p',
+        type: 'phone_list',
+        mobiles: ['0400000009'],
+        expiryDays: 14,
+        sendInviteSms: true,
+      },
+    })
+    expect(counts.granted_sms).toBe(1)
+    expect(candidates).toEqual([
+      { mobileE164: '+61400000009', contactId: 'c9', sendSms: true, bucket: 'granted_sms' },
+    ])
+  })
+})
+
+describe('computeReleasePartition — truncation guard', () => {
+  test('signals truncated when a bulk read reports totalDocs beyond its limit', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const payload = payloadWith({
+      contacts: {
+        docs: [
+          {
+            contactId: 'c1',
+            mobileE164: '+61400000001',
+            consent: consented,
+            needsReview: false,
+            customerId: null,
+          },
+        ],
+        // Reports more waitlist rows exist than the 10k-row page fetched.
+        totalDocs: 10_001,
+      },
+    })
+    const { counts, truncated } = await computeReleasePartition({
+      payload,
+      user: { id: 'staff-1' } as never,
+      command: {
+        releaseId: 'rel_12345678',
+        name: 'w',
+        type: 'waitlist',
+        count: 1,
+        expiryDays: 14,
+        sendInviteSms: true,
+      },
+    })
+    expect(truncated).toBe(true)
+    expect(counts.granted_sms).toBe(1) // counts are still computed from the fetched page
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('waitlist contacts'))
+    warnSpy.mockRestore()
+  })
+
+  test('normal case leaves truncated falsy', async () => {
+    const payload = payloadWith({
+      contacts: [
+        {
+          contactId: 'c1',
+          mobileE164: '+61400000001',
+          consent: consented,
+          needsReview: false,
+          customerId: null,
+        },
+      ],
+    })
+    const { truncated } = await computeReleasePartition({
+      payload,
+      user: { id: 'staff-1' } as never,
+      command: {
+        releaseId: 'rel_12345678',
+        name: 'w',
+        type: 'waitlist',
+        count: 1,
+        expiryDays: 14,
+        sendInviteSms: false,
+      },
+    })
+    expect(truncated).toBeFalsy()
   })
 })
 

@@ -27,6 +27,15 @@ export interface ReleaseCandidate {
 export interface ReleasePartition {
   candidates: ReleaseCandidate[]
   counts: Record<ReleaseBucket, number>
+  /**
+   * True when any of the underlying bulk reads (waitlist contacts,
+   * actively-released release-batches, or their release-grants) hit its
+   * page-size cap — the partition below is a possibly-incomplete slice, not
+   * the whole population. Absent/false in the normal case. Counts are still
+   * computed from whatever was fetched; callers should surface this to staff
+   * rather than silently trust the numbers.
+   */
+  truncated?: boolean
 }
 
 interface PartitionArgs {
@@ -52,6 +61,20 @@ interface ContactLite {
   customerId?: string | null
 }
 
+const WAITLIST_LIMIT = 10_000
+const BATCHES_LIMIT = 1000
+const GRANTS_LIMIT = 10_000
+
+/**
+ * Whether a `payload.find` page is a partial slice of a larger population.
+ * `totalDocs` (Payload's pagination count) is authoritative when present;
+ * falls back to "the page came back exactly full" when it isn't.
+ */
+function isTruncated(result: { docs: unknown[]; totalDocs?: number }, limit: number): boolean {
+  if (typeof result.totalDocs === 'number') return result.totalDocs > limit
+  return result.docs.length === limit
+}
+
 export async function computeReleasePartition({
   payload,
   user,
@@ -61,7 +84,9 @@ export async function computeReleasePartition({
     return { candidates: [], counts: { ...EMPTY_COUNTS } }
   }
 
-  const activeGrantMobiles = await fetchActivelyReleasedMobiles(payload, user)
+  const { mobiles: activeGrantMobiles, truncated: grantsTruncated } =
+    await fetchActivelyReleasedMobiles(payload, user)
+  let truncated = grantsTruncated
   const candidates: ReleaseCandidate[] = []
 
   if (command.type === 'waitlist') {
@@ -74,11 +99,17 @@ export async function computeReleasePartition({
         mergedInto: { exists: false },
       } as never,
       sort: 'waitlistPosition,waitlistJoinedAt',
-      limit: 10_000,
+      limit: WAITLIST_LIMIT,
       depth: 0,
       overrideAccess: false,
       user,
     })
+    if (isTruncated(result, WAITLIST_LIMIT)) {
+      truncated = true
+      console.warn(
+        `[computeReleasePartition] waitlist contacts fetch truncated at limit=${WAITLIST_LIMIT} (totalDocs=${result.totalDocs})`,
+      )
+    }
     let taken = 0
     for (const doc of result.docs as ContactLite[]) {
       if (taken >= (command.count ?? 0)) break
@@ -122,7 +153,9 @@ export async function computeReleasePartition({
 
   const counts = { ...EMPTY_COUNTS }
   for (const c of candidates) counts[c.bucket]++
-  return { candidates, counts }
+  const partition: ReleasePartition = { candidates, counts }
+  if (truncated) partition.truncated = true
+  return partition
 }
 
 function bucketContact(
@@ -143,25 +176,44 @@ function bucketContact(
   return { ...base, sendSms: false, bucket: 'granted_no_sms' }
 }
 
-async function fetchActivelyReleasedMobiles(payload: Payload, user: unknown): Promise<Set<string>> {
+async function fetchActivelyReleasedMobiles(
+  payload: Payload,
+  user: unknown,
+): Promise<{ mobiles: Set<string>; truncated: boolean }> {
   const now = new Date().toISOString()
   const activeBatches = await payload.find({
     collection: 'release-batches',
     where: { status: { equals: 'active' }, expiresAt: { greater_than: now } } as never,
-    limit: 1000,
+    limit: BATCHES_LIMIT,
     depth: 0,
     overrideAccess: false,
     user,
   })
+  let truncated = false
+  if (isTruncated(activeBatches, BATCHES_LIMIT)) {
+    truncated = true
+    console.warn(
+      `[computeReleasePartition] release-batches fetch truncated at limit=${BATCHES_LIMIT} (totalDocs=${activeBatches.totalDocs})`,
+    )
+  }
   const ids = activeBatches.docs.map((d) => (d as { releaseId?: string }).releaseId).filter(Boolean)
-  if (ids.length === 0) return new Set()
+  if (ids.length === 0) return { mobiles: new Set(), truncated }
   const grants = await payload.find({
     collection: 'release-grants',
     where: { releaseId: { in: ids }, status: { in: ['granted', 'claimed'] } } as never,
-    limit: 10_000,
+    limit: GRANTS_LIMIT,
     depth: 0,
     overrideAccess: false,
     user,
   })
-  return new Set(grants.docs.map((d) => (d as { mobileE164?: string }).mobileE164 ?? ''))
+  if (isTruncated(grants, GRANTS_LIMIT)) {
+    truncated = true
+    console.warn(
+      `[computeReleasePartition] release-grants fetch truncated at limit=${GRANTS_LIMIT} (totalDocs=${grants.totalDocs})`,
+    )
+  }
+  return {
+    mobiles: new Set(grants.docs.map((d) => (d as { mobileE164?: string }).mobileE164 ?? '')),
+    truncated,
+  }
 }
