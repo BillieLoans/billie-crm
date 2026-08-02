@@ -115,6 +115,27 @@ export type {
 export { usePendingBlockClears } from './queries/usePendingBlockClears'
 export type { BlockClearRequest, PendingBlockClearsOptions } from './queries/usePendingBlockClears'
 
+// Applicant Release queries & mutations
+export {
+  useReleases,
+  useRelease,
+  releasesQueryKey,
+  releaseDetailQueryKey,
+} from './queries/useReleases'
+export type {
+  ReleasesResponse,
+  ReleaseDetailResponse,
+  ReleaseWithDerived,
+} from './queries/useReleases'
+export { useGateStatus, gateStatusQueryKey } from './queries/useGateStatus'
+export type { GateStatus } from './queries/useGateStatus'
+export {
+  useCreateRelease,
+  useRevokeRelease,
+  useReleasePreflight,
+} from './mutations/useReleaseCommands'
+export type { ReleasePreflightResult } from './mutations/useReleaseCommands'
+
 export { useLendingAccess } from './useLendingAccess'
 
 // Re-export types from canonical location

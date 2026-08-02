@@ -20,9 +20,9 @@ import { useFailedActionsStore } from '@/stores/failed-actions'
  * after the typical projection lag so the view self-heals without a manual
  * refresh.
  */
-const LAG_RETRIES_MS = [1500, 4000]
+export const LAG_RETRIES_MS = [1500, 4000]
 
-function invalidateWithLag(qc: QueryClient, keys: string[][]) {
+export function invalidateWithLag(qc: QueryClient, keys: string[][]) {
   const run = () => keys.forEach((queryKey) => qc.invalidateQueries({ queryKey }))
   run()
   LAG_RETRIES_MS.forEach((ms) => setTimeout(run, ms))
@@ -106,7 +106,7 @@ function restoreSnapshot(qc: QueryClient, snapshot: CacheSnapshot | undefined) {
   snapshot?.forEach(([queryKey, data]) => qc.setQueryData(queryKey as readonly unknown[], data))
 }
 
-async function postCommand<T = unknown>(url: string, body?: unknown): Promise<T> {
+export async function postCommand<T = unknown>(url: string, body?: unknown): Promise<T> {
   const res = await fetch(url, {
     method: 'POST',
     credentials: 'include',
@@ -396,10 +396,9 @@ export function useMergeContact() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (vars: MergeContactVars) =>
-      postCommand(
-        `/api/marketing/contacts/${encodeURIComponent(vars.survivorContactId)}/merge`,
-        { merged_contact_id: vars.mergedContactId },
-      ),
+      postCommand(`/api/marketing/contacts/${encodeURIComponent(vars.survivorContactId)}/merge`, {
+        merged_contact_id: vars.mergedContactId,
+      }),
     onSuccess: () => {
       toast.success('Contacts merged', {
         description: 'History is re-attaching to this record.',
