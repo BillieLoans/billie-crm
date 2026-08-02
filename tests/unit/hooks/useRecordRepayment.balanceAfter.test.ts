@@ -221,4 +221,58 @@ describe('useRecordRepayment balanceAfter wiring', () => {
     expect(confirmed?.stage).toBe('confirmed')
     expect(confirmed?.balanceAfter).toBeUndefined()
   })
+
+  it('does not report a balance when totalAfter is null but totalDelta is a valid non-zero number (asymmetric unset, discrimination guard)', async () => {
+    // totalAfter and totalDelta are independently parseFloat()'d proto3 string
+    // fields on the route, so one can go missing (-> null) while the other
+    // arrives fine. The OLD gate coerced both with `Number(...)` before
+    // Number.isFinite — `Number(null)` is 0, which IS finite, so a valid
+    // non-zero totalDelta paired with a null totalAfter would have passed the
+    // gate and reported `balanceAfter: 0`, telling the operator "Balance
+    // updated to $0.00" for a balance the server never actually sent. The
+    // `typeof totalAfter === 'number'` guard must reject this before
+    // Number.isFinite ever gets a chance to launder the null into 0.
+    ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          success: true,
+          transaction: {
+            id: 'tx-6',
+            accountId: 'LA-8',
+            type: 'REPAYMENT',
+            typeLabel: 'Repayment',
+            date: '2026-07-31T00:00:00Z',
+            principalDelta: -40,
+            feeDelta: -10,
+            totalDelta: -50,
+            principalAfter: null,
+            feeAfter: null,
+            totalAfter: null,
+            description: 'Repayment applied (totalAfter unset, totalDelta present)',
+          },
+          eventId: 'evt-6',
+          allocation: { allocatedToFees: 10, allocatedToPrincipal: 40, overpayment: 0 },
+        }),
+    })
+
+    const { result } = renderHook(() => useRecordRepayment('LA-8'), { wrapper: createWrapper() })
+
+    await act(async () => {
+      await result.current.recordRepaymentAsync({
+        loanAccountId: 'LA-8',
+        amount: 50,
+        paymentReference: 'ref-8',
+        paymentMethod: 'direct_debit',
+      })
+    })
+
+    const confirmed = useOptimisticStore
+      .getState()
+      .getPendingForAccount('LA-8')
+      .find((m) => m.action === 'record-repayment')
+
+    expect(confirmed?.stage).toBe('confirmed')
+    expect(confirmed?.balanceAfter).toBeUndefined()
+  })
 })

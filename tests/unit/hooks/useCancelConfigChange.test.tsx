@@ -88,6 +88,56 @@ describe('useCancelConfigChange', () => {
     ).rejects.toThrow('An internal error occurred. Please try again.')
   })
 
+  it('surfaces a sensible message for a 401 from requireAuth, never "[object Object]"', async () => {
+    // requireAuth (src/lib/auth.ts) returns { error: { code, message } } on 401 — error.error
+    // is an OBJECT here, not a string. An unguarded `error.error ||` produces
+    // `new Error(<object>)`, whose message is the literal string "[object Object]".
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      json: () =>
+        Promise.resolve({
+          error: { code: 'UNAUTHENTICATED', message: 'Please log in to continue.' },
+        }),
+    })
+
+    const { result } = renderHook(() => useCancelConfigChange(), { wrapper: createWrapper() })
+
+    await expect(
+      act(async () => {
+        await result.current.cancelChange({ changeId: 'change-123', cancelledBy: 'user-1' })
+      }),
+    ).rejects.toThrow('Please log in to continue.')
+  })
+
+  it('surfaces a sensible message for a 403 from requireAuth, never "[object Object]"', async () => {
+    // Cancelling a pending ECL config change is approval-gated, so a 403 FORBIDDEN from
+    // requireAuth is a routine path. Same shape as the 401 above: error.error is an object.
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      json: () =>
+        Promise.resolve({
+          error: {
+            code: 'FORBIDDEN',
+            message: 'You do not have permission to perform this action.',
+          },
+        }),
+    })
+
+    const { result } = renderHook(() => useCancelConfigChange(), { wrapper: createWrapper() })
+
+    let caughtMessage = ''
+    await act(async () => {
+      try {
+        await result.current.cancelChange({ changeId: 'change-123', cancelledBy: 'user-1' })
+      } catch (err) {
+        caughtMessage = (err as Error).message
+      }
+    })
+
+    expect(caughtMessage).toBe('You do not have permission to perform this action.')
+    expect(caughtMessage).not.toContain('[object Object]')
+  })
+
   it('surfaces the route-specific error when there is no details field', async () => {
     // The changeId-required 400 on this route carries no `details` at all.
     mockFetch.mockResolvedValueOnce({

@@ -31,17 +31,18 @@ describe('describeSettledMutation', () => {
     })
   })
 
-  it('announces failures assertively, including the reason', () => {
+  it('returns null for a failure with no balance — the toast already carries it, so the assertive lane stays silent', () => {
+    // The failure toast ("Failed to waive fee. Ledger unavailable.") and this announcement
+    // used to say the same thing twice, with the assertive lane interrupting the user for a
+    // duplicate. The assertive lane is now reserved for a failure that ALSO reports a
+    // rolled-back balance — genuinely new information the toast doesn't carry.
     expect(
       describeSettledMutation({
         ...base,
         stage: 'failed',
         error: 'Ledger unavailable',
       }),
-    ).toEqual({
-      text: 'Waive fee failed: Ledger unavailable.',
-      urgency: 'assertive',
-    })
+    ).toBeNull()
   })
 
   it('reports the restored balance on a rollback', () => {

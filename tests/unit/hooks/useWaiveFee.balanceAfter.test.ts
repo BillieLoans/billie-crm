@@ -206,4 +206,55 @@ describe('useWaiveFee balanceAfter wiring', () => {
     expect(confirmed?.stage).toBe('confirmed')
     expect(confirmed?.balanceAfter).toBeUndefined()
   })
+
+  it('does not report a balance when totalAfter is null but totalDelta is a valid non-zero number (asymmetric unset, discrimination guard)', async () => {
+    // totalAfter and totalDelta are independently parseFloat()'d proto3 string
+    // fields on the route, so one can go missing (-> null) while the other
+    // arrives fine. The OLD gate coerced both with `Number(...)` before
+    // Number.isFinite — `Number(null)` is 0, which IS finite, so a valid
+    // non-zero totalDelta paired with a null totalAfter would have passed the
+    // gate and reported `balanceAfter: 0`, telling the operator "Balance
+    // updated to $0.00" for a balance the server never actually sent. The
+    // `typeof totalAfter === 'number'` guard must reject this before
+    // Number.isFinite ever gets a chance to launder the null into 0.
+    ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          success: true,
+          transaction: {
+            id: 'tx-4',
+            accountId: 'LA-7',
+            type: 'FEE_WAIVER',
+            typeLabel: 'Fee Waiver',
+            date: '2026-07-31T00:00:00Z',
+            feeDelta: -25,
+            totalDelta: -25,
+            feeAfter: null,
+            totalAfter: null,
+            description: 'Waived (totalAfter unset, totalDelta present)',
+          },
+          eventId: 'evt-4',
+        }),
+    })
+
+    const { result } = renderHook(() => useWaiveFee('LA-7'), { wrapper: createWrapper() })
+
+    await act(async () => {
+      await result.current.waiveFeeAsync({
+        loanAccountId: 'LA-7',
+        waiverAmount: 25,
+        reason: 'test',
+        approvedBy: 'admin',
+      })
+    })
+
+    const confirmed = useOptimisticStore
+      .getState()
+      .getPendingForAccount('LA-7')
+      .find((m) => m.action === 'waive-fee')
+
+    expect(confirmed?.stage).toBe('confirmed')
+    expect(confirmed?.balanceAfter).toBeUndefined()
+  })
 })

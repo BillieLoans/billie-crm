@@ -23,7 +23,7 @@ describe('LiveAnnouncer', () => {
   it('routes a polite announcement to the status region only', () => {
     render(<LiveAnnouncer />)
     act(() => useAnnouncerStore.getState().announce('Waive fee confirmed.', 'polite'))
-    act(() => vi.advanceTimersByTime(0))
+    act(() => vi.advanceTimersByTime(100))
     expect(screen.getByRole('status').textContent).toBe('Waive fee confirmed.')
     expect(screen.getByRole('alert').textContent).toBe('')
   })
@@ -31,7 +31,7 @@ describe('LiveAnnouncer', () => {
   it('routes a failure to the assertive region only', () => {
     render(<LiveAnnouncer />)
     act(() => useAnnouncerStore.getState().announce('Waive fee failed.', 'assertive'))
-    act(() => vi.advanceTimersByTime(0))
+    act(() => vi.advanceTimersByTime(100))
     expect(screen.getByRole('alert').textContent).toBe('Waive fee failed.')
     expect(screen.getByRole('status').textContent).toBe('')
   })
@@ -47,7 +47,7 @@ describe('LiveAnnouncer', () => {
     render(<LiveAnnouncer />)
 
     act(() => useAnnouncerStore.getState().announce('Ledger unavailable.', 'assertive'))
-    act(() => vi.advanceTimersByTime(0))
+    act(() => vi.advanceTimersByTime(100))
     const firstNode = screen.getByRole('alert')
     expect(firstNode.textContent).toBe('Ledger unavailable.')
 
@@ -58,8 +58,27 @@ describe('LiveAnnouncer', () => {
     expect(screen.getByRole('alert')).toBe(firstNode)
     expect(screen.getByRole('alert').textContent).toBe('')
 
-    act(() => vi.advanceTimersByTime(0))
+    act(() => vi.advanceTimersByTime(100))
     expect(screen.getByRole('alert')).toBe(firstNode)
+    expect(screen.getByRole('alert').textContent).toBe('Ledger unavailable.')
+  })
+
+  it('waits the full 100ms before re-setting the text — a 0ms timer commonly lands in the same coalesced a11y-tree notification and the re-announcement is never observed', () => {
+    render(<LiveAnnouncer />)
+
+    act(() => useAnnouncerStore.getState().announce('Ledger unavailable.', 'assertive'))
+    act(() => vi.advanceTimersByTime(100))
+    expect(screen.getByRole('alert').textContent).toBe('Ledger unavailable.')
+
+    act(() => useAnnouncerStore.getState().announce('Ledger unavailable.', 'assertive'))
+    expect(screen.getByRole('alert').textContent).toBe('')
+
+    // Just short of the full delay: still cleared, not yet re-set. If this were the old 0ms
+    // timer, any positive advance — including 1ms — would already have fired it.
+    act(() => vi.advanceTimersByTime(99))
+    expect(screen.getByRole('alert').textContent).toBe('')
+
+    act(() => vi.advanceTimersByTime(1))
     expect(screen.getByRole('alert').textContent).toBe('Ledger unavailable.')
   })
 
@@ -73,9 +92,9 @@ describe('LiveAnnouncer', () => {
   it('does not blank the assertive lane when a polite announcement follows it', () => {
     render(<LiveAnnouncer />)
     act(() => useAnnouncerStore.getState().announce('Write off failed.', 'assertive'))
-    act(() => vi.advanceTimersByTime(0))
+    act(() => vi.advanceTimersByTime(100))
     act(() => useAnnouncerStore.getState().announce('Repayment confirmed.', 'polite'))
-    act(() => vi.advanceTimersByTime(0))
+    act(() => vi.advanceTimersByTime(100))
     expect(screen.getByRole('alert').textContent).toBe('Write off failed.')
     expect(screen.getByRole('status').textContent).toBe('Repayment confirmed.')
   })
@@ -90,9 +109,9 @@ describe('LiveAnnouncer', () => {
     act(() =>
       useAnnouncerStore.getState().announce('Write off failed: Ledger unavailable.', 'assertive'),
     )
-    act(() => vi.advanceTimersByTime(0))
+    act(() => vi.advanceTimersByTime(100))
     act(() => useAnnouncerStore.getState().announce('Waive fee confirmed. $25.00.', 'polite'))
-    act(() => vi.advanceTimersByTime(0))
+    act(() => vi.advanceTimersByTime(100))
     expect(screen.getByRole('alert').textContent).toBe('Write off failed: Ledger unavailable.')
     expect(screen.getByRole('status').textContent).toBe('Waive fee confirmed. $25.00.')
   })
@@ -100,11 +119,11 @@ describe('LiveAnnouncer', () => {
   it('does not lose a confirmation when a failure follows it (confirmed-then-failed)', () => {
     render(<LiveAnnouncer />)
     act(() => useAnnouncerStore.getState().announce('Waive fee confirmed. $25.00.', 'polite'))
-    act(() => vi.advanceTimersByTime(0))
+    act(() => vi.advanceTimersByTime(100))
     act(() =>
       useAnnouncerStore.getState().announce('Write off failed: Ledger unavailable.', 'assertive'),
     )
-    act(() => vi.advanceTimersByTime(0))
+    act(() => vi.advanceTimersByTime(100))
     expect(screen.getByRole('status').textContent).toBe('Waive fee confirmed. $25.00.')
     expect(screen.getByRole('alert').textContent).toBe('Write off failed: Ledger unavailable.')
   })
@@ -117,11 +136,11 @@ describe('LiveAnnouncer', () => {
     // region node itself now never remounts at all.
     render(<LiveAnnouncer />)
     act(() => useAnnouncerStore.getState().announce('Waive fee confirmed.', 'polite'))
-    act(() => vi.advanceTimersByTime(0))
+    act(() => vi.advanceTimersByTime(100))
     const politeNode = screen.getByRole('status')
     const politeSeqBefore = useAnnouncerStore.getState().politeSeq
     act(() => useAnnouncerStore.getState().announce('Write off failed.', 'assertive'))
-    act(() => vi.advanceTimersByTime(0))
+    act(() => vi.advanceTimersByTime(100))
     expect(useAnnouncerStore.getState().politeSeq).toBe(politeSeqBefore)
     expect(screen.getByRole('status')).toBe(politeNode)
     expect(screen.getByRole('status').textContent).toBe('Waive fee confirmed.')

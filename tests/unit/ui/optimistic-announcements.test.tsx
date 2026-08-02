@@ -36,11 +36,30 @@ describe('useOptimisticAnnouncements', () => {
     expect(useAnnouncerStore.getState().polite).toBe('Waive fee confirmed. $25.00.')
   })
 
-  it('announces assertively with the reason on failure', () => {
+  it('stays silent on a plain failure — the toast already carries it, so the assertive lane is not duplicated', () => {
+    // describeSettledMutation returns null for a failure with no balanceAfter (see
+    // src/lib/announcements.ts) — the failure toast already says this, and the assertive
+    // lane would otherwise interrupt the user with an exact duplicate.
     render(<LiveAnnouncer />)
     act(() => useOptimisticStore.getState().setPending('acc-1', mutation()))
     act(() => useOptimisticStore.getState().setStage('acc-1', 'm1', 'failed', 'Ledger unavailable'))
-    expect(useAnnouncerStore.getState().assertive).toBe('Waive fee failed: Ledger unavailable.')
+    expect(useAnnouncerStore.getState().assertive).toBe('')
+  })
+
+  it('announces assertively with the reason when a failure also reports a rolled-back balance', () => {
+    render(<LiveAnnouncer />)
+    act(() => useOptimisticStore.getState().setPending('acc-1', mutation()))
+    act(() => {
+      useOptimisticStore.getState().setStage('acc-1', 'm1', 'failed', 'Ledger unavailable')
+      // setStage doesn't carry a balance, so patch it in directly the way a future
+      // rollback-balance-aware failure handler would (see useWaiveFee's onSuccess for the
+      // equivalent success-path pattern).
+      const current = useOptimisticStore.getState().getPendingForAccount('acc-1')[0]
+      useOptimisticStore.getState().setPending('acc-1', { ...current, balanceAfter: 150 })
+    })
+    expect(useAnnouncerStore.getState().assertive).toBe(
+      'Waive fee failed: Ledger unavailable. Balance restored to $150.00.',
+    )
   })
 
   it('does not announce the same settled mutation twice', () => {

@@ -118,7 +118,8 @@ export function usePeriodClosePreview() {
         const error = await res.json().catch(() => ({}))
         const errorMessage =
           (typeof error.details === 'string' && error.details) ||
-          error.error ||
+          (typeof error.error === 'string' && error.error) ||
+          (typeof error.error?.message === 'string' && error.error.message) ||
           error.message ||
           'Failed to generate preview'
         throw new Error(errorMessage)

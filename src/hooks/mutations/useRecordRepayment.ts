@@ -144,17 +144,24 @@ export function useRecordRepayment(loanAccountId?: string, accountLabel?: string
       // number wrapped in a false "updated to" claim.
       //
       // The route parseFloat()s proto3 string fields; an unset proto string is
-      // "", parseFloat("") is NaN, and JSON.stringify(NaN) emits null. So
-      // totalDelta can arrive as null — `null !== 0` is true, which would open
-      // the gate — and Number(null) is 0, so the operator would be told
-      // "Balance updated to $0.00" for a field the server never actually sent.
-      // Number.isFinite() on both values closes that hole.
-      const settled = Number(data.transaction.totalAfter)
-      const delta = Number(data.transaction.totalDelta)
-      if (Number.isFinite(settled) && Number.isFinite(delta) && delta !== 0) {
+      // "", parseFloat("") is NaN, and JSON.stringify(NaN) emits null. So either
+      // field can arrive as null despite the RecordRepaymentResponse type
+      // claiming `number` — and totalAfter/totalDelta are independently
+      // parsed, so one can be a valid number while the other is null (an
+      // asymmetric unset). `Number(null)` is 0, which passes
+      // `Number.isFinite`, so a bare isFinite check lets a null totalAfter
+      // through as a false "Balance updated to $0.00". Requiring
+      // `typeof === 'number'` first closes that hole: null (or any other
+      // non-number JSON value) is rejected outright, it doesn't get coerced
+      // to a misleading 0.
+      const totalAfter = data.transaction.totalAfter
+      const totalDelta = data.transaction.totalDelta
+      const totalAfterIsNumber = typeof totalAfter === 'number' && Number.isFinite(totalAfter)
+      const totalDeltaIsNumber = typeof totalDelta === 'number' && Number.isFinite(totalDelta)
+      if (totalAfterIsNumber && totalDeltaIsNumber && totalDelta !== 0) {
         setPending(context.loanAccountId, {
           ...context.pendingMutation,
-          balanceAfter: settled,
+          balanceAfter: totalAfter,
         })
       }
 

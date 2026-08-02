@@ -5,6 +5,14 @@ import { useAnnouncerStore } from '@/stores/announcer'
 import { useOptimisticAnnouncements } from './useOptimisticAnnouncements'
 import styles from './LiveAnnouncer.module.css'
 
+// Delay between clearing a lane's text and re-setting it, so an identical consecutive
+// message is re-announced. This cannot be 0: Chromium and Firefox coalesce accessibility-tree
+// change notifications within the same frame/microtask, so a 0ms timer commonly lands before
+// the clear is ever observed by the a11y tree — the re-announcement never happens, which is
+// the exact case this mechanism exists for. 100ms is the canonical figure in the a11y
+// literature for making a clear-then-set observable as two distinct mutations.
+const REANNOUNCE_DELAY_MS = 100
+
 /**
  * The app's single pair of ARIA live regions — docs/ux-standards.md §1.2 (SC 4.1.3).
  *
@@ -44,14 +52,14 @@ export const LiveAnnouncer: React.FC = () => {
   useEffect(() => {
     if (politeSeq === 0) return
     setPoliteText('')
-    const id = window.setTimeout(() => setPoliteText(polite), 0)
+    const id = window.setTimeout(() => setPoliteText(polite), REANNOUNCE_DELAY_MS)
     return () => window.clearTimeout(id)
   }, [politeSeq, polite])
 
   useEffect(() => {
     if (assertiveSeq === 0) return
     setAssertiveText('')
-    const id = window.setTimeout(() => setAssertiveText(assertive), 0)
+    const id = window.setTimeout(() => setAssertiveText(assertive), REANNOUNCE_DELAY_MS)
     return () => window.clearTimeout(id)
   }, [assertiveSeq, assertive])
 
