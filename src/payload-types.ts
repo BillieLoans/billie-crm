@@ -1841,6 +1841,10 @@ export interface ReleaseGrant {
   releaseId: string;
   mobileE164: string;
   contactId?: string | null;
+  /**
+   * Back-filled by the event processor when a customer.* event lands with a mobile matching this grant (join key: verified mobile).
+   */
+  customerId?: string | null;
   source?: ('targeted' | 'quota_claim') | null;
   status?: ('granted' | 'claimed' | 'expired' | 'revoked') | null;
   smsStatus?: ('sent' | 'failed' | 'not_sent') | null;
@@ -2762,6 +2766,7 @@ export interface ReleaseGrantsSelect<T extends boolean = true> {
   releaseId?: T;
   mobileE164?: T;
   contactId?: T;
+  customerId?: T;
   source?: T;
   status?: T;
   smsStatus?: T;

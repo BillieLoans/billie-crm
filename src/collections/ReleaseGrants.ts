@@ -24,6 +24,16 @@ export const ReleaseGrants: CollectionConfig = {
     { name: 'mobileE164', type: 'text', required: true, admin: { readOnly: true } },
     { name: 'contactId', type: 'text', index: true, admin: { readOnly: true } },
     {
+      name: 'customerId',
+      type: 'text',
+      index: true,
+      admin: {
+        readOnly: true,
+        description:
+          'Back-filled by the event processor when a customer.* event lands with a mobile matching this grant (join key: verified mobile).',
+      },
+    },
+    {
       name: 'source',
       type: 'select',
       options: ['targeted', 'quota_claim'],

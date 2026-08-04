@@ -54,6 +54,7 @@ const grants = {
       releaseId: 'rel-1',
       mobileE164: '+61400000001',
       contactId: 'c-1',
+      customerId: null,
       source: 'targeted',
       status: 'granted',
       smsStatus: 'sent',
@@ -66,6 +67,7 @@ const grants = {
       releaseId: 'rel-1',
       mobileE164: '+61400000002',
       contactId: null,
+      customerId: 'CUS-TEST-002',
       source: 'targeted',
       status: 'claimed',
       smsStatus: 'not_sent',
@@ -73,8 +75,21 @@ const grants = {
       updatedAt: '',
       createdAt: '',
     },
+    {
+      id: 'g3',
+      releaseId: 'rel-1',
+      mobileE164: '+61400000003',
+      contactId: null,
+      customerId: null,
+      source: 'quota_claim',
+      status: 'claimed',
+      smsStatus: 'not_sent',
+      claimedAt: '2026-08-02T00:00:00Z',
+      updatedAt: '',
+      createdAt: '',
+    },
   ],
-  totalDocs: 2,
+  totalDocs: 3,
   totalPages: 1,
   page: 1,
 }
@@ -110,6 +125,22 @@ describe('ReleaseDetail', () => {
 
     const contactLink = screen.getByText('c-1').closest('a')
     expect(contactLink?.getAttribute('href')).toBe('/admin/marketing/contacts/c-1')
+  })
+
+  test('links to the customer/servicing view when a grant has a customerId but no contactId yet', () => {
+    hooks.useRelease.mockReturnValue({ data: { release: baseRelease, grants }, isLoading: false })
+    render(<ReleaseDetail releaseId="rel-1" />)
+
+    const customerLink = screen.getByText('CUS-TEST-002').closest('a')
+    expect(customerLink?.getAttribute('href')).toBe('/admin/servicing/CUS-TEST-002')
+  })
+
+  test('shows — in the Contact cell when neither contactId nor customerId is set', () => {
+    hooks.useRelease.mockReturnValue({ data: { release: baseRelease, grants }, isLoading: false })
+    render(<ReleaseDetail releaseId="rel-1" />)
+
+    const row = screen.getByText('+61400000003').closest('tr')
+    expect(row?.textContent).toContain('—')
   })
 
   test('Granted tile shows — for an open_quota release', () => {

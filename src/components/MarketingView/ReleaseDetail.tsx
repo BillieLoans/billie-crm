@@ -207,6 +207,13 @@ export const ReleaseDetail: React.FC<ReleaseDetailProps> = ({ releaseId }) => {
                       >
                         {g.contactId}
                       </Link>
+                    ) : g.customerId ? (
+                      // Back-filled from customer.* events (join key: verified
+                      // mobile) — no marketing contact yet, but the claimant is
+                      // a customer we can jump straight to in servicing.
+                      <Link href={`/admin/servicing/${g.customerId}`} className={styles.nameLink}>
+                        {g.customerId}
+                      </Link>
                     ) : (
                       <span className={styles.placeholder}>—</span>
                     )}

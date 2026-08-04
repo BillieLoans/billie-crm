@@ -38,6 +38,7 @@ from billie_servicing.handlers.conversation import (
 from billie_servicing.handlers.customer import (
     handle_customer_changed,
     handle_customer_verified,
+    link_customer_to_grants,
 )
 
 
@@ -119,6 +120,101 @@ class TestCustomerHandlers:
         assert update is not None
         assert update["identity_verified"] is True
         assert update["ekyc_status"] == "successful"
+
+    @pytest.mark.asyncio
+    async def test_handle_customer_changed_links_matching_grant_by_mobile(self, mock_pool):
+        """A customer event carrying a mobile back-fills any release_grants row
+        with a matching mobile_e164 and no customer_id yet (join key: verified
+        mobile the applicant claimed the gate with)."""
+        event = MagicMock()
+        event.payload = MagicMock()
+        event.payload.customer_id = "CUS-TEST-010"
+        event.payload.first_name = "Amy"
+        event.payload.last_name = "Nguyen"
+        event.payload.email_address = None
+        event.payload.mobile_phone_number = "0412345678"
+        event.payload.date_of_birth = None
+        event.payload.ekyc_status = None
+        event.payload.residential_address = None
+
+        await handle_customer_changed(mock_pool, event)
+
+        update_calls = [c for c in mock_pool.calls_against("release_grants") if c.op == "UPDATE"]
+        assert len(update_calls) == 1
+        call = update_calls[0]
+        assert call.values["customer_id"] == "CUS-TEST-010"
+        assert "customer_id IS NULL" in call.sql
+        assert "+61412345678" in call.args
+
+    @pytest.mark.asyncio
+    async def test_handle_customer_changed_unnormalisable_mobile_does_not_touch_grants(
+        self, mock_pool
+    ):
+        event = MagicMock()
+        event.payload = MagicMock()
+        event.payload.customer_id = "CUS-TEST-011"
+        event.payload.first_name = "Bad"
+        event.payload.last_name = "Mobile"
+        event.payload.email_address = None
+        event.payload.mobile_phone_number = "not-a-number"
+        event.payload.date_of_birth = None
+        event.payload.ekyc_status = None
+        event.payload.residential_address = None
+
+        await handle_customer_changed(mock_pool, event)
+
+        assert not mock_pool.calls_against("release_grants")
+
+    @pytest.mark.asyncio
+    async def test_handle_customer_changed_without_mobile_falls_back_to_persisted_mobile(
+        self, mock_pool
+    ):
+        """Partial-update events that omit the mobile still back-fill the link
+        using the customer's already-persisted mobile, not just what's on this
+        specific event."""
+        mock_pool.set_fetchrow(
+            {"first_name": "Jane", "last_name": "Doe", "mobile_phone_number": "0412345678"}
+        )
+        event = MagicMock()
+        event.payload = MagicMock()
+        event.payload.customer_id = "CUS-TEST-012"
+        event.payload.first_name = None
+        event.payload.last_name = None
+        event.payload.email_address = "jane@test.com"
+        event.payload.mobile_phone_number = None
+        event.payload.date_of_birth = None
+        event.payload.ekyc_status = None
+        event.payload.residential_address = None
+
+        await handle_customer_changed(mock_pool, event)
+
+        update_calls = [c for c in mock_pool.calls_against("release_grants") if c.op == "UPDATE"]
+        assert len(update_calls) == 1
+        assert update_calls[0].values["customer_id"] == "CUS-TEST-012"
+
+
+class TestLinkCustomerToGrants:
+    """Direct unit coverage of the grant back-fill helper (join key: verified
+    mobile). Idempotent by construction — the UPDATE only ever touches rows
+    where customer_id IS NULL, so replays are harmless."""
+
+    @pytest.mark.asyncio
+    async def test_links_when_mobile_normalises(self, mock_pool):
+        await link_customer_to_grants(mock_pool, "CUS-1", "0412345678")
+        update_calls = [c for c in mock_pool.calls_against("release_grants") if c.op == "UPDATE"]
+        assert len(update_calls) == 1
+        assert update_calls[0].values["customer_id"] == "CUS-1"
+        assert "+61412345678" in update_calls[0].args
+
+    @pytest.mark.asyncio
+    async def test_noop_when_mobile_is_none(self, mock_pool):
+        await link_customer_to_grants(mock_pool, "CUS-2", None)
+        assert not mock_pool.calls
+
+    @pytest.mark.asyncio
+    async def test_noop_when_mobile_unnormalisable(self, mock_pool):
+        await link_customer_to_grants(mock_pool, "CUS-3", "not-a-number")
+        assert not mock_pool.calls
 
 
 # =============================================================================
