@@ -82,7 +82,7 @@ billie-crm (Payload admin)                     billieChat (FastAPI + Svelte)
 
 **`applicant_release.revoked.v1`** — `{ release_id, revoked_by, reason? }`. Kills all remaining grants and any remaining quota. Stops new entries; does not terminate in-flight conversations.
 
-**`applicant_release.gate_mode.set.v1`** — `{ mode: "open" | "gated", set_by, reason? }`. Published by the gate CLI (below), not the CRM. applicantReleaseService applies it to Redis and emits the fact.
+**`applicant_release.gate_mode.set.v1`** — `{ mode: "open" | "gated" | "closed", set_by, reason? }`. Published by the gate CLI (below), not the CRM. applicantReleaseService applies it to Redis and emits the fact. `closed` (added Aug 2026) is the kill switch: nobody passes the gate — no customer bypass, no grants, no quota — the OTP endpoints refuse (no SMS), and the frontend shows a closed page with no mobile-entry path. Closed blocks NEW passes only; sessions holding a gate-passed key from before the flip ride out that key's TTL (same posture as release revocation).
 
 ### billieChat → CRM (facts)
 
@@ -146,7 +146,7 @@ New `backend/backend/src/services/applicantRelease/` mirroring `reapplicationBlo
 
 ### Gate control (two levels)
 
-Effective gating = `ENABLE_APPLICATION_GATE` (env flag, code-level guard) **AND** runtime gate mode (`application_gate:mode` in Redis, default `open` when unset). Flag off → all gate code inert regardless of mode (dark-ship + hard kill, restart required). Flag on + mode `open` → door open exactly as today, `GET /gate/status` returns `off`, frontend never shows gate states; flipping to `gated` via the CLI takes effect within seconds (mode is read per gate check with a short in-process cache, ≤5 s). Fully-rolled-out production runs mode `open`; the service, collections and flag can later be deleted cleanly — nothing else depends on them.
+Effective gating = `ENABLE_APPLICATION_GATE` (env flag, code-level guard) **AND** runtime gate mode (`application_gate:mode` in Redis, default `open` when unset). Flag off → all gate code inert regardless of mode (dark-ship + hard kill, restart required). Flag on + mode `open` → door open exactly as today, `GET /gate/status` returns `off`, frontend never shows gate states; flipping to `gated` via the CLI takes effect within seconds (mode is read per gate check with a short in-process cache, ≤5 s). Fully-rolled-out production runs mode `open` with the flag **left permanently on**: the `closed` kill switch is only flippable without a deploy while the flag is enabled, so the flag is a one-time dark-ship guard, not something to retire. CLI commands: `on` → gated, `off` → open, `close` → closed, `status` (Make targets gate-on / gate-off / gate-close / gate-status).
 
 ### Storage (Redis primary)
 
@@ -193,7 +193,7 @@ Nobody is put through an OTP just to be refused unless they chose to check their
 1. Ship both repos dark: `ENABLE_APPLICATION_GATE` off in prod. Today's open door is preserved exactly.
 2. Rehearse in demo: flag on, then `gate_cli on` / `off`, each release type, SMS, gate entry, quota exhaustion, revocation, CRM counts and mode banner.
 3. Prod: enable the flag (deploy) with mode still `open` — zero behaviour change. During a low-traffic window, run `gate_cli on` with an open-quota release active so walk-ups are never hard-blocked on day one.
-4. Retire: `gate_cli off` returns to the open door instantly (this is the "fully rolled out" end state). The flag, service, and collections can be removed in a later cleanup with no data-model entanglement.
+4. Steady state: `gate_cli off` returns to the open door instantly (this is the "fully rolled out" end state). The flag, service, and collections stay in place permanently — they carry the `closed` kill switch, which must remain flippable without a deploy.
 
 ## 10. Post-release follow-ups (Aug 2026)
 
