@@ -1,0 +1,63 @@
+/* Gate Closed Banner Styles — mirrors ReadOnlyBanner's fixed top-bar
+   pattern (position, z-index, layout) with theme-aware danger colors so
+   contrast holds in both light and dark admin themes. */
+
+.banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 24px;
+  background: var(--theme-error-600, #b91c1c);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.bannerIcon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.bannerMessage {
+  text-align: center;
+}
+
+.bannerLink {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 4px;
+  color: #fff;
+  text-decoration: none;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.bannerLink:hover,
+.bannerLink:focus-visible {
+  background: rgba(255, 255, 255, 0.15);
+  text-decoration: underline;
+}
+
+.bannerLink:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
