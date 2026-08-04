@@ -18,7 +18,12 @@ export const ReleaseGateStatus: CollectionConfig = {
   },
   fields: [
     { name: 'gateId', type: 'text', required: true, unique: true, admin: { readOnly: true } },
-    { name: 'mode', type: 'select', options: ['open', 'gated'], admin: { readOnly: true } },
+    {
+      name: 'mode',
+      type: 'select',
+      options: ['open', 'gated', 'closed'],
+      admin: { readOnly: true },
+    },
     { name: 'setBy', type: 'text', admin: { readOnly: true } },
     { name: 'changedAt', type: 'date', admin: { readOnly: true } },
   ],

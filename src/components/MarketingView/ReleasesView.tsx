@@ -47,6 +47,12 @@ export const ReleasesView: React.FC = () => {
           before relying on release volumes.
         </div>
       )}
+      {gate?.mode === 'closed' && (
+        <div className={styles.errorMessage} role="alert">
+          Kill switch ON — all new applications are blocked. Releases and grants are not being
+          honoured while this is on.
+        </div>
+      )}
       <div className={styles.statsStrip}>
         <div className={styles.statChip}>
           <span className={styles.statValue}>{unclaimedGrants.toLocaleString('en-AU')}</span>

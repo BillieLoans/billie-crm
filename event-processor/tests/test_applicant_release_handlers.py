@@ -219,3 +219,18 @@ async def test_gate_mode_changed_upserts_single_row(mock_pool):
     row = mock_pool.last_upsert("release_gate_status")
     assert row["gate_id"] == "gate"
     assert row["mode"] == "gated"
+
+
+async def test_gate_mode_changed_closed_round_trips(mock_pool):
+    """The kill-switch mode is stored as plain text — the handler does not
+    validate against an enum, so 'closed' round-trips exactly like the other
+    two modes (CRM adds it as a select option/enum value, not this handler)."""
+    await handle_applicant_release_gate_mode_changed(
+        mock_pool,
+        _event("applicant_release.gate_mode.changed.v1",
+               {"mode": "closed", "set_by": "ops", "changed_at": "2026-08-02T09:00:00+00:00"}),
+    )
+    row = mock_pool.last_upsert("release_gate_status")
+    assert row["gate_id"] == "gate"
+    assert row["mode"] == "closed"
+    assert row["set_by"] == "ops"

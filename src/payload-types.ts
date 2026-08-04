@@ -1861,7 +1861,7 @@ export interface ReleaseGrant {
 export interface ReleaseGateStatus {
   id: string;
   gateId: string;
-  mode?: ('open' | 'gated') | null;
+  mode?: ('open' | 'gated' | 'closed') | null;
   setBy?: string | null;
   changedAt?: string | null;
   updatedAt: string;

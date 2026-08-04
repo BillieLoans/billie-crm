@@ -63,8 +63,26 @@ describe('ReleasesView', () => {
     hooks.useGateStatus.mockReturnValue({ data: { mode: 'gated', setBy: 'ops', changedAt: null } })
     render(<ReleasesView />)
     expect(screen.queryByText(/gate is OFF/i)).toBeNull()
+    expect(screen.queryByText(/kill switch/i)).toBeNull()
     // 150 granted − 113 claimed = 37, surfaced both in the capacity chip and
     // the row's Remaining column.
     expect(screen.getAllByText('37').length).toBeGreaterThan(0)
+  })
+
+  test('shows kill-switch alert when mode is closed', () => {
+    hooks.useReleases.mockReturnValue({
+      data: { docs: [release], totalDocs: 1, totalPages: 1, page: 1 },
+      isLoading: false,
+      isError: false,
+    })
+    hooks.useGateStatus.mockReturnValue({
+      data: { mode: 'closed', setBy: 'ops', changedAt: null },
+    })
+    render(<ReleasesView />)
+    expect(screen.queryByText(/gate is OFF/i)).toBeNull()
+    const alert = screen.getByRole('alert')
+    expect(alert.textContent).toMatch(/kill switch on/i)
+    expect(alert.textContent).toMatch(/all new applications are blocked/i)
+    expect(screen.getByText('August wave 2')).toBeTruthy()
   })
 })

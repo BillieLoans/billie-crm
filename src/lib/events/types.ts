@@ -338,7 +338,7 @@ export interface ApplicantReleaseRevokedPayload {
 }
 
 export interface ApplicantReleaseGateModeSetPayload {
-  mode: 'open' | 'gated'
+  mode: 'open' | 'gated' | 'closed'
   set_by: string
   reason?: string
 }

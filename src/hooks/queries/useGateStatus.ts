@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query'
 
 export interface GateStatus {
-  mode: 'open' | 'gated'
+  mode: 'open' | 'gated' | 'closed'
   setBy: string | null
   changedAt: string | null
 }
