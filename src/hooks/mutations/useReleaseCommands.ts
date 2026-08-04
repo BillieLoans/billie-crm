@@ -61,3 +61,38 @@ export function useRevokeRelease() {
     },
   })
 }
+
+export interface SetGateModeVars {
+  mode: 'open' | 'gated' | 'closed'
+  reason?: string
+}
+
+/**
+ * Admin-only gate-mode control (spec §6 "Gate control") — a second command
+ * surface alongside the ops CLI break-glass path. The gate-status projection
+ * only updates once billieChat round-trips the `.changed` fact (seconds
+ * scale), so onSuccess just invalidates; the UI shows an "applying…" hint
+ * on the control until useGateStatus reflects the requested mode.
+ */
+export function useSetGateMode() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (vars: SetGateModeVars) =>
+      postCommand<{ mode: string; eventId: string }>('/api/marketing/releases/gate-mode', vars),
+    onSuccess: (_res, vars) => {
+      toast.success(`Gate mode set to ${vars.mode}`)
+      // The 'marketing-releases' prefix also covers ['marketing-releases', 'gate-status'].
+      invalidateWithLag(qc, [['marketing-releases']])
+    },
+    onError: (e: Error, vars) => {
+      toast.error('Failed to change gate mode', { description: e.message })
+      recordMarketingFailure(
+        `Set gate mode to ${vars.mode}`,
+        'gate',
+        '/api/marketing/releases/gate-mode',
+        vars,
+        e,
+      )
+    },
+  })
+}

@@ -23,7 +23,10 @@ const authHolder = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/auth', () => ({ requireAuth: vi.fn(async () => authHolder.current) }))
 
-const publisher = vi.hoisted(() => ({ publishReleaseCommand: vi.fn() }))
+const publisher = vi.hoisted(() => ({
+  publishReleaseCommand: vi.fn(),
+  publishGateModeCommand: vi.fn(),
+}))
 vi.mock('@/server/release-publisher', () => publisher)
 
 const partition = vi.hoisted(() => ({ computeReleasePartition: vi.fn() }))
@@ -35,6 +38,7 @@ vi.mock('@/server/marketing-grpc-client', () => grpc)
 import { POST as releasePost } from '@/app/api/marketing/releases/route'
 import { POST as preflightPost } from '@/app/api/marketing/releases/preflight/route'
 import { POST as revokePost } from '@/app/api/marketing/releases/[releaseId]/revoke/route'
+import { POST as gateModePost } from '@/app/api/marketing/releases/gate-mode/route'
 
 function req(body?: unknown): NextRequest {
   return new Request('http://x/api/marketing/releases', {
@@ -80,6 +84,7 @@ beforeEach(() => {
     payload: { find: vi.fn(async () => ({ docs: [], totalDocs: 0 })) },
   }
   publisher.publishReleaseCommand.mockReset().mockResolvedValue({ eventId: 'e-1' })
+  publisher.publishGateModeCommand.mockReset().mockResolvedValue({ eventId: 'e-gate-1' })
   partition.computeReleasePartition.mockReset().mockResolvedValue({ ...basePartition })
   grpc.logInteraction.mockClear()
 })
@@ -205,5 +210,81 @@ describe('POST /api/marketing/releases/[releaseId]/revoke', () => {
     const call = publisher.publishReleaseCommand.mock.calls[0][0]
     expect(call.payload.release_id).toBe('rel-1')
     expect(call.payload.reason).toBeUndefined()
+  })
+})
+
+describe('POST /api/marketing/releases/gate-mode', () => {
+  test('202: admin publishes gate_mode.set.v1 with mode, set_by, and reason', async () => {
+    const res = (await gateModePost(req({ mode: 'gated', reason: 'wave launch' }))) as {
+      body: { mode: string; eventId: string }
+      status: number
+    }
+    expect(res.status).toBe(202)
+    expect(res.body).toEqual({ mode: 'gated', eventId: 'e-gate-1' })
+
+    const call = publisher.publishGateModeCommand.mock.calls[0][0]
+    expect(call.mode).toBe('gated')
+    expect(call.usr).toBe('staff-1')
+    expect(call.reason).toBe('wave launch')
+  })
+
+  test('202 without a reason: passes reason through as undefined', async () => {
+    await gateModePost(req({ mode: 'open' }))
+    const call = publisher.publishGateModeCommand.mock.calls[0][0]
+    expect(call.mode).toBe('open')
+    expect(call.reason).toBeUndefined()
+  })
+
+  test('403: requireAuth rejects a non-admin — publisher never called', async () => {
+    authHolder.current = {
+      error: {
+        body: {
+          error: {
+            code: 'FORBIDDEN',
+            message: 'You do not have permission to perform this action.',
+          },
+        },
+        status: 403,
+      },
+    }
+    const res = (await gateModePost(req({ mode: 'closed' }))) as {
+      body: { error: { code: string } }
+      status: number
+    }
+    expect(res.status).toBe(403)
+    expect(res.body.error.code).toBe('FORBIDDEN')
+    expect(publisher.publishGateModeCommand).not.toHaveBeenCalled()
+  })
+
+  test('400 VALIDATION_ERROR on an invalid mode', async () => {
+    const res = (await gateModePost(req({ mode: 'paused' }))) as {
+      body: { error: { code: string } }
+      status: number
+    }
+    expect(res.status).toBe(400)
+    expect(res.body.error.code).toBe('VALIDATION_ERROR')
+    expect(publisher.publishGateModeCommand).not.toHaveBeenCalled()
+  })
+
+  test('503 EVENT_PUBLISH_FAILED when the publisher throws', async () => {
+    publisher.publishGateModeCommand.mockRejectedValue(
+      new EventPublishError('down', { attempts: 3 }),
+    )
+    const res = (await gateModePost(req({ mode: 'closed' }))) as {
+      body: { error: { code: string } }
+      status: number
+    }
+    expect(res.status).toBe(503)
+    expect(res.body.error.code).toBe('EVENT_PUBLISH_FAILED')
+  })
+
+  test('500 INTERNAL_ERROR on an unexpected error', async () => {
+    publisher.publishGateModeCommand.mockRejectedValue(new Error('boom'))
+    const res = (await gateModePost(req({ mode: 'closed' }))) as {
+      body: { error: { code: string } }
+      status: number
+    }
+    expect(res.status).toBe(500)
+    expect(res.body.error.code).toBe('INTERNAL_ERROR')
   })
 })

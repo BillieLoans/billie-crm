@@ -3,9 +3,13 @@
 import React, { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useGateStatus, useReleases } from '@/hooks'
+import { useAuth } from '@payloadcms/ui'
+import { useGateStatus, useReleases, useSetGateMode } from '@/hooks'
+import type { GateStatus } from '@/hooks'
+import { isAdmin } from '@/lib/access'
 import { formatDateShort } from '@/lib/formatters'
 import { MarketingSubnav } from './MarketingSubnav'
+import { Modal } from './Modal'
 import { NewReleaseModal } from './NewReleaseModal'
 import styles from './styles.module.css'
 
@@ -13,6 +17,203 @@ const TYPE_LABELS: Record<string, string> = {
   waitlist: 'Waitlist next-N',
   phone_list: 'Phone list',
   open_quota: 'Open quota',
+}
+
+type GateMode = GateStatus['mode']
+
+const GATE_MODE_LABELS: Record<GateMode, string> = {
+  open: 'Open',
+  gated: 'Gated',
+  closed: 'Closed',
+}
+
+const GATE_MODE_CONSEQUENCE: Record<'open' | 'gated', string> = {
+  open: 'Open: gate off, everyone can apply.',
+  gated: 'Gated: only released applicants can start applications.',
+}
+
+const GATE_CLOSE_CONSEQUENCE =
+  'Blocks ALL new applications — customers, grants and walk-ups — until reopened.'
+
+const CLOSE_CONFIRM_PHRASE = 'CLOSE'
+
+function gateModeErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'Failed to change gate mode'
+}
+
+/**
+ * Admin-only gate-mode controls (spec §6 "Gate control") — a second command
+ * surface alongside the ops CLI break-glass path (which remains the
+ * break-glass path if the CRM is unreachable). Non-admins see only the mode
+ * banners below, no buttons. This slot always renders for admins regardless
+ * of the current mode — fixed layout, so the controls don't jump around as
+ * the gate flips.
+ */
+const GateControl: React.FC<{ gate: GateStatus | undefined }> = ({ gate }) => {
+  const { user } = useAuth()
+  const [confirmMode, setConfirmMode] = useState<GateMode | null>(null)
+  const [pendingMode, setPendingMode] = useState<GateMode | null>(null)
+  const setGateMode = useSetGateMode()
+
+  const currentMode: GateMode = gate?.mode ?? 'open'
+  // Derived, not effect-driven: once useGateStatus (polled + lag-invalidated)
+  // reflects the mode we asked for, the "applying…" hint disappears on its
+  // own — no need to imperatively clear pendingMode.
+  const applyingMode = pendingMode && pendingMode !== currentMode ? pendingMode : null
+
+  if (!isAdmin(user)) return null
+
+  const openConfirm = (mode: GateMode) => {
+    setPendingMode(null)
+    setConfirmMode(mode)
+  }
+
+  const handleConfirm = () => {
+    if (!confirmMode) return
+    const requested = confirmMode
+    setGateMode.mutate(
+      { mode: requested },
+      {
+        onSuccess: () => {
+          setPendingMode(requested)
+          setConfirmMode(null)
+        },
+      },
+    )
+  }
+
+  return (
+    <div className={styles.gateControl} data-testid="gate-control">
+      <span className={styles.gateControlLabel}>
+        Gate mode: <strong>{GATE_MODE_LABELS[currentMode]}</strong>
+        {applyingMode && (
+          <span className={styles.formHint}> — applying {GATE_MODE_LABELS[applyingMode]}…</span>
+        )}
+      </span>
+      <div className={styles.gateControlActions}>
+        {(['open', 'gated', 'closed'] as const).map((mode) => (
+          <button
+            key={mode}
+            type="button"
+            data-testid={`gate-btn-${mode}`}
+            className={mode === 'closed' ? styles.btnDanger : styles.btnCancel}
+            onClick={() => openConfirm(mode)}
+            disabled={setGateMode.isPending || currentMode === mode}
+          >
+            Set {GATE_MODE_LABELS[mode]}
+          </button>
+        ))}
+      </div>
+
+      {(confirmMode === 'open' || confirmMode === 'gated') && (
+        <Modal
+          title={`Set gate to ${GATE_MODE_LABELS[confirmMode]}`}
+          onClose={() => setConfirmMode(null)}
+        >
+          <div className={styles.modalBody}>
+            {setGateMode.isError && (
+              <div className={styles.errorMessage}>{gateModeErrorMessage(setGateMode.error)}</div>
+            )}
+            <p>{GATE_MODE_CONSEQUENCE[confirmMode]}</p>
+          </div>
+          <div className={styles.modalFooter}>
+            <button type="button" className={styles.btnCancel} onClick={() => setConfirmMode(null)}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className={styles.btnSubmit}
+              disabled={setGateMode.isPending}
+              onClick={handleConfirm}
+            >
+              {setGateMode.isPending
+                ? 'Applying…'
+                : `Confirm — set ${GATE_MODE_LABELS[confirmMode]}`}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {confirmMode === 'closed' && (
+        <CloseGateConfirmModal
+          isPending={setGateMode.isPending}
+          errorMessage={setGateMode.isError ? gateModeErrorMessage(setGateMode.error) : null}
+          onCancel={() => setConfirmMode(null)}
+          onConfirm={handleConfirm}
+        />
+      )}
+    </div>
+  )
+}
+
+interface CloseGateConfirmModalProps {
+  isPending: boolean
+  errorMessage: string | null
+  onCancel: () => void
+  onConfirm: () => void
+}
+
+/**
+ * Typed-confirmation dialog for the CLOSED kill switch (ux-standards
+ * irreversible-action pattern, mirroring EraseContactModal / the release
+ * RevokeReleaseModal): typing CLOSE exactly is required to enable the
+ * button, since closing the gate blocks every new applicant instantly.
+ */
+const CloseGateConfirmModal: React.FC<CloseGateConfirmModalProps> = ({
+  isPending,
+  errorMessage,
+  onCancel,
+  onConfirm,
+}) => {
+  const [confirmation, setConfirmation] = useState('')
+  const canSubmit = confirmation.trim() === CLOSE_CONFIRM_PHRASE && !isPending
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!canSubmit) return
+    onConfirm()
+  }
+
+  return (
+    <Modal title="Close the gate — kill switch" onClose={onCancel}>
+      <form onSubmit={handleSubmit}>
+        <div className={styles.modalBody}>
+          {errorMessage && <div className={styles.errorMessage}>{errorMessage}</div>}
+          <div className={styles.errorMessage}>{GATE_CLOSE_CONSEQUENCE}</div>
+
+          <div className={styles.formGroup}>
+            <label className={styles.formLabel} htmlFor="gate-close-confirmation">
+              Type <strong>{CLOSE_CONFIRM_PHRASE}</strong> to confirm
+            </label>
+            <input
+              id="gate-close-confirmation"
+              autoFocus
+              type="text"
+              className={styles.formInput}
+              value={confirmation}
+              onChange={(e) => setConfirmation(e.target.value)}
+              placeholder={CLOSE_CONFIRM_PHRASE}
+              autoComplete="off"
+            />
+          </div>
+        </div>
+
+        <div className={styles.modalFooter}>
+          <button type="button" className={styles.btnCancel} onClick={onCancel}>
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className={styles.btnDanger}
+            disabled={!canSubmit}
+            title={!canSubmit ? `Type "${CLOSE_CONFIRM_PHRASE}" exactly to enable` : undefined}
+          >
+            {isPending ? 'Closing…' : 'Close the gate'}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  )
 }
 
 /**
@@ -40,6 +241,8 @@ export const ReleasesView: React.FC = () => {
   return (
     <div className={styles.container}>
       <MarketingSubnav />
+
+      <GateControl gate={gate} />
 
       {gate?.mode === 'open' && (
         <div className={styles.warningMessage} role="status">

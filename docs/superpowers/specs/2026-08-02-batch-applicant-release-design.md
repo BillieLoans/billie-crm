@@ -16,17 +16,17 @@ Everyone arriving at chat.billie.loans passes a front-door gate: verify your mob
 
 ## 2. Decisions (settled during brainstorming)
 
-| Question | Decision |
-|---|---|
-| How does a released applicant prove identity? | **Front-door mobile + OTP** for everyone, reusing billieChat's existing `otp_service`/ClickSend. No magic-link tokens. |
-| What does "release by count" mean? | **Next N from the waitlist** (specific contacts, by `waitlistPosition` then `waitlistJoinedAt`), not an anonymous counter. |
-| Anonymous applications? | Also supported, as the **open quota** release type. Walk-ups still verify their mobile; a claim mints a grant tied to that mobile. |
-| Existing customers? | **Bypass the gate** (verified mobile matches an existing customer → straight in; the reapplication block applies unchanged). Releases control *new* applicant volume only. |
-| Grant lifetime? | **Per-release expiry window**, default 14 days, editable per release. Re-entry allowed within the window. Releases are revocable. |
-| Invite SMS? | **Optional per release** (checkbox). Sending is done by billieChat, not the CRM (the CRM's NotificationDispatcher gRPC client is read/suppression-only). |
-| SMS consent policy | **Marketing consent required for the SMS.** Unconsented (or unmatched pasted) numbers still get the grant — they can enter if they show up — but receive no message. |
-| On/off control | **Two-level.** Operational switch: runtime gate mode (`open` \| `gated`) in billieChat Redis, flipped instantly (no deploy) by an ops CLI that publishes a `gate_mode.set` event; CRM shows the current mode. Engineering guard: `ENABLE_APPLICATION_GATE` env flag for dark-shipping and hard kill. Default mode is `open` — fully-rolled-out production simply leaves it there. |
-| Architecture | **Approach A: CRM commands it, billieChat enforces it.** A new small "applicant release" domain; marketing data is only *read* for targeting; the entry decision is mastered on the lending side. Preserves the marketing spec's privacy wall (marketing never authors a lending decision) and keeps `billie-platform-services` untouched. |
+| Question                                      | Decision                                                                                                                                                                                                                                                                                                                                                                          |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| How does a released applicant prove identity? | **Front-door mobile + OTP** for everyone, reusing billieChat's existing `otp_service`/ClickSend. No magic-link tokens.                                                                                                                                                                                                                                                            |
+| What does "release by count" mean?            | **Next N from the waitlist** (specific contacts, by `waitlistPosition` then `waitlistJoinedAt`), not an anonymous counter.                                                                                                                                                                                                                                                        |
+| Anonymous applications?                       | Also supported, as the **open quota** release type. Walk-ups still verify their mobile; a claim mints a grant tied to that mobile.                                                                                                                                                                                                                                                |
+| Existing customers?                           | **Bypass the gate** (verified mobile matches an existing customer → straight in; the reapplication block applies unchanged). Releases control _new_ applicant volume only.                                                                                                                                                                                                        |
+| Grant lifetime?                               | **Per-release expiry window**, default 14 days, editable per release. Re-entry allowed within the window. Releases are revocable.                                                                                                                                                                                                                                                 |
+| Invite SMS?                                   | **Optional per release** (checkbox). Sending is done by billieChat, not the CRM (the CRM's NotificationDispatcher gRPC client is read/suppression-only).                                                                                                                                                                                                                          |
+| SMS consent policy                            | **Marketing consent required for the SMS.** Unconsented (or unmatched pasted) numbers still get the grant — they can enter if they show up — but receive no message.                                                                                                                                                                                                              |
+| On/off control                                | **Two-level.** Operational switch: runtime gate mode (`open` \| `gated`) in billieChat Redis, flipped instantly (no deploy) by an ops CLI that publishes a `gate_mode.set` event; CRM shows the current mode. Engineering guard: `ENABLE_APPLICATION_GATE` env flag for dark-shipping and hard kill. Default mode is `open` — fully-rolled-out production simply leaves it there. |
+| Architecture                                  | **Approach A: CRM commands it, billieChat enforces it.** A new small "applicant release" domain; marketing data is only _read_ for targeting; the entry decision is mastered on the lending side. Preserves the marketing spec's privacy wall (marketing never authors a lending decision) and keeps `billie-platform-services` untouched.                                        |
 
 Rejected approaches: extending the platform `marketingService` (out of scope repo; puts a lending-entry decision inside marketing, against the privacy-wall invariants in `docs/superpowers/specs/2026-07-02-marketing-crm-customer-lifecycle-design.md` §1); billieChat-masters-with-sync-CRM-read-API (new synchronous runtime coupling; breaks the CRM's projection convention).
 
@@ -66,6 +66,7 @@ billie-crm (Payload admin)                     billieChat (FastAPI + Svelte)
 ### CRM → billieChat (`cls: cmd`)
 
 **`applicant_release.released.v1`**
+
 ```json
 {
   "release_id": "nanoid — minted by the UI, idempotency anchor",
@@ -78,6 +79,7 @@ billie-crm (Payload admin)                     billieChat (FastAPI + Svelte)
   "released_by": "staff user id"
 }
 ```
+
 `grants` for targeted types, `quota_count` for open quota (mutually exclusive). Per-grant `send_sms` is computed by the CRM from marketing consent at release time — billieChat sends without needing consent knowledge.
 
 **`applicant_release.revoked.v1`** — `{ release_id, revoked_by, reason? }`. Kills all remaining grants and any remaining quota. Stops new entries; does not terminate in-flight conversations.
@@ -106,13 +108,13 @@ Both: `group: 'Marketing'`, `hidden: hideFromNonAdmins`, `read: canReadMarketing
 
 ### API routes (`src/app/api/marketing/releases/`)
 
-| Route | Method | Gate | Behaviour |
-|---|---|---|---|
-| `/` | GET | `canReadMarketing` | list from projection |
-| `/preflight` | GET | `canReadMarketing` | partition, computed fresh from projections |
-| `/` | POST | `canMarketing` | resolve targets, dual-publish `released.v1`, → 202, idempotent on `releaseId` |
-| `/[releaseId]` | GET | `canReadMarketing` | detail + grant rows |
-| `/[releaseId]/revoke` | POST | `canMarketing` | publish `revoked.v1`, → 202 |
+| Route                 | Method | Gate               | Behaviour                                                                     |
+| --------------------- | ------ | ------------------ | ----------------------------------------------------------------------------- |
+| `/`                   | GET    | `canReadMarketing` | list from projection                                                          |
+| `/preflight`          | GET    | `canReadMarketing` | partition, computed fresh from projections                                    |
+| `/`                   | POST   | `canMarketing`     | resolve targets, dual-publish `released.v1`, → 202, idempotent on `releaseId` |
+| `/[releaseId]`        | GET    | `canReadMarketing` | detail + grant rows                                                           |
+| `/[releaseId]/revoke` | POST   | `canMarketing`     | publish `revoked.v1`, → 202                                                   |
 
 **Preflight partition** (waitlist/phone-list): will-be-granted-with-SMS / granted-no-SMS (no marketing consent, or unmatched pasted number) / skipped: already a customer / skipped: already in an active release / skipped: needs-review / skipped: invalid number (failed `normaliseAuMobile`).
 
@@ -125,7 +127,7 @@ Each release also logs a "released to apply" interaction on matched contacts via
 ### UI (extends `src/components/MarketingView/`)
 
 - **Releases tab** in the marketing sub-nav (`/admin/marketing/releases`): summary line ("open capacity right now: X unclaimed grants + Y quota slots"), table of releases (name, type, status pill, released, granted, claimed, remaining, expires). When gate mode is `open`, a persistent banner reads "Application gate is OFF — releases are not being enforced" (mode comes from a single-row `release-gate-status` projection written from `gate_mode.changed.v1`).
-- **New release modal**, two steps (ux-standards stepped-flow pattern): **Define** (name, type as three radio cards, count *or* paste-area for phone lists, validity days, SMS checkbox — disabled for open quota) → **Preflight & confirm** (partition with counts; confirm states the SMS consequence explicitly). Fixed layout: switching type swaps only the count/paste field.
+- **New release modal**, two steps (ux-standards stepped-flow pattern): **Define** (name, type as three radio cards, count _or_ paste-area for phone lists, validity days, SMS checkbox — disabled for open quota) → **Preflight & confirm** (partition with counts; confirm states the SMS consequence explicitly). Fixed layout: switching type swaps only the count/paste field.
 - **Release detail**: header (status, audit line, Revoke button with typed-confirmation modal), five fixed stat tiles (granted / claimed / unclaimed / SMS sent / SMS failed), grant table (mobile, contact link, source, status, SMS, claimed at) — same columns for every type.
 - Hooks follow the marketing pattern: `useReleases` / `useRelease` / `useReleasePreflight` (staleTime 0) queries; mutations in `useMarketingCommands.ts` style with lag-tolerant invalidation and failed-action capture.
 
@@ -147,6 +149,8 @@ New `backend/backend/src/services/applicantRelease/` mirroring `reapplicationBlo
 ### Gate control (two levels)
 
 Effective gating = `ENABLE_APPLICATION_GATE` (env flag, code-level guard) **AND** runtime gate mode (`application_gate:mode` in Redis, default `open` when unset). Flag off → all gate code inert regardless of mode (dark-ship + hard kill, restart required). Flag on + mode `open` → door open exactly as today, `GET /gate/status` returns `off`, frontend never shows gate states; flipping to `gated` via the CLI takes effect within seconds (mode is read per gate check with a short in-process cache, ≤5 s). Fully-rolled-out production runs mode `open` with the flag **left permanently on**: the `closed` kill switch is only flippable without a deploy while the flag is enabled, so the flag is a one-time dark-ship guard, not something to retire. CLI commands: `on` → gated, `off` → open, `close` → closed, `status` (Make targets gate-on / gate-off / gate-close / gate-status).
+
+Since Aug 2026 the CRM's Releases view also offers admin-only gate-mode buttons (`POST /api/marketing/releases/gate-mode`, publishing the same `gate_mode.set.v1` to chatLedger) as a second command surface for staff who already live in the CRM — the ops CLI remains the break-glass path when the CRM itself is unreachable.
 
 ### Storage (Redis primary)
 

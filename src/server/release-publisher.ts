@@ -11,11 +11,13 @@ import { nanoid } from 'nanoid'
 import {
   CHATLEDGER_STREAM,
   CRM_AGENT_ID,
+  EVENT_TYPE_APPLICANT_RELEASE_GATE_MODE_SET,
   PUBLISH_BACKOFF_MS,
   PUBLISH_MAX_RETRIES,
 } from '@/lib/events/config'
 import { createAndPublishEvent, EventPublishError } from '@/server/event-publisher'
 import { getChatLedgerRedisClient } from '@/server/chatledger-publisher'
+import type { ApplicantReleaseGateModeSetPayload } from '@/lib/events/types'
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -93,4 +95,65 @@ export async function publishReleaseCommand(
     throw error
   }
   return { eventId }
+}
+
+export interface GateModeCommandOptions {
+  mode: ApplicantReleaseGateModeSetPayload['mode']
+  usr: string
+  reason?: string
+}
+
+/**
+ * chatLedger-ONLY publish for applicant_release.gate_mode.set.v1 (spec §6
+ * "Gate control") — the admin-only CRM buttons, a second command surface
+ * alongside the ops CLI break-glass path. Unlike publishReleaseCommand this
+ * does NOT also write the internal stream: the CRM's release-gate-status
+ * projection updates from billieChat's `.changed` fact once
+ * applicantReleaseService applies the mode, and the CRM's own event-processor
+ * deliberately has no handler registered for `.set` (that's the command, not
+ * the fact — see event-processor/src/billie_servicing/handlers/applicant_release.py).
+ */
+export async function publishGateModeCommand(
+  options: GateModeCommandOptions,
+): Promise<{ eventId: string }> {
+  const eventId = nanoid()
+  const payload: ApplicantReleaseGateModeSetPayload = {
+    mode: options.mode,
+    set_by: options.usr,
+    reason: options.reason,
+  }
+  const fields: Record<string, string> = {
+    conv: 'applicant-release:gate',
+    agt: CRM_AGENT_ID,
+    usr: options.usr,
+    seq: '1',
+    cls: 'cmd',
+    typ: EVENT_TYPE_APPLICANT_RELEASE_GATE_MODE_SET,
+    cause: eventId,
+    payload: JSON.stringify(payload),
+  }
+  const redis = getChatLedgerRedisClient()
+  let lastError: Error | undefined
+  for (let attempt = 0; attempt < PUBLISH_MAX_RETRIES; attempt++) {
+    try {
+      if (redis.status === 'wait') {
+        await redis.connect()
+      }
+      await redis.xadd(CHATLEDGER_STREAM, '*', ...Object.entries(fields).flat())
+      return { eventId }
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error))
+      console.warn(
+        `[ReleasePublisher] gate_mode.set attempt ${attempt + 1}/${PUBLISH_MAX_RETRIES} failed:`,
+        lastError.message,
+      )
+      if (attempt < PUBLISH_MAX_RETRIES - 1) {
+        await sleep(PUBLISH_BACKOFF_MS[attempt] ?? 400)
+      }
+    }
+  }
+  throw new EventPublishError('Failed to publish gate mode command to chatLedger after retries', {
+    attempts: PUBLISH_MAX_RETRIES,
+    cause: lastError,
+  })
 }

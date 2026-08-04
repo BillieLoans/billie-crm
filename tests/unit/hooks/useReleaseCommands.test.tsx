@@ -8,7 +8,11 @@ vi.mock('@/stores/failed-actions', () => ({
   useFailedActionsStore: { getState: () => ({ addFailedAction: vi.fn() }) },
 }))
 
-import { useCreateRelease, useRevokeRelease } from '@/hooks/mutations/useReleaseCommands'
+import {
+  useCreateRelease,
+  useRevokeRelease,
+  useSetGateMode,
+} from '@/hooks/mutations/useReleaseCommands'
 
 const fetchMock = vi.fn()
 global.fetch = fetchMock as never
@@ -92,5 +96,34 @@ describe('useRevokeRelease', () => {
     // The URL should contain the encoded form (/ becomes %2F, + becomes %2B)
     expect(fetchUrl).toContain('%2F')
     expect(fetchUrl).toContain('%2B')
+  })
+})
+
+describe('useSetGateMode', () => {
+  test('POSTs the requested mode to the gate-mode route', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ mode: 'gated', eventId: 'e-1' }),
+    })
+    const { result } = renderHook(() => useSetGateMode(), { wrapper })
+    result.current.mutate({ mode: 'gated', reason: 'launch' })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/marketing/releases/gate-mode')
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      mode: 'gated',
+      reason: 'launch',
+    })
+  })
+
+  test('surfaces command failure as error', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 403,
+      json: async () => ({ error: { code: 'FORBIDDEN', message: 'admin only' } }),
+    })
+    const { result } = renderHook(() => useSetGateMode(), { wrapper })
+    result.current.mutate({ mode: 'closed' })
+    await waitFor(() => expect(result.current.isError).toBe(true))
+    expect((result.current.error as Error).message).toContain('admin only')
   })
 })

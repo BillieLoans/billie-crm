@@ -133,8 +133,9 @@ export {
   useCreateRelease,
   useRevokeRelease,
   useReleasePreflight,
+  useSetGateMode,
 } from './mutations/useReleaseCommands'
-export type { ReleasePreflightResult } from './mutations/useReleaseCommands'
+export type { ReleasePreflightResult, SetGateModeVars } from './mutations/useReleaseCommands'
 
 export { useLendingAccess } from './useLendingAccess'
 

@@ -17,7 +17,7 @@ const internal = vi.hoisted(() => ({
 }))
 vi.mock('@/server/event-publisher', () => internal)
 
-import { publishReleaseCommand } from '@/server/release-publisher'
+import { publishReleaseCommand, publishGateModeCommand } from '@/server/release-publisher'
 
 beforeEach(() => {
   redisMock.xadd.mockClear().mockResolvedValue('1-1')
@@ -79,5 +79,51 @@ describe('publishReleaseCommand', () => {
     const loggedArgs = consoleError.mock.calls[0]
     expect(JSON.stringify(loggedArgs)).not.toContain('+61400000001')
     consoleError.mockRestore()
+  })
+})
+
+describe('publishGateModeCommand', () => {
+  test('writes chatLedger ONLY — no internal-stream publish', async () => {
+    const result = await publishGateModeCommand({ mode: 'gated', usr: 'admin-1' })
+    expect(result.eventId).toBeTruthy()
+    expect(redisMock.xadd).toHaveBeenCalledTimes(1)
+    expect(internal.createAndPublishEvent).not.toHaveBeenCalled()
+
+    const xaddArgs = redisMock.xadd.mock.calls[0]
+    expect(xaddArgs[0]).toBe('chatLedger')
+    const fields: Record<string, string> = {}
+    for (let i = 2; i < xaddArgs.length; i += 2) fields[xaddArgs[i]] = xaddArgs[i + 1]
+    expect(fields.cls).toBe('cmd')
+    expect(fields.typ).toBe('applicant_release.gate_mode.set.v1')
+    expect(fields.conv).toBe('applicant-release:gate')
+    expect(fields.agt).toBe('billie-crm')
+    expect(fields.usr).toBe('admin-1')
+    expect(JSON.parse(fields.payload)).toEqual({ mode: 'gated', set_by: 'admin-1' })
+  })
+
+  test('includes reason when provided, omits it when undefined', async () => {
+    await publishGateModeCommand({ mode: 'closed', usr: 'admin-1', reason: 'incident' })
+    const withReason = redisMock.xadd.mock.calls[0]
+    const reasonFields: Record<string, string> = {}
+    for (let i = 2; i < withReason.length; i += 2) reasonFields[withReason[i]] = withReason[i + 1]
+    expect(JSON.parse(reasonFields.payload)).toEqual({
+      mode: 'closed',
+      set_by: 'admin-1',
+      reason: 'incident',
+    })
+
+    redisMock.xadd.mockClear()
+    await publishGateModeCommand({ mode: 'open', usr: 'admin-1' })
+    const noReason = redisMock.xadd.mock.calls[0]
+    const noReasonFields: Record<string, string> = {}
+    for (let i = 2; i < noReason.length; i += 2) noReasonFields[noReason[i]] = noReason[i + 1]
+    const parsed = JSON.parse(noReasonFields.payload)
+    expect(parsed).toEqual({ mode: 'open', set_by: 'admin-1' })
+    expect('reason' in parsed).toBe(false)
+  })
+
+  test('throws when chatLedger keeps failing', async () => {
+    redisMock.xadd.mockRejectedValue(new Error('down'))
+    await expect(publishGateModeCommand({ mode: 'open', usr: 'admin-1' })).rejects.toThrow()
   })
 })
