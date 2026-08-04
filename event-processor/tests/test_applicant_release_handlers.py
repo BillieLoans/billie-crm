@@ -1,6 +1,8 @@
 """applicant_release.* projection handlers (CRM-local events, dict envelopes)."""
 import json
+from unittest.mock import AsyncMock
 
+from billie_servicing import marketing_client
 from billie_servicing.handlers.applicant_release import (
     handle_applicant_release_gate_mode_changed,
     handle_applicant_release_grant_claimed,
@@ -87,7 +89,11 @@ async def test_revoked_flips_statuses(mock_pool):
     assert mock_pool.has_call_against("release_grants")  # grants swept to revoked
 
 
-async def test_grant_claimed_upserts_row_and_recomputes_count(mock_pool):
+async def test_grant_claimed_upserts_row_and_recomputes_count(mock_pool, monkeypatch):
+    # Contact capture is a separate concern (see TestQuotaClaimContactCapture
+    # below) — mock it here so this test doesn't depend on gRPC/network.
+    monkeypatch.setattr(marketing_client, "upsert_contact", AsyncMock(return_value=None))
+
     await handle_applicant_release_grant_claimed(
         mock_pool,
         _event("applicant_release.grant_claimed.v1", {
@@ -106,6 +112,87 @@ async def test_grant_claimed_upserts_row_and_recomputes_count(mock_pool):
     # claimed_count recomputed from grant rows (replay-safe), not incremented
     sql_all = " ".join(c.sql for c in mock_pool.calls)
     assert "claimed_count" in sql_all and "count(" in sql_all.lower()
+
+
+class TestQuotaClaimContactCapture:
+    """applicant_release.grant_claimed.v1 with source=quota — walk-up
+    claimants become marketing contacts via a best-effort UpsertContact
+    (spec 2026-08-02, post-release follow-up). Policy A: never sets consent
+    — proving phone possession via OTP is not marketing opt-in."""
+
+    async def test_quota_claim_captures_marketing_contact(self, mock_pool, monkeypatch):
+        upsert_contact = AsyncMock(return_value="contact-99")
+        monkeypatch.setattr(marketing_client, "upsert_contact", upsert_contact)
+
+        await handle_applicant_release_grant_claimed(
+            mock_pool,
+            _event("applicant_release.grant_claimed.v1", {
+                "release_id": "rel-1", "mobile_e164": "+61400000005",
+                "source": "quota", "claimed_at": "2026-08-02T09:00:00+00:00",
+            }),
+        )
+
+        upsert_contact.assert_awaited_once()
+        kw = upsert_contact.call_args.kwargs
+        assert kw["idempotency_key"] == "gate-claim:rel-1:+61400000005"
+        assert kw["mobile"] == "+61400000005"
+        assert kw["source"] == "other"
+        attrs = json.loads(kw["utm_json"])
+        assert attrs["intake_channel"] == "gate_quota_claim"
+        assert attrs["release_id"] == "rel-1"
+        assert "consent" not in kw  # policy A — a gate claim is not marketing consent
+
+        update_calls = [
+            c for c in mock_pool.calls if c.table == "release_grants" and c.op == "UPDATE"
+        ]
+        assert len(update_calls) == 1
+        assert update_calls[0].values["contact_id"] == "contact-99"
+
+    async def test_targeted_claim_does_not_capture_contact(self, mock_pool, monkeypatch):
+        upsert_contact = AsyncMock(return_value="contact-99")
+        monkeypatch.setattr(marketing_client, "upsert_contact", upsert_contact)
+
+        await handle_applicant_release_grant_claimed(
+            mock_pool,
+            _event("applicant_release.grant_claimed.v1", {
+                "release_id": "rel-1", "mobile_e164": "+61400000001",
+                "source": "targeted", "claimed_at": "2026-08-02T09:00:00+00:00",
+            }),
+        )
+
+        upsert_contact.assert_not_awaited()
+
+    async def test_grpc_failure_does_not_raise_or_poison_projection(self, mock_pool, monkeypatch):
+        upsert_contact = AsyncMock(side_effect=RuntimeError("gRPC unavailable"))
+        monkeypatch.setattr(marketing_client, "upsert_contact", upsert_contact)
+
+        # Must not raise — best-effort, never fails/DLQs the claim projection.
+        await handle_applicant_release_grant_claimed(
+            mock_pool,
+            _event("applicant_release.grant_claimed.v1", {
+                "release_id": "rel-1", "mobile_e164": "+61400000006",
+                "source": "quota", "claimed_at": "2026-08-02T09:00:00+00:00",
+            }),
+        )
+
+        upsert_contact.assert_awaited_once()
+        grant = mock_pool.last_upsert("release_grants")
+        assert grant["status"] == "claimed"  # projection still landed
+
+    async def test_replay_skips_capture_when_already_linked(self, mock_pool, monkeypatch):
+        upsert_contact = AsyncMock(return_value="contact-99")
+        monkeypatch.setattr(marketing_client, "upsert_contact", upsert_contact)
+        mock_pool.set_fetchval("contact-existing")  # precheck finds an existing link
+
+        await handle_applicant_release_grant_claimed(
+            mock_pool,
+            _event("applicant_release.grant_claimed.v1", {
+                "release_id": "rel-1", "mobile_e164": "+61400000001",
+                "source": "quota", "claimed_at": "2026-08-02T09:00:00+00:00",
+            }),
+        )
+
+        upsert_contact.assert_not_awaited()
 
 
 async def test_invites_sent_marks_sms_statuses(mock_pool):

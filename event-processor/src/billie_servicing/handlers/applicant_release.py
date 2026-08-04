@@ -25,8 +25,12 @@ from datetime import UTC, datetime
 from typing import Any
 
 import asyncpg
+import structlog
 
+from .. import marketing_client
 from ..db import update_by_key, upsert
+
+logger = structlog.get_logger()
 
 
 def _now() -> datetime:
@@ -143,7 +147,21 @@ async def handle_applicant_release_revoked(pool: asyncpg.Pool, event: dict[str, 
 async def handle_applicant_release_grant_claimed(pool: asyncpg.Pool, event: dict[str, Any]) -> None:
     """applicant_release.grant_claimed.v1 — upsert the grant row (mints quota rows)."""
     p = _parse_payload(event)
-    source = "quota_claim" if p.get("source") == "quota" else "targeted"
+    is_quota_claim = p.get("source") == "quota"
+    source = "quota_claim" if is_quota_claim else "targeted"
+
+    # Cheap replay guard for the contact-capture call below: read before the
+    # upsert so a healthy replay (row already linked) skips the gRPC call
+    # entirely. The gRPC idempotency_key is still the real dedupe backstop.
+    already_linked = False
+    if is_quota_claim:
+        existing_contact_id = await pool.fetchval(
+            "SELECT contact_id FROM release_grants WHERE release_id = $1 AND mobile_e164 = $2",
+            p["release_id"],
+            p["mobile_e164"],
+        )
+        already_linked = bool(existing_contact_id)
+
     await upsert(
         pool,
         "release_grants",
@@ -161,6 +179,49 @@ async def handle_applicant_release_grant_claimed(pool: asyncpg.Pool, event: dict
         insert_only_columns=["created_at", "sms_status", "contact_id"],
     )
     await _recompute_claimed_count(pool, p["release_id"])
+
+    if is_quota_claim and not already_linked:
+        await _capture_quota_claimant_contact(pool, p)
+
+
+async def _capture_quota_claimant_contact(pool: asyncpg.Pool, p: dict[str, Any]) -> None:
+    """Best-effort: a walk-up quota claimant becomes a marketing contact.
+
+    Policy A — a gate claim proves phone possession (OTP), not marketing
+    consent — so this never sets ``consent``; provenance instead lands in
+    ``utm_json`` attributes. Strictly best-effort: any gRPC failure is logged
+    and swallowed so the claim projection above can never be poisoned/DLQ'd
+    by a marketingService outage.
+    """
+    release_id = p["release_id"]
+    mobile_e164 = p["mobile_e164"]
+    try:
+        contact_id = await marketing_client.upsert_contact(
+            idempotency_key=f"gate-claim:{release_id}:{mobile_e164}",
+            mobile=mobile_e164,
+            source="other",
+            utm_json=json.dumps({"intake_channel": "gate_quota_claim", "release_id": release_id}),
+            actor="applicant_release",
+        )
+    except Exception:
+        logger.warning(
+            "applicant_release grant_claimed: UpsertContact failed, continuing without contact "
+            "link",
+            release_id=release_id,
+            mobile_e164=mobile_e164,
+            exc_info=True,
+        )
+        return
+
+    if contact_id:
+        await pool.execute(
+            "UPDATE release_grants SET contact_id = $1, updated_at = $2 "
+            "WHERE release_id = $3 AND mobile_e164 = $4 AND contact_id IS NULL",
+            contact_id,
+            _now(),
+            release_id,
+            mobile_e164,
+        )
 
 
 async def handle_applicant_release_invites_sent(pool: asyncpg.Pool, event: dict[str, Any]) -> None:
