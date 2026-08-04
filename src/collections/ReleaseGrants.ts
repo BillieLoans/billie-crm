@@ -21,7 +21,7 @@ export const ReleaseGrants: CollectionConfig = {
   },
   fields: [
     { name: 'releaseId', type: 'text', required: true, index: true, admin: { readOnly: true } },
-    { name: 'mobileE164', type: 'text', required: true, admin: { readOnly: true } },
+    { name: 'mobileE164', type: 'text', required: true, index: true, admin: { readOnly: true } },
     { name: 'contactId', type: 'text', index: true, admin: { readOnly: true } },
     {
       name: 'customerId',
