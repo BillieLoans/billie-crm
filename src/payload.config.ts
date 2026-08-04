@@ -25,6 +25,9 @@ import { Interactions } from './collections/Interactions'
 import { ContactAuditLog } from './collections/ContactAuditLog'
 import { Batches } from './collections/Batches'
 import { Feedback } from './collections/Feedback'
+import { ReleaseBatches } from './collections/ReleaseBatches'
+import { ReleaseGrants } from './collections/ReleaseGrants'
+import { ReleaseGateStatus } from './collections/ReleaseGateStatus'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -154,7 +157,7 @@ export default buildConfig({
       },
     },
   },
-  collections: [Users, Media, Customers, Conversations, Applications, LoanAccounts, WriteOffRequests, ReapplicationBlockClearRequests, ContactNotes, Notifications, CollectionsCases, Contacts, Interactions, ContactAuditLog, Batches, Feedback],
+  collections: [Users, Media, Customers, Conversations, Applications, LoanAccounts, WriteOffRequests, ReapplicationBlockClearRequests, ContactNotes, Notifications, CollectionsCases, Contacts, Interactions, ContactAuditLog, Batches, Feedback, ReleaseBatches, ReleaseGrants, ReleaseGateStatus],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || 'build-placeholder-not-for-production',
   typescript: {
@@ -233,6 +236,23 @@ export default buildConfig({
               collectionCasesByCustomerIdx: index('collection_cases_by_customer_idx').on(
                 t.customerId,
                 desc(t.updatedAt),
+              ),
+            }),
+          })
+        }
+
+        // Natural key for release grants — the Python processor upserts via
+        // ON CONFLICT (release_id, mobile_e164) (spec §5).
+        const releaseGrants = (schema.tables as Record<string, unknown>).release_grants as
+          | Parameters<typeof extendTable>[0]['table']
+          | undefined
+        if (releaseGrants) {
+          extendTable({
+            table: releaseGrants,
+            extraConfig: (t) => ({
+              releaseGrantsNaturalKey: uniqueIndex('release_grants_natural_key_idx').on(
+                t.releaseId,
+                t.mobileE164,
               ),
             }),
           })

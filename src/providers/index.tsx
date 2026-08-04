@@ -15,6 +15,7 @@ import {
 import { LiveAnnouncer } from '@/components/ui/LiveAnnouncer'
 import { LedgerStatusIndicator } from '@/components/LedgerStatus'
 import { ReadOnlyBanner } from '@/components/ReadOnlyBanner'
+import { GateClosedBanner } from '@/components/GateClosedBanner'
 import { FailedActionsBadge } from '@/components/FailedActions'
 import { UserSessionGuard } from '@/components/UserSessionGuard'
 // Note: NotificationIndicator is now rendered through Payload's actions slot
@@ -218,6 +219,7 @@ const AuthenticatedIndicators: React.FC = () => {
     <>
       <ReadOnlyModeSync />
       <ReadOnlyBanner />
+      <GateClosedBanner />
       <GlobalCommandPalette />
       <LedgerStatusIndicator />
       <FailedActionsBadge />

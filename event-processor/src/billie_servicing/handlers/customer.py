@@ -16,6 +16,7 @@ import asyncpg
 import structlog
 
 from ..db import coerce_date, update_by_key, upsert
+from .clicksend import normalise_au_mobile
 
 logger = structlog.get_logger()
 
@@ -59,10 +60,11 @@ async def handle_customer_changed(pool: asyncpg.Pool, parsed_event: Any) -> None
     log = logger.bind(customer_id=customer_id)
     log.info("Processing customer event")
 
-    # Fetch existing for full_name computation. We only need first/last to
-    # rebuild the denormalised full_name when the incoming event is partial.
+    # Fetch existing for full_name computation (first/last) and as a fallback
+    # mobile for the grant back-fill below, since a partial event may update
+    # e.g. address only and not re-carry the mobile the customer already has.
     existing = await pool.fetchrow(
-        "SELECT first_name, last_name FROM customers WHERE customer_id = $1",
+        "SELECT first_name, last_name, mobile_phone_number FROM customers WHERE customer_id = $1",
         customer_id,
     )
 
@@ -129,6 +131,44 @@ async def handle_customer_changed(pool: asyncpg.Pool, parsed_event: Any) -> None
     )
 
     log.info("Customer upserted", customer_id=customer_id)
+
+    # Back-fill: an applicant who claimed the release gate (release_grants,
+    # keyed by mobile) may now have become a customer. Prefer the mobile this
+    # event actually carried; fall back to whatever's already persisted so a
+    # partial update (e.g. address-only) doesn't skip the back-fill for a
+    # customer whose mobile was set on an earlier event.
+    incoming_mobile = getattr(payload, "mobile_phone_number", None)
+    effective_mobile = (
+        incoming_mobile
+        if incoming_mobile is not None
+        else (existing["mobile_phone_number"] if existing else None)
+    )
+    await link_customer_to_grants(pool, customer_id, effective_mobile)
+
+
+async def link_customer_to_grants(
+    pool: asyncpg.Pool, customer_id: str, raw_mobile: str | None
+) -> None:
+    """Back-fill ``release_grants.customer_id`` for the grant(s) this customer
+    claimed pre-signup, joined on the OTP-verified mobile they used at the
+    gate (spec 2026-08-02, post-release follow-up).
+
+    Idempotent and replay-safe: the UPDATE only ever touches rows where
+    ``customer_id IS NULL``, so re-processing the same (or a later) customer
+    event is a no-op once linked. Not restricted to active releases — a late
+    link is still correct attribution. No-ops on an unnormalisable/missing
+    mobile.
+    """
+    mobile_e164 = normalise_au_mobile(raw_mobile)
+    if not mobile_e164:
+        return
+    await pool.execute(
+        "UPDATE release_grants SET customer_id = $1, updated_at = $2 "
+        "WHERE mobile_e164 = $3 AND customer_id IS NULL",
+        customer_id,
+        datetime.now(timezone.utc),
+        mobile_e164,
+    )
 
 
 async def handle_customer_verified(pool: asyncpg.Pool, parsed_event: Any) -> None:

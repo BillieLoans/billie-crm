@@ -27,11 +27,14 @@ export async function MarketingViewWithTemplate({
   const resolvedParams = await params
   const segments = resolvedParams?.segments as string[] | undefined
   // /marketing → grid; /marketing/contacts/<id> → contact detail;
-  // /marketing/campaigns[/<id>] → campaigns; /marketing/feedback → queue
+  // /marketing/campaigns[/<id>] → campaigns; /marketing/releases[/<id>] →
+  // releases; /marketing/feedback → queue
   const contactId = segments?.[1] === 'contacts' ? (segments?.[2] ?? '') : ''
   const feedback = segments?.[1] === 'feedback'
   const campaigns = segments?.[1] === 'campaigns'
   const campaignId = campaigns ? (segments?.[2] ?? '') : ''
+  const releases = segments?.[1] === 'releases'
+  const releaseId = releases ? (segments?.[2] ?? '') : ''
 
   return (
     <DefaultTemplate
@@ -49,6 +52,8 @@ export async function MarketingViewWithTemplate({
         feedback={feedback}
         campaigns={campaigns}
         campaignId={campaignId}
+        releases={releases}
+        releaseId={releaseId}
       />
     </DefaultTemplate>
   )

@@ -1,0 +1,1 @@
+export { GateClosedBanner } from './GateClosedBanner'

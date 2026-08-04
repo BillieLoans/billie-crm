@@ -5,7 +5,7 @@
  * These follow the LedgerMessage format for consistency with the event ecosystem.
  */
 
-import type { ClearableReason } from './config'
+import type { ClearableReason, ReleaseType } from './config'
 
 // =============================================================================
 // CRM Event Envelope
@@ -308,4 +308,37 @@ export interface FeedbackSubmitCommandPayload {
   text: string
   product_area: string | null
   actor: string
+}
+
+// =============================================================================
+// Applicant Release Payloads
+// =============================================================================
+
+export interface ApplicantReleaseGrantSpec {
+  mobile_e164: string
+  contact_id: string | null
+  send_sms: boolean
+}
+
+export interface ApplicantReleaseReleasedPayload {
+  release_id: string
+  name: string
+  type: ReleaseType
+  expires_at: string
+  send_invite_sms: boolean
+  grants: ApplicantReleaseGrantSpec[]
+  quota_count: number | null
+  released_by: string
+}
+
+export interface ApplicantReleaseRevokedPayload {
+  release_id: string
+  revoked_by: string
+  reason?: string
+}
+
+export interface ApplicantReleaseGateModeSetPayload {
+  mode: 'open' | 'gated' | 'closed'
+  set_by: string
+  reason?: string
 }

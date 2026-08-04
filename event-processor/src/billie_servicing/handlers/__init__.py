@@ -11,6 +11,13 @@ from .account import (
 from .aging import (
     handle_loan_aging_updated,
 )
+from .applicant_release import (
+    handle_applicant_release_gate_mode_changed,
+    handle_applicant_release_grant_claimed,
+    handle_applicant_release_invites_sent,
+    handle_applicant_release_released,
+    handle_applicant_release_revoked,
+)
 from .block_clear_approval import (
     handle_block_clear_approval_approved,
     handle_block_clear_approval_cancelled,
@@ -146,6 +153,12 @@ __all__ = [
     "handle_writeoff_approved",
     "handle_writeoff_rejected",
     "handle_writeoff_cancelled",
+    # Applicant release handlers (CRM-originated + billieChat facts — spec 2026-08-02)
+    "handle_applicant_release_released",
+    "handle_applicant_release_revoked",
+    "handle_applicant_release_grant_claimed",
+    "handle_applicant_release_invites_sent",
+    "handle_applicant_release_gate_mode_changed",
     # Block-clear approval handlers (CRM-originated events)
     "handle_block_clear_approval_requested",
     "handle_block_clear_approval_approved",

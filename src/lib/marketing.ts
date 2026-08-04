@@ -49,6 +49,7 @@ export function normaliseAuMobile(raw: string | null | undefined): string | null
   if (digits.startsWith('+')) candidate = digits
   else if (digits.startsWith('61')) candidate = `+${digits}`
   else if (digits.startsWith('0') && digits.length === 10) candidate = `+61${digits.slice(1)}`
+  else if (digits.startsWith('4') && digits.length === 9) candidate = `+61${digits}`
   else return null
   return AU_MOBILE.test(candidate) ? candidate : null
 }

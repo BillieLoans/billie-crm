@@ -191,3 +191,32 @@ export const REASONS_REQUIRING_APPROVAL = ['PRIOR_DEFAULT', 'PRIOR_SERIOUS_ARREA
  * Type alias for clearable reason.
  */
 export type ClearableReason = (typeof CLEARABLE_REASONS)[number]
+
+// =============================================================================
+// Event Types (Applicant Release)
+// =============================================================================
+
+/**
+ * Applicant release (spec 2026-08-02) — CRM-mastered entry-gate commands.
+ */
+export const EVENT_TYPE_APPLICANT_RELEASE_RELEASED =
+  process.env.EVENT_TYPE_APPLICANT_RELEASE_RELEASED ?? 'applicant_release.released.v1'
+
+export const EVENT_TYPE_APPLICANT_RELEASE_REVOKED =
+  process.env.EVENT_TYPE_APPLICANT_RELEASE_REVOKED ?? 'applicant_release.revoked.v1'
+
+export const EVENT_TYPE_APPLICANT_RELEASE_GATE_MODE_SET =
+  process.env.EVENT_TYPE_APPLICANT_RELEASE_GATE_MODE_SET ?? 'applicant_release.gate_mode.set.v1'
+
+export const EVENT_TYPE_APPLICANT_RELEASE_GRANT_CLAIMED =
+  process.env.EVENT_TYPE_APPLICANT_RELEASE_GRANT_CLAIMED ?? 'applicant_release.grant_claimed.v1'
+
+export const EVENT_TYPE_APPLICANT_RELEASE_INVITES_SENT =
+  process.env.EVENT_TYPE_APPLICANT_RELEASE_INVITES_SENT ?? 'applicant_release.invites_sent.v1'
+
+export const EVENT_TYPE_APPLICANT_RELEASE_GATE_MODE_CHANGED =
+  process.env.EVENT_TYPE_APPLICANT_RELEASE_GATE_MODE_CHANGED ??
+  'applicant_release.gate_mode.changed.v1'
+
+export const RELEASE_TYPES = ['waitlist', 'phone_list', 'open_quota'] as const
+export type ReleaseType = (typeof RELEASE_TYPES)[number]

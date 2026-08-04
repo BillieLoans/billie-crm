@@ -116,6 +116,32 @@ a.statChip:hover {
   margin: 4px 4px;
 }
 
+/* Admin-only gate-mode control strip (Releases view). Fixed slot above the
+   mode banners so it doesn't reflow as the gate flips between modes. */
+.gateControl {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  border: 1px solid var(--theme-elevation-100, #e5e5e5);
+  border-radius: 8px;
+  background: var(--theme-elevation-0, #fff);
+}
+
+.gateControlLabel {
+  font-size: 14px;
+  color: var(--theme-elevation-700, #444);
+}
+
+.gateControlActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .header {
   display: flex;
   justify-content: space-between;

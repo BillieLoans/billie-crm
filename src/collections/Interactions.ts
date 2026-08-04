@@ -56,6 +56,7 @@ export const Interactions: CollectionConfig = {
         'stage_change',
         'note',
         'import',
+        'released_to_apply',
       ],
       admin: { readOnly: true },
     },

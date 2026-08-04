@@ -13,6 +13,8 @@
 import { nanoid } from 'nanoid'
 import { getChatLedgerRedisClient } from './redis-client'
 import { EventPublishError } from './event-publisher'
+
+export { getChatLedgerRedisClient }
 import {
   CHATLEDGER_STREAM,
   CRM_AGENT_ID,

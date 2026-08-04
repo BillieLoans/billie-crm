@@ -1,0 +1,129 @@
+import { describe, test, expect, vi, beforeEach } from 'vitest'
+import { renderHook, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import React from 'react'
+
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
+vi.mock('@/stores/failed-actions', () => ({
+  useFailedActionsStore: { getState: () => ({ addFailedAction: vi.fn() }) },
+}))
+
+import {
+  useCreateRelease,
+  useRevokeRelease,
+  useSetGateMode,
+} from '@/hooks/mutations/useReleaseCommands'
+
+const fetchMock = vi.fn()
+global.fetch = fetchMock as never
+
+function wrapper({ children }: { children: React.ReactNode }) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return <QueryClientProvider client={client}>{children}</QueryClientProvider>
+}
+
+beforeEach(() => {
+  fetchMock.mockReset()
+})
+
+describe('useCreateRelease', () => {
+  test('POSTs the command and resolves the 202 body', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ releaseId: 'rel_1', eventId: 'e-1' }),
+    })
+    const { result } = renderHook(() => useCreateRelease(), { wrapper })
+    result.current.mutate({
+      releaseId: 'rel_12345678',
+      name: 'Wave',
+      type: 'waitlist',
+      count: 10,
+      expiryDays: 14,
+      sendInviteSms: false,
+    })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/marketing/releases')
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).releaseId).toBe('rel_12345678')
+  })
+
+  test('surfaces command failure as error', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 503,
+      json: async () => ({ error: { code: 'EVENT_PUBLISH_FAILED', message: 'try again' } }),
+    })
+    const { result } = renderHook(() => useCreateRelease(), { wrapper })
+    result.current.mutate({
+      releaseId: 'rel_12345678',
+      name: 'Wave',
+      type: 'waitlist',
+      count: 10,
+      expiryDays: 14,
+      sendInviteSms: false,
+    })
+    await waitFor(() => expect(result.current.isError).toBe(true))
+    expect((result.current.error as Error).message).toContain('try again')
+  })
+})
+
+describe('useRevokeRelease', () => {
+  test('POSTs to the right URL with reason', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ releaseId: 'rel_1', eventId: 'e-1' }),
+    })
+    const { result } = renderHook(() => useRevokeRelease(), { wrapper })
+    result.current.mutate({ releaseId: 'rel_12345678', reason: 'duplicate' })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/marketing/releases/rel_12345678/revoke')
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).reason).toBe('duplicate')
+  })
+
+  test('encodes special characters in releaseId correctly', async () => {
+    const releaseIdWithSpecials = 'rel/with+odd'
+    const encodedId = encodeURIComponent(releaseIdWithSpecials)
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: async () => ({ error: { message: 'Server error' } }),
+    })
+    const { result } = renderHook(() => useRevokeRelease(), { wrapper })
+    result.current.mutate({ releaseId: releaseIdWithSpecials, reason: 'test' })
+    await waitFor(() => expect(result.current.isError).toBe(true))
+    // Verify the fetch was called with encoded URL containing encoded special characters
+    const fetchUrl = fetchMock.mock.calls[0][0]
+    expect(fetchUrl).toBe(`/api/marketing/releases/${encodedId}/revoke`)
+    // The URL should contain the encoded form (/ becomes %2F, + becomes %2B)
+    expect(fetchUrl).toContain('%2F')
+    expect(fetchUrl).toContain('%2B')
+  })
+})
+
+describe('useSetGateMode', () => {
+  test('POSTs the requested mode to the gate-mode route', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ mode: 'gated', eventId: 'e-1' }),
+    })
+    const { result } = renderHook(() => useSetGateMode(), { wrapper })
+    result.current.mutate({ mode: 'gated', reason: 'launch' })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/marketing/releases/gate-mode')
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      mode: 'gated',
+      reason: 'launch',
+    })
+  })
+
+  test('surfaces command failure as error', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 403,
+      json: async () => ({ error: { code: 'FORBIDDEN', message: 'admin only' } }),
+    })
+    const { result } = renderHook(() => useSetGateMode(), { wrapper })
+    result.current.mutate({ mode: 'closed' })
+    await waitFor(() => expect(result.current.isError).toBe(true))
+    expect((result.current.error as Error).message).toContain('admin only')
+  })
+})

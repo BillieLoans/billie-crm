@@ -5,7 +5,10 @@ import { useListKeyboardNav } from '@/hooks/useListKeyboardNav'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
-import { useMarketingContacts, fetchMarketingContactIds } from '@/hooks/queries/useMarketingContacts'
+import {
+  useMarketingContacts,
+  fetchMarketingContactIds,
+} from '@/hooks/queries/useMarketingContacts'
 import type { MarketingContactsFilters } from '@/hooks/queries/useMarketingContacts'
 import { useBatches } from '@/hooks/queries/useBatches'
 import {
@@ -19,6 +22,8 @@ import { ContactDetail } from './ContactDetail'
 import { FeedbackQueueView } from './FeedbackQueueView'
 import { CampaignsView } from './CampaignsView'
 import { CampaignDetail } from './CampaignDetail'
+import { ReleasesView } from './ReleasesView'
+import { ReleaseDetail } from './ReleaseDetail'
 import { ContactPeekModal } from './ContactPeekModal'
 import { MarketingSubnav } from './MarketingSubnav'
 import { MarketingStats } from './MarketingStats'
@@ -31,6 +36,8 @@ export interface MarketingViewProps {
   feedback?: boolean
   campaigns?: boolean
   campaignId?: string
+  releases?: boolean
+  releaseId?: string
 }
 
 const STAGE_OPTIONS: Array<{ value: Contact['derivedStage'] & string; label: string }> = [
@@ -107,9 +114,17 @@ export const MarketingView: React.FC<MarketingViewProps> = ({
   feedback,
   campaigns,
   campaignId,
+  releases,
+  releaseId,
 }) => {
   if (feedback) {
     return <FeedbackQueueView />
+  }
+  if (releaseId) {
+    return <ReleaseDetail releaseId={releaseId} />
+  }
+  if (releases) {
+    return <ReleasesView />
   }
   if (campaignId) {
     return <CampaignDetail batchId={campaignId} />
@@ -596,7 +611,9 @@ const MarketingContactsGrid: React.FC = () => {
               onChange={handleAssignTargetChange}
               disabled={creatingBatch}
             >
-              <option value="">{creatingBatch ? 'Creating campaign…' : 'Choose a campaign…'}</option>
+              <option value="">
+                {creatingBatch ? 'Creating campaign…' : 'Choose a campaign…'}
+              </option>
               {batchOptions.map((b) => (
                 <option key={b.batchId} value={b.batchId}>
                   {batchLabelWithCount(b)}
@@ -730,8 +747,7 @@ const MarketingContactsGrid: React.FC = () => {
                             {contact.firstName ?? 'Unnamed contact'}
                           </Link>
                           <span className={styles.identitySecondary}>
-                            {[contact.mobileE164, contact.email].filter(Boolean).join(' · ') ||
-                              '—'}
+                            {[contact.mobileE164, contact.email].filter(Boolean).join(' · ') || '—'}
                           </span>
                         </div>
                       </td>

@@ -1,8 +1,9 @@
 """Thin async gRPC client for marketingService — used by the ClickSend inbound
-handler to issue a LogInteraction command (the processor's one command-issuing
-path). grpc + the vendored stubs are imported lazily so this module (and any
-handler importing it) still loads where grpcio isn't installed; the import only
-fires on the first real call.
+handler (LogInteraction, SetConsent) and the applicant-release grant-claimed
+handler (UpsertContact) to issue commands against the platform. grpc + the
+vendored stubs are imported lazily so this module (and any handler importing
+it) still loads where grpcio isn't installed; the import only fires on the
+first real call.
 """
 
 from __future__ import annotations
@@ -118,3 +119,60 @@ async def set_consent(
         event_id=response.event_id,
     )
     return response.event_id
+
+
+async def upsert_contact(
+    *,
+    idempotency_key: str,
+    first_name: str = "",
+    email: str = "",
+    mobile: str = "",
+    city: str = "",
+    postcode: str = "",
+    source: str = "",
+    utm_json: str = "",
+    platforms: list[str] | None = None,
+    channel_preference: str = "",
+    referred_by_code: str = "",
+    waitlist: bool = False,
+    actor: str = "",
+) -> str:
+    """Issue MarketingService.UpsertContact; returns the resolved contact_id.
+
+    Field mapping mirrors the CRM's waitlist intake route
+    (``src/app/api/intake/waitlist/route.ts`` → ``upsertContact``): proto
+    field names carried through as-is (snake_case), ``utm_json`` for
+    provenance/attributes since ``UpsertContactRequest`` has no separate
+    ``attributes_json`` (that's only on ``UpdateContactRequest``).
+
+    Deliberately has **no** ``consent`` parameter. ``UpsertContactRequest``'s
+    ``ConsentCapture`` is only ever appropriate when the caller holds actual
+    Spam-Act-grade evidence of marketing opt-in — proving phone possession via
+    OTP (e.g. a gate quota claim) is not that. Leaving the request's
+    ``consent`` field unset records no consent claim on the platform.
+    """
+    from .marketing_grpc import marketing_service_pb2 as pb2
+
+    request = pb2.UpsertContactRequest(
+        idempotency_key=idempotency_key,
+        first_name=first_name,
+        email=email,
+        mobile=mobile,
+        city=city,
+        postcode=postcode,
+        source=source,
+        utm_json=utm_json,
+        platforms=platforms or [],
+        channel_preference=channel_preference,
+        referred_by_code=referred_by_code,
+        waitlist=waitlist,
+        actor=actor,
+    )
+    response = await _get_stub().UpsertContact(request, timeout=5.0)
+    logger.info(
+        "marketing UpsertContact issued",
+        contact_id=response.contact_id,
+        created=response.created,
+        event_id=response.event_id,
+    )
+    return response.contact_id

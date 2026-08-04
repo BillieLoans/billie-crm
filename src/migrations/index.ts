@@ -16,6 +16,9 @@ import * as migration_20260708_020322 from './20260708_020322';
 import * as migration_20260708_121539_contact_merged_into from './20260708_121539_contact_merged_into';
 import * as migration_20260709_120104_fraud_risk from './20260709_120104_fraud_risk';
 import * as migration_20260714_053341_word_of_mouth_source from './20260714_053341_word_of_mouth_source';
+import * as migration_20260802_164058_applicant_release from './20260802_164058_applicant_release';
+import * as migration_20260804_051712_applicant_release_customer_link from './20260804_051712_applicant_release_customer_link';
+import * as migration_20260804_060425_gate_mode_closed from './20260804_060425_gate_mode_closed';
 
 export const migrations = [
   {
@@ -106,6 +109,21 @@ export const migrations = [
   {
     up: migration_20260714_053341_word_of_mouth_source.up,
     down: migration_20260714_053341_word_of_mouth_source.down,
-    name: '20260714_053341_word_of_mouth_source'
+    name: '20260714_053341_word_of_mouth_source',
+  },
+  {
+    up: migration_20260802_164058_applicant_release.up,
+    down: migration_20260802_164058_applicant_release.down,
+    name: '20260802_164058_applicant_release',
+  },
+  {
+    up: migration_20260804_051712_applicant_release_customer_link.up,
+    down: migration_20260804_051712_applicant_release_customer_link.down,
+    name: '20260804_051712_applicant_release_customer_link',
+  },
+  {
+    up: migration_20260804_060425_gate_mode_closed.up,
+    down: migration_20260804_060425_gate_mode_closed.down,
+    name: '20260804_060425_gate_mode_closed'
   },
 ];
