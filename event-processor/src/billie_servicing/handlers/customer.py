@@ -20,6 +20,32 @@ from .clicksend import normalise_au_mobile
 
 logger = structlog.get_logger()
 
+# Upstream eKYC vocabulary → the Payload enum (enum_customers_ekyc_status:
+# successful/failed/pending). Upstream started emitting "APPROVED" on
+# customer.changed.v1 (2026-08-17), and the raw pass-through failed the enum
+# check — DLQ'ing the entire customer update. Keyed lower-case; matching is
+# case-insensitive and strips any EnumName.MEMBER prefix.
+EKYC_STATUS_MAP = {
+    "successful": "successful",
+    "success": "successful",
+    "approved": "successful",
+    "passed": "successful",
+    "verified": "successful",
+    "failed": "failed",
+    "fail": "failed",
+    "declined": "failed",
+    "rejected": "failed",
+    "pending": "pending",
+    "in_progress": "pending",
+    "in_review": "pending",
+}
+
+
+def _normalise_ekyc_status(value: Any) -> str | None:
+    """Map an upstream ekyc_status onto the Payload enum; None if unknown."""
+    raw = str(value).split(".")[-1].strip().lower()
+    return EKYC_STATUS_MAP.get(raw)
+
 
 def _build_street_address(addr: Any) -> str:
     """Build a single-line street address from components."""
@@ -98,6 +124,16 @@ async def handle_customer_changed(pool: asyncpg.Pool, parsed_event: Any) -> None
             if column == "date_of_birth":
                 v = coerce_date(v)
                 if v is None:
+                    continue
+            # ekyc_status is an enum column — an unmappable value must drop
+            # only this field, not DLQ the whole customer update.
+            if column == "ekyc_status":
+                v = _normalise_ekyc_status(v)
+                if v is None:
+                    log.warning(
+                        "Unknown ekyc_status value — field skipped",
+                        ekyc_status=str(getattr(payload, sdk_field, None)),
+                    )
                     continue
             values[column] = v
 

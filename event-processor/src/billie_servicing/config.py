@@ -36,6 +36,14 @@ class Settings(BaseSettings):
     max_utterances: int = 2000  # Cap utterances array per conversation
     max_noticeboard_entries: int = 500  # Cap noticeboard array per conversation
 
+    # Steady-state pending reclaim + consumer hygiene (2026-08-17 incident:
+    # messages that failed below max_retries sat pending for days because
+    # pending is otherwise only drained at startup/reconnect, and the group
+    # had 46 dead consumers accumulated across deploys).
+    pending_reclaim_interval_seconds: int = 60
+    pending_min_idle_ms: int = 60_000
+    stale_consumer_max_idle_ms: int = 604_800_000  # 7 days
+
     # help@ mailbox connector (Decision J) — polls an IMAP inbox and logs
     # each email as an inbound interaction on the matching contact's
     # timeline. Enabled only when a host is configured.

@@ -58,6 +58,34 @@ def _normalise_status(value: Any, default: str = "PENDING") -> str:
     return text.split(".")[-1] if "." in text else text
 
 
+# One-way disbursement gate (prod incident 2026-08-17, account VNUR7Z4N8ZLJ):
+# accountsService can publish an account.updated.v1 carrying a stale
+# pre-transition snapshot (status PENDING_DISBURSEMENT on the establishment-fee
+# event) after the ACTIVE disbursement event, and with two CRM machines in the
+# same consumer group there is no cross-consumer ordering — the stale event can
+# be applied last. The BTB-256 finding still holds (no reliable ordering field,
+# so no general skip-stale guard), but the disbursement gate is strictly
+# one-way in the domain: once money is out the door no legitimate transition
+# returns an account to PENDING/PENDING_DISBURSEMENT, so that narrow
+# regression is safe to drop.
+PRE_DISBURSEMENT_SDK_STATUSES = frozenset({"PENDING", "PENDING_DISBURSEMENT"})
+POST_DISBURSEMENT_SDK_STATUSES = frozenset({"ACTIVE", "SUSPENDED", "CLOSED"})
+
+
+def _is_status_regression(incoming_sdk_status: str, row: Any) -> bool:
+    """True when a pre-disbursement status arrives for an account the stored
+    projection shows has already been disbursed. ``row`` may be an
+    asyncpg.Record or dict and may lack either evidence column (legacy rows/
+    older query shapes) — absence of evidence means no regression."""
+    if incoming_sdk_status not in PRE_DISBURSEMENT_SDK_STATUSES:
+        return False
+    if row is None:
+        return False
+    if row.get("sdk_status") in POST_DISBURSEMENT_SDK_STATUSES:
+        return True
+    return bool(row.get("loan_terms_disbursed_date"))
+
+
 async def _resolve_customer_link(pool: asyncpg.Pool, customer_id: str | None) -> Any | None:
     """Look up customers.id (uuid) so Payload's relationship hydrates."""
     if not customer_id:
@@ -80,6 +108,12 @@ async def handle_account_created(pool: asyncpg.Pool, parsed_event: Any) -> None:
 
     sdk_status = _normalise_status(payload.status, default="PENDING")
     account_status = SDK_STATUS_MAP.get(sdk_status, "active")
+
+    existing_row = await pool.fetchrow(
+        "SELECT sdk_status, loan_terms_disbursed_date "
+        "FROM loan_accounts WHERE loan_account_id = $1",
+        account_id,
+    )
 
     now = datetime.now(timezone.utc)
     values: dict[str, Any] = {
@@ -113,6 +147,20 @@ async def handle_account_created(pool: asyncpg.Pool, parsed_event: Any) -> None:
     signed_url = getattr(payload, "signed_loan_agreement_url", None)
     if signed_url is not None:
         values["signed_loan_agreement_url"] = str(signed_url) if signed_url else None
+
+    # A replayed account.created.v1 carries the original pre-disbursement
+    # snapshot; dropping the status keys is safe because the regression check
+    # only fires when the row already exists (so the INSERT branch — where
+    # account_status is NOT NULL — can't be taken).
+    if _is_status_regression(sdk_status, existing_row):
+        log.warning(
+            "Ignoring pre-disbursement status regression on account.created.v1 "
+            "replay — stored projection is already disbursed",
+            incoming_sdk_status=sdk_status,
+            stored_sdk_status=existing_row.get("sdk_status"),
+        )
+        del values["account_status"]
+        del values["sdk_status"]
 
     await upsert(
         pool,
@@ -168,7 +216,7 @@ async def handle_account_updated(pool: asyncpg.Pool, parsed_event: Any) -> None:
         nonlocal existing
         if existing is None:
             existing = await pool.fetchrow(
-                "SELECT account_status, loan_terms_disbursed_date, "
+                "SELECT account_status, sdk_status, loan_terms_disbursed_date, "
                 "balances_total_outstanding, updated_at "
                 "FROM loan_accounts WHERE loan_account_id = $1",
                 account_id,
@@ -211,8 +259,18 @@ async def handle_account_updated(pool: asyncpg.Pool, parsed_event: Any) -> None:
 
     if payload.status:
         sdk_status = _normalise_status(payload.status)
-        update_doc["sdk_status"] = sdk_status
-        update_doc["account_status"] = SDK_STATUS_MAP.get(sdk_status, "active")
+        row = await _load_existing()
+        if _is_status_regression(sdk_status, row):
+            log.warning(
+                "Ignoring pre-disbursement status regression on "
+                "account.updated.v1 — stored projection is already disbursed; "
+                "other fields in this event still apply",
+                incoming_sdk_status=sdk_status,
+                stored_sdk_status=row.get("sdk_status"),
+            )
+        else:
+            update_doc["sdk_status"] = sdk_status
+            update_doc["account_status"] = SDK_STATUS_MAP.get(sdk_status, "active")
     elif current_balance_value is not None:
         row = await _load_existing()
         if (
@@ -245,11 +303,21 @@ async def handle_account_updated(pool: asyncpg.Pool, parsed_event: Any) -> None:
     if getattr(payload, "last_payment_amount", None) is not None:
         update_doc["last_payment_amount"] = float(payload.last_payment_amount)
 
-    # Fallback: stamp last_payment from a balance decrease.
+    # Fallback: stamp last_payment from a balance decrease — but only when the
+    # triggering ledger transaction was (or could have been) a repayment. The
+    # disbursement-path event reports a fee-related balance dip (52.50 → 50.00,
+    # trigger DISBURSEMENT) that stamped a phantom "last payment" on freshly
+    # disbursed accounts; waivers/write-offs/adjustments also decrease the
+    # balance without any customer payment. Absent trigger = legacy event,
+    # keep inferring.
+    trigger_type = _normalise_status(
+        getattr(payload, "triggered_by_transaction_type", None), default=""
+    )
     if (
         not last_payment_date_set
         and current_balance_value is not None
         and update_doc.get("account_status", "active") == "active"
+        and trigger_type in ("", "REPAYMENT")
     ):
         row = await _load_existing()
         existing_balance = row["balances_total_outstanding"] if row else None
@@ -300,6 +368,21 @@ async def handle_account_status_changed(pool: asyncpg.Pool, parsed_event: Any) -
     account_status = SDK_STATUS_MAP.get(sdk_status, "active")
     now = datetime.now(timezone.utc)
 
+    row = await pool.fetchrow(
+        "SELECT account_status, sdk_status, loan_terms_disbursed_date "
+        "FROM loan_accounts WHERE loan_account_id = $1",
+        account_id,
+    )
+
+    if _is_status_regression(sdk_status, row):
+        log.warning(
+            "Ignoring pre-disbursement status regression on "
+            "account.status_changed.v1 — stored projection is already disbursed",
+            incoming_sdk_status=sdk_status,
+            stored_sdk_status=row.get("sdk_status"),
+        )
+        return
+
     update_doc: dict[str, Any] = {
         "sdk_status": sdk_status,
         "account_status": account_status,
@@ -307,11 +390,6 @@ async def handle_account_status_changed(pool: asyncpg.Pool, parsed_event: Any) -
     }
 
     if account_status == "active":
-        row = await pool.fetchrow(
-            "SELECT account_status, loan_terms_disbursed_date "
-            "FROM loan_accounts WHERE loan_account_id = $1",
-            account_id,
-        )
         if (
             row
             and row["account_status"] == "pending_disbursement"

@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import time
 from datetime import datetime
 from typing import Any, Callable, Coroutine
 
@@ -181,6 +182,7 @@ class EventProcessor:
         self.consumer_id = f"processor-{os.getpid()}-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
         self.handlers: dict[str, Callable[..., Coroutine[Any, Any, None]]] = {}
         self._running = False
+        self._last_pending_reclaim = time.monotonic()
 
     def register_handler(
         self, event_type: str, handler: Callable[..., Coroutine[Any, Any, None]]
@@ -321,6 +323,9 @@ class EventProcessor:
         await self._process_pending_messages(settings.inbox_stream)
         await self._process_pending_messages(settings.internal_stream)
 
+        await self._cleanup_stale_consumers(settings.inbox_stream)
+        await self._cleanup_stale_consumers(settings.internal_stream)
+
         self._running = True
         reconnect_backoff = 1
         max_reconnect_backoff = 30
@@ -339,6 +344,7 @@ class EventProcessor:
         while self._running:
             try:
                 await self._process_new_messages()
+                await self._maybe_reclaim_pending()
                 reconnect_backoff = 1  # Reset on successful iteration
 
             except RedisResponseError as e:
@@ -491,6 +497,93 @@ class EventProcessor:
                     processed_count += 1
 
         logger.info("Pending messages processed", stream=stream, count=processed_count)
+
+    async def _reclaim_stale_pending(self, stream: str) -> int:
+        """Claim and reprocess pending entries idle past the threshold.
+
+        Steady-state complement to ``_process_pending_messages`` (which runs
+        only at startup/after reconnect): a handler failure below max_retries
+        leaves the message pending, and XREADGROUP with ">" never redelivers
+        it — without this pass it sits until the next deploy. One bounded
+        batch per call; each XCLAIM bumps the delivery counter, so a poison
+        message walks to the DLQ instead of retrying forever. min_idle_time on
+        the claim re-checks idleness server-side, so the other live machine
+        can't be robbed of a message it is actively processing.
+        """
+        reclaimed = 0
+        pending = await self.redis.xpending_range(
+            stream,
+            settings.consumer_group,
+            min="-",
+            max="+",
+            count=settings.batch_size,
+            idle=settings.pending_min_idle_ms,
+        )
+        for entry in pending:
+            message_id = entry["message_id"]
+            delivery_count = entry["times_delivered"]
+
+            messages = await self.redis.xclaim(
+                stream,
+                settings.consumer_group,
+                self.consumer_id,
+                min_idle_time=settings.pending_min_idle_ms,
+                message_ids=[message_id],
+            )
+            if messages:
+                await self._process_message(messages[0], stream, delivery_count)
+                reclaimed += 1
+
+        if reclaimed:
+            logger.info(
+                "Reclaimed stale pending messages", stream=stream, count=reclaimed
+            )
+        return reclaimed
+
+    async def _maybe_reclaim_pending(self) -> None:
+        """Run the stale-pending reclaim at most once per configured interval."""
+        now = time.monotonic()
+        if now - self._last_pending_reclaim < settings.pending_reclaim_interval_seconds:
+            return
+        self._last_pending_reclaim = now
+        for stream in (settings.inbox_stream, settings.internal_stream):
+            await self._reclaim_stale_pending(stream)
+
+    async def _cleanup_stale_consumers(self, stream: str) -> None:
+        """Delete long-dead consumers that hold no pending entries.
+
+        Consumer names embed pid + start time, so every restart mints a new
+        one and the group accumulates dead entries (46 observed in prod on
+        2026-08-17). Consumers with pending > 0 are kept — DELCONSUMER would
+        drop their pending entries, which the reclaim pass rescues instead.
+        """
+        try:
+            consumers = await self.redis.xinfo_consumers(
+                stream, settings.consumer_group
+            )
+        except RedisResponseError as e:
+            logger.warning(
+                "Could not list consumers for cleanup", stream=stream, error=str(e)
+            )
+            return
+
+        removed = 0
+        for consumer in consumers:
+            name = consumer.get("name")
+            name_str = name.decode() if isinstance(name, bytes) else str(name)
+            if name_str == self.consumer_id:
+                continue
+            if consumer.get("pending", 0) != 0:
+                continue
+            if consumer.get("idle", 0) < settings.stale_consumer_max_idle_ms:
+                continue
+            await self.redis.xgroup_delconsumer(
+                stream, settings.consumer_group, name_str
+            )
+            removed += 1
+
+        if removed:
+            logger.info("Deleted stale consumers", stream=stream, count=removed)
 
     async def _process_new_messages(self) -> None:
         """Process new messages from both streams."""
