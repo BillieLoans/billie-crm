@@ -39,7 +39,10 @@ class TestLoanAgingUpdated:
         updates = mock_pool.updates_to("loan_accounts")
         assert len(updates) == 1
         update = updates[0]
-        assert mock_pool.calls_against("loan_accounts")[0].where == {"loan_account_id": "LA-AGING-001"}
+        update_calls = [
+            c for c in mock_pool.calls_against("loan_accounts") if c.op == "UPDATE"
+        ]
+        assert update_calls[0].where == {"loan_account_id": "LA-AGING-001"}
         assert update["aging_is_in_arrears"] is True
         assert update["aging_bucket"] == "late_arrears"
         assert update["aging_current_d_p_d"] == 23

@@ -44,6 +44,29 @@ async def handle_loan_aging_updated(pool: asyncpg.Pool, parsed_event: Any) -> No
     log.info("Processing loan.aging.updated.v1")
 
     raw_bucket = str(getattr(payload, "bucket", "current") or "current")
+
+    # Terminal-closure guard (prod incident 2026-08-17, WTVFB9Q1CK0N /
+    # 1CPTX2ZA67SC): the agingMonitor daily scheduler can emit a
+    # closed → current "downgrade" for an already-closed account. While the
+    # projection shows a terminal status, any bucket other than `closed` is
+    # spurious — drop the whole event. `closed` still applies (closure +
+    # replay), and a genuine reopen changes account_status via
+    # account.status_changed.v1 before aging would legitimately differ.
+    if raw_bucket != "closed":
+        row = await pool.fetchrow(
+            "SELECT account_status FROM loan_accounts WHERE loan_account_id = $1",
+            account_id,
+        )
+        if row is not None and row["account_status"] in ("paid_off", "written_off"):
+            log.warning(
+                "Ignoring aging update for terminally closed account — "
+                "bucket may not leave 'closed' while the account is "
+                "paid_off/written_off",
+                account_status=row["account_status"],
+                incoming_bucket=raw_bucket,
+            )
+            return
+
     bucket: str | None = raw_bucket if raw_bucket in _VALID_BUCKETS else None
     if bucket is None:
         log.warning(
