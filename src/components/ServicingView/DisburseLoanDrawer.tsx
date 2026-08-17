@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { ContextDrawer } from '@/components/ui/ContextDrawer'
+import { generateIdempotencyKey } from '@/lib/utils/idempotency'
 import styles from './styles.module.css'
 
 export interface DisburseLoanDrawerProps {
@@ -58,6 +59,15 @@ export const DisburseLoanDrawer: React.FC<DisburseLoanDrawerProps> = ({
   const [success, setSuccess] = useState(false)
   const [successMessage, setSuccessMessage] = useState('Loan disbursed successfully. Account is now active.')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  /**
+   * Idempotency key for the current disbursement intent.
+   *
+   * Minted on the first submit and held until the drawer is reopened, so a
+   * user who resubmits after a network error / timeout re-POSTs the SAME key
+   * and the ledger dedupes rather than disbursing twice. Reset on open (below)
+   * so the next drawer session is a genuinely new intent.
+   */
+  const idempotencyKeyRef = useRef<string | null>(null)
 
   // Reset form when drawer opens
   useEffect(() => {
@@ -71,6 +81,7 @@ export const DisburseLoanDrawer: React.FC<DisburseLoanDrawerProps> = ({
       setProgressMessage(null)
       setSuccess(false)
       setSuccessMessage('Loan disbursed successfully. Account is now active.')
+      idempotencyKeyRef.current = null
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }, [isOpen, loanAmount])
@@ -136,6 +147,11 @@ export const DisburseLoanDrawer: React.FC<DisburseLoanDrawerProps> = ({
 
       setIsPending(true)
 
+      // One key per intent — reused verbatim by any resubmit of this drawer.
+      if (!idempotencyKeyRef.current) {
+        idempotencyKeyRef.current = generateIdempotencyKey(loanAccountId, 'disburse')
+      }
+
       try {
         // Upload file to S3 if provided
         let attachmentLocation = ''
@@ -156,6 +172,7 @@ export const DisburseLoanDrawer: React.FC<DisburseLoanDrawerProps> = ({
             paymentMethod,
             attachmentLocation,
             notes: notes.trim() || undefined,
+            idempotencyKey: idempotencyKeyRef.current,
           }),
         })
 

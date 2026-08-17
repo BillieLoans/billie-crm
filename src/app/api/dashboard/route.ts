@@ -14,18 +14,25 @@ import {
   DashboardResponseSchema,
   DashboardQuerySchema,
   type DashboardResponse,
-  type MoneyFlowMetric,
-  type MoneyFlowsToday,
   type RecentAccount,
   type UpcomingPayment,
   type PendingDisbursement,
 } from '@/lib/schemas/dashboard'
 import {
-  sydneyOffsetMinutes,
+  sydneyDateString,
+  nextSydneyDateString,
   classifyBucket,
   getCommencementDate,
   summariseDisbursementBuckets,
 } from '@/lib/disbursement-cutoff'
+import {
+  getDashboardPool,
+  fetchMoneyFlowsToday,
+  fetchUpcomingPayments,
+  fetchDisbursementBucketTotals,
+  buildMetric,
+} from '@/lib/dashboard-aggregates'
+import { checkLedgerHealth } from '@/server/ledger-health'
 
 /** Valid user roles */
 const VALID_ROLES = ['admin', 'supervisor', 'operations', 'readonly'] as const
@@ -47,133 +54,27 @@ function formatCurrency(amount: number): string {
 }
 
 /**
- * Compute the UTC instants that bracket "today" in Australia/Sydney.
+ * Ledger health for the dashboard tile.
  *
- * The server runs in UTC on Fly.io; this helper keeps the "today" widgets
- * aligned with the local working day for ops staff in Australia.
+ * Probes the ledger in-process. The previous implementation looped back over
+ * HTTP to /api/ledger/health, which is auth-guarded — a server-to-server fetch
+ * carries no session cookie, so it always 401'd and the tile read "offline"
+ * regardless of the real ledger state.
  */
-function australianDayBoundaries(now: Date = new Date()): { start: Date; end: Date } {
-  const parts = new Intl.DateTimeFormat('en-AU', {
-    timeZone: 'Australia/Sydney',
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-  }).formatToParts(now)
-  const pick = (type: string) => Number(parts.find((p) => p.type === type)!.value)
-  const y = pick('year')
-  const m = pick('month')
-  const d = pick('day')
-
-  const utcMidnight = Date.UTC(y, m - 1, d)
-  const offsetMinutes = sydneyOffsetMinutes(new Date(utcMidnight))
-  const start = new Date(utcMidnight - offsetMinutes * 60_000)
-  const end = new Date(start.getTime() + 24 * 60 * 60_000)
-  return { start, end }
-}
-
-const EMPTY_METRIC: MoneyFlowMetric = {
-  count: 0,
-  totalAmount: 0,
-  totalAmountFormatted: '$0.00',
-}
-
-function buildMetric(count: number, totalAmount: number): MoneyFlowMetric {
-  return {
-    count,
-    totalAmount,
-    totalAmountFormatted: formatCurrency(totalAmount),
-  }
-}
-
-/**
- * Aggregate today's money flows (expected, received, disbursed) for the
- * Australian working day. Reads directly from the `loan_accounts` parent table
- * and the `loan_accounts_repayment_schedule_payments` child table via the
- * Postgres adapter's pool — bypasses the Local API because we only need scalar
- * aggregates over the whole table.
- */
-async function fetchMoneyFlowsToday(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  payload: any,
-): Promise<MoneyFlowsToday> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const pool = (payload.db as any).pool as
-    | {
-        query: (
-          text: string,
-          params?: unknown[],
-        ) => Promise<{ rows: Array<Record<string, unknown>> }>
-      }
-    | undefined
-  if (!pool) {
-    return {
-      paymentsExpected: EMPTY_METRIC,
-      paymentsReceived: EMPTY_METRIC,
-      disbursed: EMPTY_METRIC,
-    }
-  }
-
-  const { start, end } = australianDayBoundaries()
-
-  const toMetric = (row: Record<string, unknown> | undefined) => {
-    // node-pg returns COUNT as bigint string and numeric SUM as string.
-    const count = row?.count != null ? Number(row.count) : 0
-    const total = row?.total != null ? Number(row.total) : 0
-    return buildMetric(Number.isFinite(count) ? count : 0, Number.isFinite(total) ? total : 0)
-  }
-
-  const [expectedResult, receivedResult, disbursedResult] = await Promise.all([
-    pool.query(
-      `SELECT COUNT(*)::bigint AS count, COALESCE(SUM(amount), 0) AS total
-         FROM loan_accounts_repayment_schedule_payments
-        WHERE due_date >= $1 AND due_date < $2`,
-      [start, end],
-    ),
-    pool.query(
-      `SELECT COUNT(*)::bigint AS count, COALESCE(SUM(amount_paid), 0) AS total
-         FROM loan_accounts_repayment_schedule_payments
-        WHERE paid_date >= $1 AND paid_date < $2`,
-      [start, end],
-    ),
-    pool.query(
-      `SELECT COUNT(*)::bigint AS count, COALESCE(SUM(loan_terms_loan_amount), 0) AS total
-         FROM loan_accounts
-        WHERE loan_terms_disbursed_date >= $1 AND loan_terms_disbursed_date < $2`,
-      [start, end],
-    ),
-  ])
-
-  return {
-    paymentsExpected: toMetric(expectedResult.rows[0]),
-    paymentsReceived: toMetric(receivedResult.rows[0]),
-    disbursed: toMetric(disbursedResult.rows[0]),
-  }
-}
-
-/**
- * Fetch ledger health status from internal API.
- */
-async function fetchLedgerHealth(
-  baseUrl: string,
-): Promise<{ status: 'online' | 'degraded' | 'offline'; latencyMs: number }> {
+async function fetchLedgerHealth(): Promise<{
+  status: 'online' | 'degraded' | 'offline'
+  latencyMs: number
+}> {
   try {
-    const response = await fetch(`${baseUrl}/api/ledger/health`, {
-      cache: 'no-store',
-    })
-
-    if (!response.ok) {
-      return { status: 'offline', latencyMs: 0 }
-    }
-
-    const data = await response.json()
+    const health = await checkLedgerHealth()
     return {
       status:
-        data.status === 'connected'
+        health.status === 'connected'
           ? 'online'
-          : data.status === 'degraded'
+          : health.status === 'degraded'
             ? 'degraded'
             : 'offline',
-      latencyMs: data.latencyMs ?? 0,
+      latencyMs: Math.max(0, Math.round(health.latencyMs ?? 0)),
     }
   } catch {
     return { status: 'offline', latencyMs: 0 }
@@ -194,8 +95,12 @@ export async function GET(request: NextRequest) {
     // 3. Determine if user can see approvals count
     const canSeeApprovals = hasApprovalAuthority(user)
 
-    // 4. Get base URL for internal API calls (from trusted env, not request headers)
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    // 4. Fix a single "now" so every Sydney day window in this response agrees,
+    //    and grab the pg pool for the whole-table aggregates.
+    const now = new Date()
+    const todaySydney = sydneyDateString(now)
+    const tomorrowSydney = nextSydneyDateString(now)
+    const pool = getDashboardPool(payload)
 
     // 5. Parallel fetch all data
     const [
@@ -203,7 +108,7 @@ export async function GET(request: NextRequest) {
       ledgerHealth,
       customersResult,
       recentAccountsResult,
-      allAccountsWithSchedule,
+      upcomingPaymentsAll,
       pendingDisbursementResult,
       moneyFlowsToday,
     ] = await Promise.all([
@@ -216,8 +121,8 @@ export async function GET(request: NextRequest) {
           })
         : Promise.resolve({ totalDocs: 0 }),
 
-      // Check ledger health
-      fetchLedgerHealth(baseUrl),
+      // Check ledger health (in-process gRPC probe)
+      fetchLedgerHealth(),
 
       // Fetch recent customers if IDs provided
       recentCustomerIds.length > 0
@@ -235,16 +140,10 @@ export async function GET(request: NextRequest) {
         limit: 10,
       }),
 
-      // All active accounts with schedules (for upcoming payments)
-      payload.find({
-        collection: 'loan-accounts',
-        where: {
-          accountStatus: { equals: 'active' },
-        },
-        limit: 100, // Reasonable limit for payment processing
-      }),
+      // Most urgent scheduled payments across ALL active accounts (SQL aggregate)
+      fetchUpcomingPayments(pool, todaySydney),
 
-      // Loans pending disbursement
+      // Loans pending disbursement (list preview only — counts/totals come from SQL)
       payload.find({
         collection: 'loan-accounts',
         where: {
@@ -255,7 +154,7 @@ export async function GET(request: NextRequest) {
       }),
 
       // Today's money flows (expected / received / disbursed)
-      fetchMoneyFlowsToday(payload),
+      fetchMoneyFlowsToday(pool, now),
     ])
 
     // 6. Get loan account data for all customers in a single batch query
@@ -308,65 +207,11 @@ export async function GET(request: NextRequest) {
       createdAt: acc.createdAt,
     }))
 
-    // Process upcoming payments from repayment schedules
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const todayMs = today.getTime()
+    // Upcoming payments: already sorted by due date and capped at 10 in SQL,
+    // across every active account (not a 100-account page).
+    const topUpcomingPayments: UpcomingPayment[] = upcomingPaymentsAll
 
-    const upcomingPayments: UpcomingPayment[] = []
-
-    for (const account of allAccountsWithSchedule.docs) {
-      const payments = account.repaymentSchedule?.payments ?? []
-
-      for (const payment of payments) {
-        // Only include scheduled (not yet paid) payments
-        if (payment.status !== 'scheduled') continue
-        if (!payment.dueDate) continue
-
-        const dueDate = new Date(payment.dueDate)
-        dueDate.setHours(0, 0, 0, 0)
-        const dueDateMs = dueDate.getTime()
-        const daysUntilDue = Math.floor((dueDateMs - todayMs) / (1000 * 60 * 60 * 24))
-
-        // Include payments due within 14 days or overdue
-        if (daysUntilDue > 14) continue
-
-        let status: 'overdue' | 'due_today' | 'upcoming'
-        if (daysUntilDue < 0) {
-          status = 'overdue'
-        } else if (daysUntilDue === 0) {
-          status = 'due_today'
-        } else {
-          status = 'upcoming'
-        }
-
-        upcomingPayments.push({
-          loanAccountId: account.loanAccountId ?? '',
-          accountNumber: account.accountNumber ?? '',
-          customerName: account.customerName ?? 'Unknown',
-          customerId: account.customerIdString ?? '',
-          dueDate: payment.dueDate,
-          amount: payment.amount ?? 0,
-          amountFormatted: formatCurrency(payment.amount ?? 0),
-          daysUntilDue,
-          status,
-        })
-      }
-    }
-
-    // Sort by due date (oldest first - most urgent)
-    upcomingPayments.sort((a, b) => {
-      const dateA = new Date(a.dueDate).getTime()
-      const dateB = new Date(b.dueDate).getTime()
-      return dateA - dateB
-    })
-
-    // Limit to 10 most urgent
-    const topUpcomingPayments = upcomingPayments.slice(0, 10)
-
-    // Process pending disbursement accounts with bucket classification
-    const now = new Date()
-
+    // Pending disbursement list preview, with per-row bucket classification
     const pendingDisbursements: PendingDisbursement[] = pendingDisbursementResult.docs.map(
       (acc) => {
         const commencementDate = getCommencementDate(acc)
@@ -387,11 +232,16 @@ export async function GET(request: NextRequest) {
       },
     )
 
-    const rawBuckets = summariseDisbursementBuckets(
-      pendingDisbursements,
-      moneyFlowsToday.disbursed.count,
-      now,
-    )
+    // Bucket counts/totals over EVERY pending loan (SQL), not just the page above.
+    // Without a pg pool (non-Postgres adapter) fall back to the in-memory summary.
+    const rawBuckets = pool
+      ? await fetchDisbursementBucketTotals(
+          pool,
+          todaySydney,
+          tomorrowSydney,
+          moneyFlowsToday.disbursed.count,
+        )
+      : summariseDisbursementBuckets(pendingDisbursements, moneyFlowsToday.disbursed.count, now)
     const disbursementBuckets = {
       overdue: buildMetric(rawBuckets.overdue.count, rawBuckets.overdue.total),
       today: buildMetric(rawBuckets.today.count, rawBuckets.today.total),

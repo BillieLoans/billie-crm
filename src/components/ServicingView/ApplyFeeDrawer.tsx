@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ContextDrawer } from '@/components/ui/ContextDrawer'
 import { transactionsQueryKey } from '@/hooks/queries/useTransactions'
 import { useUIStore } from '@/stores/ui'
+import { generateIdempotencyKey } from '@/lib/utils/idempotency'
 import styles from './styles.module.css'
 
 export type FeeType = 'late-fee' | 'dishonour-fee'
@@ -47,6 +48,16 @@ export const ApplyFeeDrawer: React.FC<ApplyFeeDrawerProps> = ({
   const [isPending, setIsPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  /**
+   * Idempotency key for the current fee-application intent.
+   *
+   * Minted on the first submit and held until the drawer is reopened, so a
+   * user who resubmits after a network error / timeout re-POSTs the SAME key
+   * and the ledger dedupes rather than charging the fee twice. Reset on open
+   * (below) so the next drawer session is a genuinely new intent.
+   */
+  const idempotencyKeyRef = useRef<string | null>(null)
+
   const readOnlyMode = useUIStore((state) => state.readOnlyMode)
   const queryClient = useQueryClient()
   const config = FEE_CONFIG[feeType]
@@ -60,6 +71,7 @@ export const ApplyFeeDrawer: React.FC<ApplyFeeDrawerProps> = ({
       setReason('')
       setValidationError(null)
       setError(null)
+      idempotencyKeyRef.current = null
     }
   }, [isOpen, config.defaultAmount])
 
@@ -80,11 +92,17 @@ export const ApplyFeeDrawer: React.FC<ApplyFeeDrawerProps> = ({
     setIsPending(true)
     setError(null)
 
+    // One key per intent — reused verbatim by any resubmit of this drawer.
+    if (!idempotencyKeyRef.current) {
+      idempotencyKeyRef.current = generateIdempotencyKey(loanAccountId, feeType)
+    }
+
     try {
       const body: Record<string, unknown> = {
         loanAccountId,
         feeAmount: numAmount.toFixed(2),
         reason: reason.trim() || undefined,
+        idempotencyKey: idempotencyKeyRef.current,
       }
 
       if (feeType === 'late-fee') {

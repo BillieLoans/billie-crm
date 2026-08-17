@@ -64,6 +64,7 @@ export class AppError extends Error {
   isSystemError(): boolean {
     const systemErrorCodes: ErrorCodeType[] = [
       ERROR_CODES.LEDGER_UNAVAILABLE,
+      ERROR_CODES.LEDGER_TIMEOUT,
       ERROR_CODES.NETWORK_ERROR,
       ERROR_CODES.NETWORK_TIMEOUT,
       ERROR_CODES.UNKNOWN_ERROR,
@@ -77,6 +78,9 @@ export class AppError extends Error {
   isRetryable(): boolean {
     const retryableErrorCodes: ErrorCodeType[] = [
       ERROR_CODES.LEDGER_UNAVAILABLE,
+      // Deadline exceeded on a ledger call: outcome unknown, but the money
+      // routes carry idempotency keys so a replay is safe.
+      ERROR_CODES.LEDGER_TIMEOUT,
       ERROR_CODES.NETWORK_ERROR,
       ERROR_CODES.NETWORK_TIMEOUT,
     ]

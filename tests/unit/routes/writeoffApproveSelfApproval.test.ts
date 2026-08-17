@@ -84,6 +84,16 @@ vi.mock('@/server/grpc-client', () => ({
 }))
 
 // ---------------------------------------------------------------------------
+// redis-client mock — the route writes a "ledger posted" marker before publishing
+// ---------------------------------------------------------------------------
+const mockRedisGet = vi.hoisted(() => vi.fn().mockResolvedValue(null))
+const mockRedisSet = vi.hoisted(() => vi.fn().mockResolvedValue('OK'))
+
+vi.mock('@/server/redis-client', () => ({
+  getRedisClient: vi.fn(() => ({ get: mockRedisGet, set: mockRedisSet })),
+}))
+
+// ---------------------------------------------------------------------------
 // event-publisher mock
 // ---------------------------------------------------------------------------
 vi.mock('@/server/event-publisher', () => ({
@@ -122,6 +132,10 @@ describe('POST /api/commands/writeoff/approve — self-approval guard', () => {
     mockWriteOff.mockClear()
     mockAuth.mockClear()
     mockFind.mockClear()
+    mockRedisGet.mockClear()
+    mockRedisSet.mockClear()
+    mockRedisGet.mockResolvedValue(null)
+    mockRedisSet.mockResolvedValue('OK')
     // Reset to defaults
     mockAuth.mockResolvedValue({
       user: {

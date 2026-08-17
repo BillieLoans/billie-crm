@@ -9,6 +9,8 @@ import {
   getCommencementDate,
   nextSydneyDateString,
   summariseDisbursementBuckets,
+  sydneyDayStartUtc,
+  sydneyDayUtcRange,
 } from '@/lib/disbursement-cutoff'
 
 describe('sydneyDateString', () => {
@@ -118,5 +120,55 @@ describe('summariseDisbursementBuckets', () => {
     expect(s.today).toEqual({ count: 0, total: 0 })
     expect(s.todayTotalCount).toBe(0)
     expect(s.scheduledTomorrowCount).toBe(0)
+  })
+})
+
+describe('sydneyDayStartUtc', () => {
+  it('resolves midnight AEST (UTC+10) in winter', () => {
+    expect(sydneyDayStartUtc('2026-06-17').toISOString()).toBe('2026-06-16T14:00:00.000Z')
+  })
+  it('resolves midnight AEDT (UTC+11) in summer', () => {
+    expect(sydneyDayStartUtc('2026-01-15').toISOString()).toBe('2026-01-14T13:00:00.000Z')
+  })
+  it('resolves the AEDT->AEST changeover day (Sun 5 Apr 2026)', () => {
+    // Day begins while still AEDT (+11), even though it ends in AEST (+10).
+    expect(sydneyDayStartUtc('2026-04-05').toISOString()).toBe('2026-04-04T13:00:00.000Z')
+    expect(sydneyDayStartUtc('2026-04-06').toISOString()).toBe('2026-04-05T14:00:00.000Z')
+  })
+  it('resolves the AEST->AEDT changeover day (Sun 4 Oct 2026)', () => {
+    expect(sydneyDayStartUtc('2026-10-04').toISOString()).toBe('2026-10-03T14:00:00.000Z')
+    expect(sydneyDayStartUtc('2026-10-05').toISOString()).toBe('2026-10-04T13:00:00.000Z')
+  })
+})
+
+describe('sydneyDayUtcRange', () => {
+  const hours = (r: { start: Date; end: Date }) => (r.end.getTime() - r.start.getTime()) / 3_600_000
+
+  it('brackets an ordinary 24h Sydney day', () => {
+    const r = sydneyDayUtcRange(new Date('2026-06-17T01:00:00Z')) // 11:00 AEST
+    expect(r.start.toISOString()).toBe('2026-06-16T14:00:00.000Z')
+    expect(r.end.toISOString()).toBe('2026-06-17T14:00:00.000Z')
+    expect(hours(r)).toBe(24)
+  })
+
+  it('is 25h on the AEDT->AEST fall-back day (no double-counted hour)', () => {
+    const r = sydneyDayUtcRange(new Date('2026-04-05T01:00:00Z')) // 12:00 AEDT, 5 Apr
+    expect(r.start.toISOString()).toBe('2026-04-04T13:00:00.000Z')
+    expect(r.end.toISOString()).toBe('2026-04-05T14:00:00.000Z')
+    expect(hours(r)).toBe(25)
+  })
+
+  it('is 23h on the AEST->AEDT spring-forward day (no dropped hour)', () => {
+    const r = sydneyDayUtcRange(new Date('2026-10-04T01:00:00Z')) // 11:00/12:00, 4 Oct
+    expect(r.start.toISOString()).toBe('2026-10-03T14:00:00.000Z')
+    expect(r.end.toISOString()).toBe('2026-10-04T13:00:00.000Z')
+    expect(hours(r)).toBe(23)
+  })
+
+  it('an instant just before local midnight still belongs to the closing day', () => {
+    // 2026-06-17T13:59:00Z is 23:59 AEST on 17 Jun.
+    const r = sydneyDayUtcRange(new Date('2026-06-17T13:59:00Z'))
+    expect(r.start.toISOString()).toBe('2026-06-16T14:00:00.000Z')
+    expect(r.end.toISOString()).toBe('2026-06-17T14:00:00.000Z')
   })
 })

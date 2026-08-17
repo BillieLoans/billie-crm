@@ -411,57 +411,6 @@ describe('Ledger API Routes Integration Tests', () => {
       })
     })
 
-    describe('F3.4: POST /api/ledger/write-off - Write Off Account', () => {
-      it('should write off account successfully', async () => {
-        mockFetch.mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({
-            success: true,
-            transactionId: 'TXN-NEW-004',
-            newBalance: {
-              principalBalance: '0.00',
-              feeBalance: '0.00',
-              totalOutstanding: '0.00',
-            },
-          }),
-        })
-
-        const response = await fetch(`${BASE_URL}/api/ledger/write-off`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            loanAccountId: 'TEST-ACC-003',
-            reason: 'Bad debt - customer bankrupt',
-            approvedBy: 'manager-001',
-          }),
-        })
-        const data = await response.json()
-
-        expect(data.success).toBe(true)
-        expect(data.newBalance.totalOutstanding).toBe('0.00')
-      })
-
-      it('should require reason and approver', async () => {
-        mockFetch.mockResolvedValueOnce({
-          ok: false,
-          status: 400,
-          json: async () => ({
-            error: 'Missing required fields: reason, approvedBy',
-          }),
-        })
-
-        const response = await fetch(`${BASE_URL}/api/ledger/write-off`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            loanAccountId: 'TEST-ACC-003',
-          }),
-        })
-
-        expect(response.ok).toBe(false)
-      })
-    })
-
     describe('F3.5: POST /api/ledger/adjustment - Make Adjustment', () => {
       it('should make a positive adjustment successfully', async () => {
         mockFetch.mockResolvedValueOnce({

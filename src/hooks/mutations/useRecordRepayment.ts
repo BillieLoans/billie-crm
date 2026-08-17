@@ -29,6 +29,25 @@ export interface RecordRepaymentParams {
   notes?: string
   /** Expected version for conflict detection (optional for backward compatibility) */
   expectedVersion?: string
+  /**
+   * Idempotency key for this user intent. Minted once by the public
+   * `recordRepayment`/`recordRepaymentAsync` wrappers (or carried over from a
+   * failed action) and held in the mutation variables, so every retry of the
+   * same intent — React Query retry, toast "Retry", failed-actions replay —
+   * re-POSTs the SAME key and the ledger dedupes instead of double-posting
+   * the payment.
+   *
+   * Optional so direct `mutate()` callers keep working; when absent the route
+   * falls back to a server-generated key (pre-existing behaviour).
+   */
+  idempotencyKey?: string
+  /**
+   * External payment reference sent to the ledger. Minted once per user
+   * intent alongside `idempotencyKey` — it used to be re-minted inside
+   * `mutationFn` on every attempt, which meant even the ledger's payment-id
+   * dedupe couldn't catch a retry.
+   */
+  paymentId?: string
 }
 
 export interface RepaymentAllocation {
@@ -57,9 +76,21 @@ export interface RecordRepaymentResponse {
   allocation: RepaymentAllocation
 }
 
+/**
+ * Mints a payment reference for one repayment intent.
+ *
+ * Called from the public wrapper (once per intent), never from `mutationFn`
+ * — a per-attempt id would give the ledger a different payment reference on
+ * every retry.
+ */
+export function generatePaymentId(): string {
+  return `PAY-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`
+}
+
 async function recordRepayment(params: RecordRepaymentParams): Promise<RecordRepaymentResponse> {
-  // Generate unique payment ID
-  const paymentId = `PAY-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+  // Fall back to a fresh reference only for legacy callers that mutate()
+  // directly without one; normal flows mint it once per intent.
+  const paymentId = params.paymentId ?? generatePaymentId()
 
   // Use fetchWithTimeout for network timeout handling
   const res = await fetchWithTimeout('/api/ledger/repayment', {
@@ -72,6 +103,7 @@ async function recordRepayment(params: RecordRepaymentParams): Promise<RecordRep
       paymentMethod: params.paymentMethod,
       paymentReference: params.paymentReference,
       expectedVersion: params.expectedVersion,
+      idempotencyKey: params.idempotencyKey,
     }),
   })
 
@@ -88,7 +120,8 @@ async function recordRepayment(params: RecordRepaymentParams): Promise<RecordRep
  * Mutation hook for recording repayments with optimistic UI updates.
  *
  * Flow:
- * 1. Generate idempotency key
+ * 1. Generate the idempotency key + paymentId ONCE per user intent (in the
+ *    public wrapper, NOT in mutationFn) so retries reuse them
  * 2. Add to optimistic store (stage: 'optimistic')
  * 3. Submit API request
  * 4a. On success: update stage to 'confirmed', show toast, invalidate queries
@@ -112,8 +145,10 @@ export function useRecordRepayment(loanAccountId?: string, accountLabel?: string
     mutationFn: recordRepayment,
 
     onMutate: async (params) => {
-      // Generate idempotency key
-      const mutationId = generateIdempotencyKey(params.loanAccountId, 'record-repayment')
+      // Reuse the intent's idempotency key as the optimistic-store id so a
+      // retry re-stages the same pending mutation rather than a new one.
+      const mutationId =
+        params.idempotencyKey ?? generateIdempotencyKey(params.loanAccountId, 'record-repayment')
 
       // Create pending mutation
       const pendingMutation: PendingMutation = {
@@ -229,6 +264,11 @@ export function useRecordRepayment(loanAccountId?: string, accountLabel?: string
             paymentReference: params.paymentReference,
             paymentMethod: params.paymentMethod,
             notes: params.notes,
+            // Persisted so the Failed Actions replay re-sends the ORIGINAL
+            // key/reference — the store snapshots this object into
+            // localStorage.
+            idempotencyKey: params.idempotencyKey,
+            paymentId: params.paymentId,
           },
           appError.message,
           accountLabel,
@@ -282,6 +322,10 @@ export function useRecordRepayment(loanAccountId?: string, accountLabel?: string
         paymentMethod: params.paymentMethod as string,
         notes: params.notes as string | undefined,
         expectedVersion: getExpectedVersion(accountId),
+        // Same key/reference as the attempt that failed, so the replay is
+        // deduped by the ledger if the original POST actually landed.
+        idempotencyKey: params.idempotencyKey as string | undefined,
+        paymentId: params.paymentId as string | undefined,
       }
 
       // Execute the mutation and remove from failed actions on success
@@ -311,17 +355,31 @@ export function useRecordRepayment(loanAccountId?: string, accountLabel?: string
    * Wrapper that automatically includes expectedVersion from the version store.
    */
   const recordRepaymentWithVersion = useCallback(
-    (params: Omit<RecordRepaymentParams, 'expectedVersion'>) => {
+    (params: Omit<RecordRepaymentParams, 'expectedVersion' | 'idempotencyKey' | 'paymentId'>) => {
       const expectedVersion = getExpectedVersion(params.loanAccountId)
-      mutation.mutate({ ...params, expectedVersion })
+      const idempotencyKey = generateIdempotencyKey(params.loanAccountId, 'record-repayment')
+      mutation.mutate({
+        ...params,
+        expectedVersion,
+        idempotencyKey,
+        paymentId: generatePaymentId(),
+      })
     },
     [mutation, getExpectedVersion],
   )
 
   const recordRepaymentAsyncWithVersion = useCallback(
-    async (params: Omit<RecordRepaymentParams, 'expectedVersion'>) => {
+    async (
+      params: Omit<RecordRepaymentParams, 'expectedVersion' | 'idempotencyKey' | 'paymentId'>,
+    ) => {
       const expectedVersion = getExpectedVersion(params.loanAccountId)
-      return mutation.mutateAsync({ ...params, expectedVersion })
+      const idempotencyKey = generateIdempotencyKey(params.loanAccountId, 'record-repayment')
+      return mutation.mutateAsync({
+        ...params,
+        expectedVersion,
+        idempotencyKey,
+        paymentId: generatePaymentId(),
+      })
     },
     [mutation, getExpectedVersion],
   )

@@ -12,11 +12,17 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getLedgerClient } from '@/server/grpc-client'
+import { getOverdueSnapshotPage, OVERDUE_PAGE_SIZE_MAX } from '@/server/overdue-snapshot-cache'
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
 import { requireAuth } from '@/lib/auth'
 import { hasAnyRole } from '@/lib/access'
+import {
+  enrichOverdueAccounts,
+  indexLoanAccountsById,
+  normaliseOverdueAccount,
+} from '@/lib/aging/overdue-enrichment'
+import type { LoanAccountLike } from '@/lib/aging/overdue-enrichment'
 
 export async function GET(request: NextRequest) {
   try {
@@ -43,88 +49,43 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const client = getLedgerClient()
-
     try {
-      const response = await client.getOverdueAccounts({
+      // Shared short-TTL cache: every 30s dashboard poller collapses onto one
+      // upstream gRPC fetch per filter/page combination.
+      const response = await getOverdueSnapshotPage({
         bucketFilter: bucket,
         minDpd,
         maxDpd,
-        pageSize: Math.min(pageSize, 1000),
+        pageSize: Math.min(pageSize, OVERDUE_PAGE_SIZE_MAX),
         pageToken,
       })
 
       // Transform gRPC response to ensure field mapping is correct
       // Handle both camelCase (from proto loader with keepCase: false) and snake_case
-      const transformedAccounts = response.accounts.map((account: any) => {
-        // Extract fields handling both naming conventions
-        const accountId = account.accountId ?? account.account_id ?? ''
-        const dpd = account.dpd ?? 0
-        const bucketValue = account.bucket ?? 'current'
-        const daysUntilOverdue = account.daysUntilOverdue ?? account.days_until_overdue ?? 0
-        const totalOverdueAmount = account.totalOverdueAmount ?? account.total_overdue_amount ?? '0'
-        const lastUpdated = account.lastUpdated ?? account.last_updated ?? new Date().toISOString()
-        // aging-v1.1.0+ field. Default false when the ledger version doesn't supply it.
-        const isInArrears: boolean =
-          typeof account.isInArrears === 'boolean'
-            ? account.isInArrears
-            : typeof account.is_in_arrears === 'boolean'
-              ? account.is_in_arrears
-              : false
+      const transformedAccounts = response.accounts.map(normaliseOverdueAccount)
 
-        return {
-          accountId,
-          dpd,
-          bucket: bucketValue,
-          daysUntilOverdue,
-          totalOverdueAmount,
-          lastUpdated,
-          isInArrears,
-        }
-      })
-
-      // Enrich accounts with loan account details from Payload
+      // Enrich accounts with loan account details from Payload.
+      // One batched query for the whole page (previously one query per account).
       const payload = await getPayload({ config: configPromise })
-      const enrichedAccounts = await Promise.all(
-        transformedAccounts.map(async (account) => {
-          try {
-            // Look up loan account by loanAccountId (which matches accountId from gRPC)
-            const loanAccountResult = await payload.find({
-              collection: 'loan-accounts',
-              where: {
-                loanAccountId: { equals: account.accountId },
-              },
-              limit: 1,
-            })
+      const accountIds = transformedAccounts.map((a) => a.accountId).filter(Boolean)
 
-            if (loanAccountResult.docs.length > 0) {
-              const loanAccount = loanAccountResult.docs[0]
-              return {
-                ...account,
-                accountNumber: loanAccount.accountNumber,
-                customerIdString: loanAccount.customerIdString ?? null,
-                customerName: loanAccount.customerName ?? null,
-              }
-            }
+      let loanAccountsById = new Map<string, LoanAccountLike>()
+      if (accountIds.length > 0) {
+        try {
+          const loanAccountResult = await payload.find({
+            collection: 'loan-accounts',
+            where: { loanAccountId: { in: accountIds } },
+            limit: accountIds.length,
+            depth: 0,
+          })
+          loanAccountsById = indexLoanAccountsById(loanAccountResult.docs as any[])
+        } catch (error) {
+          // Enrichment is best-effort — fall back to null-filled rows.
+          console.warn('Failed to enrich overdue accounts with loan-account details:', error)
+        }
+      }
 
-            // If not found, return account with nulls
-            return {
-              ...account,
-              accountNumber: null,
-              customerIdString: null,
-              customerName: null,
-            }
-          } catch (error) {
-            console.warn(`Failed to enrich account ${account.accountId}:`, error)
-            return {
-              ...account,
-              accountNumber: null,
-              customerIdString: null,
-              customerName: null,
-            }
-          }
-        })
-      )
+      const enrichedAccounts = enrichOverdueAccounts(transformedAccounts, loanAccountsById)
 
       return NextResponse.json({
         accounts: enrichedAccounts,
@@ -150,7 +111,10 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Error fetching overdue accounts:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch overdue accounts', details: 'An internal error occurred. Please try again.' },
+      {
+        error: 'Failed to fetch overdue accounts',
+        details: 'An internal error occurred. Please try again.',
+      },
       { status: 500 },
     )
   }

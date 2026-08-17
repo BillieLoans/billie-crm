@@ -4,27 +4,17 @@
  * Provides typed interfaces for interacting with the ledger service.
  */
 
-import * as grpc from '@grpc/grpc-js'
-import * as protoLoader from '@grpc/proto-loader'
-import path from 'path'
-import { fileURLToPath } from 'url'
+import {
+  createGrpcCredentials,
+  loadProtoService,
+  promisifyGrpcCall,
+  type RpcKind,
+} from '@/server/grpc-base'
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-
-// Load proto file
-const PROTO_PATH = path.resolve(__dirname, '../../proto/accounting_ledger.proto')
-
-const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
-  keepCase: false,
-  longs: String,
-  enums: String,
-  defaults: true,
-  oneofs: true,
-})
-
-const protoDescriptor = grpc.loadPackageDefinition(packageDefinition) as any
-const AccountingLedgerService = protoDescriptor.billie.ledger.v1.AccountingLedgerService
+const AccountingLedgerService = loadProtoService(
+  'accounting_ledger.proto',
+  'billie.ledger.v1.AccountingLedgerService',
+)
 
 // =============================================================================
 // Types
@@ -1003,30 +993,24 @@ export class LedgerClient {
 
   constructor(serviceUrl?: string) {
     const url = serviceUrl || process.env.LEDGER_SERVICE_URL || 'localhost:50051'
-    // Use insecure credentials for Fly.io internal addresses (already WireGuard-encrypted)
-    // and localhost (local dev). Require TLS for any other address.
-    const isInternalOrLocal =
-      /\.internal(:\d+)?$/.test(url) || url.startsWith('localhost') || url.startsWith('127.')
-    const creds = isInternalOrLocal
-      ? grpc.credentials.createInsecure()
-      : grpc.credentials.createSsl()
-    this.client = new AccountingLedgerService(url, creds)
+    // Transport selection (plaintext for localhost / Fly.io .internal / .platform,
+    // TLS otherwise, `LEDGER_GRPC_TLS` overriding both ways) is shared with the
+    // other CRM gRPC clients — see src/server/grpc-base.ts.
+    this.client = new AccountingLedgerService(url, createGrpcCredentials(url, 'LEDGER_GRPC_TLS'))
   }
 
-  // Helper to promisify gRPC calls
+  /**
+   * Promisify a gRPC call with a bounded deadline (see grpc-base.ts).
+   *
+   * `kind` defaults to `read` (fail fast). Money writes pass `write` for a much
+   * longer leash, and the batch/analytical RPCs pass `batch` — they legitimately
+   * run for minutes and must not be cut off at the read deadline.
+   */
   private promisify<TRequest, TResponse>(
-    method: (req: TRequest, callback: (err: any, res: TResponse) => void) => void,
+    method: any,
+    kind: RpcKind = 'read',
   ): (req: TRequest) => Promise<TResponse> {
-    return (request: TRequest) =>
-      new Promise((resolve, reject) => {
-        method.call(this.client, request, (err: any, response: TResponse) => {
-          if (err) {
-            reject(err)
-          } else {
-            resolve(response)
-          }
-        })
-      })
+    return promisifyGrpcCall<TRequest, TResponse>(this.client, method, kind)
   }
 
   // ===========================================================================
@@ -1044,9 +1028,9 @@ export class LedgerClient {
   }
 
   async getLedgerRecord(request: GetLedgerRecordRequest): Promise<LedgerRecordResponse> {
-    return this.promisify<GetLedgerRecordRequest, LedgerRecordResponse>(this.client.getLedgerRecord)(
-      request,
-    )
+    return this.promisify<GetLedgerRecordRequest, LedgerRecordResponse>(
+      this.client.getLedgerRecord,
+    )(request)
   }
 
   async getStatement(request: GetStatementRequest): Promise<StatementResponse> {
@@ -1058,41 +1042,52 @@ export class LedgerClient {
   // ===========================================================================
 
   async recordRepayment(request: RecordRepaymentRequest): Promise<TransactionResponse> {
-    return this.promisify<RecordRepaymentRequest, TransactionResponse>(this.client.recordRepayment)(
-      request,
-    )
+    return this.promisify<RecordRepaymentRequest, TransactionResponse>(
+      this.client.recordRepayment,
+      'write',
+    )(request)
   }
 
   async applyLateFee(request: ApplyLateFeeRequest): Promise<TransactionResponse> {
-    return this.promisify<ApplyLateFeeRequest, TransactionResponse>(this.client.applyLateFee)(
-      request,
-    )
+    return this.promisify<ApplyLateFeeRequest, TransactionResponse>(
+      this.client.applyLateFee,
+      'write',
+    )(request)
   }
 
   async applyDishonourFee(request: ApplyDishonourFeeRequest): Promise<TransactionResponse> {
     return this.promisify<ApplyDishonourFeeRequest, TransactionResponse>(
       this.client.applyDishonourFee,
+      'write',
     )(request)
   }
 
   async waiveFee(request: WaiveFeeRequest): Promise<TransactionResponse> {
-    return this.promisify<WaiveFeeRequest, TransactionResponse>(this.client.waiveFee)(request)
+    return this.promisify<WaiveFeeRequest, TransactionResponse>(
+      this.client.waiveFee,
+      'write',
+    )(request)
   }
 
   async writeOff(request: WriteOffRequest): Promise<TransactionResponse> {
-    return this.promisify<WriteOffRequest, TransactionResponse>(this.client.writeOff)(request)
+    return this.promisify<WriteOffRequest, TransactionResponse>(
+      this.client.writeOff,
+      'write',
+    )(request)
   }
 
   async makeAdjustment(request: MakeAdjustmentRequest): Promise<TransactionResponse> {
-    return this.promisify<MakeAdjustmentRequest, TransactionResponse>(this.client.makeAdjustment)(
-      request,
-    )
+    return this.promisify<MakeAdjustmentRequest, TransactionResponse>(
+      this.client.makeAdjustment,
+      'write',
+    )(request)
   }
 
   async disburseLoan(request: DisburseLoanRequest): Promise<DisburseLoanResponse> {
-    return this.promisify<DisburseLoanRequest, DisburseLoanResponse>(this.client.disburseLoan)(
-      request,
-    )
+    return this.promisify<DisburseLoanRequest, DisburseLoanResponse>(
+      this.client.disburseLoan,
+      'write',
+    )(request)
   }
 
   // ===========================================================================
@@ -1177,14 +1172,14 @@ export class LedgerClient {
     // The proto loader converts GetECLAllowance to getEclAllowance (camelCase, not getECLAllowance)
     // It converts "ECL" to "Ecl" in camelCase
     const method = this.client.getEclAllowance || (this.client as any).GetECLAllowance
-    
+
     if (!method) {
       throw new Error(
         'getEclAllowance method not found on gRPC client. ' +
-        'The proto loader may have generated a different method name.'
+          'The proto loader may have generated a different method name.',
       )
     }
-    
+
     return this.promisify<GetECLAllowanceRequest, ECLAllowanceResponse>(method)(request)
   }
 
@@ -1192,25 +1187,29 @@ export class LedgerClient {
     // Proto loader with keepCase: false converts GetPortfolioECL to getPortfolioECL
     // But might also convert to getPortfolioEcl (camelCase "Ecl")
     // Try both method names for robustness
-    const method = this.client.getPortfolioECL || 
-                   this.client.getPortfolioEcl ||
-                   (this.client as any).GetPortfolioECL ||
-                   this.client.getPortfolioECL
-    
+    const method =
+      this.client.getPortfolioECL ||
+      this.client.getPortfolioEcl ||
+      (this.client as any).GetPortfolioECL ||
+      this.client.getPortfolioECL
+
     if (!method) {
       // Debug: log available methods to help diagnose
-      const availableMethods = Object.keys(this.client).filter(k => 
-        k.toLowerCase().includes('portfolio') || k.toLowerCase().includes('ecl')
+      const availableMethods = Object.keys(this.client).filter(
+        (k) => k.toLowerCase().includes('portfolio') || k.toLowerCase().includes('ecl'),
       )
-      console.error('[gRPC Client] getPortfolioECL method not found. Available portfolio/ecl methods:', availableMethods)
+      console.error(
+        '[gRPC Client] getPortfolioECL method not found. Available portfolio/ecl methods:',
+        availableMethods,
+      )
       throw new Error(
         'getPortfolioECL method not found on gRPC client. ' +
-        'The proto loader may have generated a different method name. ' +
-        `Available methods: ${availableMethods.join(', ')}`
+          'The proto loader may have generated a different method name. ' +
+          `Available methods: ${availableMethods.join(', ')}`,
       )
     }
-    
-    return this.promisify<GetPortfolioECLRequest, PortfolioECLResponse>(method)(request)
+
+    return this.promisify<GetPortfolioECLRequest, PortfolioECLResponse>(method, 'batch')(request)
   }
 
   async triggerPortfolioECLRecalculation(
@@ -1219,25 +1218,38 @@ export class LedgerClient {
     // Proto loader with keepCase: false converts TriggerPortfolioECLRecalculation to triggerPortfolioECLRecalculation
     // But might also convert to triggerPortfolioEclRecalculation (camelCase "Ecl")
     // Try both method names for robustness
-    const method = this.client.triggerPortfolioECLRecalculation || 
-                   this.client.triggerPortfolioEclRecalculation ||
-                   (this.client as any).TriggerPortfolioECLRecalculation ||
-                   this.client.triggerPortfolioECLRecalculation
-    
+    const method =
+      this.client.triggerPortfolioECLRecalculation ||
+      this.client.triggerPortfolioEclRecalculation ||
+      (this.client as any).TriggerPortfolioECLRecalculation ||
+      this.client.triggerPortfolioECLRecalculation
+
     if (!method) {
       // Debug: log available methods to help diagnose
-      const availableMethods = Object.keys(this.client).filter(k => 
-        k.toLowerCase().includes('trigger') || k.toLowerCase().includes('portfolio') || k.toLowerCase().includes('recalc')
+      const availableMethods = Object.keys(this.client).filter(
+        (k) =>
+          k.toLowerCase().includes('trigger') ||
+          k.toLowerCase().includes('portfolio') ||
+          k.toLowerCase().includes('recalc'),
       )
-      console.error('[gRPC Client] triggerPortfolioECLRecalculation method not found. Available trigger/portfolio/recalc methods:', availableMethods)
+      console.error(
+        '[gRPC Client] triggerPortfolioECLRecalculation method not found. Available trigger/portfolio/recalc methods:',
+        availableMethods,
+      )
       throw new Error(
         'triggerPortfolioECLRecalculation method not found on gRPC client. ' +
-        'The proto loader may have generated a different method name. ' +
-        `Available methods: ${availableMethods.join(', ')}`
+          'The proto loader may have generated a different method name. ' +
+          `Available methods: ${availableMethods.join(', ')}`,
       )
     }
-    
-    return this.promisify<TriggerPortfolioECLRecalculationRequest, PortfolioECLRecalculationResponse>(method)(request)
+
+    return this.promisify<
+      TriggerPortfolioECLRecalculationRequest,
+      PortfolioECLRecalculationResponse
+    >(
+      method,
+      'batch',
+    )(request)
   }
 
   async triggerBulkECLRecalculation(
@@ -1245,6 +1257,7 @@ export class LedgerClient {
   ): Promise<BulkECLRecalculationResponse> {
     return this.promisify<TriggerBulkECLRecalculationRequest, BulkECLRecalculationResponse>(
       this.client.triggerBulkECLRecalculation,
+      'batch',
     )(request)
   }
 
@@ -1254,25 +1267,34 @@ export class LedgerClient {
     // Proto loader with keepCase: false converts GetEventProcessingStatus to getEventProcessingStatus
     // But might also convert to getEventProcessingStatus (should be fine, but check variations)
     // Try both method names for robustness
-    const method = this.client.getEventProcessingStatus || 
-                   this.client.getEventProcessingstatus ||
-                   (this.client as any).GetEventProcessingStatus ||
-                   this.client.getEventProcessingStatus
-    
+    const method =
+      this.client.getEventProcessingStatus ||
+      this.client.getEventProcessingstatus ||
+      (this.client as any).GetEventProcessingStatus ||
+      this.client.getEventProcessingStatus
+
     if (!method) {
       // Debug: log available methods to help diagnose
-      const availableMethods = Object.keys(this.client).filter(k => 
-        k.toLowerCase().includes('event') || k.toLowerCase().includes('processing') || k.toLowerCase().includes('status')
+      const availableMethods = Object.keys(this.client).filter(
+        (k) =>
+          k.toLowerCase().includes('event') ||
+          k.toLowerCase().includes('processing') ||
+          k.toLowerCase().includes('status'),
       )
-      console.error('[gRPC Client] getEventProcessingStatus method not found. Available event/processing/status methods:', availableMethods)
+      console.error(
+        '[gRPC Client] getEventProcessingStatus method not found. Available event/processing/status methods:',
+        availableMethods,
+      )
       throw new Error(
         'getEventProcessingStatus method not found on gRPC client. ' +
-        'The proto loader may have generated a different method name. ' +
-        `Available methods: ${availableMethods.join(', ')}`
+          'The proto loader may have generated a different method name. ' +
+          `Available methods: ${availableMethods.join(', ')}`,
       )
     }
-    
-    return this.promisify<GetEventProcessingStatusRequest, EventProcessingStatusResponse>(method)(request)
+
+    return this.promisify<GetEventProcessingStatusRequest, EventProcessingStatusResponse>(method)(
+      request,
+    )
   }
 
   // ===========================================================================
@@ -1282,7 +1304,8 @@ export class LedgerClient {
   async getECLConfig(request: GetECLConfigRequest): Promise<ECLConfigResponse> {
     // Proto loader with keepCase: false converts GetECLConfig to getEclConfig (camelCase "Ecl")
     // Try both method names for robustness
-    const method = this.client.getEclConfig || (this.client as any).GetECLConfig || this.client.getECLConfig
+    const method =
+      this.client.getEclConfig || (this.client as any).GetECLConfig || this.client.getECLConfig
     return this.promisify<GetECLConfigRequest, ECLConfigResponse>(method)(request)
   }
 
@@ -1291,31 +1314,38 @@ export class LedgerClient {
   ): Promise<ECLConfigResponse> {
     // Proto loader with keepCase: false converts UpdateOverlayMultiplier to updateOverlayMultiplier
     // Try both method names for robustness
-    const method = this.client.updateOverlayMultiplier || (this.client as any).UpdateOverlayMultiplier || this.client.updateOverlayMultiplier
-    
+    const method =
+      this.client.updateOverlayMultiplier ||
+      (this.client as any).UpdateOverlayMultiplier ||
+      this.client.updateOverlayMultiplier
+
     if (!method) {
       throw new Error(
         'updateOverlayMultiplier method not found on gRPC client. ' +
-        'The proto loader may have generated a different method name.'
+          'The proto loader may have generated a different method name.',
       )
     }
-    
-    return this.promisify<UpdateOverlayMultiplierRequest, ECLConfigResponse>(method)(request)
+
+    return this.promisify<UpdateOverlayMultiplierRequest, ECLConfigResponse>(
+      method,
+      'write',
+    )(request)
   }
 
   async updatePDRate(request: UpdatePDRateRequest): Promise<ECLConfigResponse> {
     // Proto loader with keepCase: false converts UpdatePDRate to updatePdRate (camelCase "Pd")
     // Try both method names for robustness
-    const method = this.client.updatePdRate || (this.client as any).UpdatePDRate || this.client.updatePDRate
-    
+    const method =
+      this.client.updatePdRate || (this.client as any).UpdatePDRate || this.client.updatePDRate
+
     if (!method) {
       throw new Error(
         'updatePdRate method not found on gRPC client. ' +
-        'The proto loader may have generated a different method name.'
+          'The proto loader may have generated a different method name.',
       )
     }
-    
-    return this.promisify<UpdatePDRateRequest, ECLConfigResponse>(method)(request)
+
+    return this.promisify<UpdatePDRateRequest, ECLConfigResponse>(method, 'write')(request)
   }
 
   async getECLConfigHistory(
@@ -1323,21 +1353,30 @@ export class LedgerClient {
   ): Promise<ECLConfigHistoryResponse> {
     // Proto loader with keepCase: false converts GetECLConfigHistory to getEclConfigHistory (camelCase "Ecl")
     // Try both method names for robustness
-    const method = this.client.getEclConfigHistory || (this.client as any).GetECLConfigHistory || this.client.getECLConfigHistory
-    
+    const method =
+      this.client.getEclConfigHistory ||
+      (this.client as any).GetECLConfigHistory ||
+      this.client.getECLConfigHistory
+
     if (!method) {
       // Debug: log available methods to help diagnose
-      const availableMethods = Object.keys(this.client).filter(k => 
-        k.toLowerCase().includes('ecl') || k.toLowerCase().includes('config') || k.toLowerCase().includes('history')
+      const availableMethods = Object.keys(this.client).filter(
+        (k) =>
+          k.toLowerCase().includes('ecl') ||
+          k.toLowerCase().includes('config') ||
+          k.toLowerCase().includes('history'),
       )
-      console.error('[gRPC Client] getECLConfigHistory method not found. Available ECL/config/history methods:', availableMethods)
+      console.error(
+        '[gRPC Client] getECLConfigHistory method not found. Available ECL/config/history methods:',
+        availableMethods,
+      )
       throw new Error(
         'getEclConfigHistory method not found on gRPC client. ' +
-        'The proto loader may have generated a different method name. ' +
-        `Available methods: ${availableMethods.join(', ')}`
+          'The proto loader may have generated a different method name. ' +
+          `Available methods: ${availableMethods.join(', ')}`,
       )
     }
-    
+
     return this.promisify<GetECLConfigHistoryRequest, ECLConfigHistoryResponse>(method)(request)
   }
 
@@ -1347,19 +1386,23 @@ export class LedgerClient {
     // Proto loader with keepCase: false converts ScheduleECLConfigChange to scheduleECLConfigChange
     // But might also convert to scheduleEclConfigChange (camelCase "Ecl")
     // Try both method names for robustness
-    const method = this.client.scheduleECLConfigChange || 
-                   this.client.scheduleEclConfigChange ||
-                   (this.client as any).ScheduleECLConfigChange ||
-                   this.client.scheduleECLConfigChange
-    
+    const method =
+      this.client.scheduleECLConfigChange ||
+      this.client.scheduleEclConfigChange ||
+      (this.client as any).ScheduleECLConfigChange ||
+      this.client.scheduleECLConfigChange
+
     if (!method) {
       throw new Error(
         'scheduleECLConfigChange method not found on gRPC client. ' +
-        'The proto loader may have generated a different method name.'
+          'The proto loader may have generated a different method name.',
       )
     }
-    
-    return this.promisify<ScheduleConfigChangeRequest, ScheduleConfigChangeResponse>(method)(request)
+
+    return this.promisify<ScheduleConfigChangeRequest, ScheduleConfigChangeResponse>(
+      method,
+      'write',
+    )(request)
   }
 
   async getPendingConfigChanges(
@@ -1375,6 +1418,7 @@ export class LedgerClient {
   ): Promise<CancelPendingConfigChangeResponse> {
     return this.promisify<CancelPendingConfigChangeRequest, CancelPendingConfigChangeResponse>(
       this.client.cancelPendingConfigChange,
+      'write',
     )(request)
   }
 
@@ -1383,6 +1427,7 @@ export class LedgerClient {
   ): Promise<ApplyPendingConfigChangesResponse> {
     return this.promisify<ApplyPendingConfigChangesRequest, ApplyPendingConfigChangesResponse>(
       this.client.applyPendingConfigChanges,
+      'write',
     )(request)
   }
 
@@ -1395,6 +1440,7 @@ export class LedgerClient {
   ): Promise<PreviewPeriodCloseResponse> {
     return this.promisify<PreviewPeriodCloseRequest, PreviewPeriodCloseResponse>(
       this.client.previewPeriodClose,
+      'batch',
     )(request)
   }
 
@@ -1403,13 +1449,14 @@ export class LedgerClient {
   ): Promise<FinalizePeriodCloseResponse> {
     return this.promisify<FinalizePeriodCloseRequest, FinalizePeriodCloseResponse>(
       this.client.finalizePeriodClose,
+      'batch',
     )(request)
   }
 
   async getPeriodClose(request: GetPeriodCloseRequest): Promise<PeriodCloseResponse> {
-    return this.promisify<GetPeriodCloseRequest, PeriodCloseResponse>(
-      this.client.getPeriodClose,
-    )(request)
+    return this.promisify<GetPeriodCloseRequest, PeriodCloseResponse>(this.client.getPeriodClose)(
+      request,
+    )
   }
 
   async getClosedPeriods(request: GetClosedPeriodsRequest): Promise<GetClosedPeriodsResponse> {
@@ -1423,6 +1470,7 @@ export class LedgerClient {
   ): Promise<AcknowledgeAnomalyResponse> {
     return this.promisify<AcknowledgeAnomalyRequest, AcknowledgeAnomalyResponse>(
       this.client.acknowledgeAnomaly,
+      'write',
     )(request)
   }
 
@@ -1433,23 +1481,28 @@ export class LedgerClient {
   async createExportJob(request: CreateExportJobRequest): Promise<CreateExportJobResponse> {
     return this.promisify<CreateExportJobRequest, CreateExportJobResponse>(
       this.client.createExportJob,
+      'batch',
     )(request)
   }
 
   async getExportStatus(request: GetExportStatusRequest): Promise<ExportJobResponse> {
-    return this.promisify<GetExportStatusRequest, ExportJobResponse>(
-      this.client.getExportStatus,
-    )(request)
+    return this.promisify<GetExportStatusRequest, ExportJobResponse>(this.client.getExportStatus)(
+      request,
+    )
   }
 
   async getExportResult(request: GetExportResultRequest): Promise<GetExportResultResponse> {
     return this.promisify<GetExportResultRequest, GetExportResultResponse>(
       this.client.getExportResult,
+      'batch',
     )(request)
   }
 
   async retryExport(request: RetryExportRequest): Promise<ExportJobResponse> {
-    return this.promisify<RetryExportRequest, ExportJobResponse>(this.client.retryExport)(request)
+    return this.promisify<RetryExportRequest, ExportJobResponse>(
+      this.client.retryExport,
+      'batch',
+    )(request)
   }
 
   async listExportJobs(request: ListExportJobsRequest): Promise<ListExportJobsResponse> {
@@ -1471,6 +1524,7 @@ export class LedgerClient {
   async traceECLToSource(request: TraceECLToSourceRequest): Promise<TraceECLToSourceResponse> {
     return this.promisify<TraceECLToSourceRequest, TraceECLToSourceResponse>(
       this.client.traceECLToSource,
+      'batch',
     )(request)
   }
 
@@ -1479,6 +1533,7 @@ export class LedgerClient {
   ): Promise<TraceAccruedYieldToSourceResponse> {
     return this.promisify<TraceAccruedYieldToSourceRequest, TraceAccruedYieldToSourceResponse>(
       this.client.traceAccruedYieldToSource,
+      'batch',
     )(request)
   }
 
@@ -1491,6 +1546,7 @@ export class LedgerClient {
   async batchAccountQuery(request: BatchAccountQueryRequest): Promise<BatchAccountQueryResponse> {
     return this.promisify<BatchAccountQueryRequest, BatchAccountQueryResponse>(
       this.client.batchAccountQuery,
+      'batch',
     )(request)
   }
 
@@ -1499,6 +1555,7 @@ export class LedgerClient {
   ): Promise<GenerateRandomSampleResponse> {
     return this.promisify<GenerateRandomSampleRequest, GenerateRandomSampleResponse>(
       this.client.generateRandomSample,
+      'batch',
     )(request)
   }
 
@@ -1530,12 +1587,12 @@ export function getLedgerClient(): LedgerClient {
 
 /**
  * Generate a unique idempotency key for gRPC requests.
- * 
+ *
  * Format: {prefix}-{timestamp}-{random}
  * - prefix: Operation type (e.g., "repay", "waive", "writeoff")
  * - timestamp: Current timestamp in base36
  * - random: Random alphanumeric suffix
- * 
+ *
  * These keys have a 24-hour TTL on the server side.
  */
 export function generateIdempotencyKey(prefix: string): string {
@@ -1581,4 +1638,3 @@ export function getTransactionTypeLabel(type: TransactionType): string {
   }
   return labels[type] || 'Unknown'
 }
-

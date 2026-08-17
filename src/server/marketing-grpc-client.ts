@@ -7,35 +7,21 @@
  * back to a durable Redis stream command when gRPC is unavailable so a
  * signup is never lost.
  *
- * Loader options and address/credentials conventions mirror
- * src/server/grpc-client.ts (the authority for CRM gRPC clients), with one
- * deliberate deviation: every call carries a bounded deadline. The intake
- * route is public-facing and must fail fast into its Redis fallback rather
- * than hang on a stalled or unreachable endpoint; the internal, staff
- * triggered LedgerClient has no equivalent time pressure.
+ * Loader options and address/credentials conventions come from
+ * src/server/grpc-base.ts, shared with every other CRM gRPC client. The one
+ * client-specific choice that remains here is the deadline: this client keeps
+ * its own tight 5s bound on EVERY call, including writes, rather than the
+ * shared read/write classes. The intake route is public-facing and must fail
+ * fast into its durable Redis fallback (which replays the command, so nothing
+ * is lost) rather than hang on a stalled or unreachable endpoint.
  */
 
-import * as grpc from '@grpc/grpc-js'
-import * as protoLoader from '@grpc/proto-loader'
-import path from 'path'
-import { fileURLToPath } from 'url'
+import { createGrpcCredentials, loadProtoService, promisifyGrpcCall } from '@/server/grpc-base'
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-
-// Load proto file
-const PROTO_PATH = path.resolve(__dirname, '../../proto/marketing_service.proto')
-
-const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
-  keepCase: false,
-  longs: String,
-  enums: String,
-  defaults: true,
-  oneofs: true,
-})
-
-const protoDescriptor = grpc.loadPackageDefinition(packageDefinition) as any
-const MarketingServiceDefinition = protoDescriptor.billie.marketing.MarketingService
+const MarketingServiceDefinition = loadProtoService(
+  'marketing_service.proto',
+  'billie.marketing.MarketingService',
+)
 
 /** Bound every call so a stalled endpoint can't hang the public intake route. */
 const DEADLINE_MS = 5000
@@ -236,35 +222,15 @@ export class MarketingClient {
 
   constructor(serviceUrl?: string) {
     const url = serviceUrl || process.env.MARKETING_GRPC_ADDRESS || 'localhost:50054'
-    // Use insecure credentials for Fly.io internal addresses (already WireGuard-encrypted)
-    // and localhost (local dev). Require TLS for any other address.
-    const isInternalOrLocal =
-      /\.internal(:\d+)?$/.test(url) || url.startsWith('localhost') || url.startsWith('127.')
-    const creds = isInternalOrLocal
-      ? grpc.credentials.createInsecure()
-      : grpc.credentials.createSsl()
-    this.client = new MarketingServiceDefinition(url, creds)
+    this.client = new MarketingServiceDefinition(
+      url,
+      createGrpcCredentials(url, 'MARKETING_GRPC_TLS'),
+    )
   }
 
-  // Helper to promisify gRPC calls with a bounded deadline.
-  private promisify<TRequest, TResponse>(
-    method: (
-      req: TRequest,
-      options: grpc.CallOptions,
-      callback: (err: any, res: TResponse) => void,
-    ) => void,
-  ): (req: TRequest) => Promise<TResponse> {
-    return (request: TRequest) =>
-      new Promise((resolve, reject) => {
-        const deadline = new Date(Date.now() + DEADLINE_MS)
-        method.call(this.client, request, { deadline }, (err: any, response: TResponse) => {
-          if (err) {
-            reject(err)
-          } else {
-            resolve(response)
-          }
-        })
-      })
+  // Helper to promisify gRPC calls with this client's fixed 5s deadline.
+  private promisify<TRequest, TResponse>(method: any): (req: TRequest) => Promise<TResponse> {
+    return promisifyGrpcCall<TRequest, TResponse>(this.client, method, 'write', DEADLINE_MS)
   }
 
   async upsertContact(request: UpsertContactInput): Promise<UpsertContactResult> {

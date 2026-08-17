@@ -10,17 +10,15 @@
  * - paymentMethod (optional): e.g., "direct_debit", "card"
  * - paymentReference (optional): Additional reference
  * - expectedVersion (optional): Expected updatedAt for version conflict detection
+ * - idempotencyKey (optional): Client key (8-128 chars) deduped by the ledger for 24h;
+ *   a server-generated key is used when absent
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import {
-  getLedgerClient,
-  timestampToDate,
-  getTransactionTypeLabel,
-  generateIdempotencyKey,
-} from '@/server/grpc-client'
+import { getLedgerClient, generateIdempotencyKey } from '@/server/grpc-client'
+import { serializeTransaction } from '@/lib/ledger/serialize-transaction'
 import { checkVersion, createVersionConflictResponse } from '@/lib/utils/version-check'
-import { handleApiError } from '@/lib/utils/api-error'
+import { handleApiError, createValidationError } from '@/lib/utils/api-error'
 import { requireAuth } from '@/lib/auth'
 import { canService } from '@/lib/access'
 import { RecordRepaymentSchema } from '@/lib/schemas/ledger'
@@ -35,10 +33,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const parseResult = RecordRepaymentSchema.safeParse(body)
     if (!parseResult.success) {
-      return NextResponse.json(
-        { error: 'Validation failed', details: parseResult.error.flatten().fieldErrors },
-        { status: 400 },
-      )
+      return createValidationError(parseResult.error.flatten().fieldErrors)
     }
     data = parseResult.data
 
@@ -49,7 +44,12 @@ export async function POST(request: NextRequest) {
     }
 
     const client = getLedgerClient()
-    const idempotencyKey = generateIdempotencyKey('repay')
+    // Prefer the client-supplied key so an operator retry (toast Retry, failed
+    // actions replay, timeout-then-retry) hits the ledger's 24h idempotency
+    // cache instead of posting the money twice. Absent a key we fall back to a
+    // per-request server key — same behaviour as before, for callers that have
+    // not been updated yet.
+    const idempotencyKey = data.idempotencyKey ?? generateIdempotencyKey('repay')
     const response = await client.recordRepayment({
       loanAccountId: data.loanAccountId,
       amount: data.amount,
@@ -59,24 +59,12 @@ export async function POST(request: NextRequest) {
       idempotencyKey,
     })
 
-    const tx = response.transaction
-
     return NextResponse.json({
       success: true,
-      transaction: {
-        id: tx.transactionId,
-        accountId: tx.loanAccountId,
-        type: tx.type,
-        typeLabel: getTransactionTypeLabel(tx.type),
-        date: timestampToDate(tx.transactionDate).toISOString(),
-        principalDelta: parseFloat(tx.principalDelta),
-        feeDelta: parseFloat(tx.feeDelta),
-        totalDelta: parseFloat(tx.totalDelta),
-        principalAfter: parseFloat(tx.principalAfter),
-        feeAfter: parseFloat(tx.feeAfter),
-        totalAfter: parseFloat(tx.totalAfter),
-        description: tx.description,
-      },
+      transaction: serializeTransaction(response.transaction, {
+        includePrincipal: true,
+        includeTotalDelta: true,
+      }),
       eventId: response.eventId,
       allocation: {
         allocatedToFees: response.allocatedToFees ? parseFloat(response.allocatedToFees) : 0,
@@ -93,4 +81,3 @@ export async function POST(request: NextRequest) {
     })
   }
 }
-

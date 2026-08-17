@@ -47,6 +47,36 @@ export function sydneyDateString(instant: Date): string {
   }).format(instant)
 }
 
+/**
+ * The UTC instant at which a given Sydney calendar day ('YYYY-MM-DD') begins.
+ *
+ * DST-safe: the UTC guess is refined against the offset that actually applies at
+ * the candidate instant, so the boundary is right on both changeover days
+ * (first Sunday in April / October) where a naive ±24h step is off by an hour.
+ */
+export function sydneyDayStartUtc(day: string): Date {
+  const [y, m, d] = day.split('-').map(Number)
+  const utcGuess = Date.UTC(y, m - 1, d, 0, 0, 0)
+  const guessOffset = sydneyOffsetMinutes(new Date(utcGuess))
+  const candidate = new Date(utcGuess - guessOffset * 60_000)
+  const actualOffset = sydneyOffsetMinutes(candidate)
+  return actualOffset === guessOffset ? candidate : new Date(utcGuess - actualOffset * 60_000)
+}
+
+/**
+ * The UTC half-open interval [start, end) covering `now`'s Sydney calendar day.
+ *
+ * `end` is the start of the NEXT Sydney day (never `start + 24h`), so the window
+ * is 23h on the AEST→AEDT spring-forward day and 25h on the AEDT→AEST
+ * fall-back day — no dropped or double-counted hour.
+ */
+export function sydneyDayUtcRange(now: Date = new Date()): { start: Date; end: Date } {
+  return {
+    start: sydneyDayStartUtc(sydneyDateString(now)),
+    end: sydneyDayStartUtc(nextSydneyDateString(now)),
+  }
+}
+
 /** Classify a commencement date into a bucket relative to `now` (Sydney days). */
 export function classifyBucket(
   commencementDate: string | Date,

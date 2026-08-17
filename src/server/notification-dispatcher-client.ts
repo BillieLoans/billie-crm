@@ -5,15 +5,17 @@
  *  1. Fetch the rendered subject/body of a past notification (90-day window).
  *  2. Read / write per-customer notification suppression (kill switch).
  *
- * Mirrors the connection style of src/server/grpc-client.ts — insecure
- * credentials for Fly.io internal addresses (already WireGuard-encrypted)
- * and localhost; TLS elsewhere.
+ * Connection style (proto loading, transport selection, per-call deadlines) is
+ * shared with the other CRM gRPC clients — see src/server/grpc-base.ts.
  */
 
 import * as grpc from '@grpc/grpc-js'
-import * as protoLoader from '@grpc/proto-loader'
-import path from 'path'
-import { fileURLToPath } from 'url'
+import {
+  createGrpcCredentials,
+  loadProtoService,
+  promisifyGrpcCall,
+  type RpcKind,
+} from '@/server/grpc-base'
 import type { SuppressionMode } from '@/lib/notifications/suppression'
 
 export type { SuppressionMode } from '@/lib/notifications/suppression'
@@ -23,22 +25,10 @@ export {
   SUPPRESSION_MODE_DESCRIPTIONS,
 } from '@/lib/notifications/suppression'
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-
-const PROTO_PATH = path.resolve(__dirname, '../../proto/notification_dispatcher.proto')
-
-const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
-  keepCase: false,
-  longs: String,
-  enums: String,
-  defaults: true,
-  oneofs: true,
-})
-
-const protoDescriptor = grpc.loadPackageDefinition(packageDefinition) as any
-const NotificationDispatcherService =
-  protoDescriptor.billie.notification_dispatcher.v1.NotificationDispatcherService
+const NotificationDispatcherService = loadProtoService(
+  'notification_dispatcher.proto',
+  'billie.notification_dispatcher.v1.NotificationDispatcherService',
+)
 
 // =============================================================================
 // Types
@@ -128,7 +118,10 @@ export interface ClearSuppressionOptions {
  * Callers should branch on this to render the appropriate empty state.
  */
 export class NotFoundError extends Error {
-  constructor(public readonly resource: 'notification' | 'suppression', message: string) {
+  constructor(
+    public readonly resource: 'notification' | 'suppression',
+    message: string,
+  ) {
     super(message)
     this.name = 'NotFoundError'
   }
@@ -182,32 +175,19 @@ export class NotificationDispatcherClient {
   private client: any
 
   constructor(serviceUrl?: string) {
-    const url =
-      serviceUrl ||
-      process.env.NOTIFICATION_DISPATCHER_GRPC_URL ||
-      'localhost:50052'
-    const isInternalOrLocal =
-      /\.internal(:\d+)?$/.test(url) ||
-      url.startsWith('localhost') ||
-      url.startsWith('127.') ||
-      // Plain hostname like 'notification-dispatcher.platform:50052' (no TLS available)
-      /^[a-z0-9-]+\.platform(:\d+)?$/.test(url)
-    const creds = isInternalOrLocal
-      ? grpc.credentials.createInsecure()
-      : grpc.credentials.createSsl()
-    this.client = new NotificationDispatcherService(url, creds)
+    const url = serviceUrl || process.env.NOTIFICATION_DISPATCHER_GRPC_URL || 'localhost:50052'
+    this.client = new NotificationDispatcherService(
+      url,
+      createGrpcCredentials(url, 'NOTIFICATION_DISPATCHER_GRPC_TLS'),
+    )
   }
 
+  /** Promisify with a bounded deadline; suppression writes use the longer write deadline. */
   private promisify<TRequest, TResponse>(
-    method: (req: TRequest, callback: (err: any, res: TResponse) => void) => void,
+    method: any,
+    kind: RpcKind = 'read',
   ): (req: TRequest) => Promise<TResponse> {
-    return (request: TRequest) =>
-      new Promise((resolve, reject) => {
-        method.call(this.client, request, (err: any, response: TResponse) => {
-          if (err) reject(err)
-          else resolve(response)
-        })
-      })
+    return promisifyGrpcCall<TRequest, TResponse>(this.client, method, kind)
   }
 
   // ---------------------------------------------------------------------------
@@ -281,7 +261,7 @@ export class NotificationDispatcherClient {
     if (expiresAt) request.expiresAt = expiresAt
     if (options.correlationId) request.correlationId = options.correlationId
 
-    const response = await this.promisify<any, any>(this.client.setSuppression)(request)
+    const response = await this.promisify<any, any>(this.client.setSuppression, 'write')(request)
     return decodeSuppression(response)
   }
 
@@ -294,7 +274,7 @@ export class NotificationDispatcherClient {
     }
     if (options.correlationId) request.correlationId = options.correlationId
 
-    const response = await this.promisify<any, any>(this.client.clearSuppression)(request)
+    const response = await this.promisify<any, any>(this.client.clearSuppression, 'write')(request)
     return {
       customerId: response.customerId ?? options.customerId,
       cleared: Boolean(response.cleared),
@@ -302,9 +282,9 @@ export class NotificationDispatcherClient {
   }
 
   async listSuppressions(): Promise<Suppression[]> {
-    const response = await this.promisify<Record<string, never>, any>(
-      this.client.listSuppressions,
-    )({})
+    const response = await this.promisify<Record<string, never>, any>(this.client.listSuppressions)(
+      {},
+    )
     const items: any[] = response.suppressions ?? []
     return items.map(decodeSuppression)
   }
@@ -328,4 +308,3 @@ export function getNotificationDispatcherClient(): NotificationDispatcherClient 
 function isNotFound(err: any): boolean {
   return err && typeof err === 'object' && err.code === grpc.status.NOT_FOUND
 }
-

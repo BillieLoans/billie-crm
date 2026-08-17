@@ -107,6 +107,8 @@ function getDefaultTitle(appError: AppError): string {
       return 'Network error'
     case ERROR_CODES.LEDGER_UNAVAILABLE:
       return 'Service unavailable'
+    case ERROR_CODES.LEDGER_TIMEOUT:
+      return 'Ledger timed out'
     case ERROR_CODES.VERSION_CONFLICT:
       return 'Data has changed'
     case ERROR_CODES.INSUFFICIENT_PRIVILEGES:

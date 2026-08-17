@@ -52,6 +52,7 @@ vi.mock('@/server/grpc-client', () => ({
 // ---------------------------------------------------------------------------
 import { GET } from '@/app/api/collections/cases/route'
 import { GET as GET_DETAIL } from '@/app/api/collections/cases/[accountId]/route'
+import { resetOverdueSnapshotCache } from '@/server/overdue-snapshot-cache'
 
 const AUTHED_USER = { id: 'ops-1', role: 'operations' }
 
@@ -80,6 +81,9 @@ describe('GET /api/collections/cases', () => {
     mockRequireAuth.mockReset()
     mockFind.mockReset()
     mockGetOverdueAccounts.mockReset()
+    // The list route reads the overdue snapshot through a shared short-TTL
+    // in-process cache — clear it so tests don't inherit each other's snapshot.
+    resetOverdueSnapshotCache()
     mockRequireAuth.mockResolvedValue({ user: AUTHED_USER, payload: mockPayload })
     mockGetOverdueAccounts.mockResolvedValue({ accounts: [], totalCount: 0 })
     setFindImpl({})
@@ -278,6 +282,9 @@ describe('GET /api/collections/cases/[accountId]', () => {
     mockRequireAuth.mockReset()
     mockFind.mockReset()
     mockGetOverdueAccounts.mockReset()
+    // The list route reads the overdue snapshot through a shared short-TTL
+    // in-process cache — clear it so tests don't inherit each other's snapshot.
+    resetOverdueSnapshotCache()
     mockRequireAuth.mockResolvedValue({ user: AUTHED_USER, payload: mockPayload })
     mockGetOverdueAccounts.mockResolvedValue({ accounts: [], totalCount: 0 })
     setFindImpl({})

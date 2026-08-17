@@ -12,31 +12,22 @@
  * the provider returns `gate_result = NOT_APPLICABLE` and empty
  * economics rather than erroring — see proto/collections_service.proto.
  *
- * Mirrors the connection style of src/server/notification-dispatcher-client.ts —
- * insecure credentials for Fly.io internal addresses (already
- * WireGuard-encrypted) and localhost; TLS elsewhere.
+ * Connection style (proto loading, transport selection, per-call deadlines) is
+ * shared with the other CRM gRPC clients — see src/server/grpc-base.ts.
  */
 
 import * as grpc from '@grpc/grpc-js'
-import * as protoLoader from '@grpc/proto-loader'
-import path from 'path'
-import { fileURLToPath } from 'url'
+import {
+  createGrpcCredentials,
+  loadProtoService,
+  promisifyGrpcCall,
+  type RpcKind,
+} from '@/server/grpc-base'
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-
-const PROTO_PATH = path.resolve(__dirname, '../../proto/collections_service.proto')
-
-const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
-  keepCase: false,
-  longs: String,
-  enums: String,
-  defaults: true,
-  oneofs: true,
-})
-
-const protoDescriptor = grpc.loadPackageDefinition(packageDefinition) as any
-const CollectionsService = protoDescriptor.billie.collections.v1.CollectionsService
+const CollectionsService = loadProtoService(
+  'collections_service.proto',
+  'billie.collections.v1.CollectionsService',
+)
 
 // =============================================================================
 // Types
@@ -236,28 +227,18 @@ export class CollectionsServiceClient {
 
   constructor(serviceUrl?: string) {
     const url = serviceUrl || process.env.COLLECTIONS_SERVICE_GRPC_URL || 'localhost:50053'
-    const isInternalOrLocal =
-      /\.internal(:\d+)?$/.test(url) ||
-      url.startsWith('localhost') ||
-      url.startsWith('127.') ||
-      // Plain hostname like 'collections-service.platform:50053' (no TLS available)
-      /^[a-z0-9-]+\.platform(:\d+)?$/.test(url)
-    const creds = isInternalOrLocal
-      ? grpc.credentials.createInsecure()
-      : grpc.credentials.createSsl()
-    this.client = new CollectionsService(url, creds)
+    this.client = new CollectionsService(
+      url,
+      createGrpcCredentials(url, 'COLLECTIONS_SERVICE_GRPC_TLS'),
+    )
   }
 
+  /** Promisify with a bounded deadline; FSM commands use the longer write deadline. */
   private promisify<TRequest, TResponse>(
-    method: (req: TRequest, callback: (err: any, res: TResponse) => void) => void,
+    method: any,
+    kind: RpcKind = 'read',
   ): (req: TRequest) => Promise<TResponse> {
-    return (request: TRequest) =>
-      new Promise((resolve, reject) => {
-        method.call(this.client, request, (err: any, response: TResponse) => {
-          if (err) reject(err)
-          else resolve(response)
-        })
-      })
+    return promisifyGrpcCall<TRequest, TResponse>(this.client, method, kind)
   }
 
   // ---------------------------------------------------------------------------
@@ -265,7 +246,10 @@ export class CollectionsServiceClient {
   // ---------------------------------------------------------------------------
 
   async flagHardship(options: FlagHardshipOptions): Promise<CaseActionResponse> {
-    const response = await this.promisify<any, any>(this.client.flagHardship)({
+    const response = await this.promisify<any, any>(
+      this.client.flagHardship,
+      'write',
+    )({
       accountId: options.accountId,
       operatorId: options.operatorId,
       reason: options.reason,
@@ -275,7 +259,10 @@ export class CollectionsServiceClient {
   }
 
   async resumeFromHardship(options: ResumeFromHardshipOptions): Promise<CaseActionResponse> {
-    const response = await this.promisify<any, any>(this.client.resumeFromHardship)({
+    const response = await this.promisify<any, any>(
+      this.client.resumeFromHardship,
+      'write',
+    )({
       accountId: options.accountId,
       operatorId: options.operatorId,
       idempotencyKey: options.idempotencyKey,
@@ -284,7 +271,10 @@ export class CollectionsServiceClient {
   }
 
   async applyStopContact(options: ApplyStopContactOptions): Promise<CaseActionResponse> {
-    const response = await this.promisify<any, any>(this.client.applyStopContact)({
+    const response = await this.promisify<any, any>(
+      this.client.applyStopContact,
+      'write',
+    )({
       accountId: options.accountId,
       operatorId: options.operatorId,
       reason: options.reason ?? '',
@@ -294,7 +284,10 @@ export class CollectionsServiceClient {
   }
 
   async advanceToNextStep(options: AdvanceToNextStepOptions): Promise<CaseActionResponse> {
-    const response = await this.promisify<any, any>(this.client.advanceToNextStep)({
+    const response = await this.promisify<any, any>(
+      this.client.advanceToNextStep,
+      'write',
+    )({
       accountId: options.accountId,
       operatorId: options.operatorId,
       idempotencyKey: options.idempotencyKey,
@@ -307,9 +300,9 @@ export class CollectionsServiceClient {
   // ---------------------------------------------------------------------------
 
   async getCaseEconomics(accountId: string): Promise<CaseEconomics> {
-    const response = await this.promisify<{ accountId: string }, any>(
-      this.client.getCaseEconomics,
-    )({ accountId })
+    const response = await this.promisify<{ accountId: string }, any>(this.client.getCaseEconomics)(
+      { accountId },
+    )
     return decodeCaseEconomics(response)
   }
 
@@ -322,9 +315,9 @@ export class CollectionsServiceClient {
   }
 
   async getContactLog(accountId: string): Promise<ContactLog> {
-    const response = await this.promisify<{ accountId: string }, any>(
-      this.client.getContactLog,
-    )({ accountId })
+    const response = await this.promisify<{ accountId: string }, any>(this.client.getContactLog)({
+      accountId,
+    })
     return decodeContactLog(response)
   }
 }
@@ -345,23 +338,13 @@ export function getCollectionsServiceClient(): CollectionsServiceClient {
 // =============================================================================
 
 export function isNotFound(err: unknown): boolean {
-  return (
-    !!err && typeof err === 'object' && (err as any).code === grpc.status.NOT_FOUND
-  )
+  return !!err && typeof err === 'object' && (err as any).code === grpc.status.NOT_FOUND
 }
 
 export function isFailedPrecondition(err: unknown): boolean {
-  return (
-    !!err &&
-    typeof err === 'object' &&
-    (err as any).code === grpc.status.FAILED_PRECONDITION
-  )
+  return !!err && typeof err === 'object' && (err as any).code === grpc.status.FAILED_PRECONDITION
 }
 
 export function isResourceExhausted(err: unknown): boolean {
-  return (
-    !!err &&
-    typeof err === 'object' &&
-    (err as any).code === grpc.status.RESOURCE_EXHAUSTED
-  )
+  return !!err && typeof err === 'object' && (err as any).code === grpc.status.RESOURCE_EXHAUSTED
 }

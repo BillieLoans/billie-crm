@@ -190,8 +190,7 @@ function RungLadder({ caseRow }: { caseRow: CollectionsCaseRow }) {
 
 // =============================================================================
 // Dialogs — minimal inline modals following the repo's existing modal
-// conventions (src/components/BlockClear/ClearBlockModal.tsx,
-// src/components/LoanAccountServicing/WaiveFeeModal.tsx): overlay + card,
+// conventions (src/components/BlockClear/ClearBlockModal.tsx): overlay + card,
 // role="dialog", disabled-while-pending, click-outside/✕ to close.
 // =============================================================================
 

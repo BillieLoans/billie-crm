@@ -28,6 +28,17 @@ export interface WaiveFeeParams {
   approvedBy: string
   /** Expected version for conflict detection (optional for backward compatibility) */
   expectedVersion?: string
+  /**
+   * Idempotency key for this user intent. Minted once by the public
+   * `waiveFee`/`waiveFeeAsync` wrappers (or carried over from a failed action)
+   * and held in the mutation variables, so every retry of the same intent —
+   * React Query retry, toast "Retry", failed-actions replay — re-POSTs the
+   * SAME key and the ledger dedupes instead of double-waiving.
+   *
+   * Optional so direct `mutate()` callers keep working; when absent the route
+   * falls back to a server-generated key (pre-existing behaviour).
+   */
+  idempotencyKey?: string
 }
 
 export interface WaiveFeeResponse {
@@ -58,6 +69,7 @@ async function waiveFee(params: WaiveFeeParams): Promise<WaiveFeeResponse> {
       reason: params.reason,
       approvedBy: params.approvedBy,
       expectedVersion: params.expectedVersion,
+      idempotencyKey: params.idempotencyKey,
     }),
   })
 
@@ -74,7 +86,8 @@ async function waiveFee(params: WaiveFeeParams): Promise<WaiveFeeResponse> {
  * Mutation hook for waiving fees with optimistic UI updates.
  *
  * Flow:
- * 1. Generate idempotency key
+ * 1. Generate the idempotency key ONCE per user intent (in the public
+ *    wrapper, NOT in mutationFn) so retries reuse it
  * 2. Add to optimistic store (stage: 'optimistic')
  * 3. Submit API request
  * 4a. On success: update stage to 'confirmed', show toast, invalidate queries
@@ -96,8 +109,10 @@ export function useWaiveFee(loanAccountId?: string, accountLabel?: string) {
     mutationFn: waiveFee,
 
     onMutate: async (params) => {
-      // Generate idempotency key
-      const mutationId = generateIdempotencyKey(params.loanAccountId, 'waive-fee')
+      // Reuse the intent's idempotency key as the optimistic-store id so a
+      // retry re-stages the same pending mutation rather than a new one.
+      const mutationId =
+        params.idempotencyKey ?? generateIdempotencyKey(params.loanAccountId, 'waive-fee')
 
       // Create pending mutation
       const pendingMutation: PendingMutation = {
@@ -200,6 +215,9 @@ export function useWaiveFee(loanAccountId?: string, accountLabel?: string) {
             waiverAmount: params.waiverAmount,
             reason: params.reason,
             approvedBy: params.approvedBy,
+            // Persisted so the Failed Actions replay re-sends the ORIGINAL
+            // key — the store snapshots this object into localStorage.
+            idempotencyKey: params.idempotencyKey,
           },
           appError.message,
           accountLabel,
@@ -252,6 +270,9 @@ export function useWaiveFee(loanAccountId?: string, accountLabel?: string) {
         reason: params.reason as string,
         approvedBy: params.approvedBy as string,
         expectedVersion: getExpectedVersion(accountId),
+        // Same key as the attempt that failed, so the replay is deduped by
+        // the ledger if the original POST actually landed.
+        idempotencyKey: params.idempotencyKey as string | undefined,
       }
 
       // Execute the mutation and remove from failed actions on success
@@ -281,17 +302,19 @@ export function useWaiveFee(loanAccountId?: string, accountLabel?: string) {
    * Wrapper that automatically includes expectedVersion from the version store.
    */
   const waiveFeeWithVersion = useCallback(
-    (params: Omit<WaiveFeeParams, 'expectedVersion'>) => {
+    (params: Omit<WaiveFeeParams, 'expectedVersion' | 'idempotencyKey'>) => {
       const expectedVersion = getExpectedVersion(params.loanAccountId)
-      mutation.mutate({ ...params, expectedVersion })
+      const idempotencyKey = generateIdempotencyKey(params.loanAccountId, 'waive-fee')
+      mutation.mutate({ ...params, expectedVersion, idempotencyKey })
     },
     [mutation, getExpectedVersion],
   )
 
   const waiveFeeAsyncWithVersion = useCallback(
-    async (params: Omit<WaiveFeeParams, 'expectedVersion'>) => {
+    async (params: Omit<WaiveFeeParams, 'expectedVersion' | 'idempotencyKey'>) => {
       const expectedVersion = getExpectedVersion(params.loanAccountId)
-      return mutation.mutateAsync({ ...params, expectedVersion })
+      const idempotencyKey = generateIdempotencyKey(params.loanAccountId, 'waive-fee')
+      return mutation.mutateAsync({ ...params, expectedVersion, idempotencyKey })
     },
     [mutation, getExpectedVersion],
   )

@@ -19,7 +19,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import type { Where } from 'payload'
 import { requireAuth } from '@/lib/auth'
 import { hasAnyRole } from '@/lib/access'
-import { getLedgerClient } from '@/server/grpc-client'
+import { getFullOverdueSnapshot } from '@/server/overdue-snapshot-cache'
 import { buildCollectionsCaseRow } from '@/lib/collections/case-row'
 import type { CollectionsCaseAging, CollectionsCaseRow } from '@/types/collections'
 
@@ -70,7 +70,9 @@ export async function GET(req: NextRequest) {
     let agingByAccount = new Map<string, CollectionsCaseAging>()
     let agingUnavailable = false
     try {
-      const overdue = await getLedgerClient().getOverdueAccounts({ pageSize: 1000 })
+      // Shared short-TTL cache; pages through next_page_token so the snapshot
+      // isn't silently cut off at the ledger's 1000-row page cap.
+      const overdue = await getFullOverdueSnapshot()
       agingByAccount = new Map(
         (overdue.accounts ?? []).map((a: any) => [
           a.accountId ?? a.account_id,

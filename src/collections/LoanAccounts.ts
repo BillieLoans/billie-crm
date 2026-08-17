@@ -23,14 +23,13 @@ export const LoanAccounts: CollectionConfig = {
     components: {
       views: {
         edit: {
-          // Custom tab for servicing operations
-          Servicing: {
-            Component: '@/components/LoanAccountServicing#LoanAccountServicing',
-            path: '/servicing',
-            tab: {
-              label: 'Servicing',
-              href: '/servicing',
-            },
+          // The raw edit view used to mount the legacy LoanAccountServicing panel, which
+          // exposed single-actor money movement (notably a direct write-off that skipped
+          // the maker-checker command flow). Servicing now lives exclusively in the
+          // ServicingView, so this edit view just bounces the user there.
+          default: {
+            Component:
+              '@/components/LoanAccountServicingRedirect#LoanAccountServicingRedirect',
           },
         },
       },

@@ -17,6 +17,24 @@ const positiveDecimalString = z.string().regex(
   'Must be a valid positive decimal amount (e.g., "100.00")',
 )
 
+/**
+ * Client-supplied idempotency key for money-moving commands.
+ *
+ * Optional for backwards compatibility: any caller that has not been updated
+ * to mint a key still works, and the route falls back to a server-side
+ * generated key (see `generateIdempotencyKey` in `@/server/grpc-client`).
+ * When present it is forwarded verbatim to the ledger, which dedupes on it
+ * for 24h and replays the original response (`idempotent_replay`).
+ *
+ * Contract mirrors the collections action routes
+ * (`src/app/api/collections/actions/*`): `z.string().min(8)`, plus an upper
+ * bound so an oversized key can't be smuggled through to the ledger.
+ */
+const idempotencyKeyString = z
+  .string()
+  .min(8, 'Idempotency key must be at least 8 characters')
+  .max(128)
+
 /** Validates a string is a valid decimal that can be negative (for adjustments) */
 const decimalString = z.string().regex(
   /^-?\d+(\.\d{1,2})?$/,
@@ -34,6 +52,7 @@ export const RecordRepaymentSchema = z.object({
   paymentMethod: z.string().optional(),
   paymentReference: z.string().optional(),
   expectedVersion: z.string().optional(),
+  idempotencyKey: idempotencyKeyString.optional(),
 })
 
 export type RecordRepayment = z.infer<typeof RecordRepaymentSchema>
@@ -48,6 +67,7 @@ export const WaiveFeeSchema = z.object({
   reason: z.string().min(1, 'Reason is required').max(1000),
   approvedBy: z.string().optional(),
   expectedVersion: z.string().optional(),
+  idempotencyKey: idempotencyKeyString.optional(),
 })
 
 export type WaiveFee = z.infer<typeof WaiveFeeSchema>
@@ -74,6 +94,7 @@ export const MakeAdjustmentSchema = z.object({
   feeDelta: decimalString,
   reason: z.string().min(1, 'Reason is required').max(1000),
   approvedBy: z.string().optional(),
+  idempotencyKey: idempotencyKeyString.optional(),
 })
 
 export type MakeAdjustment = z.infer<typeof MakeAdjustmentSchema>
@@ -87,6 +108,7 @@ export const ApplyLateFeeSchema = z.object({
   feeAmount: positiveDecimalString,
   daysPastDue: z.number().int().min(0, 'Days past due must be >= 0'),
   reason: z.string().max(1000).optional(),
+  idempotencyKey: idempotencyKeyString.optional(),
 })
 
 export type ApplyLateFee = z.infer<typeof ApplyLateFeeSchema>
@@ -100,6 +122,7 @@ export const ApplyDishonourFeeSchema = z.object({
   feeAmount: positiveDecimalString,
   reason: z.string().max(1000).optional(),
   referenceId: z.string().optional(),
+  idempotencyKey: idempotencyKeyString.optional(),
 })
 
 export type ApplyDishonourFee = z.infer<typeof ApplyDishonourFeeSchema>
@@ -115,6 +138,7 @@ export const DisburseLoanSchema = z.object({
   paymentMethod: z.string().optional(),
   attachmentLocation: z.string().optional(),
   notes: z.string().max(2000).optional(),
+  idempotencyKey: idempotencyKeyString.optional(),
 })
 
 export type DisburseLoan = z.infer<typeof DisburseLoanSchema>

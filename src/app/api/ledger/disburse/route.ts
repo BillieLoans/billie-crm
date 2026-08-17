@@ -14,11 +14,13 @@
  * - paymentMethod (optional): Defaults to "bank_transfer"
  * - attachmentLocation (required): S3 URI for proof of payment
  * - notes (optional): Free-text notes
+ * - idempotencyKey (optional): Client key (8-128 chars) deduped by the ledger for 24h;
+ *   a server-generated key is used when absent
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getLedgerClient, generateIdempotencyKey } from '@/server/grpc-client'
-import { handleApiError } from '@/lib/utils/api-error'
+import { handleApiError, createValidationError } from '@/lib/utils/api-error'
 import { requireAuth } from '@/lib/auth'
 import { canService } from '@/lib/access'
 import { DisburseLoanSchema } from '@/lib/schemas/ledger'
@@ -32,16 +34,18 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const parseResult = DisburseLoanSchema.safeParse(body)
     if (!parseResult.success) {
-      return NextResponse.json(
-        { error: 'Validation failed', details: parseResult.error.flatten().fieldErrors },
-        { status: 400 },
-      )
+      return createValidationError(parseResult.error.flatten().fieldErrors)
     }
     const data = parseResult.data
     loanAccountId = data.loanAccountId
 
     const client = getLedgerClient()
-    const idempotencyKey = generateIdempotencyKey('disburse')
+    // Prefer the client-supplied key so an operator retry (toast Retry, failed
+    // actions replay, timeout-then-retry) hits the ledger's 24h idempotency
+    // cache instead of posting the money twice. Absent a key we fall back to a
+    // per-request server key — same behaviour as before, for callers that have
+    // not been updated yet.
+    const idempotencyKey = data.idempotencyKey ?? generateIdempotencyKey('disburse')
 
     const response = await client.disburseLoan({
       loanAccountId: data.loanAccountId,
@@ -62,7 +66,9 @@ export async function POST(request: NextRequest) {
       idempotentReplay: response.idempotentReplay,
     })
   } catch (error) {
-    // Handle duplicate disbursement attempts as a business conflict, not a server error.
+    // Bespoke branch: a duplicate disbursement keeps its own ALREADY_DISBURSED body and
+    // operator-facing wording, so it stays ahead of the generic mapping. Everything else
+    // (gRPC 9 -> 422, 5 -> 404, 14 -> 503) is handled centrally by handleApiError.
     const grpcCode = (error as { code?: number } | undefined)?.code
     const grpcDetails = (error as { details?: string } | undefined)?.details
     const grpcMessage = error instanceof Error ? error.message : String(error)

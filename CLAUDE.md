@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Billie CRM is an internal staff servicing application for managing customer loan accounts at Billie (Australian small amount lender). Built on **Payload CMS v3.45.0** (Next.js 15) with a **Python event processor** that consumes domain events via Redis. The data layer is **Postgres** (`@payloadcms/db-postgres` adapter on the Node side, `asyncpg` on the Python side). Deployed on Fly.io.
+Billie CRM is an internal staff servicing application for managing customer loan accounts at Billie (Australian small amount lender). Built on **Payload CMS v3.85.x** (Next.js 16) with a **Python event processor** that consumes domain events via Redis. The data layer is **Postgres** (`@payloadcms/db-postgres` adapter on the Node side, `asyncpg` on the Python side). Deployed on Fly.io.
 
 ## Commands
 
@@ -79,7 +79,7 @@ Payload's pg adapter generates child tables for `type: 'array'` fields and flatt
 
 **Zustand stores**: Client state managed via Zustand stores in `src/stores/` (UI state, failed actions queue, optimistic updates, version conflicts, recent customers).
 
-**Role-based access**: Four roles — `admin`, `supervisor`, `operations`, `readonly`. Access helpers in `src/lib/access.ts`. Non-admin users cannot see raw Payload collections in the sidebar (`hideFromNonAdmins`). Approval actions require `hasApprovalAuthority` (admin or supervisor).
+**Role-based access**: Six roles — `admin`, `supervisor`, `operations`, `readonly`, plus `service` (API-only inter-service auth) and `marketing` (marketing CRM only, walled off from lending collections via exclusion from `hasAnyRole`). Access helpers in `src/lib/access.ts`. Non-admin users cannot see raw Payload collections in the sidebar (`hideFromNonAdmins`). Approval actions require `hasApprovalAuthority` (admin or supervisor).
 
 **Edge proxy**: `src/proxy.ts` (renamed from `middleware.ts` in Next 16 — there is no `src/middleware.ts`) handles Cloudflare origin verification plus the `/admin` and `/admin/login` interception that routes authenticated users to `/admin/dashboard`.
 

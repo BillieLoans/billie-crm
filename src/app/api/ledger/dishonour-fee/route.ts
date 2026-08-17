@@ -8,20 +8,20 @@
  * - feeAmount (required): Fee amount as string
  * - reason (optional): Reason for fee (e.g., "direct debit returned")
  * - referenceId (optional): External payment reference that was dishonoured
+ * - idempotencyKey (optional): Client key (8-128 chars) deduped by the ledger for 24h;
+ *   a server-generated key is used when absent
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import {
-  getLedgerClient,
-  timestampToDate,
-  getTransactionTypeLabel,
-  generateIdempotencyKey,
-} from '@/server/grpc-client'
+import { getLedgerClient, generateIdempotencyKey } from '@/server/grpc-client'
+import { serializeTransaction } from '@/lib/ledger/serialize-transaction'
+import { handleApiError, createValidationError } from '@/lib/utils/api-error'
 import { requireAuth } from '@/lib/auth'
 import { canService } from '@/lib/access'
 import { ApplyDishonourFeeSchema } from '@/lib/schemas/ledger'
 
 export async function POST(request: NextRequest) {
+  let loanAccountId: string | undefined
   try {
     const auth = await requireAuth(canService)
     if ('error' in auth) return auth.error
@@ -29,15 +29,18 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const parseResult = ApplyDishonourFeeSchema.safeParse(body)
     if (!parseResult.success) {
-      return NextResponse.json(
-        { error: 'Validation failed', details: parseResult.error.flatten().fieldErrors },
-        { status: 400 },
-      )
+      return createValidationError(parseResult.error.flatten().fieldErrors)
     }
     const data = parseResult.data
+    loanAccountId = data.loanAccountId
 
     const client = getLedgerClient()
-    const idempotencyKey = generateIdempotencyKey('dishonourfee')
+    // Prefer the client-supplied key so an operator retry (toast Retry, failed
+    // actions replay, timeout-then-retry) hits the ledger's 24h idempotency
+    // cache instead of posting the money twice. Absent a key we fall back to a
+    // per-request server key — same behaviour as before, for callers that have
+    // not been updated yet.
+    const idempotencyKey = data.idempotencyKey ?? generateIdempotencyKey('dishonourfee')
     const response = await client.applyDishonourFee({
       loanAccountId: data.loanAccountId,
       feeAmount: data.feeAmount,
@@ -46,36 +49,14 @@ export async function POST(request: NextRequest) {
       idempotencyKey,
     })
 
-    const tx = response.transaction
-
     return NextResponse.json({
       success: true,
-      transaction: {
-        id: tx.transactionId,
-        accountId: tx.loanAccountId,
-        type: tx.type,
-        typeLabel: getTransactionTypeLabel(tx.type),
-        date: timestampToDate(tx.transactionDate).toISOString(),
-        feeDelta: parseFloat(tx.feeDelta),
-        feeAfter: parseFloat(tx.feeAfter),
-        totalAfter: parseFloat(tx.totalAfter),
-        description: tx.description,
-      },
+      transaction: serializeTransaction(response.transaction),
       eventId: response.eventId,
     })
-  } catch (error: any) {
-    console.error('Error applying dishonour fee:', error)
-
-    if (error.code === 9) {
-      return NextResponse.json(
-        { error: error.details || 'The ledger rejected this operation due to a business rule.' },
-        { status: 422 },
-      )
-    }
-
-    return NextResponse.json(
-      { error: 'Failed to apply dishonour fee', details: 'An internal error occurred. Please try again.' },
-      { status: 500 },
-    )
+  } catch (error) {
+    // Business rule rejections arrive as gRPC code 9 and are mapped to a
+    // non-retryable 422 by handleApiError.
+    return handleApiError(error, { action: 'apply-dishonour-fee', accountId: loanAccountId })
   }
 }
