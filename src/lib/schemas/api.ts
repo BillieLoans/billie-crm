@@ -106,7 +106,7 @@ export const PortfolioRecalcSchema = z.object({
 // Upload Schemas
 // =============================================================================
 
-export const PresignedUrlSchema = z.object({
+export const DisbursementAttachmentSchema = z.object({
   accountNumber: z.string().min(1, 'Account number is required'),
   fileName: z.string().min(1, 'File name is required').max(255, 'File name too long'),
   contentType: z.enum([
@@ -124,6 +124,6 @@ export const PresignedUrlSchema = z.object({
 // Issue Report Schemas
 // =============================================================================
 
-export const IssueScreenshotPresignSchema = z.object({
+export const IssueScreenshotUploadSchema = z.object({
   contentType: z.enum(['image/jpeg', 'image/png']),
 })

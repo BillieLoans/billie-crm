@@ -16,6 +16,9 @@ const DESCRIPTION_COUNT_ID = 'issue-reporter-description-count'
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png'] as const
 type ScreenshotContentType = (typeof ALLOWED_IMAGE_TYPES)[number]
 
+// Must stay in sync with ISSUE_SCREENSHOT_MAX_BYTES enforced by /api/issues/screenshot
+const MAX_SCREENSHOT_BYTES = 5 * 1024 * 1024
+
 const contentTypeOf = (blob: Blob): ScreenshotContentType =>
   blob.type === 'image/jpeg' ? 'image/jpeg' : 'image/png'
 
@@ -126,6 +129,14 @@ export const IssueReporterModal: React.FC<IssueReporterModalProps> = ({ reporter
 
       if (!ALLOWED_IMAGE_TYPES.includes(file.type as ScreenshotContentType)) {
         setFileError('Choose a JPEG or PNG image.')
+        setPreview(null)
+        setIncludeScreenshot(false)
+        e.target.value = ''
+        return
+      }
+
+      if (file.size > MAX_SCREENSHOT_BYTES) {
+        setFileError('Screenshot must be 5MB or less.')
         setPreview(null)
         setIncludeScreenshot(false)
         e.target.value = ''

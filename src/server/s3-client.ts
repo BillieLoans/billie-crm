@@ -1,12 +1,11 @@
 /**
  * S3 Client Singleton
  *
- * Provides a configured S3 client and helpers for generating presigned URLs.
- * Used for uploading disbursement proof-of-payment attachments.
+ * Provides a configured S3 client and helpers for reading and writing
+ * customer documents and issue screenshots. All access is server-side.
  */
 
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 let s3ClientInstance: S3Client | null = null
 
@@ -40,28 +39,27 @@ export function getBucketName(): string {
 }
 
 /**
- * Generate a presigned PUT URL for uploading a file to S3.
- *
- * @param key - The S3 object key (path within the bucket)
- * @param contentType - MIME type of the file being uploaded
- * @param expiresIn - URL expiration time in seconds (default: 300 = 5 minutes)
- * @returns The presigned URL for PUT upload
+ * Upload an object to the configured bucket. All uploads are proxied through
+ * the app server (never presigned to the browser) so the CSP can stay
+ * connect-src 'self' and size/content validation happens server-side.
  */
-export async function generatePresignedUploadUrl(
+export async function uploadObject(
   key: string,
   contentType: string,
-  expiresIn = 300,
-): Promise<string> {
+  body: Uint8Array,
+): Promise<void> {
   const client = getS3Client()
   const bucket = getBucketName()
 
-  const command = new PutObjectCommand({
-    Bucket: bucket,
-    Key: key,
-    ContentType: contentType,
-  })
-
-  return getSignedUrl(client, command, { expiresIn })
+  await client.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      ContentType: contentType,
+      Body: body,
+      ContentLength: body.byteLength,
+    }),
+  )
 }
 
 /**

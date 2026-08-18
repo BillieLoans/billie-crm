@@ -11,7 +11,7 @@ import {
 import {
   UpdatePDRateSchema,
   PeriodClosePreviewSchema,
-  PresignedUrlSchema,
+  DisbursementAttachmentSchema,
   CreateExportJobSchema,
 } from '@/lib/schemas/api'
 
@@ -285,9 +285,9 @@ describe('PeriodClosePreviewSchema', () => {
   })
 })
 
-describe('PresignedUrlSchema', () => {
+describe('DisbursementAttachmentSchema', () => {
   it('accepts contentType: "application/pdf"', () => {
-    const result = PresignedUrlSchema.safeParse({
+    const result = DisbursementAttachmentSchema.safeParse({
       accountNumber: 'ACC-001',
       fileName: 'document.pdf',
       contentType: 'application/pdf',
@@ -296,7 +296,7 @@ describe('PresignedUrlSchema', () => {
   })
 
   it('rejects contentType: "text/html" (not in allowed list)', () => {
-    const result = PresignedUrlSchema.safeParse({
+    const result = DisbursementAttachmentSchema.safeParse({
       accountNumber: 'ACC-001',
       fileName: 'page.html',
       contentType: 'text/html',
@@ -305,7 +305,7 @@ describe('PresignedUrlSchema', () => {
   })
 
   it('rejects contentType: "application/javascript"', () => {
-    const result = PresignedUrlSchema.safeParse({
+    const result = DisbursementAttachmentSchema.safeParse({
       accountNumber: 'ACC-001',
       fileName: 'script.js',
       contentType: 'application/javascript',
@@ -314,7 +314,7 @@ describe('PresignedUrlSchema', () => {
   })
 
   it('rejects fileName with 256 chars (max 255)', () => {
-    const result = PresignedUrlSchema.safeParse({
+    const result = DisbursementAttachmentSchema.safeParse({
       accountNumber: 'ACC-001',
       fileName: 'a'.repeat(256),
       contentType: 'application/pdf',
@@ -323,7 +323,7 @@ describe('PresignedUrlSchema', () => {
   })
 
   it('accepts fileName with 255 chars', () => {
-    const result = PresignedUrlSchema.safeParse({
+    const result = DisbursementAttachmentSchema.safeParse({
       accountNumber: 'ACC-001',
       fileName: 'a'.repeat(255),
       contentType: 'application/pdf',

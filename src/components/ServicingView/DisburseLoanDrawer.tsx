@@ -27,16 +27,10 @@ const currencyFormatter = new Intl.NumberFormat('en-AU', {
   currency: 'AUD',
 })
 
-interface PresignedUrlResponse {
-  uploadUrl: string
-  s3Key: string
-  s3Uri: string
-}
-
 /**
  * DisburseLoanDrawer - Slide-over form for disbursing loan funds.
  *
- * Uploads proof-of-payment to S3 via presigned URL, then calls
+ * Uploads proof-of-payment through the server-side upload route, then calls
  * the DisburseLoan gRPC endpoint via /api/ledger/disburse.
  */
 export const DisburseLoanDrawer: React.FC<DisburseLoanDrawerProps> = ({
@@ -101,37 +95,23 @@ export const DisburseLoanDrawer: React.FC<DisburseLoanDrawerProps> = ({
   }, [])
 
   const uploadFileToS3 = useCallback(async (file: File): Promise<string> => {
-    setProgressMessage('Requesting upload URL...')
-
-    const presignedRes = await fetch('/api/uploads/presigned-url', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        accountNumber,
-        fileName: file.name,
-        contentType: file.type,
-      }),
-    })
-
-    if (!presignedRes.ok) {
-      const data = await presignedRes.json().catch(() => ({}))
-      throw new Error(data.error || 'Failed to get upload URL')
-    }
-
-    const { uploadUrl, s3Uri }: PresignedUrlResponse = await presignedRes.json()
-
     setProgressMessage('Uploading attachment...')
 
-    const uploadRes = await fetch(uploadUrl, {
-      method: 'PUT',
+    const params = new URLSearchParams({ accountNumber, fileName: file.name })
+    const res = await fetch(`/api/uploads/disbursement-attachment?${params}`, {
+      method: 'POST',
       headers: { 'Content-Type': file.type },
       body: file,
     })
 
-    if (!uploadRes.ok) {
-      throw new Error('Failed to upload file to storage')
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      throw new Error(
+        typeof data.error === 'string' ? data.error : 'Failed to upload attachment',
+      )
     }
 
+    const { s3Uri }: { s3Uri: string } = await res.json()
     return s3Uri
   }, [accountNumber])
 

@@ -24,34 +24,24 @@ export interface ReportIssueResult {
 // =============================================================================
 
 /**
- * Presigns and uploads the screenshot, returning its `s3://` URI.
+ * Uploads the screenshot through the server-side proxy route (the browser
+ * never talks to S3 directly), returning its `s3://` URI.
  * Throws on failure — the caller decides whether that aborts the report.
  */
 async function uploadScreenshot(blob: Blob, contentType: 'image/jpeg' | 'image/png') {
-  const presignRes = await fetch('/api/issues/screenshot-upload-url', {
+  const res = await fetch('/api/issues/screenshot', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ contentType }),
-  })
-
-  if (!presignRes.ok) {
-    const body = await presignRes.json().catch(() => null)
-    throw new Error(body?.error?.message ?? `Screenshot presign failed: ${presignRes.status}`)
-  }
-
-  const { uploadUrl, s3Uri } = await presignRes.json()
-
-  // Presigned S3 PUT — no cookies, and the Content-Type must match the one
-  // that was signed.
-  const putRes = await fetch(uploadUrl, {
-    method: 'PUT',
     headers: { 'Content-Type': contentType },
+    credentials: 'include',
     body: blob,
   })
 
-  if (!putRes.ok) throw new Error(`Screenshot upload failed: ${putRes.status}`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => null)
+    throw new Error(body?.error?.message ?? `Screenshot upload failed: ${res.status}`)
+  }
 
+  const { s3Uri } = await res.json()
   return s3Uri as string
 }
 

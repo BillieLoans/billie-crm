@@ -35,6 +35,7 @@ primary_region = "syd"
   # TODO(platform): confirm dispatcher hostname for prod — placeholder pending platform team handover
   NOTIFICATION_DISPATCHER_GRPC_URL = "billie-platform-services-prod.internal:50052"
   COLLECTIONS_SERVICE_GRPC_URL = "billie-platform-services-prod.internal:50053"
+  S3_BUCKET_NAME="billie-files-prod-734836384687"
 
 # =============================================================================
 # HTTP service configuration
