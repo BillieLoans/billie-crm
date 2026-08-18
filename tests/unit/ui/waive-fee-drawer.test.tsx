@@ -6,17 +6,22 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { WaiveFeeDrawer } from '@/components/ServicingView/WaiveFeeDrawer'
 
-// Mock the useWaiveFee hook
+// Mock the useWaiveFee hook. Mutable state (via vi.hoisted) so individual
+// tests can flip flags like isReadOnlyMode without vi.doMock — a stale doMock
+// registration here previously leaked into later test files in the shared fork.
+const mockWaiveFeeState = vi.hoisted(() => ({
+  waiveFee: vi.fn(),
+  waiveFeeAsync: vi.fn(),
+  isPending: false,
+  isSuccess: false,
+  isError: false,
+  error: null,
+  isReadOnlyMode: false,
+  hasPendingWaive: false,
+}))
+
 vi.mock('@/hooks/mutations/useWaiveFee', () => ({
-  useWaiveFee: () => ({
-    waiveFee: vi.fn(),
-    waiveFeeAsync: vi.fn(),
-    isPending: false,
-    isSuccess: false,
-    isError: false,
-    error: null,
-    isReadOnlyMode: false,
-  }),
+  useWaiveFee: () => ({ ...mockWaiveFeeState }),
 }))
 
 // Mock sonner toast
@@ -37,6 +42,7 @@ describe('WaiveFeeDrawer', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    mockWaiveFeeState.isReadOnlyMode = false
   })
 
   afterEach(() => {
@@ -134,19 +140,38 @@ describe('WaiveFeeDrawer', () => {
       const reasonInput = screen.getByLabelText(/reason/i)
       const form = screen.getByRole('button', { name: /confirm waive/i }).closest('form')!
 
-      // Enter invalid amount (exceeds balance)
-      fireEvent.change(amountInput, { target: { value: '100' } })
+      fireEvent.change(amountInput, { target: { value: '-5' } })
       fireEvent.change(reasonInput, { target: { value: 'Test reason' } })
       fireEvent.submit(form)
 
       expect(await screen.findByRole('alert')).toBeInTheDocument()
     })
 
-    it('should have max constraint on amount input', () => {
+    it('should submit an amount above the current fee balance (retroactive waiver)', () => {
+      // The ledger now accepts waivers above the fee balance — the paid portion
+      // is reallocated against principal — so the client no longer caps the amount.
+      const onClose = vi.fn()
+      render(<WaiveFeeDrawer {...defaultProps} onClose={onClose} currentFeeBalance={0} />)
+
+      const amountInput = screen.getByLabelText(/waiver amount/i)
+      const reasonInput = screen.getByLabelText(/reason/i)
+      const form = screen.getByRole('button', { name: /confirm waive/i }).closest('form')!
+
+      fireEvent.change(amountInput, { target: { value: '7.65' } })
+      fireEvent.change(reasonInput, { target: { value: 'Waive fee settled by repayment' } })
+      fireEvent.submit(form)
+
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(mockWaiveFeeState.waiveFee).toHaveBeenCalledWith(
+        expect.objectContaining({ waiverAmount: 7.65 }),
+      )
+      expect(onClose).toHaveBeenCalledTimes(1)
+    })
+
+    it('should not cap the amount input at the current fee balance', () => {
       render(<WaiveFeeDrawer {...defaultProps} currentFeeBalance={99.99} />)
       const input = screen.getByLabelText(/waiver amount/i)
-      // Max is set to currentFeeBalance
-      expect(input).toHaveAttribute('max', '99.99')
+      expect(input).not.toHaveAttribute('max')
     })
 
     it('should have min constraint on amount input', () => {
@@ -157,20 +182,13 @@ describe('WaiveFeeDrawer', () => {
   })
 
   describe('read-only mode', () => {
-    it('should show read-only warning when in read-only mode', async () => {
-      // Re-mock with read-only mode enabled
-      vi.doMock('@/hooks/mutations/useWaiveFee', () => ({
-        useWaiveFee: () => ({
-          waiveFee: vi.fn(),
-          isPending: false,
-          isReadOnlyMode: true,
-        }),
-      }))
+    it('should show the read-only warning and disable submission', () => {
+      mockWaiveFeeState.isReadOnlyMode = true
+      render(<WaiveFeeDrawer {...defaultProps} />)
 
-      // Note: This test documents expected behavior.
-      // Full integration would require re-importing the component.
-      // The component should display a warning when readOnlyMode is true.
-      expect(true).toBe(true)
+      expect(screen.getByRole('alert')).toHaveTextContent(/read-only mode/i)
+      expect(screen.getByLabelText(/waiver amount/i)).toBeDisabled()
+      expect(screen.getByRole('button', { name: /confirm waive/i })).toBeDisabled()
     })
   })
 

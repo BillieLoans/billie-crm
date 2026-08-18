@@ -39,7 +39,6 @@ export function getAccountActions(
   ctx: AccountActionContext,
 ): AccountAction[] {
   const isPending = account.accountStatus === 'pending_disbursement'
-  const fees = account.liveBalance ? account.liveBalance.feeBalance : 0
 
   // Resolve a disabledReason in precedence order; null means enabled.
   const reason = (extra: () => string | null): string | null => {
@@ -63,10 +62,11 @@ export function getAccountActions(
     disabledReason: reason(() => (ctx.pendingRepayment ? 'Payment in progress' : null)),
   })
 
+  // Not gated on feeBalance > 0: the ledger accepts retroactive waivers of
+  // fees already settled by a repayment (the paid portion is reallocated
+  // against principal), so a $0.00 fee balance is still waivable.
   const waiveFee: AccountAction = mk('waive-fee', 'Waive fee', {
-    disabledReason: reason(() =>
-      ctx.pendingWaive ? 'Waive in progress' : fees <= 0 ? 'No fees to waive' : null,
-    ),
+    disabledReason: reason(() => (ctx.pendingWaive ? 'Waive in progress' : null)),
   })
 
   const lateFee = mk('apply-late-fee', 'Apply late fee', { disabledReason: reason(() => null) })

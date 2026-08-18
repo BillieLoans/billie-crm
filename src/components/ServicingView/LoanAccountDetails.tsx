@@ -204,7 +204,7 @@ export const LoanAccountDetails: React.FC<LoanAccountDetailsProps> = ({
       )}
 
       {/* Actions */}
-      {(onRecordRepayment || (onWaiveFee && fees > 0)) && (
+      {(onRecordRepayment || onWaiveFee) && (
         <div className={styles.detailsActions}>
           {onRecordRepayment && (
             <button
@@ -224,7 +224,9 @@ export const LoanAccountDetails: React.FC<LoanAccountDetailsProps> = ({
               {hasPendingRepayment ? '⏳ Processing...' : '💳 Record Payment'}
             </button>
           )}
-          {onWaiveFee && fees > 0 && (
+          {/* Shown even at $0.00 fee balance — the ledger supports retroactive
+              waivers of fees already settled by a repayment */}
+          {onWaiveFee && (
             <button
               type="button"
               className={`${styles.detailsActionBtn} ${styles.detailsActionBtnPrimary}`}
@@ -235,7 +237,7 @@ export const LoanAccountDetails: React.FC<LoanAccountDetailsProps> = ({
                   ? 'System in read-only mode'
                   : hasPendingWaive
                     ? 'Action in progress'
-                    : 'Waive outstanding fees'
+                    : 'Waive fees'
               }
               data-testid="waive-fee-button"
             >

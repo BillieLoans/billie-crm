@@ -60,7 +60,13 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      transaction: serializeTransaction(response.transaction, { includeTotalDelta: true }),
+      // includePrincipal: a retroactive waiver (fee already settled by a
+      // repayment) posts with feeDelta = 0 and the waived amount as a
+      // principalDelta, so fee fields alone would report a $0.00 waiver.
+      transaction: serializeTransaction(response.transaction, {
+        includePrincipal: true,
+        includeTotalDelta: true,
+      }),
       eventId: response.eventId,
     })
   } catch (error) {

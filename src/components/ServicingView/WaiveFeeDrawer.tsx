@@ -57,11 +57,10 @@ export const WaiveFeeDrawer: React.FC<WaiveFeeDrawerProps> = ({
       return
     }
 
-    if (numAmount > currentFeeBalance) {
-      setValidationError(`Amount cannot exceed current fee balance ($${currentFeeBalance.toFixed(2)})`)
-      return
-    }
-
+    // No client-side cap against currentFeeBalance: the ledger accepts waivers
+    // above the current fee balance (the already-paid portion is reallocated
+    // against principal) and rejects genuinely over-limit waivers with an
+    // operator-readable FAILED_PRECONDITION message surfaced via the error toast.
     if (!reason.trim()) {
       setValidationError('Reason is required')
       return
@@ -77,7 +76,7 @@ export const WaiveFeeDrawer: React.FC<WaiveFeeDrawerProps> = ({
 
     // Close drawer immediately (optimistic)
     onClose()
-  }, [amount, reason, currentFeeBalance, loanAccountId, waiveFee, onClose])
+  }, [amount, reason, loanAccountId, waiveFee, onClose])
 
   const isFormValid = amount && reason.trim() && !validationError
   const isDisabled = isPending || isReadOnlyMode || hasPendingWaive
@@ -132,13 +131,13 @@ export const WaiveFeeDrawer: React.FC<WaiveFeeDrawerProps> = ({
               placeholder="0.00"
               step="0.01"
               min="0.01"
-              max={currentFeeBalance}
               disabled={isDisabled}
               required
             />
           </div>
           <p className={styles.waiveFeeHint}>
-            Cannot exceed current fee balance
+            Fees already paid by a repayment can still be waived — the paid amount is re-applied to
+            the loan principal
           </p>
         </div>
 

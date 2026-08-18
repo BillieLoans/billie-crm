@@ -387,12 +387,23 @@ describe('Ledger API Routes Integration Tests', () => {
         expect(response.ok).toBe(false)
       })
 
-      it('should not allow waiving more than fee balance', async () => {
+      it('should accept a waiver above the current fee balance (retroactive waiver)', async () => {
+        // The ledger reallocates the already-paid portion against principal:
+        // feeDelta = 0, principalDelta = -amount, one FEE_WAIVER transaction.
         mockFetch.mockResolvedValueOnce({
-          ok: false,
-          status: 400,
+          ok: true,
           json: async () => ({
-            error: 'Waiver amount exceeds current fee balance',
+            success: true,
+            transaction: {
+              id: 'TXN-NEW-004',
+              type: 'FEE_WAIVER',
+              feeDelta: 0,
+              principalDelta: -7.65,
+              totalDelta: -7.65,
+              feeAfter: 0,
+              principalAfter: 123.0,
+              totalAfter: 123.0,
+            },
           }),
         })
 
@@ -401,7 +412,35 @@ describe('Ledger API Routes Integration Tests', () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             loanAccountId: 'TEST-ACC-001',
-            waiverAmount: 1000.0, // More than fee balance
+            waiverAmount: 7.65, // Fee balance is 0 — fee was settled by a repayment
+            reason: 'Waive fee settled by repayment',
+            approvedBy: 'supervisor-001',
+          }),
+        })
+        const data = await response.json()
+
+        expect(data.success).toBe(true)
+        expect(data.transaction.principalDelta).toBe(-7.65)
+      })
+
+      it('should reject a waiver above what was ever genuinely paid', async () => {
+        // gRPC FAILED_PRECONDITION → 422 LEDGER_REJECTED with the ledger's
+        // operator-readable message passed through verbatim.
+        mockFetch.mockResolvedValueOnce({
+          ok: false,
+          status: 422,
+          json: async () => ({
+            error: 'LEDGER_REJECTED',
+            message: 'Waiver amount exceeds waivable fees',
+          }),
+        })
+
+        const response = await fetch(`${BASE_URL}/api/ledger/waive-fee`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            loanAccountId: 'TEST-ACC-001',
+            waiverAmount: 1000.0, // More than was ever charged/paid in fees
             reason: 'Test',
             approvedBy: 'supervisor-001',
           }),

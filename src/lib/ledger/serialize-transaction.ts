@@ -9,7 +9,7 @@
  *
  * Which delta fields a route reports is part of its contract, so the extra
  * groups are opt-in rather than always emitted:
- *  - principal deltas: repayment, adjustment
+ *  - principal deltas: repayment, waive-fee, adjustment
  *  - totalDelta:       repayment, waive-fee, adjustment
  */
 

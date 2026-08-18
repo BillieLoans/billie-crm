@@ -30,7 +30,7 @@ const byId = (a: LoanAccountData, ctx: AccountActionContext) =>
   Object.fromEntries(getAccountActions(a, ctx).map((x) => [x.id, x]))
 
 describe('getAccountActions', () => {
-  it('live account: record-payment is the enabled primary; waive enabled when fees>0', () => {
+  it('live account: record-payment is the enabled primary; waive enabled', () => {
     const m = byId(account(), baseCtx)
     expect(m['record-payment'].primary).toBe(true)
     expect(m['record-payment'].enabled).toBe(true)
@@ -38,10 +38,10 @@ describe('getAccountActions', () => {
     expect(m['waive-fee'].enabled).toBe(true)
   })
 
-  it('waive disabled when fees are zero', () => {
+  it('waive stays enabled at zero fee balance (retroactive waiver of a paid fee)', () => {
     const m = byId(account({ liveBalance: { principalBalance: 160, feeBalance: 0, totalOutstanding: 160, asOf: '2026-06-09T00:00:00Z' } }), baseCtx)
-    expect(m['waive-fee'].enabled).toBe(false)
-    expect(m['waive-fee'].disabledReason).toBe('No fees to waive')
+    expect(m['waive-fee'].enabled).toBe(true)
+    expect(m['waive-fee'].disabledReason).toBeNull()
   })
 
   it('pending_disbursement: disburse is the enabled primary, all money actions disabled', () => {

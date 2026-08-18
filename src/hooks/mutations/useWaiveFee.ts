@@ -50,8 +50,12 @@ export interface WaiveFeeResponse {
     typeLabel: string
     date: string
     feeDelta: number
+    // A retroactive waiver (fee already settled by a repayment) arrives with
+    // feeDelta = 0 and the waived amount in principalDelta.
+    principalDelta: number
     totalDelta: number
     feeAfter: number
+    principalAfter: number
     totalAfter: number
     description: string
   }
