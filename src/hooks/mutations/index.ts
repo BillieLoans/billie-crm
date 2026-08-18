@@ -25,3 +25,9 @@ export { useApplyStopContact } from './useApplyStopContact'
 export type { ApplyStopContactParams } from './useApplyStopContact'
 export { useAdvanceToNextStep } from './useAdvanceToNextStep'
 export type { AdvanceToNextStepParams } from './useAdvanceToNextStep'
+
+// Issue report mutations (in-app problem reports)
+export { useReportIssue } from './useReportIssue'
+export type { ReportIssueParams, ReportIssueResult } from './useReportIssue'
+export { useResolveIssue } from './useResolveIssue'
+export type { ResolveIssueParams, ResolveIssueResult } from './useResolveIssue'

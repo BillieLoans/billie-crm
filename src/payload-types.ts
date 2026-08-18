@@ -86,6 +86,7 @@ export interface Config {
     'release-batches': ReleaseBatch;
     'release-grants': ReleaseGrant;
     'release-gate-status': ReleaseGateStatus;
+    issues: Issue;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -112,6 +113,7 @@ export interface Config {
     'release-batches': ReleaseBatchesSelect<false> | ReleaseBatchesSelect<true>;
     'release-grants': ReleaseGrantsSelect<false> | ReleaseGrantsSelect<true>;
     'release-gate-status': ReleaseGateStatusSelect<false> | ReleaseGateStatusSelect<true>;
+    issues: IssuesSelect<false> | IssuesSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -1868,6 +1870,65 @@ export interface ReleaseGateStatus {
   createdAt: string;
 }
 /**
+ * In-app problem reports raised by staff, with captured diagnostics
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "issues".
+ */
+export interface Issue {
+  id: string;
+  /**
+   * Derived from the first line of the description (auto-set)
+   */
+  title?: string | null;
+  /**
+   * What the reporter was doing and what went wrong
+   */
+  description: string;
+  /**
+   * What prompted the report — `server-error` / `network-error`, or blank when raised manually
+   */
+  triggerReason?: string | null;
+  /**
+   * S3 URI of the captured screenshot (s3://…), if one was attached
+   */
+  screenshotUri?: string | null;
+  /**
+   * Captured context, device, interactions, routes, API calls and errors
+   */
+  diagnostics:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Open = awaiting triage. Resolved = actioned or dismissed.
+   */
+  status: 'open' | 'resolved';
+  /**
+   * What was done about this report
+   */
+  resolutionNote?: string | null;
+  /**
+   * When the report was resolved (auto-set)
+   */
+  resolvedAt?: string | null;
+  /**
+   * User who resolved this report (auto-populated from session)
+   */
+  resolvedBy?: (string | null) | User;
+  /**
+   * User who filed this report (auto-populated from session)
+   */
+  reportedBy?: (string | null) | User;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
@@ -1966,6 +2027,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'release-gate-status';
         value: string | ReleaseGateStatus;
+      } | null)
+    | ({
+        relationTo: 'issues';
+        value: string | Issue;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -2783,6 +2848,24 @@ export interface ReleaseGateStatusSelect<T extends boolean = true> {
   mode?: T;
   setBy?: T;
   changedAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "issues_select".
+ */
+export interface IssuesSelect<T extends boolean = true> {
+  title?: T;
+  description?: T;
+  triggerReason?: T;
+  screenshotUri?: T;
+  diagnostics?: T;
+  status?: T;
+  resolutionNote?: T;
+  resolvedAt?: T;
+  resolvedBy?: T;
+  reportedBy?: T;
   updatedAt?: T;
   createdAt?: T;
 }

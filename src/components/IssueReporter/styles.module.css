@@ -1,0 +1,255 @@
+/* IssueReporter — floating launcher + report modal styles.
+   Follows the FailedActions convention: Payload theme vars with literal
+   fallbacks so the chrome still reads correctly before the theme loads. */
+
+/* ===== Floating launcher (bottom-LEFT; FailedActions owns bottom-right) ===== */
+
+.launcherContainer {
+  position: fixed;
+  bottom: 24px;
+  left: 24px;
+  z-index: 1000;
+}
+
+.launcherButton {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid var(--theme-elevation-200, #444);
+  border-radius: 999px;
+  background: var(--theme-elevation-50, #1a1a1a);
+  color: var(--theme-text, #fff);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.launcherButton:hover {
+  background: var(--theme-elevation-100, #2a2a2a);
+  border-color: var(--theme-elevation-300, #555);
+}
+
+.launcherButton:focus-visible {
+  outline: 2px solid var(--theme-elevation-500, #666);
+  outline-offset: 2px;
+}
+
+.launcherIcon {
+  font-size: 15px;
+  line-height: 1;
+}
+
+/* ===== Modal body ===== */
+
+.modalBody {
+  padding: 20px;
+}
+
+.modalFooter {
+  display: flex;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--theme-elevation-200, #333);
+}
+
+.intro {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: var(--theme-elevation-500, #888);
+}
+
+/* ===== Error summary (GOV.UK pattern — ux-standards.md §3) ===== */
+
+.errorSummary {
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  border: 2px solid #dc2626;
+  border-radius: 6px;
+  background: rgba(220, 38, 38, 0.08);
+}
+
+.errorSummaryTitle {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #dc2626;
+}
+
+.errorSummaryList {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+}
+
+.errorSummaryList a {
+  color: #dc2626;
+  text-decoration: underline;
+}
+
+/* ===== Form fields ===== */
+
+.fieldGroup {
+  margin-bottom: 16px;
+}
+
+.fieldLabel {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--theme-text, #fff);
+}
+
+.textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--theme-elevation-200, #444);
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 120px;
+  outline: none;
+  background: var(--theme-elevation-100, #2a2a2a);
+  color: var(--theme-text, #fff);
+  box-sizing: border-box;
+}
+
+.textarea:focus {
+  box-shadow: 0 0 0 2px #3b82f6;
+  border-color: #3b82f6;
+}
+
+.textarea:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.textareaInvalid {
+  border-color: #dc2626;
+}
+
+.charCount {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--theme-elevation-500, #888);
+}
+
+.fieldError {
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #dc2626;
+}
+
+/* ===== Screenshot ===== */
+
+.checkboxLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--theme-text, #fff);
+  cursor: pointer;
+}
+
+.checkboxLabel input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.previewWrap {
+  margin-top: 10px;
+}
+
+.previewImage {
+  display: block;
+  max-width: 100%;
+  max-height: 220px;
+  border: 1px solid var(--theme-elevation-200, #444);
+  border-radius: 6px;
+  background: var(--theme-elevation-100, #2a2a2a);
+}
+
+.removeBtn {
+  margin-top: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--theme-elevation-200, #444);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--theme-elevation-600, #aaa);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.removeBtn:hover:not(:disabled) {
+  background: var(--theme-elevation-100, #2a2a2a);
+  color: var(--theme-text, #fff);
+}
+
+.fileInput {
+  display: block;
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--theme-text, #fff);
+}
+
+.hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--theme-elevation-500, #888);
+}
+
+/* ===== Footer buttons ===== */
+
+.cancelBtn {
+  flex: 1;
+  padding: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  border: 1px solid var(--theme-elevation-200, #444);
+  border-radius: 6px;
+  background: var(--theme-elevation-100, #2a2a2a);
+  color: var(--theme-text, #fff);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.cancelBtn:hover:not(:disabled) {
+  background: var(--theme-elevation-150, #333);
+}
+
+.cancelBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.submitBtn {
+  flex: 1;
+  padding: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  border: none;
+  border-radius: 6px;
+  background: #2563eb;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.submitBtn:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.submitBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

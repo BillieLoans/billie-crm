@@ -19,6 +19,7 @@ import * as migration_20260714_053341_word_of_mouth_source from './20260714_0533
 import * as migration_20260802_164058_applicant_release from './20260802_164058_applicant_release';
 import * as migration_20260804_051712_applicant_release_customer_link from './20260804_051712_applicant_release_customer_link';
 import * as migration_20260804_060425_gate_mode_closed from './20260804_060425_gate_mode_closed';
+import * as migration_20260818_001906_issues_collection from './20260818_001906_issues_collection';
 
 export const migrations = [
   {
@@ -124,6 +125,11 @@ export const migrations = [
   {
     up: migration_20260804_060425_gate_mode_closed.up,
     down: migration_20260804_060425_gate_mode_closed.down,
-    name: '20260804_060425_gate_mode_closed'
+    name: '20260804_060425_gate_mode_closed',
+  },
+  {
+    up: migration_20260818_001906_issues_collection.up,
+    down: migration_20260818_001906_issues_collection.down,
+    name: '20260818_001906_issues_collection'
   },
 ];

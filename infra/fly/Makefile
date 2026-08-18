@@ -34,6 +34,10 @@ APP_NAME := $(SERVICE)-$(ENV)
 ORG_NAME := $(if $(filter $(ENV),prod),$(FLY_ORG_PROD),$(FLY_ORG_NONPROD))
 IS_PROD := $(filter $(ENV),prod)
 IMAGE_LABEL ?= $(ENV)-$(shell git -C "$(WORKTREE_ROOT)" rev-parse --short HEAD 2>/dev/null || echo manual)
+# Commit sha baked into the client bundle as NEXT_PUBLIC_BUILD_SHA (see
+# Dockerfile.demo builder stage). Optional — empty outside a git checkout, in
+# which case the --build-arg is omitted entirely and the var stays unset.
+BUILD_SHA ?= $(shell git -C "$(WORKTREE_ROOT)" rev-parse --short HEAD 2>/dev/null)
 
 define PROD_CHECK
 	@if [ -n "$(IS_PROD)" ] && [ "$(CONFIRM)" != "1" ]; then \
@@ -186,6 +190,7 @@ deploy: check-config preflight
 	@echo ""
 	@FLY_OPTS="--strategy rolling --image-label $(IMAGE_LABEL)"; \
 	[ "$(NO_CACHE)" = "1" ] && FLY_OPTS="$$FLY_OPTS --no-cache"; \
+	[ -n "$(BUILD_SHA)" ] && FLY_OPTS="$$FLY_OPTS --build-arg NEXT_PUBLIC_BUILD_SHA=$(BUILD_SHA)"; \
 	if [ -n "$(GITHUB_TOKEN)" ]; then \
 		echo "Building with GITHUB_TOKEN (for private SDKs)"; \
 		fly deploy "$(APP_DIR)" -c "$(CONFIG_FILE)" -a "$(APP_NAME)" --build-secret GITHUB_TOKEN="$(GITHUB_TOKEN)" $$FLY_OPTS; \

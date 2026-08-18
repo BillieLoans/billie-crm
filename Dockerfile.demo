@@ -93,6 +93,12 @@ RUN npm install -g corepack@latest && corepack enable
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# Deploy identity stamped into the client bundle. NEXT_PUBLIC_* vars are inlined
+# by Next at build time, so this must be set BEFORE `pnpm run build`. Optional —
+# unset leaves it as an empty string and callers must treat it as absent.
+ARG NEXT_PUBLIC_BUILD_SHA
+ENV NEXT_PUBLIC_BUILD_SHA=$NEXT_PUBLIC_BUILD_SHA
+
 # Build Next.js (standalone output)
 RUN pnpm run build
 

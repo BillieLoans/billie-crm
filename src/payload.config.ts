@@ -28,6 +28,7 @@ import { Feedback } from './collections/Feedback'
 import { ReleaseBatches } from './collections/ReleaseBatches'
 import { ReleaseGrants } from './collections/ReleaseGrants'
 import { ReleaseGateStatus } from './collections/ReleaseGateStatus'
+import { Issues } from './collections/Issues'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -70,6 +71,7 @@ export default buildConfig({
         '@/components/navigation/NavExportsLink#NavExportsLink',
         '@/components/navigation/NavInvestigationLink#NavInvestigationLink',
         '@/components/navigation/NavMarketingLink#NavMarketingLink',
+        '@/components/navigation/NavIssueReportsLink#NavIssueReportsLink',
       ],
       // Notification bell in header actions (next to user profile button)
       actions: ['@/components/Notifications/NotificationAction#NotificationAction'],
@@ -154,10 +156,16 @@ export default buildConfig({
           Component: '@/components/MarketingView/MarketingViewWithTemplate#MarketingViewWithTemplate',
           path: '/marketing/:segments*',
         },
+        // Issue Reports view (in-app problem reports) — catch-all for report-detail sub-routes
+        issueReports: {
+          Component:
+            '@/components/IssueReportsView/IssueReportsViewWithTemplate#IssueReportsViewWithTemplate',
+          path: '/issue-reports/:segments*',
+        },
       },
     },
   },
-  collections: [Users, Media, Customers, Conversations, Applications, LoanAccounts, WriteOffRequests, ReapplicationBlockClearRequests, ContactNotes, Notifications, CollectionsCases, Contacts, Interactions, ContactAuditLog, Batches, Feedback, ReleaseBatches, ReleaseGrants, ReleaseGateStatus],
+  collections: [Users, Media, Customers, Conversations, Applications, LoanAccounts, WriteOffRequests, ReapplicationBlockClearRequests, ContactNotes, Notifications, CollectionsCases, Contacts, Interactions, ContactAuditLog, Batches, Feedback, ReleaseBatches, ReleaseGrants, ReleaseGateStatus, Issues],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || 'build-placeholder-not-for-production',
   typescript: {
@@ -254,6 +262,21 @@ export default buildConfig({
                 t.releaseId,
                 t.mobileE164,
               ),
+            }),
+          })
+        }
+
+        // Compound index for the issue-reports triage grid, which lists open
+        // reports newest-first. Mirrors the conversations monitor-grid pattern
+        // above — the collection config can only express single-field indexes.
+        const issues = (schema.tables as Record<string, unknown>).issues as
+          | Parameters<typeof extendTable>[0]['table']
+          | undefined
+        if (issues) {
+          extendTable({
+            table: issues,
+            extraConfig: (t) => ({
+              issuesTriageGridIdx: index('issues_triage_grid_idx').on(t.status, desc(t.createdAt)),
             }),
           })
         }

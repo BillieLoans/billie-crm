@@ -17,6 +17,7 @@ import { LedgerStatusIndicator } from '@/components/LedgerStatus'
 import { ReadOnlyBanner } from '@/components/ReadOnlyBanner'
 import { GateClosedBanner } from '@/components/GateClosedBanner'
 import { FailedActionsBadge } from '@/components/FailedActions'
+import { IssueReporter, RouteTracker } from '@/components/IssueReporter'
 import { UserSessionGuard } from '@/components/UserSessionGuard'
 // Note: NotificationIndicator is now rendered through Payload's actions slot
 import { useUIStore } from '@/stores/ui'
@@ -223,6 +224,8 @@ const AuthenticatedIndicators: React.FC = () => {
       <GlobalCommandPalette />
       <LedgerStatusIndicator />
       <FailedActionsBadge />
+      <RouteTracker />
+      <IssueReporter />
     </>
   )
 }

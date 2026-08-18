@@ -119,3 +119,11 @@ export const PresignedUrlSchema = z.object({
     'text/csv',
   ], { message: 'Unsupported file type. Allowed: PDF, JPEG, PNG, WebP, Excel, CSV.' }),
 })
+
+// =============================================================================
+// Issue Report Schemas
+// =============================================================================
+
+export const IssueScreenshotPresignSchema = z.object({
+  contentType: z.enum(['image/jpeg', 'image/png']),
+})

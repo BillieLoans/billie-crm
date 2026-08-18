@@ -139,6 +139,15 @@ export type { BatchPreflight } from './useBatchPreflight'
 export { useMarketingContactSearch } from './useMarketingContactSearch'
 export type { MarketingContactHit } from './useMarketingContactSearch'
 
+// Issue report hooks (in-app problem reports)
+export {
+  useIssueReports,
+  useOpenIssueCount,
+  useIssueReport,
+  issueReportsKeys,
+} from './useIssueReports'
+export type { IssueReport, IssueReportsResponse } from './useIssueReports'
+
 // Re-export types from canonical location
 export type {
   CustomerSearchResult,

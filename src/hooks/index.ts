@@ -137,6 +137,19 @@ export {
 } from './mutations/useReleaseCommands'
 export type { ReleasePreflightResult, SetGateModeVars } from './mutations/useReleaseCommands'
 
+// Issue reports queries & mutations (in-app problem reports)
+export {
+  useIssueReports,
+  useOpenIssueCount,
+  useIssueReport,
+  issueReportsKeys,
+} from './queries/useIssueReports'
+export type { IssueReport, IssueReportsResponse } from './queries/useIssueReports'
+export { useReportIssue } from './mutations/useReportIssue'
+export type { ReportIssueParams, ReportIssueResult } from './mutations/useReportIssue'
+export { useResolveIssue } from './mutations/useResolveIssue'
+export type { ResolveIssueParams, ResolveIssueResult } from './mutations/useResolveIssue'
+
 export { useLendingAccess } from './useLendingAccess'
 
 // Re-export types from canonical location

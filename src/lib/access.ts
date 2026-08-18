@@ -69,6 +69,14 @@ export function hasAnyRole(user: unknown): boolean {
 }
 
 /**
+ * Check if a user can file an in-app problem report (everyone except service accounts).
+ */
+export function canReportIssue(user: unknown): boolean {
+  const role = getUserRole(user)
+  return role !== undefined && role !== 'service'
+}
+
+/**
  * Payload admin.hidden function to hide collections from non-admin users.
  * Use this in collection config: `admin: { hidden: hideFromNonAdmins }`
  */

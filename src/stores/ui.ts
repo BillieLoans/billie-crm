@@ -25,6 +25,13 @@ interface UIState {
   // Payment to auto-expand when returning to Overview
   expandedPaymentNumber: number | null
   setExpandedPaymentNumber: (paymentNumber: number | null) => void
+
+  // Issue reporter modal
+  reportIssueOpen: boolean
+  /** What opened the reporter — 'server-error' | 'network-error' | null for manual */
+  reportIssueTrigger: string | null
+  openReportIssue: (trigger?: string) => void
+  closeReportIssue: () => void
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -54,4 +61,11 @@ export const useUIStore = create<UIState>((set) => ({
   // Auto-expand payment
   expandedPaymentNumber: null,
   setExpandedPaymentNumber: (paymentNumber) => set({ expandedPaymentNumber: paymentNumber }),
+
+  // Issue reporter
+  reportIssueOpen: false,
+  reportIssueTrigger: null,
+  openReportIssue: (trigger) => set({ reportIssueOpen: true, reportIssueTrigger: trigger ?? null }),
+  // Clear the trigger on close so the next manual open isn't labelled an error
+  closeReportIssue: () => set({ reportIssueOpen: false, reportIssueTrigger: null }),
 }))

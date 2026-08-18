@@ -11,6 +11,7 @@ import {
   RECENT_CUSTOMERS_STORAGE_KEY,
   FAILED_ACTIONS_STORAGE_KEY,
 } from '@/lib/constants'
+import { clearIssueDiagnostics } from '@/lib/issue-diagnostics'
 
 /**
  * Clears all user-specific data from stores and localStorage.
@@ -30,6 +31,9 @@ function clearUserSessionData(): void {
   if (typeof window !== 'undefined') {
     localStorage.removeItem(RECENT_CUSTOMERS_STORAGE_KEY)
     localStorage.removeItem(FAILED_ACTIONS_STORAGE_KEY)
+    // Issue-reporter diagnostics buffers (interactions/routes/api calls/errors)
+    // — User A's browsing trail must never end up on User B's report
+    clearIssueDiagnostics()
   }
 }
 
@@ -40,6 +44,7 @@ function clearUserSessionData(): void {
  * browser and clears all user-specific localStorage data to prevent:
  * - User B seeing User A's recently viewed customers
  * - User B seeing User A's failed action queue
+ * - User B's issue report carrying User A's diagnostics trail
  * - Any other session-specific data bleeding across users
  *
  * This component should be rendered inside the Providers component,
