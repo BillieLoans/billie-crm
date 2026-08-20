@@ -58,6 +58,17 @@ export function ApplicationsView() {
 
   // Keyboard navigation: arrow keys to move between cards, Enter to open
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    // The container wraps the FilterBar too — leave arrow keys alone inside
+    // form controls (caret movement in inputs, option choice in selects).
+    const target = e.target as HTMLElement
+    if (
+      target.tagName === 'INPUT' ||
+      target.tagName === 'TEXTAREA' ||
+      target.tagName === 'SELECT' ||
+      target.isContentEditable
+    ) {
+      return
+    }
     const cards = Array.from(
       document.querySelectorAll<HTMLElement>('[data-conversation-card]'),
     )

@@ -298,3 +298,80 @@ describe('ConversationsQuerySchema', () => {
     expect(result.success).toBe(false)
   })
 })
+
+// =============================================================================
+// ApplicationsView container keyboard navigation — arrow keys must not hijack
+// the caret inside the FilterBar's form controls
+// =============================================================================
+
+vi.mock('@/hooks/queries/useConversations', () => ({
+  useConversations: () => ({
+    data: {
+      conversations: [
+        {
+          conversationId: 'conv-kb-1',
+          customer: { fullName: 'Kb One', customerId: 'CUS-KB1' },
+          applicationNumber: 'APP-KB1',
+          status: 'active',
+          decisionStatus: null,
+          application: { loanAmount: 200, purpose: 'Test' },
+          messageCount: 1,
+          lastMessageAt: null,
+          updatedAt: '2026-08-20T00:00:00.000Z',
+          startedAt: '2026-08-20T00:00:00.000Z',
+        },
+        {
+          conversationId: 'conv-kb-2',
+          customer: { fullName: 'Kb Two', customerId: 'CUS-KB2' },
+          applicationNumber: 'APP-KB2',
+          status: 'active',
+          decisionStatus: null,
+          application: { loanAmount: 300, purpose: 'Test' },
+          messageCount: 1,
+          lastMessageAt: null,
+          updatedAt: '2026-08-20T00:00:00.000Z',
+          startedAt: '2026-08-20T00:00:00.000Z',
+        },
+      ],
+      hasMore: false,
+      total: 2,
+    },
+    isLoading: false,
+    isError: false,
+    error: null,
+    dataUpdatedAt: Date.now(),
+    fetchNextPage: vi.fn(),
+    isFetchingNextPage: false,
+  }),
+}))
+
+describe('ApplicationsView keyboard navigation', () => {
+  afterEach(() => cleanup())
+
+  it('arrow keys inside the search input move the caret (default not prevented, focus kept)', async () => {
+    const { ApplicationsView } = await import('@/components/ApplicationsView')
+    render(<ApplicationsView />)
+    const input = screen.getByLabelText('Search conversations')
+    input.focus()
+    // fireEvent returns false when a handler called preventDefault
+    expect(fireEvent.keyDown(input, { key: 'ArrowLeft' })).toBe(true)
+    expect(fireEvent.keyDown(input, { key: 'ArrowRight' })).toBe(true)
+    expect(document.activeElement).toBe(input)
+  })
+
+  it('arrow keys inside the filter selects are not hijacked', async () => {
+    const { ApplicationsView } = await import('@/components/ApplicationsView')
+    render(<ApplicationsView />)
+    const select = screen.getByLabelText('Filter by conversation status')
+    select.focus()
+    expect(fireEvent.keyDown(select, { key: 'ArrowDown' })).toBe(true)
+  })
+
+  it('arrow keys on a conversation card still drive grid navigation', async () => {
+    const { ApplicationsView } = await import('@/components/ApplicationsView')
+    render(<ApplicationsView />)
+    const card = screen.getAllByRole('link', { name: /^Conversation APP-KB/ })[0]
+    card.focus()
+    expect(fireEvent.keyDown(card, { key: 'ArrowRight' })).toBe(false)
+  })
+})
