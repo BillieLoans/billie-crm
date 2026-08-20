@@ -9,7 +9,8 @@
  *   decision  - decision status filter (approved, declined, no_decision)
  *   from      - ISO date string — updatedAt >= from
  *   to        - ISO date string — updatedAt <= to
- *   q         - text search on customerIdString / applicationNumber
+ *   q         - text search on customerIdString / applicationNumber / statement account holders /
+ *               customer name, email or phone
  *   limit     - page size (1-100, default 20)
  *   cursor    - opaque cursor from previous response
  *
@@ -21,6 +22,8 @@ import { getPayload, type Where } from 'payload'
 import { headers } from 'next/headers'
 import configPromise from '@payload-config'
 import { hasAnyRole } from '@/lib/access'
+import { conversationSearchOrClauses } from '@/lib/conversation-search'
+import { customerSearchOrClauses } from '@/lib/customer-search'
 import { ConversationsQuerySchema, type ConversationsListResponse } from '@/lib/schemas/conversations'
 
 export async function GET(request: NextRequest) {
@@ -86,12 +89,12 @@ export async function GET(request: NextRequest) {
     if (q && q.trim()) {
       const term = q.trim()
 
-      // Search by customer name requires resolving fullName → customerId(s) first,
-      // since conversations only store customerIdString. Cap the lookup to avoid
-      // huge IN clauses on broad terms.
+      // Search by customer name/email/phone requires resolving the term →
+      // customerId(s) first, since conversations only store customerIdString.
+      // Cap the lookup to avoid huge IN clauses on broad terms.
       const customerMatches = await payload.find({
         collection: 'customers',
-        where: { fullName: { like: term } },
+        where: { or: customerSearchOrClauses(term, 'like') },
         limit: 200,
         select: { customerId: true },
         depth: 0,
@@ -100,14 +103,7 @@ export async function GET(request: NextRequest) {
         .map((c) => (c as { customerId?: string }).customerId)
         .filter((v): v is string => Boolean(v))
 
-      const orClauses: Where[] = [
-        { customerIdString: { like: term } },
-        { applicationNumber: { like: term } },
-      ]
-      if (matchedCustomerIds.length > 0) {
-        orClauses.push({ customerIdString: { in: matchedCustomerIds } })
-      }
-      filters.push({ or: orClauses })
+      filters.push({ or: conversationSearchOrClauses(term, matchedCustomerIds) })
     }
 
     // Cursor: keyset pagination over (updatedAt DESC, id DESC).

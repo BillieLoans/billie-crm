@@ -443,6 +443,15 @@ export const Conversations: CollectionConfig = {
       },
     },
     {
+      name: 'statementAccountHolders',
+      type: 'text',
+      admin: {
+        readOnly: true,
+        description:
+          'Bank-statement account holder names joined with " | ", set by the event processor from statement_retrieval_complete — search target only, never the customer name',
+      },
+    },
+    {
       name: 'decisionStatus',
       type: 'select',
       options: [

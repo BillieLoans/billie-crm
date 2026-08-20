@@ -898,6 +898,10 @@ export interface Conversation {
     | boolean
     | null;
   /**
+   * Bank-statement account holder names joined with " | ", set by the event processor from statement_retrieval_complete — search target only, never the customer name
+   */
+  statementAccountHolders?: string | null;
+  /**
    * Final decision outcome for filtering in monitoring view
    */
   decisionStatus?: ('approved' | 'declined' | 'referred' | 'no_decision') | null;
@@ -2305,6 +2309,7 @@ export interface ConversationsSelect<T extends boolean = true> {
         creditAssessmentComplete?: T;
       };
   statementCapture?: T;
+  statementAccountHolders?: T;
   decisionStatus?: T;
   noticeboard?:
     | T

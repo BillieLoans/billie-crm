@@ -24,7 +24,7 @@ import asyncpg
 import structlog
 
 from ..config import settings
-from ..db import coerce_date, merge_jsonb, upsert, upsert_conversation
+from ..db import coerce_date, merge_jsonb, update_by_key, upsert, upsert_conversation
 from .identity_verification import mirror_lab_verification
 from .sanitize import parse_payload, safe_str, strip_dollar_keys
 
@@ -786,7 +786,10 @@ async def handle_conversation_summary(pool: asyncpg.Pool, event: dict[str, Any])
 
 
 async def _set_statement_capture(
-    pool: asyncpg.Pool, conversation_id: str, patch: dict[str, Any]
+    pool: asyncpg.Pool,
+    conversation_id: str,
+    patch: dict[str, Any],
+    columns: dict[str, Any] | None = None,
 ) -> None:
     async with pool.acquire() as conn:
         async with conn.transaction():
@@ -799,6 +802,14 @@ async def _set_statement_capture(
                 key_value=conversation_id,
                 patch=patch,
             )
+            if columns:
+                await update_by_key(
+                    conn,
+                    "conversations",
+                    key_column="conversation_id",
+                    key_value=conversation_id,
+                    values=columns,
+                )
 
 
 async def handle_statement_consent_initiated(pool: asyncpg.Pool, event: dict[str, Any]) -> None:
@@ -874,14 +885,31 @@ async def handle_statement_retrieval_complete(pool: asyncpg.Pool, event: dict[st
             if isinstance(locs, list) and locs and isinstance(locs[0], str):
                 file_locations[dst_key] = locs[0]
 
+    # payload.account_summary.account_holders — added 2026-08-20; absent on
+    # historical events, possibly [] after. Upstream dedupes; we defensively
+    # keep only non-blank strings.
+    account_holders: list[str] = []
+    summary = payload.get("account_summary")
+    if isinstance(summary, dict) and isinstance(summary.get("account_holders"), list):
+        account_holders = [
+            h.strip() for h in summary["account_holders"] if isinstance(h, str) and h.strip()
+        ]
+
     patch: dict[str, Any] = {"retrievalComplete": True}
     if file_locations:
         patch["fileLocations"] = file_locations
+    columns: dict[str, Any] | None = None
+    if account_holders:
+        patch["accountHolders"] = account_holders
+        # Flat text mirror ILIKE'd by the CRM Applications search.
+        columns = {"statement_account_holders": " | ".join(account_holders)}
 
-    logger.bind(conversation_id=conversation_id, file_count=len(file_locations)).info(
-        "Processing statement_retrieval_complete"
-    )
-    await _set_statement_capture(pool, conversation_id, patch)
+    logger.bind(
+        conversation_id=conversation_id,
+        file_count=len(file_locations),
+        holder_count=len(account_holders),
+    ).info("Processing statement_retrieval_complete")
+    await _set_statement_capture(pool, conversation_id, patch, columns=columns)
 
 
 async def handle_affordability_report_downloaded(pool: asyncpg.Pool, event: dict[str, Any]) -> None:

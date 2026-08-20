@@ -20,6 +20,7 @@ import * as migration_20260802_164058_applicant_release from './20260802_164058_
 import * as migration_20260804_051712_applicant_release_customer_link from './20260804_051712_applicant_release_customer_link';
 import * as migration_20260804_060425_gate_mode_closed from './20260804_060425_gate_mode_closed';
 import * as migration_20260818_001906_issues_collection from './20260818_001906_issues_collection';
+import * as migration_20260820_063404_statement_account_holders from './20260820_063404_statement_account_holders';
 
 export const migrations = [
   {
@@ -130,6 +131,11 @@ export const migrations = [
   {
     up: migration_20260818_001906_issues_collection.up,
     down: migration_20260818_001906_issues_collection.down,
-    name: '20260818_001906_issues_collection'
+    name: '20260818_001906_issues_collection',
+  },
+  {
+    up: migration_20260820_063404_statement_account_holders.up,
+    down: migration_20260820_063404_statement_account_holders.down,
+    name: '20260820_063404_statement_account_holders'
   },
 ];

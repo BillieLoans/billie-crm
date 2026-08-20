@@ -189,6 +189,77 @@ class TestHandleStatementRetrievalComplete:
         assert patch == {"retrievalComplete": True}
 
     @pytest.mark.asyncio
+    async def test_stores_account_holders_in_jsonb_and_search_column(self, mock_pool):
+        await handle_statement_retrieval_complete(
+            mock_pool,
+            {
+                "cid": "conv-holders",
+                "payload": {
+                    "statement_provider": "BSDC",
+                    "account_summary": {
+                        "total_accounts": 3,
+                        "account_holders": ["Jane Doe", "John & Jane Doe"],
+                    },
+                },
+            },
+        )
+        patch = _patch_for(mock_pool)
+        assert patch["accountHolders"] == ["Jane Doe", "John & Jane Doe"]
+        updates = [c for c in mock_pool.calls_against("conversations") if c.op == "UPDATE"]
+        holder_sets = [c.values for c in updates if "statement_account_holders" in c.values]
+        assert holder_sets, "expected statement_account_holders column write"
+        assert holder_sets[-1]["statement_account_holders"] == "Jane Doe | John & Jane Doe"
+
+    @pytest.mark.asyncio
+    async def test_account_holders_absent_on_historical_event(self, mock_pool):
+        await handle_statement_retrieval_complete(
+            mock_pool, {"cid": "conv-old", "payload": {"application_number": "A"}}
+        )
+        patch = _patch_for(mock_pool)
+        assert "accountHolders" not in patch
+        updates = [c for c in mock_pool.calls_against("conversations") if c.op == "UPDATE"]
+        assert not any("statement_account_holders" in c.values for c in updates)
+
+    @pytest.mark.asyncio
+    async def test_account_holders_empty_list_skips_column_write(self, mock_pool):
+        await handle_statement_retrieval_complete(
+            mock_pool,
+            {"cid": "conv-empty", "payload": {"account_summary": {"account_holders": []}}},
+        )
+        patch = _patch_for(mock_pool)
+        assert "accountHolders" not in patch
+        updates = [c for c in mock_pool.calls_against("conversations") if c.op == "UPDATE"]
+        assert not any("statement_account_holders" in c.values for c in updates)
+
+    @pytest.mark.asyncio
+    async def test_account_holders_drops_blank_and_non_string_entries(self, mock_pool):
+        await handle_statement_retrieval_complete(
+            mock_pool,
+            {
+                "cid": "conv-messy",
+                "payload": {
+                    "account_summary": {
+                        "account_holders": ["  J & S SMITH  ", "", 42, None, "Jane Doe"]
+                    }
+                },
+            },
+        )
+        patch = _patch_for(mock_pool)
+        assert patch["accountHolders"] == ["J & S SMITH", "Jane Doe"]
+        updates = [c for c in mock_pool.calls_against("conversations") if c.op == "UPDATE"]
+        holder_sets = [c.values for c in updates if "statement_account_holders" in c.values]
+        assert holder_sets[-1]["statement_account_holders"] == "J & S SMITH | Jane Doe"
+
+    @pytest.mark.asyncio
+    async def test_account_holders_non_list_ignored(self, mock_pool):
+        await handle_statement_retrieval_complete(
+            mock_pool,
+            {"cid": "conv-bad", "payload": {"account_summary": {"account_holders": "Jane"}}},
+        )
+        patch = _patch_for(mock_pool)
+        assert "accountHolders" not in patch
+
+    @pytest.mark.asyncio
     async def test_skips_step_with_empty_file_locations(self, mock_pool):
         await handle_statement_retrieval_complete(
             mock_pool,

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useMemo, useRef, useEffect } from 'react'
+import React, { useMemo, useRef, useEffect } from 'react'
 import { useConversationFiltersStore } from '@/stores/conversationFilters'
 import styles from './styles.module.css'
 
@@ -56,7 +56,7 @@ export function FilterBar() {
       <input
         ref={searchRef}
         type="search"
-        placeholder="Search by customer name or app number (press /)"
+        placeholder="Search by name, email, phone or app number (press /)"
         className={styles.searchInput}
         defaultValue={filters.q}
         onChange={(e) => debouncedSetSearch(e.target.value)}

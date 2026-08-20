@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
 import { hasAnyRole } from '@/lib/access'
+import { customerSearchOrClauses } from '@/lib/customer-search'
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
@@ -26,12 +27,7 @@ export async function GET(request: NextRequest) {
     const results = await payload.find({
       collection: 'customers',
       where: {
-        or: [
-          { fullName: { contains: query } },
-          { emailAddress: { contains: query } },
-          { mobilePhoneNumber: { contains: query } },
-          { customerId: { contains: query } },
-        ],
+        or: [...customerSearchOrClauses(query, 'contains'), { customerId: { contains: query } }],
       },
       limit: 10,
     })
