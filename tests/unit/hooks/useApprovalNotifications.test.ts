@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, waitFor, act } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import React from 'react'
+import { installMockLocalStorage } from '../../utils/mock-local-storage'
 
 // Mock sonner toast
 const mockToastInfo = vi.fn()
@@ -36,9 +37,7 @@ const localStorageMock = (() => {
   }
 })()
 
-Object.defineProperty(window, 'localStorage', {
-  value: localStorageMock,
-})
+installMockLocalStorage(localStorageMock)
 
 // Create a fresh query client for each test
 function createTestQueryClient() {
