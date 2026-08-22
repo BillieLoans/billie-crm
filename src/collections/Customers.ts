@@ -348,7 +348,8 @@ export const Customers: CollectionConfig = {
           type: 'date',
           admin: {
             readOnly: true,
-            description: 'Emission time of the billieChat block state event that last wrote this mirror',
+            description:
+              'Emission time of the billieChat block state event that last wrote this mirror',
           },
         },
       ],
