@@ -141,6 +141,15 @@ def test_collection_handlers_registered(make_processor):
         assert event_type in proc.handlers, f"{event_type} not registered"
 
 
+def test_reapplication_block_state_changed_registered(make_processor):
+    """setup_handlers wires the customer-level block-state mirror handler."""
+    from billie_servicing.main import setup_handlers
+
+    proc = make_processor
+    setup_handlers(proc)
+    assert "reapplication_block.state.changed.v1" in proc.handlers
+
+
 def _stub_collection_models(monkeypatch):
     """Inject a fake billie_collection_events.models (the SDK isn't in the venv).
 

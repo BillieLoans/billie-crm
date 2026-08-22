@@ -442,3 +442,112 @@ async def handle_reapplication_block_auto_cleared(
         datetime.now(UTC),
     )
     log.info("Re-application ACTIVE_LOAN block auto-cleared", update_status=status)
+
+
+# Guard for the customer-level block mirror. The version clause orders events
+# within one projection epoch so the two unordered prod consumers converge on
+# the newest state; the changed_at clause lets a new epoch (a Redis rebuild or
+# merge fold restarts the document at v1) or a late `drop` event after a merge
+# be superseded instead of wedging the row forever (spec: Race analysis).
+STATE_VERSION_GUARD = (
+    "COALESCE(customers.reapplication_block_state_version, 0) "
+    "< EXCLUDED.reapplication_block_state_version "
+    "OR customers.reapplication_block_state_changed_at IS NULL "
+    "OR EXCLUDED.reapplication_block_state_changed_at "
+    "> customers.reapplication_block_state_changed_at"
+)
+
+
+async def handle_reapplication_block_state_changed(
+    pool: asyncpg.Pool, event: dict[str, Any]
+) -> None:
+    """Handle ``reapplication_block.state.changed.v1``.
+
+    Emitted by billieChat's reapplicationBlock service whenever the evaluated
+    block decision for a canonical customer changes — a decline recorded, a loan
+    closed, a manual clear applied, an identity merge, or the one-off backfill.
+    No customer interaction is required, so a customer declined today shows as
+    blocked in the servicing view today (spec: 2026-08-22 state-changed design).
+
+    This is the authoritative writer of the customer-level "currently blocked"
+    mirror (``reason`` / ``blocked_until`` / ``blocked_at`` /
+    ``application_number``). It never touches the clear-audit stamps
+    (``clear_status`` / ``cleared_at`` — owned by the cleared/auto_cleared
+    handlers) nor the conversation-level "why was THIS application halted"
+    record (owned by ``handle_reapplication_blocked``).
+
+    Guarded: ``state_version`` is the projection's CAS version and orders
+    events within one projection epoch, so arrival order across the two prod
+    consumers does not matter; ``changed_at`` lets a newer emission from a new
+    epoch (or after a merge) supersede a higher stale version. A rejected
+    (stale) write is logged at INFO and is not an error. A missing or
+    non-integer ``state_version`` is rejected before any DB access — fail fast
+    on malformed input rather than spend a round trip resolving the canonical
+    customer id first.
+    """
+    payload = parse_payload(event)
+    customer_id = (
+        safe_str(
+            payload.get("canonical_customer_id") or event.get("usr"),
+            "customer_id",
+        )
+        or None
+    )
+    raw_version = payload.get("state_version")
+    blocked = bool(payload.get("blocked"))
+    reason = payload.get("reason") if blocked else None
+
+    log = logger.bind(
+        customer_id=customer_id,
+        state_version=raw_version,
+        blocked=blocked,
+        reason=reason,
+    )
+    log.info("Processing reapplication_block.state.changed.v1")
+
+    try:
+        state_version = int(raw_version)
+    except (TypeError, ValueError):
+        log.warning("state.changed event without an integer state_version — ignored")
+        return
+
+    canonical = await resolve_canonical_customer_id(pool, customer_id)
+    if not canonical:
+        log.warning("state.changed event without resolvable customer id — no customer mirror")
+        return
+    log = log.bind(canonical_customer_id=canonical)
+
+    now = datetime.now(UTC)
+    changed_at = coerce_date(payload.get("changed_at")) or now
+    values: dict[str, Any] = {
+        "customer_id": canonical,
+        "reapplication_block_state_version": state_version,
+        "reapplication_block_state_changed_at": changed_at,
+        "reapplication_block_reason": reason,
+        "reapplication_block_blocked_until": (
+            coerce_date(payload.get("blocked_until")) if blocked else None
+        ),
+        "reapplication_block_application_number": (
+            payload.get("source_application_number") if blocked else None
+        ),
+        "updated_at": now,
+        "created_at": now,
+    }
+    if blocked:
+        # When the block became effective in the mirror. The fact's own time is
+        # source_decided_at (kept on the conversation record). Retained on
+        # unblock as audit, so it is simply not written then.
+        values["reapplication_block_blocked_at"] = changed_at
+
+    tag = await upsert(
+        pool,
+        "customers",
+        conflict_columns=["customer_id"],
+        values=values,
+        insert_only_columns=["created_at"],
+        update_where=STATE_VERSION_GUARD,
+    )
+    if str(tag).endswith(" 0"):
+        log.info("Stale reapplication_block.state.changed ignored (stored version is newer)")
+        return
+    log.info("Re-application block state mirrored")
