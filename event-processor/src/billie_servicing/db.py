@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from datetime import date, datetime
-from typing import Any, Union
+from typing import Any
 
 import asyncpg
 
@@ -34,7 +34,7 @@ def coerce_date(value: Any) -> Any:
     Returns the value unchanged if it's already a ``datetime``/``date``,
     ``None`` if coercion fails (caller decides whether NULL is acceptable).
     """
-    if value is None or isinstance(value, (datetime, date)):
+    if value is None or isinstance(value, datetime | date):
         return value
     if isinstance(value, str):
         # Strip a trailing 'Z' and try datetime first, then plain date.
@@ -51,7 +51,7 @@ def coerce_date(value: Any) -> Any:
 
 # Anything that exposes asyncpg's `execute` signature works here — Pool and
 # Connection both implement it.
-ExecuteTarget = Union[asyncpg.Pool, asyncpg.Connection]
+ExecuteTarget = asyncpg.Pool | asyncpg.Connection
 
 
 async def upsert(
@@ -133,9 +133,9 @@ async def upsert_conversation(
     in the CRM stays in sync. This helper centralises the version-increment
     logic so individual handlers don't have to re-write the same SQL.
     """
-    from datetime import datetime, timezone
+    from datetime import UTC, datetime
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     base_insert: dict[str, Any] = {
         "conversation_id": conversation_id,
         "application_number": "",  # NOT NULL — overwritten if set_values has it

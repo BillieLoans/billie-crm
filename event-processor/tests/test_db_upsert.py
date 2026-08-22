@@ -26,7 +26,12 @@ async def test_update_where_is_appended_to_do_update(mock_pool):
 
 
 async def test_no_update_where_leaves_sql_unchanged(mock_pool):
-    await upsert(mock_pool, "customers", conflict_columns=["customer_id"], values={"customer_id": "A", "x": 1})
+    await upsert(
+        mock_pool,
+        "customers",
+        conflict_columns=["customer_id"],
+        values={"customer_id": "A", "x": 1},
+    )
     sql = mock_pool.calls_against("customers")[-1].sql
     assert sql.endswith("DO UPDATE SET x = EXCLUDED.x")
     assert " WHERE " not in sql
