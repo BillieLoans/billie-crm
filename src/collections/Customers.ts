@@ -340,6 +340,17 @@ export const Customers: CollectionConfig = {
             description: 'billieChat block projection version that last wrote this mirror',
           },
         },
+        {
+          // state.changed.v1: emission time of the event that last wrote this mirror. Second
+          // clause of the event-processor's guard: a newer emission supersedes a higher stale
+          // version after a projection epoch reset (Redis rebuild / merge fold) or a merge.
+          name: 'stateChangedAt',
+          type: 'date',
+          admin: {
+            readOnly: true,
+            description: 'Emission time of the billieChat block state event that last wrote this mirror',
+          },
+        },
       ],
     },
     {

@@ -139,6 +139,9 @@ describe('Payload Collections Configuration', () => {
       const stateVersion = (group?.fields || []).find((f: any) => f.name === 'stateVersion')
       expect(stateVersion?.type).toBe('number')
       expect(stateVersion?.admin?.readOnly).toBe(true)
+      const stateChangedAt = (group?.fields || []).find((f: any) => f.name === 'stateChangedAt')
+      expect(stateChangedAt?.type).toBe('date')
+      expect(stateChangedAt?.admin?.readOnly).toBe(true)
     })
   })
 

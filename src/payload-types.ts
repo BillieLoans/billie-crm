@@ -344,6 +344,10 @@ export interface Customer {
      * billieChat block projection version that last wrote this mirror
      */
     stateVersion?: number | null;
+    /**
+     * Emission time of the billieChat block state event that last wrote this mirror
+     */
+    stateChangedAt?: string | null;
   };
   /**
    * Latest LAB EVS identity verification result
@@ -2187,6 +2191,7 @@ export interface CustomersSelect<T extends boolean = true> {
         clearStatus?: T;
         clearedAt?: T;
         stateVersion?: T;
+        stateChangedAt?: T;
       };
   identityVerification?:
     | T
