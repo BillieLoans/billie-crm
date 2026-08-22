@@ -16,8 +16,9 @@ The helpers here cover the two patterns every handler needs:
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
-from typing import Any, Iterable, Union
+from collections.abc import Iterable
+from datetime import date, datetime
+from typing import Any, Union
 
 import asyncpg
 
@@ -61,7 +62,8 @@ async def upsert(
     values: dict[str, Any],
     insert_only_columns: Iterable[str] | None = None,
     do_nothing_on_conflict: bool = False,
-) -> None:
+    update_where: str | None = None,
+) -> str:
     """Run ``INSERT … ON CONFLICT (cols) DO UPDATE SET …`` against ``table``.
 
     All keys in ``values`` are inserted. On conflict, every column listed in
@@ -76,6 +78,14 @@ async def upsert(
         insert_only_columns: columns that should not be updated on conflict.
         do_nothing_on_conflict: if True, use ``DO NOTHING`` instead of
             ``DO UPDATE``. Useful for append-only insertion paths.
+        update_where: optional SQL predicate appended to the ``DO UPDATE`` branch
+            (``DO UPDATE SET … WHERE <predicate>``) — for monotonic guards such as
+            ``COALESCE(t.version, 0) < EXCLUDED.version``. Caller-trusted SQL, like
+            the column names; never user input. Ignored with ``do_nothing_on_conflict``.
+
+    Returns:
+        asyncpg's command tag (``"INSERT 0 1"``; ``"INSERT 0 0"`` when the
+        ``update_where`` predicate rejected the update on conflict).
 
     Notes:
         The helper builds the SQL via simple string formatting — column names
@@ -104,8 +114,9 @@ async def upsert(
         else:
             set_clause = ", ".join(f"{c} = EXCLUDED.{c}" for c in update_cols)
             sql += f"DO UPDATE SET {set_clause}"
-
-    await target.execute(sql, *args)
+            if update_where:
+                sql += f" WHERE {update_where}"
+    return await target.execute(sql, *args)
 
 
 async def upsert_conversation(
