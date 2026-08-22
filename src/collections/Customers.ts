@@ -329,6 +329,17 @@ export const Customers: CollectionConfig = {
           type: 'date',
           admin: { description: 'When the block was cleared' },
         },
+        {
+          // state.changed.v1: billieChat's projection CAS version. The event-processor
+          // applies an event only when this stored version is lower, so the two
+          // unordered prod consumers converge on the newest state.
+          name: 'stateVersion',
+          type: 'number',
+          admin: {
+            readOnly: true,
+            description: 'billieChat block projection version that last wrote this mirror',
+          },
+        },
       ],
     },
     {

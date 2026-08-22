@@ -340,6 +340,10 @@ export interface Customer {
      * When the block was cleared
      */
     clearedAt?: string | null;
+    /**
+     * billieChat block projection version that last wrote this mirror
+     */
+    stateVersion?: number | null;
   };
   /**
    * Latest LAB EVS identity verification result
@@ -2182,6 +2186,7 @@ export interface CustomersSelect<T extends boolean = true> {
         applicationNumber?: T;
         clearStatus?: T;
         clearedAt?: T;
+        stateVersion?: T;
       };
   identityVerification?:
     | T
