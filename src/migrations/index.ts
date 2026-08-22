@@ -21,6 +21,8 @@ import * as migration_20260804_051712_applicant_release_customer_link from './20
 import * as migration_20260804_060425_gate_mode_closed from './20260804_060425_gate_mode_closed';
 import * as migration_20260818_001906_issues_collection from './20260818_001906_issues_collection';
 import * as migration_20260820_063404_statement_account_holders from './20260820_063404_statement_account_holders';
+import * as migration_20260822_121203_reapplication_block_state_version from './20260822_121203_reapplication_block_state_version';
+import * as migration_20260822_121938_reapplication_block_state_changed_at from './20260822_121938_reapplication_block_state_changed_at';
 
 export const migrations = [
   {
@@ -136,6 +138,16 @@ export const migrations = [
   {
     up: migration_20260820_063404_statement_account_holders.up,
     down: migration_20260820_063404_statement_account_holders.down,
-    name: '20260820_063404_statement_account_holders'
+    name: '20260820_063404_statement_account_holders',
+  },
+  {
+    up: migration_20260822_121203_reapplication_block_state_version.up,
+    down: migration_20260822_121203_reapplication_block_state_version.down,
+    name: '20260822_121203_reapplication_block_state_version',
+  },
+  {
+    up: migration_20260822_121938_reapplication_block_state_changed_at.up,
+    down: migration_20260822_121938_reapplication_block_state_changed_at.down,
+    name: '20260822_121938_reapplication_block_state_changed_at'
   },
 ];

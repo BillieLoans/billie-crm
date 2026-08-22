@@ -7,6 +7,8 @@ import {
   MAX_FAILED_ACTIONS,
 } from '@/lib/constants'
 
+import { installMockLocalStorage } from '../../utils/mock-local-storage'
+
 // Mock localStorage
 const mockLocalStorage = (() => {
   let store: Record<string, string> = {}
@@ -24,7 +26,7 @@ const mockLocalStorage = (() => {
   }
 })()
 
-Object.defineProperty(window, 'localStorage', { value: mockLocalStorage })
+installMockLocalStorage(mockLocalStorage)
 
 describe('useFailedActionsStore', () => {
   beforeEach(() => {

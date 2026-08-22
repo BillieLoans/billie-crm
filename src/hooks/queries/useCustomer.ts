@@ -114,6 +114,10 @@ export interface CustomerData {
     clearStatus?: string | null
     /** BTB-202: ISO timestamp when the block was cleared. Guard used by ClearBlockButton. */
     clearedAt?: string | null
+    /** state.changed.v1: billieChat projection version that last wrote this mirror (ordering guard). */
+    stateVersion?: number | null
+    /** state.changed.v1: emission time of the event that last wrote this mirror (second guard clause). */
+    stateChangedAt?: string | null
   } | null
   /** Latest LAB EVS identity verification result (PR #67). */
   identityVerification?: {

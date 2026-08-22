@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act } from '@testing-library/react'
+import { installMockLocalStorage } from '../../utils/mock-local-storage'
 
 // Mock localStorage before importing the store
 const localStorageMock = (() => {
@@ -22,7 +23,7 @@ const localStorageMock = (() => {
   }
 })()
 
-Object.defineProperty(window, 'localStorage', { value: localStorageMock })
+installMockLocalStorage(localStorageMock)
 
 // Import store after mocking localStorage
 import { useRecentCustomersStore } from '@/stores/recentCustomers'

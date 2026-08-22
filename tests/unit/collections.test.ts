@@ -131,6 +131,18 @@ describe('Payload Collections Configuration', () => {
       expect(convsField?.relationTo).toBe('conversations')
       expect(convsField?.hasMany).toBe(true)
     })
+
+    test('reapplicationBlock group carries the projection stateVersion guard', () => {
+      const fields = (Customers.fields || []) as any[]
+      const group = fields.find((f) => f.name === 'reapplicationBlock')
+      expect(group?.type).toBe('group')
+      const stateVersion = (group?.fields || []).find((f: any) => f.name === 'stateVersion')
+      expect(stateVersion?.type).toBe('number')
+      expect(stateVersion?.admin?.readOnly).toBe(true)
+      const stateChangedAt = (group?.fields || []).find((f: any) => f.name === 'stateChangedAt')
+      expect(stateChangedAt?.type).toBe('date')
+      expect(stateChangedAt?.admin?.readOnly).toBe(true)
+    })
   })
 
   describe('Conversations Collection', () => {

@@ -83,6 +83,7 @@ from .handlers import (
     handle_reapplication_block_auto_cleared,
     handle_reapplication_block_clear_rejected,
     handle_reapplication_block_cleared,
+    handle_reapplication_block_state_changed,
     # Re-application block (BTB-135) + cleared/rejected projection (Task 6)
     handle_reapplication_blocked,
     handle_referral_attributed,
@@ -207,6 +208,12 @@ def setup_handlers(processor: EventProcessor) -> None:
     # banner without operator action.
     processor.register_handler(
         "reapplication_block.auto_cleared.v1", handle_reapplication_block_auto_cleared
+    )
+    # Customer-level block state (spec 2026-08-22) — emitted by billieChat whenever
+    # the evaluated block decision changes; authoritative writer of the customers
+    # mirror, version-guarded so arrival order across consumers is irrelevant.
+    processor.register_handler(
+        "reapplication_block.state.changed.v1", handle_reapplication_block_state_changed
     )
 
     # Identity verification report archival (PR #67)

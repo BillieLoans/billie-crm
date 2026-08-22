@@ -4,6 +4,7 @@ import React from 'react'
 import { FailedActionsBadge } from '@/components/FailedActions'
 import { useFailedActionsStore, FailedAction } from '@/stores/failed-actions'
 import { FAILED_ACTIONS_STORAGE_KEY } from '@/lib/constants'
+import { installMockLocalStorage } from '../../utils/mock-local-storage'
 
 // Helper to create a test action
 function createTestAction(id: string): FailedAction {
@@ -39,7 +40,7 @@ const createMockLocalStorage = () => {
 }
 
 const mockLocalStorage = createMockLocalStorage()
-Object.defineProperty(window, 'localStorage', { value: mockLocalStorage, writable: true })
+installMockLocalStorage(mockLocalStorage)
 
 describe('FailedActionsBadge', () => {
   beforeEach(() => {

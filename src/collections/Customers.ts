@@ -329,6 +329,29 @@ export const Customers: CollectionConfig = {
           type: 'date',
           admin: { description: 'When the block was cleared' },
         },
+        {
+          // state.changed.v1: billieChat's projection CAS version. The event-processor
+          // applies an event only when this stored version is lower, so the two
+          // unordered prod consumers converge on the newest state.
+          name: 'stateVersion',
+          type: 'number',
+          admin: {
+            readOnly: true,
+            description: 'billieChat block projection version that last wrote this mirror',
+          },
+        },
+        {
+          // state.changed.v1: emission time of the event that last wrote this mirror. Second
+          // clause of the event-processor's guard: a newer emission supersedes a higher stale
+          // version after a projection epoch reset (Redis rebuild / merge fold) or a merge.
+          name: 'stateChangedAt',
+          type: 'date',
+          admin: {
+            readOnly: true,
+            description:
+              'Emission time of the billieChat block state event that last wrote this mirror',
+          },
+        },
       ],
     },
     {

@@ -96,6 +96,7 @@ from .reapplication import (
     handle_reapplication_block_auto_cleared,
     handle_reapplication_block_clear_rejected,
     handle_reapplication_block_cleared,
+    handle_reapplication_block_state_changed,
     handle_reapplication_blocked,
 )
 from .writeoff import (
@@ -123,6 +124,7 @@ __all__ = [
     "handle_reapplication_block_cleared",
     "handle_reapplication_block_clear_rejected",
     "handle_reapplication_block_auto_cleared",
+    "handle_reapplication_block_state_changed",
     # Identity verification archival (PR #67)
     "handle_identity_report_archived",
     # Conversation handlers
