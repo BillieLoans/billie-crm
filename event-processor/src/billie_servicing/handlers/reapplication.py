@@ -469,9 +469,12 @@ async def handle_reapplication_block_state_changed(
     No customer interaction is required, so a customer declined today shows as
     blocked in the servicing view today (spec: 2026-08-22 state-changed design).
 
-    This is the authoritative writer of the customer-level "currently blocked"
-    mirror (``reason`` / ``blocked_until`` / ``blocked_at`` /
-    ``application_number``). It never touches the clear-audit stamps
+    This becomes the authoritative writer of the customer-level "currently
+    blocked" mirror (``reason`` / ``blocked_until`` / ``blocked_at`` /
+    ``application_number``) from Phase 2; until then the legacy handlers
+    (``handle_reapplication_blocked``, ``handle_reapplication_block_cleared``,
+    ``handle_reapplication_block_auto_cleared``) still write these columns
+    without a version. It never touches the clear-audit stamps
     (``clear_status`` / ``cleared_at`` — owned by the cleared/auto_cleared
     handlers) nor the conversation-level "why was THIS application halted"
     record (owned by ``handle_reapplication_blocked``).
@@ -480,10 +483,13 @@ async def handle_reapplication_block_state_changed(
     events within one projection epoch, so arrival order across the two prod
     consumers does not matter; ``changed_at`` lets a newer emission from a new
     epoch (or after a merge) supersede a higher stale version. A rejected
-    (stale) write is logged at INFO and is not an error. A missing or
-    non-integer ``state_version`` is rejected before any DB access — fail fast
-    on malformed input rather than spend a round trip resolving the canonical
-    customer id first.
+    (stale) write is logged at INFO and is not an error. ``state_version``,
+    ``blocked``, and ``changed_at`` are required contract fields, validated in
+    that order before any DB access — fail fast on malformed input rather than
+    spend a round trip resolving the canonical customer id first. A missing or
+    non-integer ``state_version``, a missing ``blocked``, or a missing/
+    unparseable ``changed_at`` is rejected the same way (logged at WARNING,
+    handler returns).
     """
     payload = parse_payload(event)
     customer_id = (
@@ -494,14 +500,11 @@ async def handle_reapplication_block_state_changed(
         or None
     )
     raw_version = payload.get("state_version")
-    blocked = bool(payload.get("blocked"))
-    reason = payload.get("reason") if blocked else None
 
     log = logger.bind(
         customer_id=customer_id,
         state_version=raw_version,
-        blocked=blocked,
-        reason=reason,
+        blocked=payload.get("blocked"),
     )
     log.info("Processing reapplication_block.state.changed.v1")
 
@@ -511,6 +514,18 @@ async def handle_reapplication_block_state_changed(
         log.warning("state.changed event without an integer state_version — ignored")
         return
 
+    if "blocked" not in payload:
+        log.warning("state.changed event without `blocked` — ignored")
+        return
+    blocked = bool(payload["blocked"])
+    reason = payload.get("reason") if blocked else None
+    log = log.bind(blocked=blocked, reason=reason)
+
+    changed_at = coerce_date(payload.get("changed_at"))
+    if not isinstance(changed_at, datetime):
+        log.warning("state.changed event without a parseable changed_at — ignored")
+        return
+
     canonical = await resolve_canonical_customer_id(pool, customer_id)
     if not canonical:
         log.warning("state.changed event without resolvable customer id — no customer mirror")
@@ -518,7 +533,6 @@ async def handle_reapplication_block_state_changed(
     log = log.bind(canonical_customer_id=canonical)
 
     now = datetime.now(UTC)
-    changed_at = coerce_date(payload.get("changed_at")) or now
     values: dict[str, Any] = {
         "customer_id": canonical,
         "reapplication_block_state_version": state_version,

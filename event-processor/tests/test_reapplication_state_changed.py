@@ -120,6 +120,22 @@ class TestGuards:
         await handle_reapplication_block_state_changed(mock_pool, event)
         assert not mock_pool.has_call_against("customers")
 
+    async def test_missing_blocked_is_ignored(self, mock_pool):
+        event = _event()
+        del event["payload"]["blocked"]
+        await handle_reapplication_block_state_changed(mock_pool, event)
+        assert not mock_pool.has_call_against("customers")
+
+    async def test_unparseable_changed_at_is_ignored(self, mock_pool):
+        await handle_reapplication_block_state_changed(
+            mock_pool, _event(changed_at="not-a-timestamp")
+        )
+        assert not mock_pool.has_call_against("customers")
+
+    async def test_missing_changed_at_is_ignored(self, mock_pool):
+        await handle_reapplication_block_state_changed(mock_pool, _event(changed_at=None))
+        assert not mock_pool.has_call_against("customers")
+
     async def test_guard_rejection_is_not_an_error(self, mock_pool):
         """asyncpg reports 'INSERT 0 0' when the version guard rejects the write —
         the handler logs at INFO and returns; nothing is raised or retried."""
