@@ -63,6 +63,11 @@
   color: var(--theme-elevation-600, #666);
 }
 
+.startedDate {
+  font-size: 13px;
+  color: var(--theme-elevation-600, #666);
+}
+
 .customerId {
   font-size: 13px;
   color: var(--theme-elevation-600, #666);

@@ -7,7 +7,7 @@ import { useConversation } from '@/hooks/queries/useConversation'
 import { MessagePanel } from './MessagePanel'
 import { AssessmentPanel } from './AssessmentPanel'
 import { StatusBadge } from '../ApplicationsView/StatusBadge'
-import { formatCurrency } from '@/lib/formatters'
+import { formatCurrency, formatDateOnly } from '@/lib/formatters'
 import styles from './styles.module.css'
 
 interface ConversationDetailViewProps {
@@ -70,6 +70,7 @@ export function ConversationDetailView({ conversationId, referrer }: Conversatio
   const appNumber = conversation?.applicationNumber
   const loanAmount = conversation?.application?.loanAmount
   const purpose = conversation?.application?.purpose
+  const startedAt = conversation?.startedAt ?? null
 
   const loanMeta = [
     loanAmount != null ? formatCurrency(loanAmount) : null,
@@ -115,6 +116,9 @@ export function ConversationDetailView({ conversationId, referrer }: Conversatio
             {appNumber && <span className={styles.appNumber}>{appNumber}</span>}
             <StatusBadge status={conversation?.status} />
             {loanMeta && <span className={styles.loanMeta}>{loanMeta}</span>}
+            {startedAt && (
+              <span className={styles.startedDate}>Started {formatDateOnly(startedAt)}</span>
+            )}
             {customerId && (
               <span className={styles.customerId}>
                 Customer <span className={styles.customerIdValue}>{customerId}</span>
