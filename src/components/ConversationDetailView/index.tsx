@@ -7,6 +7,7 @@ import { useConversation } from '@/hooks/queries/useConversation'
 import { MessagePanel } from './MessagePanel'
 import { AssessmentPanel } from './AssessmentPanel'
 import { StatusBadge } from '../ApplicationsView/StatusBadge'
+import { CopyButton } from '@/components/ui/CopyButton'
 import { formatCurrency, formatDateOnly } from '@/lib/formatters'
 import styles from './styles.module.css'
 
@@ -72,10 +73,7 @@ export function ConversationDetailView({ conversationId, referrer }: Conversatio
   const purpose = conversation?.application?.purpose
   const startedAt = conversation?.startedAt ?? null
 
-  const loanMeta = [
-    loanAmount != null ? formatCurrency(loanAmount) : null,
-    purpose,
-  ]
+  const loanMeta = [loanAmount != null ? formatCurrency(loanAmount) : null, purpose]
     .filter(Boolean)
     .join(' · ')
 
@@ -99,13 +97,17 @@ export function ConversationDetailView({ conversationId, referrer }: Conversatio
           )}
           {(isLoading || customerFullName) && (
             <>
-              <span className={styles.breadcrumbSep} aria-hidden="true">›</span>
+              <span className={styles.breadcrumbSep} aria-hidden="true">
+                ›
+              </span>
               <span>{customerFullName ?? 'Loading…'}</span>
             </>
           )}
           {appNumber && (
             <>
-              <span className={styles.breadcrumbSep} aria-hidden="true">›</span>
+              <span className={styles.breadcrumbSep} aria-hidden="true">
+                ›
+              </span>
               <span>{appNumber}</span>
             </>
           )}
@@ -113,23 +115,29 @@ export function ConversationDetailView({ conversationId, referrer }: Conversatio
 
         <div className={styles.headerRow}>
           <div className={styles.headerLeft}>
-            {appNumber && <span className={styles.appNumber}>{appNumber}</span>}
+            {appNumber && (
+              <span className={styles.idGroup}>
+                <span className={styles.appNumber}>{appNumber}</span>
+                <CopyButton value={appNumber} label={`Copy application number ${appNumber}`} />
+              </span>
+            )}
             <StatusBadge status={conversation?.status} />
             {loanMeta && <span className={styles.loanMeta}>{loanMeta}</span>}
             {startedAt && (
               <span className={styles.startedDate}>Started {formatDateOnly(startedAt)}</span>
             )}
             {customerId && (
-              <span className={styles.customerId}>
-                Customer <span className={styles.customerIdValue}>{customerId}</span>
+              <span className={`${styles.customerId} ${styles.idGroup}`}>
+                Customer{' '}
+                <Link href={`/admin/servicing/${customerId}`} className={styles.customerIdLink}>
+                  <span className={styles.customerIdValue}>{customerId}</span>
+                </Link>
+                <CopyButton value={customerId} label={`Copy customer id ${customerId}`} />
               </span>
             )}
           </div>
           {customerId && (
-            <Link
-              href={`/admin/servicing/${customerId}`}
-              className={styles.viewProfileLink}
-            >
+            <Link href={`/admin/servicing/${customerId}`} className={styles.viewProfileLink}>
               View profile →
             </Link>
           )}
@@ -145,12 +153,11 @@ export function ConversationDetailView({ conversationId, referrer }: Conversatio
           />
         </div>
 
-        <div className={`${styles.rightPanel} ${showAssessmentsMobile ? styles.mobileVisible : ''}`}>
+        <div
+          className={`${styles.rightPanel} ${showAssessmentsMobile ? styles.mobileVisible : ''}`}
+        >
           {conversation ? (
-            <AssessmentPanel
-              conversation={conversation}
-              conversationId={conversationId}
-            />
+            <AssessmentPanel conversation={conversation} conversationId={conversationId} />
           ) : isLoading ? (
             <div style={{ padding: 16 }}>
               {Array.from({ length: 4 }).map((_, i) => (

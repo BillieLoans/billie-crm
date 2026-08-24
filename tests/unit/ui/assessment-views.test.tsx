@@ -21,14 +21,22 @@ import { formatDateMedium } from '@/lib/formatters'
 // hooks have one. (The statement query is disabled when no slot is selected.)
 const render = (ui: React.ReactElement) =>
   rtlRender(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <QueryClientProvider
+      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+    >
       {ui}
     </QueryClientProvider>,
   )
 
 vi.mock('next/link', () => ({
-  default: ({ children, href, ...props }: React.PropsWithChildren<{ href: string; [k: string]: unknown }>) => (
-    <a href={href} {...props}>{children}</a>
+  default: ({
+    children,
+    href,
+    ...props
+  }: React.PropsWithChildren<{ href: string; [k: string]: unknown }>) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
   ),
 }))
 
@@ -46,7 +54,10 @@ vi.mock('@/hooks/queries/useAssessments', () => ({
   usePostIdentityRiskAssessment: vi.fn(() => ({ data: undefined, isLoading: false, error: null })),
 }))
 
-import { useAccountConductAssessment, useServiceabilityAssessment } from '@/hooks/queries/useAssessments'
+import {
+  useAccountConductAssessment,
+  useServiceabilityAssessment,
+} from '@/hooks/queries/useAssessments'
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -130,7 +141,9 @@ describe('AssessmentPanel — fraud risk summary', () => {
     })
     render(<AssessmentPanel conversation={conversation} conversationId="conv-001" />)
     expect(screen.getAllByText('HIGH').length).toBeGreaterThan(0)
-    const fraudBtn = screen.getAllByRole('button').find((b) => b.textContent?.includes('Fraud risk'))
+    const fraudBtn = screen
+      .getAllByRole('button')
+      .find((b) => b.textContent?.includes('Fraud risk'))
     fireEvent.click(fraudBtn!)
     expect(screen.getByText(/score 87/)).toBeInTheDocument()
   })
@@ -138,7 +151,9 @@ describe('AssessmentPanel — fraud risk summary', () => {
   it('shows "No data" summary and fallback message when fraudCheck is absent', () => {
     const conversation = baseConversation({ assessments: {} })
     render(<AssessmentPanel conversation={conversation} conversationId="conv-001" />)
-    const fraudBtn = screen.getAllByRole('button').find((b) => b.textContent?.includes('Fraud risk'))
+    const fraudBtn = screen
+      .getAllByRole('button')
+      .find((b) => b.textContent?.includes('Fraud risk'))
     fireEvent.click(fraudBtn!)
     expect(screen.getByText('No fraud-risk assessment data.')).toBeInTheDocument()
   })
@@ -163,9 +178,7 @@ describe('AssessmentPanel — application term label', () => {
     })
     render(<AssessmentPanel conversation={conversation} conversationId="conv-001" />)
     // Expand the Application section
-    const appBtn = screen.getAllByRole('button').find((b) =>
-      b.textContent?.includes('Application'),
-    )
+    const appBtn = screen.getAllByRole('button').find((b) => b.textContent?.includes('Application'))
     expect(appBtn).toBeTruthy()
     fireEvent.click(appBtn!)
     expect(screen.getAllByText(/10 days/).length).toBeGreaterThan(0)
@@ -213,10 +226,14 @@ describe('AssessmentDetailView — loading and null states', () => {
 
   it('renders skeletons while loading', () => {
     vi.mocked(useAccountConductAssessment).mockReturnValue({
-      data: undefined, isLoading: true, error: null,
+      data: undefined,
+      isLoading: true,
+      error: null,
     } as ReturnType<typeof useAccountConductAssessment>)
     vi.mocked(useServiceabilityAssessment).mockReturnValue({
-      data: undefined, isLoading: true, error: null,
+      data: undefined,
+      isLoading: true,
+      error: null,
     } as ReturnType<typeof useServiceabilityAssessment>)
 
     const { container } = render(
@@ -234,29 +251,33 @@ describe('AssessmentDetailView — loading and null states', () => {
 
   it('shows "No assessment data" when assessment is null', () => {
     vi.mocked(useAccountConductAssessment).mockReturnValue({
-      data: null, isLoading: false, error: null,
+      data: null,
+      isLoading: false,
+      error: null,
     } as ReturnType<typeof useAccountConductAssessment>)
     vi.mocked(useServiceabilityAssessment).mockReturnValue({
-      data: undefined, isLoading: false, error: null,
+      data: undefined,
+      isLoading: false,
+      error: null,
     } as ReturnType<typeof useServiceabilityAssessment>)
 
-    render(
-      <AssessmentDetailView conversationId="conv-001" type="account-conduct" />,
-    )
+    render(<AssessmentDetailView conversationId="conv-001" type="account-conduct" />)
     expect(screen.getByText(/No assessment data available/)).toBeTruthy()
   })
 
   it('shows "No assessment data" when query errors', () => {
     vi.mocked(useAccountConductAssessment).mockReturnValue({
-      data: undefined, isLoading: false, error: new Error('S3 error'),
+      data: undefined,
+      isLoading: false,
+      error: new Error('S3 error'),
     } as ReturnType<typeof useAccountConductAssessment>)
     vi.mocked(useServiceabilityAssessment).mockReturnValue({
-      data: undefined, isLoading: false, error: null,
+      data: undefined,
+      isLoading: false,
+      error: null,
     } as ReturnType<typeof useServiceabilityAssessment>)
 
-    render(
-      <AssessmentDetailView conversationId="conv-001" type="account-conduct" />,
-    )
+    render(<AssessmentDetailView conversationId="conv-001" type="account-conduct" />)
     expect(screen.getByText(/No assessment data available/)).toBeTruthy()
   })
 })
@@ -268,26 +289,35 @@ describe('AssessmentDetailView — loading and null states', () => {
 describe('AssessmentDetailView — decision banner', () => {
   afterEach(() => cleanup())
 
-  function renderWithDecision(decision: string, type: 'account-conduct' | 'serviceability' = 'account-conduct') {
+  function renderWithDecision(
+    decision: string,
+    type: 'account-conduct' | 'serviceability' = 'account-conduct',
+  ) {
     const assessment = { decision, rules: [] }
     if (type === 'account-conduct') {
       vi.mocked(useAccountConductAssessment).mockReturnValue({
-        data: assessment, isLoading: false, error: null,
+        data: assessment,
+        isLoading: false,
+        error: null,
       } as ReturnType<typeof useAccountConductAssessment>)
       vi.mocked(useServiceabilityAssessment).mockReturnValue({
-        data: undefined, isLoading: false, error: null,
+        data: undefined,
+        isLoading: false,
+        error: null,
       } as ReturnType<typeof useServiceabilityAssessment>)
     } else {
       vi.mocked(useServiceabilityAssessment).mockReturnValue({
-        data: assessment, isLoading: false, error: null,
+        data: assessment,
+        isLoading: false,
+        error: null,
       } as ReturnType<typeof useServiceabilityAssessment>)
       vi.mocked(useAccountConductAssessment).mockReturnValue({
-        data: undefined, isLoading: false, error: null,
+        data: undefined,
+        isLoading: false,
+        error: null,
       } as ReturnType<typeof useAccountConductAssessment>)
     }
-    return render(
-      <AssessmentDetailView conversationId="conv-001" type={type} />,
-    )
+    return render(<AssessmentDetailView conversationId="conv-001" type={type} />)
   }
 
   it('shows decision value in uppercase', () => {
@@ -334,10 +364,14 @@ describe('AssessmentDetailView — decision banner', () => {
   it('shows score when present', () => {
     const assessment = { decision: 'PASS', totalScore: 85, rules: [] }
     vi.mocked(useAccountConductAssessment).mockReturnValue({
-      data: assessment, isLoading: false, error: null,
+      data: assessment,
+      isLoading: false,
+      error: null,
     } as ReturnType<typeof useAccountConductAssessment>)
     vi.mocked(useServiceabilityAssessment).mockReturnValue({
-      data: undefined, isLoading: false, error: null,
+      data: undefined,
+      isLoading: false,
+      error: null,
     } as ReturnType<typeof useServiceabilityAssessment>)
 
     render(<AssessmentDetailView conversationId="conv-001" type="account-conduct" />)
@@ -359,11 +393,11 @@ describe('AssessmentDetailView — rules table', () => {
       error: null,
     } as ReturnType<typeof useAccountConductAssessment>)
     vi.mocked(useServiceabilityAssessment).mockReturnValue({
-      data: undefined, isLoading: false, error: null,
+      data: undefined,
+      isLoading: false,
+      error: null,
     } as ReturnType<typeof useServiceabilityAssessment>)
-    return render(
-      <AssessmentDetailView conversationId="conv-001" type="account-conduct" />,
-    )
+    return render(<AssessmentDetailView conversationId="conv-001" type="account-conduct" />)
   }
 
   it('renders each rule name', () => {
@@ -433,36 +467,43 @@ describe('AssessmentDetailView — serviceability financial metrics', () => {
       decision: surplusValue >= 0 ? 'PASS' : 'DECLINED',
       assessment_date: '2026-04-04T03:03:35.826395',
       monthly_metrics: { avg_daily_loan_repayment: 20.48, days_loan_term: 10, cash_savings: 0 },
-      rule_results: [{
-        rule_id: 'SERVICEABILITY_RULE_001',
-        description: 'Net income surplus must be non-negative',
-        result: surplusValue >= 0 ? 'pass' : 'fail',
-        data_value: surplusValue,
-        condition: '>= 0',
-        hard_rule: true,
-        details: {
-          avg_daily_income: 92.04,
-          avg_daily_expenses: 135.33,
-          avg_daily_loan_repayment: 20.48,
-          days_loan_term: 10,
-          cash_savings: 0,
+      rule_results: [
+        {
+          rule_id: 'SERVICEABILITY_RULE_001',
+          description: 'Net income surplus must be non-negative',
+          result: surplusValue >= 0 ? 'pass' : 'fail',
+          data_value: surplusValue,
+          condition: '>= 0',
+          hard_rule: true,
+          details: {
+            avg_daily_income: 92.04,
+            avg_daily_expenses: 135.33,
+            avg_daily_loan_repayment: 20.48,
+            days_loan_term: 10,
+            cash_savings: 0,
+          },
+          reason:
+            surplusValue < 0
+              ? `Net income surplus (${surplusValue}) is below threshold`
+              : undefined,
         },
-        reason: surplusValue < 0 ? `Net income surplus (${surplusValue}) is below threshold` : undefined,
-      }],
+      ],
       files_processed: [],
     }
   }
 
   function renderServiceability(assessment: Record<string, unknown>) {
     vi.mocked(useServiceabilityAssessment).mockReturnValue({
-      data: assessment, isLoading: false, error: null,
+      data: assessment,
+      isLoading: false,
+      error: null,
     } as ReturnType<typeof useServiceabilityAssessment>)
     vi.mocked(useAccountConductAssessment).mockReturnValue({
-      data: undefined, isLoading: false, error: null,
+      data: undefined,
+      isLoading: false,
+      error: null,
     } as ReturnType<typeof useAccountConductAssessment>)
-    return render(
-      <AssessmentDetailView conversationId="conv-001" type="serviceability" />,
-    )
+    return render(<AssessmentDetailView conversationId="conv-001" type="serviceability" />)
   }
 
   it('renders Cash Flow Over Loan Term section', () => {
@@ -496,7 +537,9 @@ describe('AssessmentDetailView — serviceability financial metrics', () => {
       error: null,
     } as ReturnType<typeof useAccountConductAssessment>)
     vi.mocked(useServiceabilityAssessment).mockReturnValue({
-      data: undefined, isLoading: false, error: null,
+      data: undefined,
+      isLoading: false,
+      error: null,
     } as ReturnType<typeof useServiceabilityAssessment>)
 
     render(<AssessmentDetailView conversationId="conv-001" type="account-conduct" />)
@@ -561,10 +604,14 @@ describe('AssessmentDetailView — serviceability HEM floor (BTB-221)', () => {
 
   function renderSvc(assessment: Record<string, unknown>) {
     vi.mocked(useServiceabilityAssessment).mockReturnValue({
-      data: assessment, isLoading: false, error: null,
+      data: assessment,
+      isLoading: false,
+      error: null,
     } as ReturnType<typeof useServiceabilityAssessment>)
     vi.mocked(useAccountConductAssessment).mockReturnValue({
-      data: undefined, isLoading: false, error: null,
+      data: undefined,
+      isLoading: false,
+      error: null,
     } as ReturnType<typeof useAccountConductAssessment>)
     return render(<AssessmentDetailView conversationId="conv-001" type="serviceability" />)
   }
@@ -613,7 +660,10 @@ describe('AssessmentDetailView — serviceability HEM floor (BTB-221)', () => {
 
   it('shows the observed figure and no floor indicator when observed exceeds the HEM floor', () => {
     const { container } = renderSvc(
-      makeSvcV2({ avg_observed_living: 2737.2, monthly_living: 2737.2, hem_floor_binding: false }, -277.4),
+      makeSvcV2(
+        { avg_observed_living: 2737.2, monthly_living: 2737.2, hem_floor_binding: false },
+        -277.4,
+      ),
     )
     expect(tileValue(container, 'Living Expenses')).toBeCloseTo(912.4, 2)
     expect(container.textContent).not.toContain('HEM floor applied')
@@ -681,10 +731,14 @@ describe('AssessmentDetailView — raw JSON toggle', () => {
 
   it('raw JSON is hidden by default', () => {
     vi.mocked(useAccountConductAssessment).mockReturnValue({
-      data: { decision: 'PASS' }, isLoading: false, error: null,
+      data: { decision: 'PASS' },
+      isLoading: false,
+      error: null,
     } as ReturnType<typeof useAccountConductAssessment>)
     vi.mocked(useServiceabilityAssessment).mockReturnValue({
-      data: undefined, isLoading: false, error: null,
+      data: undefined,
+      isLoading: false,
+      error: null,
     } as ReturnType<typeof useServiceabilityAssessment>)
 
     render(<AssessmentDetailView conversationId="conv-001" type="account-conduct" />)
@@ -694,10 +748,14 @@ describe('AssessmentDetailView — raw JSON toggle', () => {
 
   it('raw JSON is visible after toggle', () => {
     vi.mocked(useAccountConductAssessment).mockReturnValue({
-      data: { decision: 'PASS' }, isLoading: false, error: null,
+      data: { decision: 'PASS' },
+      isLoading: false,
+      error: null,
     } as ReturnType<typeof useAccountConductAssessment>)
     vi.mocked(useServiceabilityAssessment).mockReturnValue({
-      data: undefined, isLoading: false, error: null,
+      data: undefined,
+      isLoading: false,
+      error: null,
     } as ReturnType<typeof useServiceabilityAssessment>)
 
     render(<AssessmentDetailView conversationId="conv-001" type="account-conduct" />)
@@ -708,10 +766,14 @@ describe('AssessmentDetailView — raw JSON toggle', () => {
 
   it('raw JSON hides again after second toggle', () => {
     vi.mocked(useAccountConductAssessment).mockReturnValue({
-      data: { decision: 'PASS' }, isLoading: false, error: null,
+      data: { decision: 'PASS' },
+      isLoading: false,
+      error: null,
     } as ReturnType<typeof useAccountConductAssessment>)
     vi.mocked(useServiceabilityAssessment).mockReturnValue({
-      data: undefined, isLoading: false, error: null,
+      data: undefined,
+      isLoading: false,
+      error: null,
     } as ReturnType<typeof useServiceabilityAssessment>)
 
     render(<AssessmentDetailView conversationId="conv-001" type="account-conduct" />)
@@ -736,7 +798,9 @@ describe('AssessmentDetailView — flags and decline reasons', () => {
       error: null,
     } as ReturnType<typeof useAccountConductAssessment>)
     vi.mocked(useServiceabilityAssessment).mockReturnValue({
-      data: undefined, isLoading: false, error: null,
+      data: undefined,
+      isLoading: false,
+      error: null,
     } as ReturnType<typeof useServiceabilityAssessment>)
 
     const { container } = render(
@@ -754,7 +818,9 @@ describe('AssessmentDetailView — flags and decline reasons', () => {
       error: null,
     } as ReturnType<typeof useAccountConductAssessment>)
     vi.mocked(useServiceabilityAssessment).mockReturnValue({
-      data: undefined, isLoading: false, error: null,
+      data: undefined,
+      isLoading: false,
+      error: null,
     } as ReturnType<typeof useServiceabilityAssessment>)
 
     render(<AssessmentDetailView conversationId="conv-001" type="account-conduct" />)
@@ -769,10 +835,55 @@ describe('AssessmentDetailView — flags and decline reasons', () => {
       error: null,
     } as ReturnType<typeof useAccountConductAssessment>)
     vi.mocked(useServiceabilityAssessment).mockReturnValue({
-      data: undefined, isLoading: false, error: null,
+      data: undefined,
+      isLoading: false,
+      error: null,
     } as ReturnType<typeof useServiceabilityAssessment>)
 
     render(<AssessmentDetailView conversationId="conv-001" type="account-conduct" />)
     expect(screen.getByText('Previous default')).toBeTruthy()
+  })
+})
+
+describe('AssessmentPanel \u2014 customer section', () => {
+  afterEach(() => cleanup())
+
+  it('shows the customer name as the section summary', () => {
+    render(<AssessmentPanel conversation={baseConversation()} conversationId="conv-001" />)
+    const btn = screen.getAllByRole('button').find((b) => b.textContent?.includes('Customer'))
+    expect(btn).toBeTruthy()
+    expect(btn!.textContent).toContain('Jane Smith')
+  })
+
+  it('expanded section shows customer details with placeholders for missing fields', () => {
+    const conversation = baseConversation({
+      customer: {
+        fullName: 'Jane Smith',
+        customerId: 'CUS-001',
+        emailAddress: 'jane@example.com',
+        mobilePhoneNumber: '0468993318',
+        dateOfBirth: '1990-01-15T00:00:00.000Z',
+        identityVerified: true,
+        residentialAddress: '1 Test St, Sydney NSW 2000',
+      },
+    })
+    render(<AssessmentPanel conversation={conversation} conversationId="conv-001" />)
+    const btn = screen.getAllByRole('button').find((b) => b.textContent?.includes('Customer'))
+    fireEvent.click(btn!)
+    expect(screen.getByText('jane@example.com')).toBeTruthy()
+    expect(screen.getByText('0468993318')).toBeTruthy()
+    expect(screen.getByText('1 Test St, Sydney NSW 2000')).toBeTruthy()
+    expect(screen.getByText('Verified \u2713')).toBeTruthy()
+    // Preferred name absent \u2192 placeholder keeps the row in a fixed position
+    expect(screen.getByText('Preferred name')).toBeTruthy()
+  })
+
+  it('links to the customer profile from the expanded section', () => {
+    render(<AssessmentPanel conversation={baseConversation()} conversationId="conv-001" />)
+    const btn = screen.getAllByRole('button').find((b) => b.textContent?.includes('Customer'))
+    fireEvent.click(btn!)
+    const link = screen.getByText('View profile \u2192').closest('a')
+    expect(link).toBeTruthy()
+    expect(link!.getAttribute('href')).toBe('/admin/servicing/CUS-001')
   })
 })

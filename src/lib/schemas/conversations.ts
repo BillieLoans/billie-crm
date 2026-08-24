@@ -196,6 +196,12 @@ export const ConversationDetailSchema = z.object({
       fullName: z.string().nullable().optional(),
       customerId: z.string().nullable().optional(),
       payloadId: z.string().nullable().optional(),
+      preferredName: z.string().nullable().optional(),
+      emailAddress: z.string().nullable().optional(),
+      mobilePhoneNumber: z.string().nullable().optional(),
+      dateOfBirth: z.string().nullable().optional(),
+      identityVerified: z.boolean().nullable().optional(),
+      residentialAddress: z.string().nullable().optional(),
     })
     .optional(),
   application: z

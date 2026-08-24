@@ -66,22 +66,40 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    // 3. Optionally enrich with customer full name from customers collection
+    // 3. Optionally enrich with customer details from the customers collection
+    type CustomerEnrichment = {
+      id?: string
+      fullName?: string | null
+      preferredName?: string | null
+      emailAddress?: string | null
+      mobilePhoneNumber?: string | null
+      dateOfBirth?: string | Date | null
+      identityVerified?: boolean | null
+      residentialAddress?: { fullAddress?: string | null } | null
+    }
     let customerFullName: string | null = null
     let customerPayloadId: string | null = null
+    let customerDetails: CustomerEnrichment = {}
     if (doc.customerIdString) {
       const custResult = await payload.find({
         collection: 'customers',
         where: { customerId: { equals: doc.customerIdString as string } },
         limit: 1,
-        select: { fullName: true },
+        select: {
+          fullName: true,
+          preferredName: true,
+          emailAddress: true,
+          mobilePhoneNumber: true,
+          dateOfBirth: true,
+          identityVerified: true,
+          residentialAddress: true,
+        },
       })
-      const customerDoc = custResult.docs[0] as
-        | { id?: string; fullName?: string | null }
-        | undefined
+      const customerDoc = custResult.docs[0] as CustomerEnrichment | undefined
       if (customerDoc) {
         customerFullName = customerDoc.fullName ?? null
         customerPayloadId = customerDoc.id ?? null
+        customerDetails = customerDoc
       }
     }
 
@@ -137,6 +155,12 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         fullName: customerFullName,
         customerId: (doc.customerIdString as string) ?? null,
         payloadId: customerPayloadId,
+        preferredName: customerDetails.preferredName ?? null,
+        emailAddress: customerDetails.emailAddress ?? null,
+        mobilePhoneNumber: customerDetails.mobilePhoneNumber ?? null,
+        dateOfBirth: toIso(customerDetails.dateOfBirth),
+        identityVerified: customerDetails.identityVerified ?? null,
+        residentialAddress: customerDetails.residentialAddress?.fullAddress ?? null,
       },
       application: {
         loanAmount:
@@ -145,7 +169,9 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
             : typeof appData?.loanAmount === 'number'
               ? appData.loanAmount
               : null,
-        purpose: (appData?.loan_purpose ?? appData?.loanPurpose ?? appData?.purpose) as string | null,
+        purpose: (appData?.loan_purpose ?? appData?.loanPurpose ?? appData?.purpose) as
+          | string
+          | null,
         term:
           typeof appData?.loan_term === 'number'
             ? appData.loan_term
@@ -179,7 +205,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
             timestamp:
               n.timestamp instanceof Date
                 ? n.timestamp.toISOString()
-                : (n.timestamp as string) ?? null,
+                : ((n.timestamp as string) ?? null),
           }))
         : [],
       summary: {

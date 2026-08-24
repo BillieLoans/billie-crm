@@ -80,4 +80,20 @@ describe('ConversationDetailView header — application date', () => {
     // Rest of the header still renders in its usual position
     expect(screen.getByText('86E8925E')).toBeTruthy()
   })
+
+  it('renders copy buttons for the application number and customer id', () => {
+    mockConversation({ startedAt: null })
+    render(<ConversationDetailView conversationId="conv-1" />)
+    expect(screen.getAllByTestId('copy-button')).toHaveLength(2)
+    expect(screen.getByLabelText('Copy application number 5CA0380F-38F')).toBeTruthy()
+    expect(screen.getByLabelText('Copy customer id 86E8925E')).toBeTruthy()
+  })
+
+  it('links the customer id to the customer profile', () => {
+    mockConversation({ startedAt: null })
+    render(<ConversationDetailView conversationId="conv-1" />)
+    const link = screen.getByText('86E8925E').closest('a')
+    expect(link).toBeTruthy()
+    expect(link!.getAttribute('href')).toBe('/admin/servicing/86E8925E')
+  })
 })

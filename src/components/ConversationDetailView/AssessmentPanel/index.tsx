@@ -1,7 +1,13 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { formatRelativeTime, formatCurrency, formatDateMedium } from '@/lib/formatters'
+import Link from 'next/link'
+import {
+  formatRelativeTime,
+  formatCurrency,
+  formatDateMedium,
+  formatDateOnly,
+} from '@/lib/formatters'
 import type { ConversationDetail } from '@/lib/schemas/conversations'
 import { ContextDrawer } from '@/components/ui/ContextDrawer'
 import { StatementFileViewer } from '../StatementFileViewer'
@@ -18,7 +24,12 @@ interface AssessmentSectionProps {
   defaultOpen?: boolean
 }
 
-function AssessmentSection({ title, summary, children, defaultOpen = false }: AssessmentSectionProps) {
+function AssessmentSection({
+  title,
+  summary,
+  children,
+  defaultOpen = false,
+}: AssessmentSectionProps) {
   const [open, setOpen] = useState(defaultOpen)
   const id = `section-${title.toLowerCase().replace(/\s+/g, '-')}`
 
@@ -64,22 +75,26 @@ function NoticeboardEntry({ entry, onClick }: NoticeboardEntryProps) {
 
   return (
     <div className={styles.noticeboardEntry}>
-      <button
-        type="button"
-        className={styles.noticeboardRow}
-        onClick={() => onClick(entry)}
-      >
+      <button type="button" className={styles.noticeboardRow} onClick={() => onClick(entry)}>
         <span className={styles.noticeboardTopic}>{topic}</span>
         <span className={styles.noticeboardMeta}>
           {entry.timestamp ? formatRelativeTime(entry.timestamp as string) : ''}
-          <span className={styles.noticeboardChevron} aria-hidden="true">›</span>
+          <span className={styles.noticeboardChevron} aria-hidden="true">
+            ›
+          </span>
         </span>
       </button>
     </div>
   )
 }
 
-function NoticeboardDrawer({ post, onClose }: { post: NoticeboardPost | null; onClose: () => void }) {
+function NoticeboardDrawer({
+  post,
+  onClose,
+}: {
+  post: NoticeboardPost | null
+  onClose: () => void
+}) {
   if (!post) return null
   const rawName = post.agentName ?? post.topic ?? 'Unknown agent'
   const topic = rawName.startsWith('AGENT::') ? rawName.slice('AGENT::'.length) : rawName
@@ -87,9 +102,7 @@ function NoticeboardDrawer({ post, onClose }: { post: NoticeboardPost | null; on
   return (
     <ContextDrawer isOpen={true} onClose={onClose} title={topic}>
       <div className={styles.drawerPost}>
-        {post.agentName && (
-          <p className={styles.drawerAgent}>{post.agentName}</p>
-        )}
+        {post.agentName && <p className={styles.drawerAgent}>{post.agentName}</p>}
         {post.timestamp && (
           <p className={styles.drawerTime}>{formatRelativeTime(post.timestamp as string)}</p>
         )}
@@ -122,7 +135,8 @@ interface AssessmentPanelProps {
  * Story 3.3: Assessment Panel & Noticeboard (FR12-FR14)
  */
 export function AssessmentPanel({ conversation, conversationId }: AssessmentPanelProps) {
-  const { assessments, statementCapture, noticeboard, application, startedAt } = conversation
+  const { assessments, statementCapture, noticeboard, application, startedAt, customer } =
+    conversation
   const [selectedPost, setSelectedPost] = useState<NoticeboardPost | null>(null)
   const [openStatementSlot, setOpenStatementSlot] = useState<StatementSlot | null>(null)
   const [openAssessment, setOpenAssessment] = useState<AssessmentType | null>(null)
@@ -132,9 +146,13 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
     const handler = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
       if (e.key === '[') {
-        document.querySelectorAll<HTMLButtonElement>('[aria-expanded="true"]').forEach((btn) => btn.click())
+        document
+          .querySelectorAll<HTMLButtonElement>('[aria-expanded="true"]')
+          .forEach((btn) => btn.click())
       } else if (e.key === ']') {
-        document.querySelectorAll<HTMLButtonElement>('[aria-expanded="false"]').forEach((btn) => btn.click())
+        document
+          .querySelectorAll<HTMLButtonElement>('[aria-expanded="false"]')
+          .forEach((btn) => btn.click())
       }
     }
     document.addEventListener('keydown', handler)
@@ -149,6 +167,9 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
   ]
     .filter(Boolean)
     .join(' · ')
+
+  // Customer summary
+  const customerSummary = customer?.fullName || customer?.customerId || 'No data'
 
   // Identity summary
   const identity = assessments?.identityRisk as Record<string, unknown> | undefined
@@ -197,7 +218,7 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
   // Noticeboard: most recent post
   const latestPost = noticeboard?.[noticeboard.length - 1]
   const noticeboardSummary = latestPost
-    ? (latestPost.content ?? '').slice(0, 40) + (((latestPost.content ?? '').length > 40) ? '…' : '')
+    ? (latestPost.content ?? '').slice(0, 40) + ((latestPost.content ?? '').length > 40 ? '…' : '')
     : 'No posts'
 
   return (
@@ -212,7 +233,9 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
             {application?.loanAmount != null && (
               <div className={styles.statementRow}>
                 <span className={styles.statementLabel}>Loan amount</span>
-                <span className={styles.statementValue}>{formatCurrency(application.loanAmount)}</span>
+                <span className={styles.statementValue}>
+                  {formatCurrency(application.loanAmount)}
+                </span>
               </div>
             )}
             {application?.purpose && (
@@ -236,6 +259,64 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
           </div>
         ) : (
           <p>No application data available.</p>
+        )}
+      </AssessmentSection>
+
+      {/* Customer */}
+      <AssessmentSection title="Customer" summary={customerSummary}>
+        {customer ? (
+          <div>
+            <div className={styles.statementRow}>
+              <span className={styles.statementLabel}>Name</span>
+              <span className={styles.statementValue}>{customer.fullName ?? '—'}</span>
+            </div>
+            <div className={styles.statementRow}>
+              <span className={styles.statementLabel}>Preferred name</span>
+              <span className={styles.statementValue}>{customer.preferredName ?? '—'}</span>
+            </div>
+            <div className={styles.statementRow}>
+              <span className={styles.statementLabel}>Customer ID</span>
+              <span className={styles.statementValue}>{customer.customerId ?? '—'}</span>
+            </div>
+            <div className={styles.statementRow}>
+              <span className={styles.statementLabel}>Email</span>
+              <span className={styles.statementValue}>{customer.emailAddress ?? '—'}</span>
+            </div>
+            <div className={styles.statementRow}>
+              <span className={styles.statementLabel}>Mobile</span>
+              <span className={styles.statementValue}>
+                {customer.mobilePhoneNumber ?? '—'}
+              </span>
+            </div>
+            <div className={styles.statementRow}>
+              <span className={styles.statementLabel}>Date of birth</span>
+              <span className={styles.statementValue}>
+                {customer.dateOfBirth ? formatDateOnly(customer.dateOfBirth) : '—'}
+              </span>
+            </div>
+            <div className={styles.statementRow}>
+              <span className={styles.statementLabel}>Address</span>
+              <span className={styles.statementValue}>
+                {customer.residentialAddress ?? '—'}
+              </span>
+            </div>
+            <div className={styles.statementRow}>
+              <span className={styles.statementLabel}>Identity</span>
+              <span className={styles.statementValue}>
+                {customer.identityVerified ? 'Verified ✓' : 'Not verified'}
+              </span>
+            </div>
+            {customer.customerId && (
+              <Link
+                href={`/admin/servicing/${customer.customerId}`}
+                className={styles.detailLinkButton}
+              >
+                View profile →
+              </Link>
+            )}
+          </div>
+        ) : (
+          <p>No customer data.</p>
         )}
       </AssessmentSection>
 
@@ -357,7 +438,9 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
             </div>
             <div className={styles.statementRow}>
               <span className={styles.statementLabel}>Retrieval</span>
-              <span className={styles.statementValue}>{retrievalComplete ? 'Complete' : 'Pending'}</span>
+              <span className={styles.statementValue}>
+                {retrievalComplete ? 'Complete' : 'Pending'}
+              </span>
             </div>
             <div className={styles.statementRow}>
               <span className={styles.statementLabel}>Checks</span>

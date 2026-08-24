@@ -79,6 +79,26 @@
   color: var(--theme-elevation-800, #222);
 }
 
+.idGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.customerIdLink {
+  color: var(--theme-success-700, #0369a1);
+  text-decoration: none;
+}
+
+.customerIdLink .customerIdValue {
+  color: inherit;
+}
+
+.customerIdLink:hover,
+.customerIdLink:focus-visible {
+  text-decoration: underline;
+}
+
 .viewProfileLink {
   font-size: 13px;
   color: var(--theme-success-700, #0369a1);
