@@ -220,3 +220,13 @@ export const EVENT_TYPE_APPLICANT_RELEASE_GATE_MODE_CHANGED =
 
 export const RELEASE_TYPES = ['waitlist', 'phone_list', 'open_quota'] as const
 export type ReleaseType = (typeof RELEASE_TYPES)[number]
+
+// =============================================================================
+// Event Types (Conversation Kill)
+// =============================================================================
+
+/**
+ * Command: operator-initiated conversation termination (spec 2026-08-24).
+ */
+export const EVENT_TYPE_CONVERSATION_KILL_REQUESTED =
+  process.env.EVENT_TYPE_CONVERSATION_KILL_REQUESTED ?? 'conversation.kill.requested.v1'

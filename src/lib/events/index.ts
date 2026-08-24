@@ -56,11 +56,6 @@ export type {
 } from './schemas'
 
 // Polling
-export {
-  pollForWriteOffRequest,
-  pollForWriteOffUpdate,
-  pollUntil,
-  PollTimeoutError,
-} from './poll'
+export { pollForWriteOffRequest, pollForWriteOffUpdate, pollUntil, PollTimeoutError } from './poll'
 
 export type { PollOptions, PollResult } from './poll'

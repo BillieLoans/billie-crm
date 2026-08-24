@@ -140,6 +140,20 @@ export const BlockClearRequestCommandSchema = z.object({
 export type BlockClearRequestCommand = z.infer<typeof BlockClearRequestCommandSchema>
 
 /**
+ * Schema for the conversation kill command (input from client).
+ */
+export const ConversationKillCommandSchema = z.object({
+  conversationId: z.string().min(1, 'Conversation ID is required'),
+  applicationNumber: z.string().optional(),
+  customerId: z.string().min(1, 'Customer ID is required'),
+  reasonCategory: z.enum(['fraud_abuse', 'operational', 'compliance']),
+  note: z.string().max(500).optional(),
+  blockRequested: z.boolean().optional(),
+})
+
+export type ConversationKillCommand = z.infer<typeof ConversationKillCommandSchema>
+
+/**
  * Schema for the block clear approval command (input from client).
  */
 export const BlockClearApproveCommandSchema = z.object({
