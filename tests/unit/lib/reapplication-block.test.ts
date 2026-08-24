@@ -19,6 +19,7 @@ describe('formatBlockReason', () => {
     expect(formatBlockReason('ACCOUNT_CONDUCT')).toBe('Account conduct')
     expect(formatBlockReason('IDENTITY_CONFLICT')).toBe('Identity conflict')
     expect(formatBlockReason('PRIOR_SERIOUS_ARREARS')).toBe('Prior serious arrears')
+    expect(formatBlockReason('MANUAL_ADMIN')).toBe('Manually blocked (staff)')
   })
 
   it('falls back to the raw value for unknown enums', () => {

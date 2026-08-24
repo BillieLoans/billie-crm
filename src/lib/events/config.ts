@@ -180,12 +180,17 @@ export const CLEARABLE_REASONS = [
   'ID_VERIFICATION',
   'SERVICEABILITY',
   'ACCOUNT_CONDUCT',
+  'MANUAL_ADMIN',
 ] as const
 
 /**
  * Reasons that require approval before clearing.
  */
-export const REASONS_REQUIRING_APPROVAL = ['PRIOR_DEFAULT', 'PRIOR_SERIOUS_ARREARS'] as const
+export const REASONS_REQUIRING_APPROVAL = [
+  'PRIOR_DEFAULT',
+  'PRIOR_SERIOUS_ARREARS',
+  'MANUAL_ADMIN',
+] as const
 
 /**
  * Type alias for clearable reason.

@@ -23,6 +23,7 @@ const BLOCK_REASON_LABELS: Record<string, string> = {
   SERVICEABILITY: 'Serviceability',
   ACCOUNT_CONDUCT: 'Account conduct',
   IDENTITY_CONFLICT: 'Identity conflict',
+  MANUAL_ADMIN: 'Manually blocked (staff)',
 }
 
 export function formatBlockReason(reason: string | null | undefined): string {
