@@ -39,6 +39,11 @@ IMAGE_LABEL ?= $(ENV)-$(shell git -C "$(WORKTREE_ROOT)" rev-parse --short HEAD 2
 # which case the --build-arg is omitted entirely and the var stays unset.
 BUILD_SHA ?= $(shell git -C "$(WORKTREE_ROOT)" rev-parse --short HEAD 2>/dev/null)
 
+# Phase 2 feature flag for the "also block" checkbox in End Conversation. Inlined
+# at build time. Defaults to true for demo, false for prod (can be overridden via
+# CLI: make deploy ENV=demo NEXT_PUBLIC_ENABLE_KILL_BLOCK=true).
+NEXT_PUBLIC_ENABLE_KILL_BLOCK ?= $(if $(filter $(ENV),demo),true,false)
+
 define PROD_CHECK
 	@if [ -n "$(IS_PROD)" ] && [ "$(CONFIRM)" != "1" ]; then \
 		echo ""; \
@@ -191,6 +196,7 @@ deploy: check-config preflight
 	@FLY_OPTS="--strategy rolling --image-label $(IMAGE_LABEL)"; \
 	[ "$(NO_CACHE)" = "1" ] && FLY_OPTS="$$FLY_OPTS --no-cache"; \
 	[ -n "$(BUILD_SHA)" ] && FLY_OPTS="$$FLY_OPTS --build-arg NEXT_PUBLIC_BUILD_SHA=$(BUILD_SHA)"; \
+	FLY_OPTS="$$FLY_OPTS --build-arg NEXT_PUBLIC_ENABLE_KILL_BLOCK=$(NEXT_PUBLIC_ENABLE_KILL_BLOCK)"; \
 	if [ -n "$(GITHUB_TOKEN)" ]; then \
 		echo "Building with GITHUB_TOKEN (for private SDKs)"; \
 		fly deploy "$(APP_DIR)" -c "$(CONFIG_FILE)" -a "$(APP_NAME)" --build-secret GITHUB_TOKEN="$(GITHUB_TOKEN)" $$FLY_OPTS; \

@@ -76,6 +76,7 @@ describe('EndConversationButton', () => {
 
   afterEach(() => {
     cleanup()
+    vi.unstubAllEnvs()
   })
 
   it('renders "End conversation" for a supervisor user when status is active', () => {
