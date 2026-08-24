@@ -894,6 +894,18 @@ export interface Conversation {
       | null;
   };
   /**
+   * Operator conversation-kill audit: {request_id, actor, reason_category, note, killed_at}
+   */
+  killRecord?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
    * Statement capture flow state (consent, Basiq job, retrieval, affordability)
    */
   statementCapture?:
@@ -2318,6 +2330,7 @@ export interface ConversationsSelect<T extends boolean = true> {
         postIdentityRisk?: T;
         creditAssessmentComplete?: T;
       };
+  killRecord?: T;
   statementCapture?: T;
   statementAccountHolders?: T;
   decisionStatus?: T;
