@@ -26,6 +26,16 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/admin/applications',
 }))
 
+// ConversationDetailView now renders EndConversationButton, which pulls the
+// @payloadcms/ui client barrel in (useAuth), which side-effect-imports
+// react-image-crop's CSS. Stub it (matching tests/unit/ui/assessment-views.test.tsx
+// and the nav-sidebar precedent) so the suite can collect without the
+// externalised .css import blowing up. `user: null` means the button simply
+// won't render — these tests don't assert on it.
+vi.mock('@payloadcms/ui', () => ({
+  useAuth: () => ({ user: null }),
+}))
+
 // Panels are exercised by their own tests — stub them out here
 vi.mock('@/components/ConversationDetailView/MessagePanel', () => ({
   MessagePanel: () => <div data-testid="message-panel" />,
