@@ -23,7 +23,7 @@ import * as migration_20260818_001906_issues_collection from './20260818_001906_
 import * as migration_20260820_063404_statement_account_holders from './20260820_063404_statement_account_holders';
 import * as migration_20260822_121203_reapplication_block_state_version from './20260822_121203_reapplication_block_state_version';
 import * as migration_20260822_121938_reapplication_block_state_changed_at from './20260822_121938_reapplication_block_state_changed_at';
-import * as migration_20260824_211344_conversation_kill_record from './20260824_211344_conversation_kill_record';
+import * as migration_20260824_112358_conversation_kill_record from './20260824_112358_conversation_kill_record';
 
 export const migrations = [
   {
@@ -149,11 +149,11 @@ export const migrations = [
   {
     up: migration_20260822_121938_reapplication_block_state_changed_at.up,
     down: migration_20260822_121938_reapplication_block_state_changed_at.down,
-    name: '20260822_121938_reapplication_block_state_changed_at'
+    name: '20260822_121938_reapplication_block_state_changed_at',
   },
   {
-    up: migration_20260824_211344_conversation_kill_record.up,
-    down: migration_20260824_211344_conversation_kill_record.down,
-    name: '20260824_211344_conversation_kill_record',
+    up: migration_20260824_112358_conversation_kill_record.up,
+    down: migration_20260824_112358_conversation_kill_record.down,
+    name: '20260824_112358_conversation_kill_record'
   },
 ];
