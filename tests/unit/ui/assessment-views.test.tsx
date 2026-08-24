@@ -135,27 +135,98 @@ describe('AssessmentPanel — identity summary', () => {
 describe('AssessmentPanel — fraud risk summary', () => {
   afterEach(() => cleanup())
 
-  it('shows the severity and score, with fail styling for HIGH severity', () => {
-    const conversation = baseConversation({
-      assessments: { fraudCheck: { severity: 'HIGH', final_score: 87 } },
-    })
-    render(<AssessmentPanel conversation={conversation} conversationId="conv-001" />)
-    expect(screen.getAllByText('HIGH').length).toBeGreaterThan(0)
+  const openFraudSection = () => {
     const fraudBtn = screen
       .getAllByRole('button')
       .find((b) => b.textContent?.includes('Fraud risk'))
     fireEvent.click(fraudBtn!)
-    expect(screen.getByText(/score 87/)).toBeInTheDocument()
+  }
+
+  const summaryFraudCheck = (overrides: Record<string, unknown> = {}) => ({
+    latest: { severity: 'LOW', final_score: 2, rationale: 'benign turn' },
+    peak_severity: 'LOW',
+    peak_score: 5,
+    turns_assessed: 12,
+    flagged_count: 0,
+    first_assessed_at: '2026-08-20T01:00:00+00:00',
+    last_assessed_at: '2026-08-24T01:00:00+00:00',
+    ...overrides,
   })
 
-  it('shows "No data" summary and fallback message when fraudCheck is absent', () => {
+  it('shows "Not assessed" chip and explicit copy when no row has arrived', () => {
     const conversation = baseConversation({ assessments: {} })
     render(<AssessmentPanel conversation={conversation} conversationId="conv-001" />)
-    const fraudBtn = screen
-      .getAllByRole('button')
-      .find((b) => b.textContent?.includes('Fraud risk'))
-    fireEvent.click(fraudBtn!)
-    expect(screen.getByText('No fraud-risk assessment data.')).toBeInTheDocument()
+    expect(screen.getByText('Not assessed')).toBeInTheDocument()
+    openFraudSection()
+    expect(
+      screen.getByText(
+        'Not assessed yet — no fraud_risk.assessment.v1 received for this conversation.',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('shows "Clear · N turns" and the no-signals line when the peak is LOW', () => {
+    const conversation = baseConversation({
+      assessments: { fraudCheck: summaryFraudCheck() },
+    })
+    render(<AssessmentPanel conversation={conversation} conversationId="conv-001" />)
+    expect(screen.getByText('Clear · 12 turns')).toBeInTheDocument()
+    openFraudSection()
+    expect(
+      screen.getByText(/No fraud signals raised across 12 turns \(peak score 5/),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/No fraud-risk assessment data/)).not.toBeInTheDocument()
+  })
+
+  it('shows "MEDIUM · N turns" with peak details and a latest-only preview', () => {
+    const conversation = baseConversation({
+      assessments: {
+        fraudCheck: summaryFraudCheck({
+          peak_severity: 'MEDIUM',
+          peak_score: 30,
+          turns_assessed: 8,
+          flagged_count: 1,
+        }),
+      },
+    })
+    const { container } = render(
+      <AssessmentPanel conversation={conversation} conversationId="conv-001" />,
+    )
+    expect(screen.getByText('MEDIUM · 8 turns')).toBeInTheDocument()
+    openFraudSection()
+    expect(screen.getByText(/MEDIUM — score 30/)).toBeInTheDocument()
+    expect(screen.getByText('1 of 8 turns')).toBeInTheDocument()
+    // JSON preview shows the latest decision, not the whole summary envelope.
+    const pre = container.querySelector('pre')
+    expect(pre?.textContent).toContain('benign turn')
+    expect(pre?.textContent).not.toContain('peak_severity')
+  })
+
+  it('shows "CRITICAL · N turns" for a peak-CRITICAL summary', () => {
+    const conversation = baseConversation({
+      assessments: {
+        fraudCheck: summaryFraudCheck({
+          peak_severity: 'CRITICAL',
+          peak_score: 95,
+          turns_assessed: 3,
+          flagged_count: 2,
+        }),
+      },
+    })
+    render(<AssessmentPanel conversation={conversation} conversationId="conv-001" />)
+    expect(screen.getByText('CRITICAL · 3 turns')).toBeInTheDocument()
+    openFraudSection()
+    expect(screen.getByText(/CRITICAL — score 95/)).toBeInTheDocument()
+  })
+
+  it('falls back to the legacy flat shape as one flagged turn (pre-rollout rows)', () => {
+    const conversation = baseConversation({
+      assessments: { fraudCheck: { severity: 'MEDIUM', final_score: 30 } },
+    })
+    render(<AssessmentPanel conversation={conversation} conversationId="conv-001" />)
+    expect(screen.getByText('MEDIUM · 1 turn')).toBeInTheDocument()
+    openFraudSection()
+    expect(screen.getByText(/MEDIUM — score 30/)).toBeInTheDocument()
   })
 })
 

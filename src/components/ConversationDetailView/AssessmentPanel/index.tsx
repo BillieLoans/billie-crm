@@ -193,10 +193,30 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
   const pirDecision = postIdentityRisk?.decision as string | undefined
   const pirHasS3 = Boolean(postIdentityRisk?.s3Key || postIdentityRisk?.file_location)
 
-  // Fraud risk (billieChat FraudRiskAgent) — written to assessments.fraudCheck.
+  // Fraud risk (billieChat FraudRiskAgent) — rolling summary in assessments.fraudCheck:
+  // { latest, peak_severity, peak_score, turns_assessed, flagged_count, *_assessed_at }.
+  // Legacy rows are a flat FraudRiskDecision (no peak_severity key) — treat as one
+  // flagged turn so pre-rollout MEDIUM+ rows keep rendering their severity.
   const fraudCheck = assessments?.fraudCheck as Record<string, unknown> | undefined
-  const fraudSeverity = (fraudCheck?.severity as string | undefined)?.toUpperCase()
-  const fraudSummary = fraudSeverity ? fraudSeverity : 'No data'
+  const fraudIsSummary = Boolean(fraudCheck && 'peak_severity' in fraudCheck)
+  const fraudSeverity = (
+    (fraudIsSummary ? fraudCheck?.peak_severity : fraudCheck?.severity) as string | undefined
+  )?.toUpperCase()
+  const fraudLatest = (fraudIsSummary ? fraudCheck?.latest : fraudCheck) as
+    | Record<string, unknown>
+    | undefined
+  const fraudTurns = fraudCheck ? (fraudIsSummary ? Number(fraudCheck.turns_assessed ?? 1) : 1) : 0
+  const fraudFlagged = fraudCheck ? (fraudIsSummary ? Number(fraudCheck.flagged_count ?? 0) : 1) : 0
+  const fraudPeakScore = fraudCheck
+    ? Number((fraudIsSummary ? fraudCheck.peak_score : fraudCheck.final_score) ?? 0)
+    : null
+  const fraudLastAssessedAt = fraudCheck?.last_assessed_at as string | undefined
+  const fraudTurnsLabel = `${fraudTurns} turn${fraudTurns === 1 ? '' : 's'}`
+  const fraudSummary = !fraudCheck
+    ? 'Not assessed'
+    : fraudSeverity === 'LOW'
+      ? `Clear · ${fraudTurnsLabel}`
+      : `${fraudSeverity ?? '?'} · ${fraudTurnsLabel}`
 
   // Statements summary
   const sc = statementCapture as Record<string, unknown> | undefined
@@ -284,9 +304,7 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
             </div>
             <div className={styles.statementRow}>
               <span className={styles.statementLabel}>Mobile</span>
-              <span className={styles.statementValue}>
-                {customer.mobilePhoneNumber ?? '—'}
-              </span>
+              <span className={styles.statementValue}>{customer.mobilePhoneNumber ?? '—'}</span>
             </div>
             <div className={styles.statementRow}>
               <span className={styles.statementLabel}>Date of birth</span>
@@ -296,9 +314,7 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
             </div>
             <div className={styles.statementRow}>
               <span className={styles.statementLabel}>Address</span>
-              <span className={styles.statementValue}>
-                {customer.residentialAddress ?? '—'}
-              </span>
+              <span className={styles.statementValue}>{customer.residentialAddress ?? '—'}</span>
             </div>
             <div className={styles.statementRow}>
               <span className={styles.statementLabel}>Identity</span>
@@ -410,7 +426,17 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
 
       {/* Fraud risk */}
       <AssessmentSection title="Fraud risk" summary={fraudSummary}>
-        {fraudCheck ? (
+        {!fraudCheck ? (
+          <p>Not assessed yet — no fraud_risk.assessment.v1 received for this conversation.</p>
+        ) : fraudSeverity === 'LOW' ? (
+          <p className={styles.pass}>
+            {`No fraud signals raised across ${fraudTurnsLabel} (peak score ${fraudPeakScore ?? '?'}${
+              fraudLastAssessedAt
+                ? `, last assessed ${formatRelativeTime(fraudLastAssessedAt)}`
+                : ''
+            })`}
+          </p>
+        ) : (
           <div>
             <p
               className={
@@ -419,12 +445,24 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
                   : styles.pass
               }
             >
-              {fraudSeverity} — score {String(fraudCheck.final_score ?? '?')}
+              {fraudSeverity} — score {String(fraudPeakScore ?? '?')}
             </p>
-            <pre className={styles.jsonPreview}>{JSON.stringify(fraudCheck, null, 2)}</pre>
+            <div className={styles.statementRow}>
+              <span className={styles.statementLabel}>Flagged turns</span>
+              <span className={styles.statementValue}>
+                {fraudFlagged} of {fraudTurnsLabel}
+              </span>
+            </div>
+            <div className={styles.statementRow}>
+              <span className={styles.statementLabel}>Last assessed</span>
+              <span className={styles.statementValue}>
+                {fraudLastAssessedAt ? formatRelativeTime(fraudLastAssessedAt) : '—'}
+              </span>
+            </div>
+            {fraudLatest ? (
+              <pre className={styles.jsonPreview}>{JSON.stringify(fraudLatest, null, 2)}</pre>
+            ) : null}
           </div>
-        ) : (
-          <p>No fraud-risk assessment data.</p>
         )}
       </AssessmentSection>
 
