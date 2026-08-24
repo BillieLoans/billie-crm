@@ -193,6 +193,48 @@ describe('EndConversationButton', () => {
     fireEvent.click(screen.getByRole('button', { name: 'End conversation' }))
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
   })
+
+  it('renders the block checkbox in the modal when NEXT_PUBLIC_ENABLE_KILL_BLOCK is true', () => {
+    vi.stubEnv('NEXT_PUBLIC_ENABLE_KILL_BLOCK', 'true')
+    renderWithProviders(
+      <EndConversationButton conversation={baseConversation()} conversationId="conv-001" />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'End conversation' }))
+    expect(screen.getByRole('checkbox', { name: /also block/i })).toBeInTheDocument()
+  })
+
+  it('posts blockRequested: true when the checkbox is ticked and confirmed with the flag enabled', async () => {
+    vi.stubEnv('NEXT_PUBLIC_ENABLE_KILL_BLOCK', 'true')
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ eventId: 'evt-1', requestId: 'req-1', status: 'accepted' }),
+    })
+
+    renderWithProviders(
+      <EndConversationButton conversation={baseConversation()} conversationId="conv-001" />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'End conversation' }))
+    fireEvent.click(screen.getByLabelText('Fraud / abuse'))
+    fireEvent.click(screen.getByRole('checkbox', { name: /also block/i }))
+    fireEvent.click(screen.getByTestId('end-conversation-confirm'))
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
+
+    const [url, options] = mockFetch.mock.calls[0]
+    expect(url).toBe('/api/commands/conversation-kill')
+    expect(JSON.parse(options.body)).toEqual({
+      conversationId: 'conv-001',
+      customerId: 'CUS-001',
+      applicationNumber: 'APP-001',
+      reasonCategory: 'fraud_abuse',
+      note: undefined,
+      blockRequested: true,
+    })
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('end-conversation-modal')).not.toBeInTheDocument(),
+    )
+  })
 })
 
 describe('KillBanner', () => {
