@@ -180,12 +180,17 @@ export const CLEARABLE_REASONS = [
   'ID_VERIFICATION',
   'SERVICEABILITY',
   'ACCOUNT_CONDUCT',
+  'MANUAL_ADMIN',
 ] as const
 
 /**
  * Reasons that require approval before clearing.
  */
-export const REASONS_REQUIRING_APPROVAL = ['PRIOR_DEFAULT', 'PRIOR_SERIOUS_ARREARS'] as const
+export const REASONS_REQUIRING_APPROVAL = [
+  'PRIOR_DEFAULT',
+  'PRIOR_SERIOUS_ARREARS',
+  'MANUAL_ADMIN',
+] as const
 
 /**
  * Type alias for clearable reason.
@@ -220,3 +225,13 @@ export const EVENT_TYPE_APPLICANT_RELEASE_GATE_MODE_CHANGED =
 
 export const RELEASE_TYPES = ['waitlist', 'phone_list', 'open_quota'] as const
 export type ReleaseType = (typeof RELEASE_TYPES)[number]
+
+// =============================================================================
+// Event Types (Conversation Kill)
+// =============================================================================
+
+/**
+ * Command: operator-initiated conversation termination (spec 2026-08-24).
+ */
+export const EVENT_TYPE_CONVERSATION_KILL_REQUESTED =
+  process.env.EVENT_TYPE_CONVERSATION_KILL_REQUESTED ?? 'conversation.kill.requested.v1'

@@ -110,6 +110,213 @@
   text-decoration: underline;
 }
 
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* ===== End conversation — button, kill banner ===== */
+
+.endConversationBtn {
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid var(--theme-error-300, #f0b8b1);
+  border-radius: 6px;
+  background: var(--theme-error-100, #fdecea);
+  color: var(--theme-error-600, #b91c1c);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.endConversationBtn:hover:not(:disabled) {
+  background: var(--theme-error-200, #f5c6bf);
+}
+
+.endConversationBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.killBanner {
+  margin: 0 24px 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--theme-elevation-150, #e5e7eb);
+  background: var(--theme-elevation-50, #f9fafb);
+  color: var(--theme-elevation-600, #6b7280);
+  font-size: 13px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+/* ===== End conversation — confirm modal ===== */
+
+.modalBody {
+  padding: 20px;
+}
+
+.stopMessagePreview {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--theme-elevation-150, #e5e7eb);
+  background: var(--theme-elevation-50, #f9fafb);
+  color: var(--theme-elevation-700, #374151);
+  font-size: 13px;
+  font-style: italic;
+}
+
+.fieldGroup {
+  margin-bottom: 16px;
+}
+
+.fieldLabel {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--theme-elevation-800, #222);
+}
+
+.radioList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.radioLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--theme-elevation-800, #222);
+  cursor: pointer;
+}
+
+.radioLabel input[type='radio'] {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.radioLabel input[type='radio']:disabled {
+  cursor: not-allowed;
+}
+
+.checkboxLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--theme-elevation-800, #222);
+  cursor: pointer;
+}
+
+.checkboxLabel input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.checkboxLabel input[type='checkbox']:disabled {
+  cursor: not-allowed;
+}
+
+.textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--theme-elevation-200, #d1d5db);
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 72px;
+  outline: none;
+  background: var(--theme-bg, #fff);
+  color: var(--theme-elevation-800, #222);
+  box-sizing: border-box;
+}
+
+.textarea:focus {
+  box-shadow: 0 0 0 2px var(--theme-success-400, #3b82f6);
+  border-color: var(--theme-success-400, #3b82f6);
+}
+
+.textarea:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.errorMessage {
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--theme-error-300, #f0b8b1);
+  background: var(--theme-error-100, #fdecea);
+  color: var(--theme-error-600, #b91c1c);
+  font-size: 13px;
+}
+
+.modalFooter {
+  display: flex;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--theme-elevation-150, #e5e7eb);
+}
+
+.cancelBtn {
+  flex: 1;
+  padding: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  border: 1px solid var(--theme-elevation-200, #d1d5db);
+  border-radius: 6px;
+  background: var(--theme-elevation-50, #f9fafb);
+  color: var(--theme-elevation-800, #222);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.cancelBtn:hover:not(:disabled) {
+  background: var(--theme-elevation-100, #f3f4f6);
+}
+
+.cancelBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.submitBtn {
+  flex: 1;
+  padding: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  border: none;
+  border-radius: 6px;
+  background: var(--theme-error-600, #dc2626);
+  color: #fff;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.submitBtn:hover:not(:disabled) {
+  background: var(--theme-error-700, #b91c1c);
+}
+
+.submitBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Split panel layout: 60/40 */
 .splitPanel {
   display: grid;

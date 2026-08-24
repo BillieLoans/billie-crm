@@ -99,6 +99,11 @@ COPY . .
 ARG NEXT_PUBLIC_BUILD_SHA
 ENV NEXT_PUBLIC_BUILD_SHA=$NEXT_PUBLIC_BUILD_SHA
 
+# Phase 2 feature flag for the "also block" checkbox in End Conversation.
+# Inlined at build time; defaults to false (feature disabled in demo unless explicitly set).
+ARG NEXT_PUBLIC_ENABLE_KILL_BLOCK=false
+ENV NEXT_PUBLIC_ENABLE_KILL_BLOCK=$NEXT_PUBLIC_ENABLE_KILL_BLOCK
+
 # Build Next.js (standalone output)
 RUN pnpm run build
 

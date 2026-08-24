@@ -734,6 +734,40 @@ async def handle_final_decision(pool: asyncpg.Pool, event: dict[str, Any]) -> No
     log.info("Final decision recorded", status=status)
 
 
+async def handle_conversation_killed(pool: asyncpg.Pool, event: dict[str, Any]) -> None:
+    """Project conversation.killed.v1 — operator/system conversation kill.
+
+    Sets the terminal status and stores the audit record. Update-only: a kill
+    for an unknown conversation updates nothing.
+    """
+    payload = parse_payload(event)
+    conversation_id = safe_str(
+        event.get("cid") or event.get("conv") or payload.get("conversation_id"),
+        "conversation_id",
+    )
+    log = logger.bind(conversation_id=conversation_id)
+    if not conversation_id:
+        log.warning("conversation.killed.v1 without conversation id — skipping")
+        return
+
+    kill_record = {
+        "request_id": payload.get("request_id"),
+        "actor": payload.get("actor"),
+        "reason_category": payload.get("reason_category"),
+        "note": payload.get("note"),
+        "killed_at": payload.get("killed_at"),
+    }
+    await pool.execute(
+        "UPDATE conversations SET status = $1, kill_record = $2::jsonb, "
+        "updated_at = NOW(), version = COALESCE(version, 1) + 1 "
+        "WHERE conversation_id = $3",
+        "hard_end",
+        json.dumps(kill_record),
+        conversation_id,
+    )
+    log.info("conversation kill projected", actor=payload.get("actor"))
+
+
 # =============================================================================
 # Conversation summary
 # =============================================================================

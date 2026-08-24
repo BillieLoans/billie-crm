@@ -342,3 +342,24 @@ export interface ApplicantReleaseGateModeSetPayload {
   set_by: string
   reason?: string
 }
+
+// =============================================================================
+// Conversation Kill Payloads
+// =============================================================================
+
+/**
+ * conversation.kill.requested.v1 — payload published to chatLedger.
+ * Consumed by billieChat applicationState (kill) and reapplicationBlock
+ * (manual block when block_requested).
+ */
+export interface ConversationKillPayload {
+  request_id: string
+  conversation_id: string
+  application_number: string
+  customer_id: string
+  reason_category: 'fraud_abuse' | 'operational' | 'compliance'
+  note: string
+  actor: string // "user:<staff-id>" | "system:<agent>"
+  block_requested: boolean
+  requested_at: string
+}

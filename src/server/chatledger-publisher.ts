@@ -21,6 +21,7 @@ import {
   EVENT_TYPE_REAPPLICATION_BLOCK_CLEAR_AUTHORIZED,
   EVENT_TYPE_CONTACT_INTAKE_REQUESTED,
   EVENT_TYPE_FEEDBACK_SUBMIT_REQUESTED,
+  EVENT_TYPE_CONVERSATION_KILL_REQUESTED,
   PUBLISH_MAX_RETRIES,
   PUBLISH_BACKOFF_MS,
 } from '@/lib/events/config'
@@ -28,6 +29,7 @@ import type {
   ReapplicationBlockClearAuthorizedPayload,
   ContactIntakeCommandPayload,
   FeedbackSubmitCommandPayload,
+  ConversationKillPayload,
 } from '@/lib/events/types'
 
 function sleep(ms: number): Promise<void> {
@@ -192,6 +194,53 @@ export async function publishFeedbackSubmitted(
     }
   }
   throw new EventPublishError('Failed to publish feedback intake to chatLedger after retries', {
+    attempts: PUBLISH_MAX_RETRIES,
+    cause: lastError,
+  })
+}
+
+/**
+ * Publish a conversation.kill.requested.v1 command to chatLedger.
+ *
+ * Routed by billieChat's Broker to applicationState (kill) and
+ * reapplicationBlock (optional manual block). Uses the REAL conversation id
+ * as `conv` — the kill applies to a live customer conversation.
+ */
+export async function publishConversationKill(
+  payload: ConversationKillPayload,
+): Promise<{ eventId: string }> {
+  const eventId = nanoid()
+  const fields: Record<string, string> = {
+    conv: payload.conversation_id,
+    agt: CRM_AGENT_ID,
+    usr: payload.customer_id,
+    seq: '1',
+    cls: 'cmd',
+    typ: EVENT_TYPE_CONVERSATION_KILL_REQUESTED,
+    cause: eventId,
+    payload: JSON.stringify(payload),
+  }
+  const redis = getChatLedgerRedisClient()
+  let lastError: Error | undefined
+  for (let attempt = 0; attempt < PUBLISH_MAX_RETRIES; attempt++) {
+    try {
+      if (redis.status === 'wait') {
+        await redis.connect()
+      }
+      await redis.xadd(CHATLEDGER_STREAM, '*', ...Object.entries(fields).flat())
+      return { eventId }
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error))
+      console.warn(
+        `[ChatLedgerPublisher] Attempt ${attempt + 1}/${PUBLISH_MAX_RETRIES} failed:`,
+        lastError.message,
+      )
+      if (attempt < PUBLISH_MAX_RETRIES - 1) {
+        await sleep(PUBLISH_BACKOFF_MS[attempt] ?? 400)
+      }
+    }
+  }
+  throw new EventPublishError('Failed to publish conversation kill after retries', {
     attempts: PUBLISH_MAX_RETRIES,
     cause: lastError,
   })

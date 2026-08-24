@@ -53,6 +53,7 @@ from .handlers import (
     handle_contact_unlinked,
     handle_contact_updated,
     # Conversation handlers
+    handle_conversation_killed,
     handle_conversation_started,
     handle_conversation_summary,
     handle_conversation_summary_changed,
@@ -187,6 +188,7 @@ def setup_handlers(processor: EventProcessor) -> None:
 
     # Final decision
     processor.register_handler("final_credit_decision", handle_final_decision)
+    processor.register_handler("conversation.killed.v1", handle_conversation_killed)
 
     # Re-application block (BTB-135) — the rich "why" behind a block-decline,
     # arrives before the final_credit_decision for the same application.

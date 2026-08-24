@@ -320,7 +320,7 @@ export interface Customer {
    */
   reapplicationBlock?: {
     /**
-     * Block reason enum: ACTIVE_LOAN, PRIOR_DEFAULT, PRIOR_SERIOUS_ARREARS, PEP, ID_VERIFICATION, SERVICEABILITY, ACCOUNT_CONDUCT, IDENTITY_CONFLICT
+     * Block reason enum: ACTIVE_LOAN, PRIOR_DEFAULT, PRIOR_SERIOUS_ARREARS, PEP, ID_VERIFICATION, SERVICEABILITY, ACCOUNT_CONDUCT, IDENTITY_CONFLICT, MANUAL_ADMIN
      */
     reason?: string | null;
     /**
@@ -893,6 +893,18 @@ export interface Conversation {
       | boolean
       | null;
   };
+  /**
+   * Operator conversation-kill audit: {request_id, actor, reason_category, note, killed_at}
+   */
+  killRecord?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   /**
    * Statement capture flow state (consent, Basiq job, retrieval, affordability)
    */
@@ -2318,6 +2330,7 @@ export interface ConversationsSelect<T extends boolean = true> {
         postIdentityRisk?: T;
         creditAssessmentComplete?: T;
       };
+  killRecord?: T;
   statementCapture?: T;
   statementAccountHolders?: T;
   decisionStatus?: T;

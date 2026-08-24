@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useConversation } from '@/hooks/queries/useConversation'
 import { MessagePanel } from './MessagePanel'
 import { AssessmentPanel } from './AssessmentPanel'
+import { EndConversationButton, KillBanner } from './EndConversation'
 import { StatusBadge } from '../ApplicationsView/StatusBadge'
 import { CopyButton } from '@/components/ui/CopyButton'
 import { formatCurrency, formatDateOnly } from '@/lib/formatters'
@@ -136,13 +137,20 @@ export function ConversationDetailView({ conversationId, referrer }: Conversatio
               </span>
             )}
           </div>
-          {customerId && (
-            <Link href={`/admin/servicing/${customerId}`} className={styles.viewProfileLink}>
-              View profile →
-            </Link>
-          )}
+          <div className={styles.headerActions}>
+            {customerId && (
+              <Link href={`/admin/servicing/${customerId}`} className={styles.viewProfileLink}>
+                View profile →
+              </Link>
+            )}
+            {conversation && (
+              <EndConversationButton conversation={conversation} conversationId={conversationId} />
+            )}
+          </div>
         </div>
       </div>
+
+      {conversation?.killRecord && <KillBanner killRecord={conversation.killRecord} />}
 
       {/* Split panel */}
       <div className={styles.splitPanel}>

@@ -435,6 +435,15 @@ export const Conversations: CollectionConfig = {
       ],
     },
     {
+      name: 'killRecord',
+      type: 'json',
+      admin: {
+        readOnly: true,
+        description:
+          'Operator conversation-kill audit: {request_id, actor, reason_category, note, killed_at}',
+      },
+    },
+    {
       name: 'statementCapture',
       type: 'json',
       admin: {

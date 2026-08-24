@@ -1357,6 +1357,7 @@ git commit -m "feat(kill): enable also-block checkbox behind NEXT_PUBLIC_ENABLE_
 2. **billie-crm → demo:** `make -C infra/fly deploy ENV=demo GITHUB_TOKEN=…` (runs the kill_record migration; dev/demo also have `push: true`).
 3. **Demo end-to-end:** kill a live test conversation (stop message renders, chat input closes) AND a zombie one (status flips without a live session); confirm `status=hard_end`, banner, noticeboard stop post; with the checkbox: customer blocked on re-application, block chip on customer, clear via existing maker-checker flow.
 4. **Prod:** billieChat deploy, flip `ENABLE_CONVERSATION_KILL=true` (config or `fly secrets set`), then CRM deploy. Phase 2 flags stay off in prod until the demo checkbox test passes.
+   - **Prod ordering:** flip billieChat prod `ENABLE_CONVERSATION_KILL` to true at/before the CRM prod deploy; until then the prod button would silently no-op (command delivered, handler flag-off).
 5. **BTB-295** (fraud-agent adoption) stays open — blocked on enforce-mode decision.
 
 ## Plan-time verifications already done

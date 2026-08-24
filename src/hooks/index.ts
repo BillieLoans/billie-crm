@@ -150,6 +150,10 @@ export type { ReportIssueParams, ReportIssueResult } from './mutations/useReport
 export { useResolveIssue } from './mutations/useResolveIssue'
 export type { ResolveIssueParams, ResolveIssueResult } from './mutations/useResolveIssue'
 
+// Conversation-kill mutation (End conversation)
+export { useKillConversation } from './mutations/useKillConversation'
+export type { KillConversationResult } from './mutations/useKillConversation'
+
 export { useLendingAccess } from './useLendingAccess'
 
 // Re-export types from canonical location

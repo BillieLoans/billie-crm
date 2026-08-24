@@ -126,7 +126,9 @@ New event-processor handler `handle_conversation_killed` for `conversation.kille
    API, UI, projection + migration → demo), end-to-end demo test, then prod. billieChat deploys are
    manual (`make -C infra/fly/backend deploy ENV=… CONFIRM=1`); CRM via `make -C infra/fly deploy`.
    Deploy order affects when the feature lights up, not correctness — unknown events drop safely in
-   both directions.
+   both directions. Prod ordering: flip billieChat prod `ENABLE_CONVERSATION_KILL` to true at/before
+   the CRM prod deploy; until then the prod button would silently no-op (command delivered, handler
+   flag-off).
 2. **Phase 2 — block checkbox.** `MANUAL_ADMIN` + reapplicationBlock handler + clear-flow reason-class
    check + unhide checkbox (`ENABLE_MANUAL_KILL_BLOCK`).
 3. **Phase 3 — BTB-295.** FraudRiskAgent enforce mode emits the kill command
