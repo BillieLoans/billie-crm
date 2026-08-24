@@ -98,6 +98,14 @@ export const DecisionDetailSchema = z.object({
   blockedUntil: z.union([z.string(), z.date()]).nullable().optional(),
 })
 
+export const KillRecordSchema = z.object({
+  request_id: z.string().nullable().optional(),
+  actor: z.string().nullable().optional(),
+  reason_category: z.string().nullable().optional(),
+  note: z.string().nullable().optional(),
+  killed_at: z.string().nullable().optional(),
+})
+
 /**
  * Identity-recognition context attached to a review-kind halt.
  *
@@ -184,6 +192,7 @@ export const ConversationDetailSchema = z.object({
   decisionStatus: z.string().nullable().optional(),
   finalDecision: z.string().nullable().optional(),
   decisionDetail: DecisionDetailSchema.nullable().optional(),
+  killRecord: KillRecordSchema.nullable().optional(),
   reapplicationBlock: ReapplicationBlockSchema.nullable().optional(),
   /** Conversation id of the prior decline referenced by a block (deep-link target). */
   sourceConversationId: z.string().nullable().optional(),
