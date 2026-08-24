@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import type { ConversationKillCommand } from '@/lib/events/schemas'
 
 export interface KillConversationResult {
@@ -12,8 +13,10 @@ export interface KillConversationResult {
  * `POST /api/commands/conversation-kill` and fires immediately — no
  * approval round-trip (see docs/superpowers/specs/2026-08-24-conversation-kill-design.md).
  *
- * On success, invalidates the conversation detail query so the banner and
- * status flip once the projection has caught up.
+ * On success, shows a "request submitted" toast (this is a 202-accepted,
+ * no-optimistic-claim flow — the toast is the only confirmation an operator
+ * gets until the poll catches up) and invalidates the conversation detail
+ * query so the banner and status flip once the projection has caught up.
  */
 export function useKillConversation(conversationId: string) {
   const queryClient = useQueryClient()
@@ -32,6 +35,7 @@ export function useKillConversation(conversationId: string) {
       return res.json() as Promise<KillConversationResult>
     },
     onSuccess: () => {
+      toast.success('End-conversation request submitted')
       queryClient.invalidateQueries({ queryKey: ['conversation', conversationId] })
     },
   })

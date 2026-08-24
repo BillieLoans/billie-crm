@@ -9,6 +9,7 @@
  *   needs it for the zombie-safe session close)
  * - KillBanner rendering from `conversation.killRecord`
  * - The block checkbox stays hidden while NEXT_PUBLIC_ENABLE_KILL_BLOCK is unset
+ * - Success toast fires on a successful submit (useKillConversation's onSuccess)
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -28,6 +29,15 @@ import { formatDateMedium } from '@/lib/formatters'
 let mockUser: { id: string; role: string } | null = { id: '42', role: 'supervisor' }
 vi.mock('@payloadcms/ui', () => ({
   useAuth: () => ({ user: mockUser }),
+}))
+
+// useKillConversation toasts on success (docs/ux-standards.md §1.2 4.1.3 — async
+// state must be announced). Mock sonner so the toast call is assertable.
+vi.mock('sonner', () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
 }))
 
 const mockFetch = vi.fn()
@@ -60,6 +70,7 @@ describe('EndConversationButton', () => {
   beforeEach(() => {
     mockUser = { id: '42', role: 'supervisor' }
     mockFetch.mockReset()
+    vi.clearAllMocks()
     delete process.env.NEXT_PUBLIC_ENABLE_KILL_BLOCK
   })
 
@@ -153,6 +164,25 @@ describe('EndConversationButton', () => {
 
     await waitFor(() =>
       expect(screen.queryByTestId('end-conversation-modal')).not.toBeInTheDocument(),
+    )
+  })
+
+  it('shows a success toast once the kill command is accepted', async () => {
+    const { toast } = await import('sonner')
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ eventId: 'evt-1', requestId: 'req-1', status: 'accepted' }),
+    })
+
+    renderWithProviders(
+      <EndConversationButton conversation={baseConversation()} conversationId="conv-001" />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'End conversation' }))
+    fireEvent.click(screen.getByLabelText('Fraud / abuse'))
+    fireEvent.click(screen.getByTestId('end-conversation-confirm'))
+
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith('End-conversation request submitted'),
     )
   })
 
