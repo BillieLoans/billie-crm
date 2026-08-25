@@ -81,14 +81,31 @@ describe('resolveActorDisplayName', () => {
     expect(await resolveActorDisplayName(payload, null)).toBeNull()
   })
 
-  it('returns empty string unchanged', async () => {
+  it('returns null for an empty string', async () => {
     const payload = mockPayload(vi.fn())
-    expect(await resolveActorDisplayName(payload, '')).toBe('')
+    expect(await resolveActorDisplayName(payload, '')).toBeNull()
+  })
+
+  it('returns null for a whitespace-only string', async () => {
+    const payload = mockPayload(vi.fn())
+    expect(await resolveActorDisplayName(payload, '   ')).toBeNull()
   })
 
   it('returns undefined unchanged (as null)', async () => {
     const payload = mockPayload(vi.fn())
     expect(await resolveActorDisplayName(payload, undefined)).toBeNull()
+  })
+
+  it('returns null (never throws) for a non-string actor, e.g. a number', async () => {
+    const payload = mockPayload(vi.fn())
+    // Malformed/legacy data could plausibly hand this a non-string; the
+    // helper's "never throws" contract must hold even then.
+    expect(await resolveActorDisplayName(payload, 12345 as unknown as string)).toBeNull()
+  })
+
+  it('returns null (never throws) for a non-string actor, e.g. an object', async () => {
+    const payload = mockPayload(vi.fn())
+    expect(await resolveActorDisplayName(payload, { id: 'x' } as unknown as string)).toBeNull()
   })
 
   it('returns an unrecognised actor format unchanged', async () => {

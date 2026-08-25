@@ -22,18 +22,23 @@ function titleCaseFallback(suffix: string): string {
  * - "user:<id>"   -> "<firstName> <lastName>" || email || the raw input
  * - "system:<x>"  -> a friendly label for known agents, else a title-cased
  *                    fallback of the suffix
- * - null/empty/unrecognised -> the input unchanged
+ * - null/undefined/blank/non-string -> null
+ * - any other unrecognised format -> the input unchanged
  *
- * Never throws — any lookup failure (including "not found") falls back to the
- * raw actor id so this can never block the caller (e.g. the conversation
- * detail response).
+ * Never throws for any input — a non-string/blank actor short-circuits before
+ * any string method runs, and any lookup failure (including "not found")
+ * falls back to the raw actor id, so this can never block the caller (e.g.
+ * the conversation detail response).
  */
 export async function resolveActorDisplayName(
   payload: Payload,
   actor: string | null | undefined,
 ): Promise<string | null> {
-  if (actor === null || actor === undefined) return null
-  if (actor === '') return ''
+  // Normalize: anything that isn't a non-blank string (missing, wrong type from
+  // malformed/legacy data, or whitespace-only) resolves to "no name" rather than
+  // reaching string methods below — this is what makes "never throws" true for
+  // any input, not just the well-typed ones.
+  if (typeof actor !== 'string' || actor.trim() === '') return null
 
   if (actor.startsWith('user:')) {
     const id = actor.slice('user:'.length)
