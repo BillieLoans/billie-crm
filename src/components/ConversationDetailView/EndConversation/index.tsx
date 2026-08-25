@@ -234,11 +234,12 @@ export interface KillBannerProps {
 export function KillBanner({ killRecord }: KillBannerProps) {
   if (!killRecord) return null
 
-  const { actor, reason_category, killed_at } = killRecord
+  const { actor, actorName, reason_category, killed_at } = killRecord
 
   return (
     <div className={styles.killBanner} data-testid="kill-banner">
-      Ended by {actor} · {reason_category} · {killed_at ? formatDateMedium(killed_at) : '—'}
+      Ended by {actorName || actor} · {reason_category} ·{' '}
+      {killed_at ? formatDateMedium(killed_at) : '—'}
     </div>
   )
 }

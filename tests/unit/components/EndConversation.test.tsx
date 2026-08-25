@@ -241,7 +241,7 @@ describe('EndConversationButton', () => {
 describe('KillBanner', () => {
   afterEach(() => cleanup())
 
-  it('renders "Ended by <actor> · <reason> · <date>" when a killRecord is present', () => {
+  it('renders "Ended by <actor> · <reason> · <date>" when a killRecord is present (back-compat: no actorName)', () => {
     const killedAt = '2026-08-24T04:00:00.000Z'
     renderWithProviders(
       <KillBanner
@@ -257,6 +257,26 @@ describe('KillBanner', () => {
     expect(
       screen.getByText(`Ended by user:42 · fraud_abuse · ${formatDateMedium(killedAt)}`),
     ).toBeInTheDocument()
+  })
+
+  it('renders the resolved staff name instead of the raw actor id when actorName is present', () => {
+    const killedAt = '2026-08-24T04:00:00.000Z'
+    renderWithProviders(
+      <KillBanner
+        killRecord={{
+          request_id: 'req-1',
+          actor: 'user:95979e54-7f2e-4578-a9d0-807c8951d684',
+          actorName: 'Jane Smith',
+          reason_category: 'fraud_abuse',
+          note: null,
+          killed_at: killedAt,
+        }}
+      />,
+    )
+    expect(
+      screen.getByText(`Ended by Jane Smith · fraud_abuse · ${formatDateMedium(killedAt)}`),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/95979e54/)).not.toBeInTheDocument()
   })
 
   it('renders nothing when killRecord is absent', () => {
