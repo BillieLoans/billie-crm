@@ -4,6 +4,7 @@ import React, { useState } from 'react'
 import { useAuth } from '@payloadcms/ui'
 import { hasApprovalAuthority } from '@/lib/access'
 import { Modal } from '@/components/ui/Modal'
+import { ContextDrawer } from '@/components/ui/ContextDrawer'
 import { useKillConversation } from '@/hooks/mutations/useKillConversation'
 import { formatDateMedium } from '@/lib/formatters'
 import type { ConversationDetail } from '@/lib/schemas/conversations'
@@ -20,6 +21,14 @@ const REASON_OPTIONS: { value: ReasonCategory; label: string }[] = [
   { value: 'operational', label: 'Operational cleanup' },
   { value: 'compliance', label: 'Compliance / customer request' },
 ]
+
+/**
+ * Friendly label for a kill reason category, falling back to the raw value
+ * for anything not in REASON_OPTIONS (e.g. a category added server-side
+ * before the CRM picks up a matching label) rather than hiding it.
+ */
+const reasonLabel = (category: string | null | undefined): string =>
+  REASON_OPTIONS.find((o) => o.value === category)?.label ?? category ?? '—'
 
 /**
  * The single neutral message every kill shows the customer (billieChat config
@@ -230,16 +239,64 @@ export interface KillBannerProps {
  * Audit banner shown above the split panel once a conversation has been
  * ended: "Ended by <actor> · <reason> · <date>". Nothing renders while
  * `killRecord` is absent.
+ *
+ * The compact line is a fixed one-line layout (never reflows by content —
+ * the kill note is variable length and belongs in the drawer, not inline).
+ * Clicking it opens a ContextDrawer with the full audit detail, including
+ * the note entered in the end-conversation modal.
  */
 export function KillBanner({ killRecord }: KillBannerProps) {
+  const [open, setOpen] = useState(false)
+
   if (!killRecord) return null
 
-  const { actor, actorName, reason_category, killed_at } = killRecord
+  const { actor, actorName, reason_category, note, killed_at } = killRecord
+  const displayActor = actorName || actor || '—'
+  const displayReason = reasonLabel(reason_category)
+  const displayDate = killed_at ? formatDateMedium(killed_at) : '—'
+  const hasNote = Boolean(note?.trim())
 
   return (
-    <div className={styles.killBanner} data-testid="kill-banner">
-      Ended by {actorName || actor} · {reason_category} ·{' '}
-      {killed_at ? formatDateMedium(killed_at) : '—'}
-    </div>
+    <>
+      <button
+        type="button"
+        className={styles.killBanner}
+        onClick={() => setOpen(true)}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        data-testid="kill-banner"
+      >
+        <span className={styles.killBannerText}>
+          Ended by {displayActor} · {displayReason} · {displayDate}
+        </span>
+        <span className={styles.killBannerAffordance} aria-hidden="true">
+          Details
+        </span>
+      </button>
+      <ContextDrawer isOpen={open} onClose={() => setOpen(false)} title="Conversation ended">
+        <div className={styles.killDrawerRow}>
+          <span className={styles.killDrawerLabel}>Ended by</span>
+          <span className={styles.killDrawerValue}>{displayActor}</span>
+        </div>
+        <div className={styles.killDrawerRow}>
+          <span className={styles.killDrawerLabel}>Reason</span>
+          <span className={styles.killDrawerValue}>{displayReason}</span>
+        </div>
+        <div className={styles.killDrawerRow}>
+          <span className={styles.killDrawerLabel}>Ended at</span>
+          <span className={styles.killDrawerValue}>{displayDate}</span>
+        </div>
+        <div className={styles.killDrawerNoteBlock}>
+          <span className={styles.killDrawerLabel}>Note</span>
+          {hasNote ? (
+            <p className={styles.killDrawerNote} data-testid="kill-note">
+              {note}
+            </p>
+          ) : (
+            <p className={styles.killDrawerNoteEmpty}>No note recorded.</p>
+          )}
+        </div>
+      </ContextDrawer>
+    </>
   )
 }

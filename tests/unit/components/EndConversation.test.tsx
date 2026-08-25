@@ -241,7 +241,7 @@ describe('EndConversationButton', () => {
 describe('KillBanner', () => {
   afterEach(() => cleanup())
 
-  it('renders "Ended by <actor> · <reason> · <date>" when a killRecord is present (back-compat: no actorName)', () => {
+  it('renders "Ended by <actor> · <friendly reason> · <date>" when a killRecord is present (back-compat: no actorName)', () => {
     const killedAt = '2026-08-24T04:00:00.000Z'
     renderWithProviders(
       <KillBanner
@@ -255,7 +255,7 @@ describe('KillBanner', () => {
       />,
     )
     expect(
-      screen.getByText(`Ended by user:42 · fraud_abuse · ${formatDateMedium(killedAt)}`),
+      screen.getByText(`Ended by user:42 · Fraud / abuse · ${formatDateMedium(killedAt)}`),
     ).toBeInTheDocument()
   })
 
@@ -274,7 +274,7 @@ describe('KillBanner', () => {
       />,
     )
     expect(
-      screen.getByText(`Ended by Jane Smith · fraud_abuse · ${formatDateMedium(killedAt)}`),
+      screen.getByText(`Ended by Jane Smith · Fraud / abuse · ${formatDateMedium(killedAt)}`),
     ).toBeInTheDocument()
     expect(screen.queryByText(/95979e54/)).not.toBeInTheDocument()
   })
@@ -282,5 +282,164 @@ describe('KillBanner', () => {
   it('renders nothing when killRecord is absent', () => {
     const { container } = renderWithProviders(<KillBanner killRecord={null} />)
     expect(container).toBeEmptyDOMElement()
+  })
+
+  it('falls back to the raw reason category when it does not match a known REASON_OPTIONS value', () => {
+    renderWithProviders(
+      <KillBanner
+        killRecord={{
+          request_id: 'req-1',
+          actor: 'user:42',
+          reason_category: 'some_future_category',
+          note: null,
+          killed_at: '2026-08-24T04:00:00.000Z',
+        }}
+      />,
+    )
+    expect(screen.getByText(/some_future_category/)).toBeInTheDocument()
+  })
+
+  it('renders the compact line as a button that opens a "Conversation ended" drawer on click', () => {
+    renderWithProviders(
+      <KillBanner
+        killRecord={{
+          request_id: 'req-1',
+          actor: 'user:42',
+          actorName: 'Jane Smith',
+          reason_category: 'fraud_abuse',
+          note: 'Confirmed fraud ring across three linked accounts.',
+          killed_at: '2026-08-24T04:00:00.000Z',
+        }}
+      />,
+    )
+
+    const banner = screen.getByTestId('kill-banner')
+    expect(banner.tagName).toBe('BUTTON')
+    expect(banner).toHaveAttribute('aria-haspopup', 'dialog')
+    expect(banner).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText('Conversation ended')).not.toBeInTheDocument()
+
+    fireEvent.click(banner)
+
+    expect(banner).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText('Conversation ended')).toBeInTheDocument()
+  })
+
+  it('shows the staff name, friendly reason, timestamp, and note in the drawer', () => {
+    const killedAt = '2026-08-24T04:00:00.000Z'
+    renderWithProviders(
+      <KillBanner
+        killRecord={{
+          request_id: 'req-1',
+          actor: 'user:42',
+          actorName: 'Jane Smith',
+          reason_category: 'compliance',
+          note: 'Customer requested account closure via phone.',
+          killed_at: killedAt,
+        }}
+      />,
+    )
+    fireEvent.click(screen.getByTestId('kill-banner'))
+
+    const drawer = screen.getByTestId('context-drawer')
+    expect(drawer).toHaveTextContent('Jane Smith')
+    expect(drawer).toHaveTextContent('Compliance / customer request')
+    expect(drawer).toHaveTextContent(formatDateMedium(killedAt))
+    expect(drawer).toHaveTextContent('Customer requested account closure via phone.')
+  })
+
+  it('renders multi-line notes with line breaks preserved', () => {
+    renderWithProviders(
+      <KillBanner
+        killRecord={{
+          request_id: 'req-1',
+          actor: 'user:42',
+          actorName: 'Jane Smith',
+          reason_category: 'operational',
+          note: 'Line one\nLine two',
+          killed_at: '2026-08-24T04:00:00.000Z',
+        }}
+      />,
+    )
+    fireEvent.click(screen.getByTestId('kill-banner'))
+
+    const note = screen.getByTestId('kill-note')
+    expect(note.textContent).toBe('Line one\nLine two')
+    expect(note).toHaveStyle({ whiteSpace: 'pre-wrap' })
+  })
+
+  it('shows "No note recorded." (and no empty note area) when the killRecord note is null', () => {
+    renderWithProviders(
+      <KillBanner
+        killRecord={{
+          request_id: 'req-1',
+          actor: 'user:42',
+          actorName: 'Jane Smith',
+          reason_category: 'operational',
+          note: null,
+          killed_at: '2026-08-24T04:00:00.000Z',
+        }}
+      />,
+    )
+    fireEvent.click(screen.getByTestId('kill-banner'))
+
+    expect(screen.getByText('No note recorded.')).toBeInTheDocument()
+    expect(screen.queryByTestId('kill-note')).not.toBeInTheDocument()
+  })
+
+  it('shows "No note recorded." when the killRecord note is an empty/whitespace-only string', () => {
+    renderWithProviders(
+      <KillBanner
+        killRecord={{
+          request_id: 'req-1',
+          actor: 'user:42',
+          actorName: 'Jane Smith',
+          reason_category: 'operational',
+          note: '   ',
+          killed_at: '2026-08-24T04:00:00.000Z',
+        }}
+      />,
+    )
+    fireEvent.click(screen.getByTestId('kill-banner'))
+
+    expect(screen.getByText('No note recorded.')).toBeInTheDocument()
+    expect(screen.queryByTestId('kill-note')).not.toBeInTheDocument()
+  })
+
+  it('back-compat: shows the raw actor (never blank) in both the banner and the drawer when actorName is absent', () => {
+    renderWithProviders(
+      <KillBanner
+        killRecord={{
+          request_id: 'req-1',
+          actor: 'user:xyz',
+          reason_category: 'fraud_abuse',
+          note: 'Some note',
+          killed_at: '2026-08-24T04:00:00.000Z',
+        }}
+      />,
+    )
+    expect(screen.getByText(/Ended by user:xyz/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('kill-banner'))
+    expect(screen.getByTestId('context-drawer')).toHaveTextContent('user:xyz')
+  })
+
+  it('closes the drawer when its close button is clicked', () => {
+    renderWithProviders(
+      <KillBanner
+        killRecord={{
+          request_id: 'req-1',
+          actor: 'user:42',
+          reason_category: 'fraud_abuse',
+          note: null,
+          killed_at: '2026-08-24T04:00:00.000Z',
+        }}
+      />,
+    )
+    fireEvent.click(screen.getByTestId('kill-banner'))
+    expect(screen.getByTestId('context-drawer')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('context-drawer-close'))
+    expect(screen.queryByTestId('context-drawer')).not.toBeInTheDocument()
   })
 })
