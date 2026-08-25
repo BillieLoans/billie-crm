@@ -144,6 +144,11 @@
 }
 
 .killBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
   margin: 0 24px 12px;
   padding: 10px 14px;
   border-radius: 8px;
@@ -152,7 +157,83 @@
   color: var(--theme-elevation-600, #6b7280);
   font-size: 13px;
   font-weight: 500;
+  font-family: inherit;
   flex-shrink: 0;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s ease;
+}
+
+.killBanner:hover {
+  background: var(--theme-elevation-100, #f3f4f6);
+}
+
+.killBanner:focus-visible {
+  outline: 2px solid var(--theme-success-400, #3b82f6);
+  outline-offset: 2px;
+}
+
+.killBannerText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.killBannerAffordance {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--theme-success-700, #0369a1);
+  text-decoration: underline;
+}
+
+/* ===== End conversation — kill detail drawer ===== */
+
+.killDrawerRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--theme-elevation-100, #f3f4f6);
+  font-size: 13px;
+}
+
+.killDrawerLabel {
+  color: var(--theme-elevation-600, #666);
+  flex-shrink: 0;
+}
+
+.killDrawerValue {
+  font-weight: 500;
+  color: var(--theme-elevation-800, #222);
+  text-align: right;
+}
+
+.killDrawerNoteBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+}
+
+.killDrawerNote {
+  margin: 0;
+  padding: 12px;
+  border-radius: 6px;
+  background: var(--theme-elevation-50, #f9fafb);
+  color: var(--theme-elevation-800, #222);
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.killDrawerNoteEmpty {
+  margin: 0;
+  font-size: 14px;
+  font-style: italic;
+  color: var(--theme-elevation-400, #aaa);
 }
 
 /* ===== End conversation — confirm modal ===== */
