@@ -12,6 +12,7 @@ import { getPayload } from 'payload'
 import { headers } from 'next/headers'
 import configPromise from '@payload-config'
 import { hasAnyRole } from '@/lib/access'
+import { resolveActorDisplayName } from '@/lib/users'
 
 /** Safely convert a MongoDB Date or ISO string to ISO string, or null. */
 function toIso(val: unknown): string | null {
@@ -131,6 +132,16 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     const appDataRaw = doc.applicationData as Record<string, unknown> | undefined
     const appData = (appDataRaw?.payload as Record<string, unknown> | undefined) ?? appDataRaw
 
+    // Resolve the kill record's raw "user:<id>"/"system:<agent>" actor to a
+    // display name for the banner. The raw actor stays in the record (audit);
+    // this is render-time only and never blocks the response on failure.
+    const killRecordOut = killRecord
+      ? {
+          ...killRecord,
+          actorName: await resolveActorDisplayName(payload, killRecord.actor as string),
+        }
+      : null
+
     const conversation = {
       conversationId: String(doc.conversationId ?? ''),
       applicationNumber: (doc.applicationNumber as string) ?? null,
@@ -138,7 +149,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       decisionStatus: (doc.decisionStatus as string) ?? null,
       finalDecision: (doc.finalDecision as string) ?? null,
       decisionDetail: decisionDetail ?? null,
-      killRecord: killRecord ?? null,
+      killRecord: killRecordOut,
       reapplicationBlock: block ?? null,
       sourceConversationId,
       identityVerificationReport: {

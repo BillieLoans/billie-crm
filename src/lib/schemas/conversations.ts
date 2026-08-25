@@ -101,6 +101,8 @@ export const DecisionDetailSchema = z.object({
 export const KillRecordSchema = z.object({
   request_id: z.string().nullable().optional(),
   actor: z.string().nullable().optional(),
+  /** Render-time resolved display name for `actor` (CRM-only; not stored). */
+  actorName: z.string().nullable().optional(),
   reason_category: z.string().nullable().optional(),
   note: z.string().nullable().optional(),
   killed_at: z.string().nullable().optional(),
