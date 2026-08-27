@@ -25,6 +25,7 @@ import { Interactions } from './collections/Interactions'
 import { ContactAuditLog } from './collections/ContactAuditLog'
 import { Batches } from './collections/Batches'
 import { Feedback } from './collections/Feedback'
+import { LlmCosts } from './collections/LlmCosts'
 import { ReleaseBatches } from './collections/ReleaseBatches'
 import { ReleaseGrants } from './collections/ReleaseGrants'
 import { ReleaseGateStatus } from './collections/ReleaseGateStatus'
@@ -165,7 +166,7 @@ export default buildConfig({
       },
     },
   },
-  collections: [Users, Media, Customers, Conversations, Applications, LoanAccounts, WriteOffRequests, ReapplicationBlockClearRequests, ContactNotes, Notifications, CollectionsCases, Contacts, Interactions, ContactAuditLog, Batches, Feedback, ReleaseBatches, ReleaseGrants, ReleaseGateStatus, Issues],
+  collections: [Users, Media, Customers, Conversations, Applications, LoanAccounts, WriteOffRequests, ReapplicationBlockClearRequests, ContactNotes, Notifications, CollectionsCases, Contacts, Interactions, ContactAuditLog, Batches, Feedback, ReleaseBatches, ReleaseGrants, ReleaseGateStatus, Issues, LlmCosts],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || 'build-placeholder-not-for-production',
   typescript: {

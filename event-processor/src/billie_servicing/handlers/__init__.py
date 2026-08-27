@@ -38,6 +38,7 @@ from .conversation import (
     handle_affordability_report_downloaded,
     handle_application_detail_changed,
     handle_assessment,
+    handle_data_quality_alert,
     handle_basiq_job_created,
     handle_conversation_killed,
     handle_conversation_started,
@@ -137,6 +138,7 @@ __all__ = [
     "handle_conversation_summary_changed",
     "handle_application_detail_changed",
     "handle_assessment",
+    "handle_data_quality_alert",
     "handle_noticeboard_updated",
     # Statement capture handlers
     "handle_statement_consent_initiated",

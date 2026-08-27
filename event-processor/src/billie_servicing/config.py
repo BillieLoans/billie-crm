@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     internal_stream: str = "inbox:billie-servicing:internal"
     consumer_group: str = "billie-servicing-processor"
     dlq_stream: str = "dlq:billie-servicing"
+    # BTB-302: LLM cost projection — consume billieChat's llm_logs
+    # stream (flat field entries from the LiteLLM Redis logger; same
+    # Redis instance as the inbox streams).
+    llm_logs_stream: str = "llm_logs"
 
     # Postgres configuration (asyncpg pool). The default is a credential-less
     # localhost URI so a misconfigured deployment fails at connect time

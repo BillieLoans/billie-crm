@@ -81,6 +81,37 @@ export const Conversations: CollectionConfig = {
       index: true,
     },
     {
+      name: 'llmCostTotalUsd',
+      type: 'number',
+      admin: {
+        readOnly: true,
+        description:
+          'Cumulative recomputed LLM cost for this application (BTB-302, USD — per-call rows in LLM Costs)',
+      },
+    },
+    {
+      name: 'llmCallCount',
+      type: 'number',
+      admin: { readOnly: true, description: 'LLM calls projected for this conversation' },
+    },
+    {
+      name: 'llmUnpricedCount',
+      type: 'number',
+      admin: {
+        readOnly: true,
+        description: 'Calls whose model was missing from the rate table — should be zero',
+      },
+    },
+    {
+      name: 'dataQualityAlert',
+      type: 'json',
+      admin: {
+        readOnly: true,
+        description:
+          'BTB-307 ME001 implausibility shadow alert — what the engine believed the income sources were (data quality, never a credit decision)',
+      },
+    },
+    {
       name: 'startedAt',
       type: 'date',
       required: true,
