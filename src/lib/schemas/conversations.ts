@@ -202,6 +202,15 @@ export const ConversationDetailSchema = z.object({
   startedAt: z.union([z.string(), z.date()]).nullable().optional(),
   updatedAt: z.union([z.string(), z.date()]).nullable().optional(),
   lastMessageAt: z.union([z.string(), z.date()]).nullable().optional(),
+  /**
+   * Cumulative LLM cost roll-up for this application (BTB-302), maintained on
+   * the conversation record by the event processor. Authoritative for display —
+   * the per-call `llm-costs` rows are the supervisor-only audit trail.
+   */
+  llmCostTotalUsd: z.number().nullable().optional(),
+  llmCallCount: z.number().nullable().optional(),
+  /** Calls whose model was missing from the rate table — should be zero. */
+  llmUnpricedCount: z.number().nullable().optional(),
   customer: z
     .object({
       fullName: z.string().nullable().optional(),

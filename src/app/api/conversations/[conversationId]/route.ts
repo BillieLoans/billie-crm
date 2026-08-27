@@ -164,6 +164,11 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       startedAt: toIso(doc.startedAt),
       updatedAt: toIso(doc.updatedAt),
       lastMessageAt: toIso(doc.lastUtteranceTime),
+      // LLM cost roll-up (BTB-302) — maintained on the conversation record by
+      // the event processor; the per-call llm-costs rows stay supervisor-only.
+      llmCostTotalUsd: (doc.llmCostTotalUsd as number) ?? null,
+      llmCallCount: (doc.llmCallCount as number) ?? null,
+      llmUnpricedCount: (doc.llmUnpricedCount as number) ?? null,
       customer: {
         fullName: customerFullName,
         customerId: (doc.customerIdString as string) ?? null,

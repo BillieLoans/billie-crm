@@ -483,7 +483,7 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
       </AssessmentSection>
 
       {/* LLM costs (BTB-302) — supervisor/admin only; renders nothing for other roles */}
-      <LlmCostsSection conversationId={conversationId} />
+      <LlmCostsSection conversation={conversation} />
 
       <NoticeboardDrawer post={selectedPost} onClose={() => setSelectedPost(null)} />
       <StatementFileViewer
