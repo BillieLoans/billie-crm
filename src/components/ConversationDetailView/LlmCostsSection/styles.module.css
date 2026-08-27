@@ -1,113 +1,23 @@
-/* LLM Costs section (BTB-302) — table + warning styles.
+/* LLM Costs section (BTB-302).
    Section chrome and stat rows come from ../AssessmentPanel/styles.module.css. */
 
-.tokenDetail {
-  padding-left: 12px;
-  border-left: 2px solid var(--theme-elevation-100, #f3f4f6);
-  margin: 2px 0 2px 2px;
-}
-
 .warning {
-  margin-top: 8px;
+  margin-top: 10px;
   padding: 6px 8px;
   border-radius: 4px;
   font-size: 12px;
+  line-height: 1.5;
   background: #fef3c7;
   color: #92400e;
 }
 
-.tableBlock {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--theme-elevation-100, #f3f4f6);
+.code {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  margin-left: 4px;
 }
 
-.tableCaption {
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--theme-elevation-600, #6b7280);
-  margin-bottom: 6px;
-}
-
-.tableWrap {
-  overflow-x: auto;
-}
-
-.callsWrap {
-  max-height: 240px;
-  overflow-y: auto;
-}
-
-.table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
-}
-
-.table th {
-  position: sticky;
-  top: 0;
-  background: var(--theme-elevation-50, #fafafa);
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--theme-elevation-500, #888);
-  text-align: left;
-  padding: 4px 8px 4px 0;
-}
-
-.table td {
-  padding: 4px 8px 4px 0;
-  border-top: 1px solid var(--theme-elevation-100, #f3f4f6);
-  white-space: nowrap;
-}
-
-.table th:last-child,
-.table td:last-child {
-  padding-right: 0;
-}
-
-.num {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-.keyCell {
-  max-width: 140px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.timeCell {
-  color: var(--theme-elevation-500, #888);
-}
-
-.flag {
-  cursor: help;
-}
-
-/* Dark mode */
 :global([data-theme='dark']) .warning {
   background: #451a03;
   color: #fcd34d;
-}
-
-:global([data-theme='dark']) .tokenDetail {
-  border-left-color: #374151;
-}
-
-:global([data-theme='dark']) .tableBlock {
-  border-top-color: #374151;
-}
-
-:global([data-theme='dark']) .table th {
-  background: #1f2937;
-  color: #9ca3af;
-}
-
-:global([data-theme='dark']) .table td {
-  border-top-color: #374151;
 }
