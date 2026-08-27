@@ -135,3 +135,24 @@ export function formatRelativeTime(timestamp: string | Date, showAbsoluteAfterWe
   }
   return `${diffDays}d ago`
 }
+
+/**
+ * USD formatter for LLM call costs (BTB-302). LLM rates are quoted in USD and
+ * a single call routinely lands under a cent, so this keeps up to 4 decimal
+ * places (e.g. "US$0.0042") while whole-dollar-plus amounts render normally.
+ */
+const usdCostFormatter = new Intl.NumberFormat('en-AU', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 4,
+})
+
+/**
+ * Format a USD cost amount. Missing input renders an em-dash, matching
+ * formatCurrency.
+ */
+export function formatUsd(amount: number | null | undefined): string {
+  if (amount == null || Number.isNaN(amount)) return '—'
+  return usdCostFormatter.format(amount)
+}
