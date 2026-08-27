@@ -11,7 +11,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import { headers } from 'next/headers'
 import configPromise from '@payload-config'
-import { hasAnyRole } from '@/lib/access'
+import { hasAnyRole, hasApprovalAuthority } from '@/lib/access'
 import { resolveActorDisplayName } from '@/lib/users'
 
 /** Safely convert a MongoDB Date or ISO string to ISO string, or null. */
@@ -164,11 +164,19 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       startedAt: toIso(doc.startedAt),
       updatedAt: toIso(doc.updatedAt),
       lastMessageAt: toIso(doc.lastUtteranceTime),
-      // LLM cost roll-up (BTB-302) — maintained on the conversation record by
-      // the event processor; the per-call llm-costs rows stay supervisor-only.
-      llmCostTotalUsd: (doc.llmCostTotalUsd as number) ?? null,
-      llmCallCount: (doc.llmCallCount as number) ?? null,
-      llmUnpricedCount: (doc.llmUnpricedCount as number) ?? null,
+      // LLM cost roll-up (BTB-302) — supervisor/admin only, matching the read
+      // rule on the `llm-costs` collection this roll-up summarises. The rest of
+      // this route serves every lending role (operations, readonly included),
+      // so the fields are omitted per-role rather than the whole response
+      // being gated. The UI hides the section too, but that is defence in
+      // depth: without this the data would still ship in the JSON.
+      ...(hasApprovalAuthority(user)
+        ? {
+            llmCostTotalUsd: (doc.llmCostTotalUsd as number) ?? null,
+            llmCallCount: (doc.llmCallCount as number) ?? null,
+            llmUnpricedCount: (doc.llmUnpricedCount as number) ?? null,
+          }
+        : {}),
       customer: {
         fullName: customerFullName,
         customerId: (doc.customerIdString as string) ?? null,
