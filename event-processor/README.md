@@ -36,6 +36,7 @@ Python daemon that consumes events from the Redis inbox stream and writes projec
 | `user_input` | `handle_utterance` | `conversations` |
 | `assistant_response` | `handle_utterance` | `conversations` |
 | `final_decision` | `handle_final_decision` | `conversations` |
+| `credit_assessment.data_quality_alert.v1` | `handle_data_quality_alert` | `conversations` (BTB-307 shadow alert) |
 
 ### LLM Cost Projection (BTB-302)
 

@@ -44,6 +44,8 @@ export async function up({ db }: MigrateUpArgs): Promise<void> {
   ALTER TABLE "conversations" ADD COLUMN IF NOT EXISTS "llm_call_count" numeric;`)
   await db.execute(sql`
   ALTER TABLE "conversations" ADD COLUMN IF NOT EXISTS "llm_unpriced_count" numeric;`)
+  await db.execute(sql`
+  ALTER TABLE "conversations" ADD COLUMN IF NOT EXISTS "data_quality_alert" jsonb;`)
 }
 
 export async function down({ db }: MigrateDownArgs): Promise<void> {
@@ -55,4 +57,6 @@ export async function down({ db }: MigrateDownArgs): Promise<void> {
   ALTER TABLE "conversations" DROP COLUMN IF EXISTS "llm_call_count";`)
   await db.execute(sql`
   ALTER TABLE "conversations" DROP COLUMN IF EXISTS "llm_unpriced_count";`)
+  await db.execute(sql`
+  ALTER TABLE "conversations" DROP COLUMN IF EXISTS "data_quality_alert";`)
 }

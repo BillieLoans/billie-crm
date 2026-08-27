@@ -103,6 +103,15 @@ export const Conversations: CollectionConfig = {
       },
     },
     {
+      name: 'dataQualityAlert',
+      type: 'json',
+      admin: {
+        readOnly: true,
+        description:
+          'BTB-307 ME001 implausibility shadow alert — what the engine believed the income sources were (data quality, never a credit decision)',
+      },
+    },
+    {
       name: 'startedAt',
       type: 'date',
       required: true,

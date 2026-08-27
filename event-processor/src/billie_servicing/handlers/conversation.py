@@ -531,6 +531,25 @@ async def _set_assessment(
             )
 
 
+async def handle_data_quality_alert(
+    pool: asyncpg.Pool, event: dict[str, Any]
+) -> None:
+    """BTB-307 phase 1: land the ME001 implausibility shadow alert on the
+    conversation record (``credit_assessment.data_quality_alert.v1``) so an
+    operator can see exactly what the engine believed the income sources
+    were. Data quality, never a credit decision."""
+    conversation_id = safe_str(
+        event.get("cid") or event.get("conv") or event.get("conversation_id"),
+        "conversation_id",
+    )
+    log = logger.bind(conversation_id=conversation_id)
+    log.info("Processing data-quality alert")
+
+    data = strip_dollar_keys(parse_payload(event))
+    data["received_at"] = _now().isoformat()
+    await _set_assessment(pool, conversation_id, "data_quality_alert", data)
+
+
 async def handle_assessment(pool: asyncpg.Pool, event: dict[str, Any]) -> None:
     """Handle identityRisk_assessment / credit_assessment_serviceability_result /
     credit_assessment_accountConduct_result.

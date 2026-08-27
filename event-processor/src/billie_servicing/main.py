@@ -23,6 +23,7 @@ from .handlers import (
     handle_applicant_release_revoked,
     handle_application_detail_changed,
     handle_assessment,
+    handle_data_quality_alert,
     handle_basiq_job_created,
     handle_batch_created,
     handle_batch_invitations_triggered,
@@ -238,6 +239,9 @@ def setup_handlers(processor: EventProcessor) -> None:
 
     # Credit assessments & post-identity
     processor.register_handler("credit_assessment_accountConduct_result", handle_assessment)
+    processor.register_handler(
+        "credit_assessment.data_quality_alert.v1", handle_data_quality_alert
+    )
     processor.register_handler("post_identity_risk_checks_complete", handle_post_identity_risk_check)
     processor.register_handler("credit_assessment_complete", handle_credit_assessment_complete)
 
