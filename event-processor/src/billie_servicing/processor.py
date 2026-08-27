@@ -22,6 +22,7 @@ from billie_notifications_events.parser import parse_notification_event
 from billie_aging_events import parse_aging_event
 
 from .config import settings
+from .handlers.llm_cost import handle_llm_log
 
 logger = structlog.get_logger()
 
@@ -308,8 +309,10 @@ class EventProcessor:
         logger.info("Redis reconnection successful")
         await self._ensure_consumer_group(settings.inbox_stream)
         await self._ensure_consumer_group(settings.internal_stream)
+        await self._ensure_consumer_group(settings.llm_logs_stream)
         await self._process_pending_messages(settings.inbox_stream)
         await self._process_pending_messages(settings.internal_stream)
+        await self._process_pending_messages(settings.llm_logs_stream)
 
     async def start(self) -> None:
         """Initialize connections and start processing."""
@@ -318,13 +321,16 @@ class EventProcessor:
         print("Setting up consumer groups...")
         await self._ensure_consumer_group(settings.inbox_stream)
         await self._ensure_consumer_group(settings.internal_stream)
+        await self._ensure_consumer_group(settings.llm_logs_stream)
 
         print("Processing any pending messages...")
         await self._process_pending_messages(settings.inbox_stream)
         await self._process_pending_messages(settings.internal_stream)
+        await self._process_pending_messages(settings.llm_logs_stream)
 
         await self._cleanup_stale_consumers(settings.inbox_stream)
         await self._cleanup_stale_consumers(settings.internal_stream)
+        await self._cleanup_stale_consumers(settings.llm_logs_stream)
 
         self._running = True
         reconnect_backoff = 1
@@ -334,11 +340,16 @@ class EventProcessor:
         print(f"👂 Listening for events on:")
         print(f"   - {settings.inbox_stream} (external)")
         print(f"   - {settings.internal_stream} (internal/CRM)")
+        print(f"   - {settings.llm_logs_stream} (LLM cost projection)")
         print()
         logger.info(
             "Event processor started",
             consumer_id=self.consumer_id,
-            streams=[settings.inbox_stream, settings.internal_stream],
+            streams=[
+                settings.inbox_stream,
+                settings.internal_stream,
+                settings.llm_logs_stream,
+            ],
         )
 
         while self._running:
@@ -358,6 +369,7 @@ class EventProcessor:
                     try:
                         await self._ensure_consumer_group(settings.inbox_stream)
                         await self._ensure_consumer_group(settings.internal_stream)
+                        await self._ensure_consumer_group(settings.llm_logs_stream)
                         logger.info(
                             "Consumer groups re-created successfully "
                             "(from id=0, backlog will be replayed)"
@@ -546,7 +558,11 @@ class EventProcessor:
         if now - self._last_pending_reclaim < settings.pending_reclaim_interval_seconds:
             return
         self._last_pending_reclaim = now
-        for stream in (settings.inbox_stream, settings.internal_stream):
+        for stream in (
+            settings.inbox_stream,
+            settings.internal_stream,
+            settings.llm_logs_stream,
+        ):
             await self._reclaim_stale_pending(stream)
 
     async def _cleanup_stale_consumers(self, stream: str) -> None:
@@ -593,6 +609,7 @@ class EventProcessor:
             streams={
                 settings.inbox_stream: ">",
                 settings.internal_stream: ">",
+                settings.llm_logs_stream: ">",
             },
             count=settings.batch_size,
             block=settings.block_timeout_ms,
@@ -621,6 +638,26 @@ class EventProcessor:
                 k.decode() if isinstance(k, bytes) else k: v.decode() if isinstance(v, bytes) else v
                 for k, v in fields.items()
             }
+
+            # ── BTB-302: llm_logs projection ───────────────────────────
+            # llm_logs entries are flat field dicts (no msg_type envelope)
+            # and prompts can exceed max_payload_bytes — route them to the
+            # cost handler BEFORE the generic size guard. The handler
+            # projects an allowlist of numeric fields only, so the prompt /
+            # response text never goes anywhere.
+            if stream == settings.llm_logs_stream:
+                dedup_key = f"dedup:{stream}:{message_id_str}"
+                if await self.redis.exists(dedup_key):
+                    await self.redis.xack(
+                        stream, settings.consumer_group, message_id
+                    )
+                    return
+                await handle_llm_log(self.pool, message_id_str, sanitized)
+                await self.redis.set(
+                    dedup_key, "1", ex=settings.dedup_ttl_seconds
+                )
+                await self.redis.xack(stream, settings.consumer_group, message_id)
+                return
 
             # Reject oversized payloads to prevent DoS / document bloat
             payload_size = sum(len(str(v)) for v in sanitized.values())

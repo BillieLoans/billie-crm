@@ -24,6 +24,7 @@ import * as migration_20260820_063404_statement_account_holders from './20260820
 import * as migration_20260822_121203_reapplication_block_state_version from './20260822_121203_reapplication_block_state_version';
 import * as migration_20260822_121938_reapplication_block_state_changed_at from './20260822_121938_reapplication_block_state_changed_at';
 import * as migration_20260824_112358_conversation_kill_record from './20260824_112358_conversation_kill_record';
+import * as migration_20260827_131500_llm_costs from './20260827_131500_llm_costs';
 
 export const migrations = [
   {
@@ -155,5 +156,10 @@ export const migrations = [
     up: migration_20260824_112358_conversation_kill_record.up,
     down: migration_20260824_112358_conversation_kill_record.down,
     name: '20260824_112358_conversation_kill_record'
+  },
+  {
+    up: migration_20260827_131500_llm_costs.up,
+    down: migration_20260827_131500_llm_costs.down,
+    name: '20260827_131500_llm_costs',
   },
 ];

@@ -37,6 +37,16 @@ Python daemon that consumes events from the Redis inbox stream and writes projec
 | `assistant_response` | `handle_utterance` | `conversations` |
 | `final_decision` | `handle_final_decision` | `conversations` |
 
+### LLM Cost Projection (BTB-302)
+
+The processor also consumes billieChat's ``llm_logs`` stream directly (its
+own consumer group; flat field entries, no envelope). Each entry projects
+into the ``llm-costs`` collection — numeric fields and ids ONLY (prompt /
+response text is dropped at ingest), with cost stored both as logged and
+as recomputed from tokens x the versioned rate table
+(``llm_rates.RATE_VERSION``) — and rolls up onto the conversation
+(``llm_cost_total_usd`` / ``llm_call_count`` / ``llm_unpriced_count``).
+
 ## Installation
 
 ### Prerequisites
