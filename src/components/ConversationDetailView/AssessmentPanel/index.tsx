@@ -15,47 +15,9 @@ import { AssessmentDrawer } from '../AssessmentDrawer'
 import { DecisionBanner } from '../DecisionBanner'
 import type { AssessmentType } from '../AssessmentDetailView'
 import type { StatementSlot } from '@/hooks'
+import { AssessmentSection } from './AssessmentSection'
+import { LlmCostsSection } from '../LlmCostsSection'
 import styles from './styles.module.css'
-
-interface AssessmentSectionProps {
-  title: string
-  summary: string
-  children: React.ReactNode
-  defaultOpen?: boolean
-}
-
-function AssessmentSection({
-  title,
-  summary,
-  children,
-  defaultOpen = false,
-}: AssessmentSectionProps) {
-  const [open, setOpen] = useState(defaultOpen)
-  const id = `section-${title.toLowerCase().replace(/\s+/g, '-')}`
-
-  return (
-    <div className={styles.section}>
-      <button
-        type="button"
-        className={styles.sectionHeader}
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        aria-controls={id}
-      >
-        <span className={styles.sectionTitle}>{title}</span>
-        <span className={styles.sectionSummary}>{summary}</span>
-        <span className={`${styles.chevron} ${open ? styles.open : ''}`} aria-hidden="true">
-          ▶
-        </span>
-      </button>
-      {open && (
-        <div id={id} className={styles.sectionContent}>
-          {children}
-        </div>
-      )}
-    </div>
-  )
-}
 
 type NoticeboardPost = {
   agentName?: string | null
@@ -519,6 +481,9 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
           <p>No noticeboard posts.</p>
         )}
       </AssessmentSection>
+
+      {/* LLM costs (BTB-302) — supervisor/admin only; renders nothing for other roles */}
+      <LlmCostsSection conversationId={conversationId} />
 
       <NoticeboardDrawer post={selectedPost} onClose={() => setSelectedPost(null)} />
       <StatementFileViewer

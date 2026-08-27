@@ -69,6 +69,7 @@ export type { RandomSampleRequest, RandomSampleResponse } from './mutations/useR
 // Conversations queries (billie-crm-applications)
 export { useConversations, useCustomerConversations } from './queries/useConversations'
 export { useConversation } from './queries/useConversation'
+export { useLlmCosts } from './queries/useLlmCosts'
 export {
   useAccountConductAssessment,
   useServiceabilityAssessment,
