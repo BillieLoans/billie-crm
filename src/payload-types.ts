@@ -87,6 +87,7 @@ export interface Config {
     'release-grants': ReleaseGrant;
     'release-gate-status': ReleaseGateStatus;
     issues: Issue;
+    'llm-costs': LlmCost;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -114,6 +115,7 @@ export interface Config {
     'release-grants': ReleaseGrantsSelect<false> | ReleaseGrantsSelect<true>;
     'release-gate-status': ReleaseGateStatusSelect<false> | ReleaseGateStatusSelect<true>;
     issues: IssuesSelect<false> | IssuesSelect<true>;
+    'llm-costs': LlmCostsSelect<false> | LlmCostsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -629,6 +631,30 @@ export interface Conversation {
    */
   applicationId?: (string | null) | Application;
   status?: ('active' | 'paused' | 'soft_end' | 'hard_end' | 'approved' | 'declined') | null;
+  /**
+   * Cumulative recomputed LLM cost for this application (BTB-302, USD — per-call rows in LLM Costs)
+   */
+  llmCostTotalUsd?: number | null;
+  /**
+   * LLM calls projected for this conversation
+   */
+  llmCallCount?: number | null;
+  /**
+   * Calls whose model was missing from the rate table — should be zero
+   */
+  llmUnpricedCount?: number | null;
+  /**
+   * BTB-307 ME001 implausibility shadow alert — what the engine believed the income sources were (data quality, never a credit decision)
+   */
+  dataQualityAlert?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   startedAt: string;
   updatedAt: string;
   utterances?:
@@ -1953,6 +1979,56 @@ export interface Issue {
   createdAt: string;
 }
 /**
+ * LLM cost per call (llm_logs projection). Filter by conversation, agent, model or day; join to a loan via the conversation record. No customer text lives here.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "llm-costs".
+ */
+export interface LlmCost {
+  id: string;
+  /**
+   * llm_logs stream entry id (dedup key)
+   */
+  streamId: string;
+  /**
+   * Join key to conversations.conversationId (→ application, customer, loan)
+   */
+  conversationId?: string | null;
+  seq?: number | null;
+  model?: string | null;
+  agentName?: string | null;
+  serviceTier?: string | null;
+  promptTokens?: number | null;
+  completionTokens?: number | null;
+  cachedTokens?: number | null;
+  reasoningTokens?: number | null;
+  totalTokens?: number | null;
+  responseTimeMs?: number | null;
+  /**
+   * Cost as logged by LiteLLM at call time
+   */
+  loggedCostUsd?: number | null;
+  /**
+   * Recomputed from tokens × the versioned rate table
+   */
+  computedCostUsd?: number | null;
+  /**
+   * Rate table version in force at ingest
+   */
+  rateVersion?: string | null;
+  /**
+   * False = the source llm_logs row carried a cost but no token counts (upstream telemetry gap) — computed cost is not derivable; use loggedCostUsd
+   */
+  hasUsage?: boolean | null;
+  /**
+   * False = model missing from the rate table (never silently costed at zero) — update llm_rates.py
+   */
+  priced?: boolean | null;
+  calledAt?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
@@ -2055,6 +2131,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'issues';
         value: string | Issue;
+      } | null)
+    | ({
+        relationTo: 'llm-costs';
+        value: string | LlmCost;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -2254,6 +2334,10 @@ export interface ConversationsSelect<T extends boolean = true> {
   customerIdString?: T;
   applicationId?: T;
   status?: T;
+  llmCostTotalUsd?: T;
+  llmCallCount?: T;
+  llmUnpricedCount?: T;
+  dataQualityAlert?: T;
   startedAt?: T;
   updatedAt?: T;
   utterances?:
@@ -2894,6 +2978,32 @@ export interface IssuesSelect<T extends boolean = true> {
   resolvedAt?: T;
   resolvedBy?: T;
   reportedBy?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "llm-costs_select".
+ */
+export interface LlmCostsSelect<T extends boolean = true> {
+  streamId?: T;
+  conversationId?: T;
+  seq?: T;
+  model?: T;
+  agentName?: T;
+  serviceTier?: T;
+  promptTokens?: T;
+  completionTokens?: T;
+  cachedTokens?: T;
+  reasoningTokens?: T;
+  totalTokens?: T;
+  responseTimeMs?: T;
+  loggedCostUsd?: T;
+  computedCostUsd?: T;
+  rateVersion?: T;
+  hasUsage?: T;
+  priced?: T;
+  calledAt?: T;
   updatedAt?: T;
   createdAt?: T;
 }
