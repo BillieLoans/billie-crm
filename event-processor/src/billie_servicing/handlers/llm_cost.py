@@ -45,6 +45,15 @@ async def handle_llm_log(pool: Any, stream_id: str, fields: dict[str, Any]) -> N
     service_tier = str(fields.get("service_tier") or "")
     logged_cost = _num(fields.get("llm_cost"), cast=float, default=0.0)
 
+    # A row can only be costed from tokens if it HAS tokens. billieChat's
+    # streaming path logged usage-less records (cost present, all token
+    # counts zero) — recording those priced=true at $0.00 silently
+    # under-reports every consumer that sums computed cost. That is the same
+    # failure BTB-302 guards for an unknown model, reached via absent usage,
+    # so it gets the same treatment: never priced, counted as unpriced, and
+    # logged_cost_usd left as the only valid figure for the row.
+    has_usage = (prompt_tokens + completion_tokens) > 0
+
     computed_cost, priced = recompute_cost(
         model,
         agent_name,
@@ -53,6 +62,8 @@ async def handle_llm_log(pool: Any, stream_id: str, fields: dict[str, Any]) -> N
         cached_tokens,
         service_tier=service_tier,
     )
+    if not has_usage:
+        computed_cost, priced = 0.0, False
 
     # Stream ids are "<ms>-<seq>" — the ms half is the call timestamp.
     try:
@@ -85,6 +96,7 @@ async def handle_llm_log(pool: Any, stream_id: str, fields: dict[str, Any]) -> N
             "computed_cost_usd": computed_cost,
             "rate_version": RATE_VERSION,
             "priced": priced,
+            "has_usage": has_usage,
             "called_at": called_at,
             "updated_at": now,
             "created_at": now,
@@ -96,7 +108,16 @@ async def handle_llm_log(pool: Any, stream_id: str, fields: dict[str, Any]) -> N
         logger.debug("llm_costs row already projected", stream_id=stream_id)
         return
 
-    if not priced:
+    if not has_usage:
+        logger.warning(
+            "llm_logs row carries cost but no token usage — cannot recompute "
+            "(upstream telemetry gap); logged cost retained",
+            model=model,
+            agent_name=agent_name,
+            stream_id=stream_id,
+            logged_cost_usd=logged_cost,
+        )
+    elif not priced:
         logger.warning(
             "Unpriced model in llm_logs — rate table needs updating",
             model=model,

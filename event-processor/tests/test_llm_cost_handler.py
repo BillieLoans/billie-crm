@@ -221,3 +221,93 @@ class TestLlmCostProjection:
         assert called_at == datetime.fromtimestamp(
             1756260000, tz=timezone.utc
         )
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Absent token data must never be costed as $0.00 (deployment finding)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#
+# Verifying the deployed projection against live demo data found 1,529 rows
+# ($32.92 of logged spend) arriving with prompt_tokens=0 / completion_tokens=0
+# but a real llm_cost — billieChat's streaming path logged no usage. Those
+# rows were stored priced=true with computed_cost_usd=0.0, so anyone summing
+# computed cost silently under-reported. BTB-302 guards the unknown-MODEL
+# case; this is the same failure via absent TOKENS.
+
+
+def _no_usage_fields(**over) -> dict:
+    """A streamed row as it actually arrives: cost present, tokens absent."""
+    f = _fields(
+        prompt_tokens="0",
+        completion_tokens="0",
+        cached_tokens="0",
+        total_tokens="0",
+        llm_cost="0.04224",
+        model="gpt-5.6-terra",
+    )
+    f.update(over)
+    return f
+
+
+class TestRowsWithoutUsage:
+    @pytest.mark.asyncio
+    async def test_zero_token_row_is_not_marked_priced(self, mock_pool):
+        """A row with no token data cannot be costed — recording it
+        priced=true at $0.00 is the silent-zero failure this ticket exists
+        to prevent. The logged figure is kept as the only valid number."""
+        await handle_llm_log(mock_pool, "1787793364510-0", _no_usage_fields())
+
+        (ins,) = _cost_inserts(mock_pool)
+        v = ins.values
+        assert v["priced"] is False, "token-less row must not claim to be priced"
+        assert v["computed_cost_usd"] == 0.0
+        assert v["logged_cost_usd"] == pytest.approx(0.04224)
+        assert v["has_usage"] is False
+
+    @pytest.mark.asyncio
+    async def test_zero_token_row_counts_as_unpriced_on_the_conversation(
+        self, mock_pool
+    ):
+        """It must show up in llm_unpriced_count so a reader can see the
+        conversation's computed total is incomplete."""
+        await handle_llm_log(mock_pool, "1787793364510-0", _no_usage_fields())
+        rollups = [
+            c
+            for c in mock_pool.calls_against("conversations")
+            if c.op == "UPDATE" and "llm_unpriced_count" in c.sql
+        ]
+        assert len(rollups) == 1
+        assert 1 in rollups[0].args, "unpriced increment not applied"
+
+    @pytest.mark.asyncio
+    async def test_normal_row_still_reports_usage_present(self, mock_pool):
+        """Regression: a row WITH tokens keeps priced=true and has_usage."""
+        await handle_llm_log(mock_pool, "1756260000000-0", _fields())
+        (ins,) = _cost_inserts(mock_pool)
+        assert ins.values["priced"] is True
+        assert ins.values["has_usage"] is True
+        assert ins.values["computed_cost_usd"] > 0
+
+    @pytest.mark.asyncio
+    async def test_completion_only_row_still_prices(self, mock_pool):
+        """A genuinely cheap call (prompt cached to 0 but output tokens
+        present) still has usable usage — must not be swept up."""
+        await handle_llm_log(
+            mock_pool,
+            "1756260000001-0",
+            _fields(prompt_tokens="0", completion_tokens="120"),
+        )
+        (ins,) = _cost_inserts(mock_pool)
+        assert ins.values["has_usage"] is True
+        assert ins.values["priced"] is True
+        assert ins.values["computed_cost_usd"] > 0
+
+    @pytest.mark.asyncio
+    async def test_unknown_model_without_usage_is_still_unpriced(self, mock_pool):
+        """Both failure modes at once — stays unpriced, never $0.00 priced."""
+        await handle_llm_log(
+            mock_pool, "1787793364511-0", _no_usage_fields(model="gpt-9-unknown")
+        )
+        (ins,) = _cost_inserts(mock_pool)
+        assert ins.values["priced"] is False
+        assert ins.values["has_usage"] is False

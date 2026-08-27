@@ -84,6 +84,15 @@ export const LlmCosts: CollectionConfig = {
       admin: { readOnly: true, description: 'Rate table version in force at ingest' },
     },
     {
+      name: 'hasUsage',
+      type: 'checkbox',
+      admin: {
+        readOnly: true,
+        description:
+          'False = the source llm_logs row carried a cost but no token counts (upstream telemetry gap) — computed cost is not derivable; use loggedCostUsd',
+      },
+    },
+    {
       name: 'priced',
       type: 'checkbox',
       admin: {
