@@ -5,6 +5,11 @@
  * collection, whose read rule is supervisor/admin. This route serves every
  * lending role, so the fields must be omitted for operations/readonly rather
  * than shipped in the JSON and merely hidden by the UI.
+ *
+ * Also pins the route's response contract: the exact top-level key sets served
+ * to the base audience and to supervisors. The route reads via the Local API,
+ * which bypasses collection access, so nothing else forces an author adding a
+ * field to decide who may see it — this test does.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
@@ -98,4 +103,57 @@ describe('GET /api/conversations/:conversationId — LLM cost roll-up authz', ()
     const res = await callRoute('marketing')
     expect(res.status).toBe(403)
   })
+})
+
+/**
+ * The top-level keys every lending role receives. If adding a field made this
+ * fail, decide its audience FIRST: a field readable by all lending roles goes
+ * in the route's base object and gets added here; a field whose source is
+ * supervisor/admin-classified goes in the route's `supervisorOnlyFields`
+ * block and in SUPERVISOR_ONLY_KEYS below. Do not extend this list to make
+ * the test pass without making that call.
+ */
+const BASE_KEYS = [
+  'application',
+  'applicationNumber',
+  'assessments',
+  'conversationId',
+  'customer',
+  'decisionDetail',
+  'decisionStatus',
+  'finalDecision',
+  'identityVerificationReport',
+  'killRecord',
+  'lastMessageAt',
+  'messageCount',
+  'noticeboard',
+  'reapplicationBlock',
+  'sourceConversationId',
+  'startedAt',
+  'statementCapture',
+  'status',
+  'summary',
+  'updatedAt',
+  'utterances',
+].sort()
+
+const SUPERVISOR_ONLY_KEYS = ['llmCallCount', 'llmCostTotalUsd', 'llmUnpricedCount'].sort()
+
+describe('GET /api/conversations/:conversationId — response contract', () => {
+  it.each(['operations', 'readonly'])('serves exactly the base key set to %s', async (role) => {
+    const res = await callRoute(role)
+    expect(res.status).toBe(200)
+    expect(Object.keys(res.body.conversation!).sort()).toEqual(BASE_KEYS)
+  })
+
+  it.each(['admin', 'supervisor'])(
+    'serves the base keys plus the supervisor-only keys to %s',
+    async (role) => {
+      const res = await callRoute(role)
+      expect(res.status).toBe(200)
+      expect(Object.keys(res.body.conversation!).sort()).toEqual(
+        [...BASE_KEYS, ...SUPERVISOR_ONLY_KEYS].sort(),
+      )
+    },
+  )
 })
