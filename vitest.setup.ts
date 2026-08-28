@@ -1,5 +1,13 @@
 // Any setup scripts you might need go here
 
+// Resolve lexical packages straight to their dev/prod builds, skipping the
+// top-level-await shims that can deadlock Node's ESM evaluation when a test
+// imports @payload-config — see tests/utils/lexicalEsmConditionsHook.mjs.
+// globalSetup does the same for the main process.
+import { registerLexicalEsmConditions } from './tests/utils/registerLexicalEsmConditions'
+
+registerLexicalEsmConditions()
+
 // Load .env files
 import 'dotenv/config'
 
