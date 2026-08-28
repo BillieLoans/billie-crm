@@ -118,6 +118,13 @@
   color: var(--theme-warning-500);
 }
 
+/* A failed identity check is a fraud signal, not a caveat — it reads at error
+   weight so it cannot be mistaken for the pending/unknown case above. */
+.ekycFailed {
+  font-weight: 700;
+  color: var(--theme-error-500);
+}
+
 .checkGroup {
   margin: 0;
   padding: 0;

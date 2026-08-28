@@ -21,7 +21,7 @@ export interface QueueItem {
   customerId: string
   customerName: string
   ekycVerifiedName: string | null
-  identityVerified: boolean
+  ekycStatus: 'successful' | 'failed' | 'pending' | 'unknown'
   loanAmount: number
   loanAmountFormatted: string
   commencementDate: string | null

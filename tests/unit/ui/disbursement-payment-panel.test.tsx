@@ -13,7 +13,7 @@ function makeItem(overrides: Partial<QueueItem> = {}): QueueItem {
     customerId: 'c1',
     customerName: 'Kathryn Shine',
     ekycVerifiedName: 'Kathryn Shine',
-    identityVerified: true,
+    ekycStatus: 'successful' as const,
     loanAmount: 200,
     loanAmountFormatted: '$200.00',
     commencementDate: '2026-08-28',
@@ -144,14 +144,43 @@ describe('DisbursementPaymentPanel', () => {
     expect(screen.getByTestId('panel-disburse')).toBeDisabled()
   })
 
-  it('flags an unverified identity in the payee comparison', () => {
-    render(
-      <DisbursementPaymentPanel
-        item={makeItem({ identityVerified: false, ekycVerifiedName: null })}
-        onDisburse={vi.fn()}
-      />,
+  it('does not warn when eKYC succeeded', () => {
+    render(<DisbursementPaymentPanel item={makeItem()} onDisburse={vi.fn()} />)
+    expect(screen.getByText(/eKYC-verified identity/i)).toBeInTheDocument()
+    expect(screen.queryByText(/not verified/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/eKYC failed/i)).not.toBeInTheDocument()
+  })
+
+  it('distinguishes a FAILED identity check from one that never ran', () => {
+    // These must not read alike: one is a fraud signal, the other is missing data.
+    const { unmount } = render(
+      <DisbursementPaymentPanel item={makeItem({ ekycStatus: 'failed' })} onDisburse={vi.fn()} />,
     )
-    expect(screen.getByText(/unverified/i)).toBeInTheDocument()
+    expect(screen.getByText(/eKYC failed/i)).toBeInTheDocument()
+    expect(screen.getByText(/Identity check FAILED/i)).toBeInTheDocument()
+    unmount()
+
+    render(
+      <DisbursementPaymentPanel item={makeItem({ ekycStatus: 'unknown' })} onDisburse={vi.fn()} />,
+    )
+    expect(screen.queryByText(/eKYC failed/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/not verified/i)).toBeInTheDocument()
+  })
+
+  it('marks a pending eKYC check as incomplete rather than failed', () => {
+    render(
+      <DisbursementPaymentPanel item={makeItem({ ekycStatus: 'pending' })} onDisburse={vi.fn()} />,
+    )
+    expect(screen.getByText(/check not complete/i)).toBeInTheDocument()
+    expect(screen.queryByText(/eKYC failed/i)).not.toBeInTheDocument()
+  })
+
+  it('still shows the payee name to compare when eKYC has not succeeded', () => {
+    // The operator has to check the bank's answer against something either way.
+    render(
+      <DisbursementPaymentPanel item={makeItem({ ekycStatus: 'unknown' })} onDisburse={vi.fn()} />,
+    )
+    expect(screen.getByText(/Kathryn Shine/)).toBeInTheDocument()
   })
 
   it('shows the payment message with its length against the Osko limit', () => {

@@ -17,6 +17,21 @@ interface Props {
 type PayeeCheck = 'unchecked' | 'match' | 'mismatch'
 
 /**
+ * How each eKYC outcome reads next to the payee name.
+ *
+ * Deliberately four states rather than verified/unverified. A FAILED identity check
+ * is a fraud signal and has to look different from one that simply has not run —
+ * collapsing them would either understate a real hit or cry wolf on every customer
+ * whose check is still pending, and a warning that is always on gets clicked past.
+ */
+const EKYC_META = {
+  successful: { label: 'eKYC-verified identity', badge: '', tone: 'unverified' },
+  failed: { label: 'Identity check FAILED', badge: '🛑 eKYC failed', tone: 'ekycFailed' },
+  pending: { label: 'Customer (eKYC pending)', badge: '⚠ check not complete', tone: 'unverified' },
+  unknown: { label: 'Customer (no eKYC record)', badge: '⚠ not verified', tone: 'unverified' },
+} as const
+
+/**
  * The per-loan payment panel: everything an operator needs to pay one advance by
  * hand in ANZ "Pay Anyone", and the Confirmation-of-Payee gate they must pass first.
  *
@@ -204,12 +219,15 @@ export function DisbursementPaymentPanel({ item, onDisburse }: Props) {
             <span className={styles.copValue}>{account?.holder ?? '—'}</span>
           </div>
           <div className={styles.copSide}>
-            <span className={styles.label}>
-              {item.identityVerified ? 'eKYC-verified identity' : 'Customer (not eKYC-verified)'}
-            </span>
+            <span className={styles.label}>{EKYC_META[item.ekycStatus].label}</span>
             <span className={styles.copValue}>
               {item.ekycVerifiedName ?? item.customerName}
-              {!item.identityVerified && <span className={styles.unverified}> ⚠ unverified</span>}
+              {EKYC_META[item.ekycStatus].badge && (
+                <span className={styles[EKYC_META[item.ekycStatus].tone]}>
+                  {' '}
+                  {EKYC_META[item.ekycStatus].badge}
+                </span>
+              )}
             </span>
           </div>
         </div>
