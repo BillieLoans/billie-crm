@@ -28,6 +28,7 @@ import * as migration_20260827_131500_llm_costs from './20260827_131500_llm_cost
 import * as migration_20260827_214500_llm_costs_has_usage from './20260827_214500_llm_costs_has_usage';
 import * as migration_20260827_224500_llm_costs_system_rels from './20260827_224500_llm_costs_system_rels';
 import * as migration_20260827_230000_llm_costs_uuid_id from './20260827_230000_llm_costs_uuid_id';
+import * as migration_20260828_124500_conversations_llm_rollup_columns from './20260828_124500_conversations_llm_rollup_columns';
 
 export const migrations = [
   {
@@ -179,5 +180,10 @@ export const migrations = [
     up: migration_20260827_230000_llm_costs_uuid_id.up,
     down: migration_20260827_230000_llm_costs_uuid_id.down,
     name: '20260827_230000_llm_costs_uuid_id',
+  },
+  {
+    up: migration_20260828_124500_conversations_llm_rollup_columns.up,
+    down: migration_20260828_124500_conversations_llm_rollup_columns.down,
+    name: '20260828_124500_conversations_llm_rollup_columns',
   },
 ];
