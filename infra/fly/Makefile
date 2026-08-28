@@ -301,7 +301,7 @@ pg-migrate-create:
 		echo "Set DATABASE_URI to a local Postgres before running pg-migrate-create."; \
 		exit 1; \
 	fi
-	@cd "$(WORKTREE_ROOT)" && pnpm payload migrate:create --name "$(or $(NAME),change)"
+	@cd "$(WORKTREE_ROOT)" && NODE_OPTIONS="--conditions=development" pnpm payload migrate:create --name "$(or $(NAME),change)"
 
 # Apply Payload migrations to the <env> Neon DB. Runs `pnpm payload
 # migrate` from your laptop with DATABASE_URI sourced from .env.<env>.
@@ -324,7 +324,19 @@ pg-migrate: check-secrets
 	fi; \
 	echo "Applying Payload migrations to $(ENV) Postgres…"; \
 	cd "$(WORKTREE_ROOT)" && \
-	DATABASE_URI="$$DSN" PAYLOAD_SECRET="cutover-migrate" pnpm payload migrate
+	TMP=$$(mktemp) && \
+	DATABASE_URI="$$DSN" PAYLOAD_SECRET="cutover-migrate" NODE_OPTIONS="--conditions=development" \
+		pnpm payload migrate >"$$TMP" 2>&1; RC=$$?; cat "$$TMP"; \
+	if [ $$RC -ne 0 ]; then rm -f "$$TMP"; exit $$RC; fi; \
+	if ! grep -q "Reading migration files" "$$TMP"; then \
+		rm -f "$$TMP"; \
+		echo "ERROR: payload migrate exited 0 but produced no migration output."; \
+		echo "       The payload CLI can hit a Node ESM deadlock importing payload.config"; \
+		echo "       (lexical top-level-await shims) and exit silently having done NOTHING —"; \
+		echo "       this silently skipped prod migrations on 28 Aug 2026 (issue 9851ff6f)."; \
+		echo "       --conditions=development prevents it; if this still fires, re-run."; \
+		exit 1; \
+	fi; rm -f "$$TMP"
 
 # Show recorded/pending migrations on the <env> Neon DB without applying
 # anything. Safe read-only check before pg-migrate. DATABASE_URI sourced
@@ -336,7 +348,7 @@ pg-migrate-status: check-secrets
 		exit 1; \
 	fi; \
 	cd "$(WORKTREE_ROOT)" && \
-	DATABASE_URI="$$DSN" PAYLOAD_SECRET="cutover-migrate" pnpm payload migrate:status
+	DATABASE_URI="$$DSN" PAYLOAD_SECRET="cutover-migrate" NODE_OPTIONS="--conditions=development" pnpm payload migrate:status
 
 # Print row counts for every projection + CRM-owned table. Reads
 # DATABASE_URI from .env.<env> and runs psql locally.
