@@ -132,3 +132,25 @@
   text-align: center;
   color: var(--theme-elevation-500);
 }
+
+/* ── Expandable payment rows (BTB-279) ───────────────────────────── */
+.mono {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  letter-spacing: 0.02em;
+}
+
+.rowOpen td {
+  background: var(--theme-elevation-50);
+}
+
+.rowWarn {
+  color: var(--theme-warning-500);
+  font-weight: 600;
+  font-size: 11px;
+}
+
+/* The panel supplies its own padding and top border. */
+.panelCell {
+  padding: 0 !important;
+  border-top: none !important;
+}

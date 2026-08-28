@@ -6,12 +6,15 @@ import { DisburseLoanDrawer } from '@/components/ServicingView/DisburseLoanDrawe
 import { CutoffCountdown } from '@/components/DashboardView/CutoffCountdown'
 import { formatCurrency } from '@/lib/formatters'
 import { DisbursementSection, type QueueItem } from './DisbursementSection'
+import { DailyLimitIndicator } from './DailyLimitIndicator'
 import { EarlyDisburseWarningModal } from './EarlyDisburseWarningModal'
+import type { DailyLimitUsage } from '@/lib/disbursement-payments'
 import styles from './styles.module.css'
 
 interface PendingDisbursementResponse {
   totalCount: number
   items: QueueItem[]
+  dailyLimit?: DailyLimitUsage
 }
 
 export function PendingDisbursementsView() {
@@ -20,10 +23,15 @@ export function PendingDisbursementsView() {
   const [totalCount, setTotalCount] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [dailyLimit, setDailyLimit] = useState<DailyLimitUsage | null>(null)
 
   const [selectedItem, setSelectedItem] = useState<QueueItem | null>(null)
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [pendingEarly, setPendingEarly] = useState<QueueItem | null>(null)
+  // One payment panel open across all three sections: the operator works one
+  // payment at a time, and two open panels of bank details is two chances to copy
+  // the wrong row's account number.
+  const [expandedId, setExpandedId] = useState<string | null>(null)
 
   const [targetBucket, setTargetBucket] = useState<string | null>(null)
   useEffect(() => {
@@ -46,6 +54,7 @@ export function PendingDisbursementsView() {
       }
       setItems(data.items || [])
       setTotalCount(data.totalCount || 0)
+      setDailyLimit(data.dailyLimit ?? null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch pending disbursements')
     } finally {
@@ -62,12 +71,25 @@ export function PendingDisbursementsView() {
     setIsDrawerOpen(true)
   }, [])
 
-  const handleDisburse = useCallback(
-    (item: QueueItem) => {
+  /**
+   * Opening a scheduled loan's payment panel is the gate, not the disburse click.
+   * By the time an operator has copied the BSB and paid in ANZ, warning them that
+   * this resets the loan start date is too late to act on.
+   */
+  const handleToggleRow = useCallback((item: QueueItem) => {
+    setExpandedId((current) => {
+      if (current === item.loanAccountId) return null
       if (item.bucket === 'scheduled') {
         setPendingEarly(item)
-        return
+        return current
       }
+      return item.loanAccountId
+    })
+  }, [])
+
+  const handleDisburse = useCallback(
+    (item: QueueItem) => {
+      // Scheduled loans were already warned at panel-open time.
       openDrawer(item)
     },
     [openDrawer],
@@ -88,6 +110,7 @@ export function PendingDisbursementsView() {
   }, [])
 
   const handleDisburseSuccess = useCallback(() => {
+    setExpandedId(null)
     void fetchPendingDisbursements()
   }, [fetchPendingDisbursements])
 
@@ -124,6 +147,7 @@ export function PendingDisbursementsView() {
           <p className={styles.subtitle}>{headerSubtitle}</p>
         </div>
         <div className={styles.headerActions}>
+          <DailyLimitIndicator usage={dailyLimit} />
           <CutoffCountdown />
           <button className={styles.refreshButton} onClick={() => void fetchPendingDisbursements()}>
             Refresh
@@ -141,6 +165,8 @@ export function PendingDisbursementsView() {
             bucket="overdue"
             items={byBucket('overdue')}
             totalFormatted={subtotal('overdue')}
+            expandedId={expandedId}
+            onToggleRow={handleToggleRow}
             onDisburse={handleDisburse}
             onView={handleView}
           />
@@ -148,6 +174,8 @@ export function PendingDisbursementsView() {
             bucket="today"
             items={byBucket('today')}
             totalFormatted={subtotal('today')}
+            expandedId={expandedId}
+            onToggleRow={handleToggleRow}
             onDisburse={handleDisburse}
             onView={handleView}
           />
@@ -156,6 +184,8 @@ export function PendingDisbursementsView() {
             items={byBucket('scheduled')}
             totalFormatted={subtotal('scheduled')}
             defaultCollapsed={targetBucket !== 'scheduled'}
+            expandedId={expandedId}
+            onToggleRow={handleToggleRow}
             onDisburse={handleDisburse}
             onView={handleView}
           />
@@ -184,7 +214,7 @@ export function PendingDisbursementsView() {
         onConfirm={() => {
           const it = pendingEarly!
           setPendingEarly(null)
-          openDrawer(it)
+          setExpandedId(it.loanAccountId)
         }}
       />
     </div>

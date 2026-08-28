@@ -148,6 +148,23 @@ async def handle_account_created(pool: asyncpg.Pool, parsed_event: Any) -> None:
     if signed_url is not None:
         values["signed_loan_agreement_url"] = str(signed_url) if signed_url else None
 
+    # Nominated salary account (accounts-v2.11.0+). getattr-guarded like the two
+    # fields above so an older SDK in the venv can't AttributeError the handler.
+    # Written per-field rather than as a blob: the disbursement queue renders each
+    # value as its own copy target, and a partial account (BSB known, number not)
+    # must still land so the row can be shown and flagged.
+    # Customer-facing loan reference — goes in the Osko payment message so the
+    # morning statement recon can tie the payment back to the loan.
+    application_number = getattr(payload, "application_number", None)
+    if application_number is not None:
+        values["application_number"] = str(application_number) if application_number else None
+
+    disbursement_account = getattr(payload, "disbursement_account", None)
+    if disbursement_account is not None:
+        values["disbursement_account_holder"] = disbursement_account.holder
+        values["disbursement_account_bsb"] = disbursement_account.bsb
+        values["disbursement_account_number"] = disbursement_account.number
+
     # A replayed account.created.v1 carries the original pre-disbursement
     # snapshot; dropping the status keys is safe because the regression check
     # only fires when the row already exists (so the INSERT branch — where

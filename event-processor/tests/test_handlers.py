@@ -335,6 +335,109 @@ class TestAccountHandlers:
         assert "commencement_date" not in doc
 
     @pytest.mark.asyncio
+    async def test_handle_account_created_stores_disbursement_account(self, mock_pool):
+        """account.created.v1 projects the nominated salary account (BTB-279).
+
+        SimpleNamespace stands in for the accounts-v2.11.0 DisbursementAccount so the
+        test doesn't depend on the installed SDK version.
+        """
+        payload = SimpleNamespace(
+            account_id="ACC-DA-001",
+            account_number="ACC-DA-001",
+            customer_id="CUS-DA-001",
+            status="PENDING_DISBURSEMENT",
+            loan_amount=Decimal("200.00"),
+            loan_fee=Decimal("10.00"),
+            loan_total_payable=Decimal("210.00"),
+            current_balance=Decimal("210.00"),
+            opened_date="2026-08-28",
+            disbursement_account=SimpleNamespace(
+                holder="Mr Rohan C Sharp & Ms Kathryn F Shine",
+                bsb="923100",
+                number="63764292",
+            ),
+        )
+        event = SimpleNamespace(payload=payload)
+
+        await handle_account_created(mock_pool, event)
+
+        doc = mock_pool.last_insert("loan_accounts")
+        assert doc is not None
+        assert doc["disbursement_account_holder"] == "Mr Rohan C Sharp & Ms Kathryn F Shine"
+        assert doc["disbursement_account_bsb"] == "923100"
+        assert doc["disbursement_account_number"] == "63764292"
+
+    @pytest.mark.asyncio
+    async def test_handle_account_created_disbursement_account_bsb_keeps_leading_zero(
+        self, mock_pool
+    ):
+        """A BSB stays a string — projecting 013257 as a number would pay 13257."""
+        payload = SimpleNamespace(
+            account_id="ACC-DA-002",
+            account_number="ACC-DA-002",
+            customer_id="CUS-DA-002",
+            status="PENDING_DISBURSEMENT",
+            loan_amount=Decimal("200.00"),
+            loan_fee=Decimal("10.00"),
+            loan_total_payable=Decimal("210.00"),
+            current_balance=Decimal("210.00"),
+            opened_date="2026-08-28",
+            disbursement_account=SimpleNamespace(
+                holder="A Payee", bsb="013257", number="0805296574"
+            ),
+        )
+        await handle_account_created(mock_pool, SimpleNamespace(payload=payload))
+
+        doc = mock_pool.last_insert("loan_accounts")
+        assert doc["disbursement_account_bsb"] == "013257"
+        assert doc["disbursement_account_number"] == "0805296574"
+
+    @pytest.mark.asyncio
+    async def test_handle_account_created_partial_disbursement_account(self, mock_pool):
+        """A partly-known account still lands so the queue can show and flag the row."""
+        payload = SimpleNamespace(
+            account_id="ACC-DA-003",
+            account_number="ACC-DA-003",
+            customer_id="CUS-DA-003",
+            status="PENDING_DISBURSEMENT",
+            loan_amount=Decimal("200.00"),
+            loan_fee=Decimal("10.00"),
+            loan_total_payable=Decimal("210.00"),
+            current_balance=Decimal("210.00"),
+            opened_date="2026-08-28",
+            disbursement_account=SimpleNamespace(holder=None, bsb="923100", number=None),
+        )
+        await handle_account_created(mock_pool, SimpleNamespace(payload=payload))
+
+        doc = mock_pool.last_insert("loan_accounts")
+        assert doc["disbursement_account_bsb"] == "923100"
+        assert doc["disbursement_account_holder"] is None
+        assert doc["disbursement_account_number"] is None
+
+    @pytest.mark.asyncio
+    async def test_handle_account_created_without_disbursement_account(self, mock_pool):
+        """Pre-2.11.0 events omit the field entirely — the columns must not be written."""
+        payload = SimpleNamespace(
+            account_id="ACC-DA-004",
+            account_number="ACC-DA-004",
+            customer_id="CUS-DA-004",
+            status="PENDING_DISBURSEMENT",
+            loan_amount=Decimal("200.00"),
+            loan_fee=Decimal("10.00"),
+            loan_total_payable=Decimal("210.00"),
+            current_balance=Decimal("210.00"),
+            opened_date="2026-08-28",
+            # disbursement_account attribute absent — simulates accounts-v2.10.0
+        )
+        await handle_account_created(mock_pool, SimpleNamespace(payload=payload))
+
+        doc = mock_pool.last_insert("loan_accounts")
+        assert doc is not None
+        assert "disbursement_account_holder" not in doc
+        assert "disbursement_account_bsb" not in doc
+        assert "disbursement_account_number" not in doc
+
+    @pytest.mark.asyncio
     async def test_handle_account_updated_sets_commencement_date_when_present(self, mock_pool):
         """account.updated.v1 with commencement_date updates the column."""
         event = MagicMock()

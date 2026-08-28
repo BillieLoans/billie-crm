@@ -59,6 +59,29 @@ export function buildMetric(count: number, totalAmount: number): MoneyFlowMetric
 }
 
 /**
+ * Total value disbursed so far during today's Sydney business day.
+ *
+ * Shared by the dashboard's money-flow tiles and the disbursement queue's daily
+ * bank-limit indicator (BTB-279), so both read the same number from the same
+ * `loan_terms_disbursed_date` window rather than drifting apart.
+ */
+export async function fetchDisbursedToday(
+  pool: QueryablePool | undefined,
+  now: Date = new Date(),
+): Promise<MoneyFlowMetric> {
+  if (!pool) return EMPTY_METRIC
+  const { start, end } = sydneyDayUtcRange(now)
+  const result = await pool.query(
+    `SELECT COUNT(*)::bigint AS count, COALESCE(SUM(loan_terms_loan_amount), 0) AS total
+       FROM loan_accounts
+      WHERE loan_terms_disbursed_date >= $1 AND loan_terms_disbursed_date < $2`,
+    [start, end],
+  )
+  const row = result.rows[0]
+  return buildMetric(toNumber(row?.count), toNumber(row?.total))
+}
+
+/**
  * Aggregate today's money flows (expected, received, disbursed) for the
  * Australian working day, from the `loan_accounts` parent table and the
  * `loan_accounts_repayment_schedule_payments` child table.
@@ -80,7 +103,7 @@ export async function fetchMoneyFlowsToday(
   const toMetric = (row: Record<string, unknown> | undefined) =>
     buildMetric(toNumber(row?.count), toNumber(row?.total))
 
-  const [expectedResult, receivedResult, disbursedResult] = await Promise.all([
+  const [expectedResult, receivedResult, disbursed] = await Promise.all([
     pool.query(
       `SELECT COUNT(*)::bigint AS count, COALESCE(SUM(amount), 0) AS total
          FROM loan_accounts_repayment_schedule_payments
@@ -93,18 +116,13 @@ export async function fetchMoneyFlowsToday(
         WHERE paid_date >= $1 AND paid_date < $2`,
       [start, end],
     ),
-    pool.query(
-      `SELECT COUNT(*)::bigint AS count, COALESCE(SUM(loan_terms_loan_amount), 0) AS total
-         FROM loan_accounts
-        WHERE loan_terms_disbursed_date >= $1 AND loan_terms_disbursed_date < $2`,
-      [start, end],
-    ),
+    fetchDisbursedToday(pool, now),
   ])
 
   return {
     paymentsExpected: toMetric(expectedResult.rows[0]),
     paymentsReceived: toMetric(receivedResult.rows[0]),
-    disbursed: toMetric(disbursedResult.rows[0]),
+    disbursed,
   }
 }
 

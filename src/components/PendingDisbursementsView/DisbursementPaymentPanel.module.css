@@ -1,0 +1,239 @@
+.panel {
+  padding: 14px 16px 16px;
+  background: var(--theme-elevation-25);
+  border-top: 1px solid var(--theme-elevation-150);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.blockTitle {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--theme-elevation-500);
+}
+
+.counter {
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--theme-elevation-450);
+}
+
+/* Fixed 4-up grid: each field keeps its position whether or not it has a value,
+   so the eye learns where the BSB always is. */
+.fieldGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
+  gap: 12px 18px;
+}
+
+@media (max-width: 900px) {
+  .fieldGrid {
+    grid-template-columns: repeat(2, minmax(140px, 1fr));
+  }
+}
+
+.label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--theme-elevation-500);
+}
+
+.blockActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.messageBox {
+  margin: 0;
+  padding: 9px 11px;
+  background: var(--theme-input-bg, var(--theme-elevation-50));
+  border: 1px solid var(--theme-elevation-200);
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--theme-elevation-800);
+  overflow-wrap: anywhere;
+}
+
+.hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--theme-elevation-500);
+}
+
+.link {
+  font-size: 12px;
+  color: var(--theme-success-500);
+  text-decoration: underline;
+}
+
+/* ── Confirmation of Payee ───────────────────────────────────────── */
+.copCompare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 18px;
+}
+
+@media (max-width: 700px) {
+  .copCompare {
+    grid-template-columns: 1fr;
+  }
+}
+
+.copSide {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  border: 1px solid var(--theme-elevation-200);
+  border-radius: 6px;
+  background: var(--theme-elevation-50);
+}
+
+.copValue {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--theme-elevation-800);
+  overflow-wrap: anywhere;
+}
+
+.unverified {
+  font-weight: 600;
+  color: var(--theme-warning-500);
+}
+
+.checkGroup {
+  margin: 0;
+  padding: 0;
+  border: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.checkLegend {
+  padding: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--theme-elevation-700);
+}
+
+.checkOptions {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+/* 24px min target incl. the label hit area (ux-standards §2.1, SC 2.5.8). */
+.radioLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  font-size: 12px;
+  color: var(--theme-elevation-800);
+  cursor: pointer;
+}
+
+/* ── Alerts ──────────────────────────────────────────────────────── */
+.warn {
+  margin: 0;
+  padding: 8px 11px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--theme-warning-500);
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid var(--theme-warning-500);
+}
+
+.stop {
+  margin: 0;
+  padding: 9px 11px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--theme-error-500);
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid var(--theme-error-500);
+}
+
+/* ── Footer ──────────────────────────────────────────────────────── */
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 4px;
+  border-top: 1px solid var(--theme-elevation-150);
+  flex-wrap: wrap;
+}
+
+.footerMeta {
+  font-size: 12px;
+  color: var(--theme-elevation-600);
+}
+
+.gateHint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--theme-elevation-500);
+  text-align: right;
+}
+
+.primaryBtn {
+  min-height: 32px;
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  background: #f59e0b;
+  color: #1a1205;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.primaryBtn:disabled {
+  background: var(--theme-elevation-150);
+  color: var(--theme-elevation-450);
+  cursor: not-allowed;
+}
+
+.primaryBtn:focus-visible,
+.secondaryBtn:focus-visible {
+  outline: 2px solid var(--theme-success-500);
+  outline-offset: 2px;
+}
+
+.secondaryBtn {
+  min-height: 24px;
+  padding: 4px 11px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--theme-elevation-50);
+  border: 1px solid var(--theme-elevation-250);
+  border-radius: 6px;
+  color: var(--theme-elevation-700);
+  cursor: pointer;
+}
+
+.secondaryBtn:hover {
+  background: var(--theme-elevation-100);
+}

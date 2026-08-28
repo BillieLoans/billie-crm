@@ -88,6 +88,7 @@ export interface Config {
     'release-gate-status': ReleaseGateStatus;
     issues: Issue;
     'llm-costs': LlmCost;
+    'disbursement-access-log': DisbursementAccessLog;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -116,6 +117,7 @@ export interface Config {
     'release-gate-status': ReleaseGateStatusSelect<false> | ReleaseGateStatusSelect<true>;
     issues: IssuesSelect<false> | IssuesSelect<true>;
     'llm-costs': LlmCostsSelect<false> | LlmCostsSelect<true>;
+    'disbursement-access-log': DisbursementAccessLogSelect<false> | DisbursementAccessLogSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -1088,9 +1090,30 @@ export interface LoanAccount {
    */
   commencementDate?: string | null;
   /**
+   * Originating application reference (from SDK: application_number). The reference shown to the customer.
+   */
+  applicationNumber?: string | null;
+  /**
    * S3 URI for signed loan agreement document (from SDK: signed_loan_agreement_url, accounts-v2.7.0+)
    */
   signedLoanAgreementUrl?: string | null;
+  /**
+   * Customer's nominated salary account for disbursement, as disclosed in the signed agreement (from SDK: disbursement_account, accounts-v2.11.0+). Null on loans created before that SDK version.
+   */
+  disbursementAccount?: {
+    /**
+     * Account holder name — checked against the bank's Confirmation of Payee before paying
+     */
+    holder?: string | null;
+    /**
+     * Unformatted 6-digit BSB (e.g. 013257). Text, not number — a leading zero is significant
+     */
+    bsb?: string | null;
+    /**
+     * Account number, digits only. Text to preserve any leading zeros
+     */
+    number?: string | null;
+  };
   /**
    * Closure snapshot from account.closed.v1
    */
@@ -2029,6 +2052,30 @@ export interface LlmCost {
   createdAt: string;
 }
 /**
+ * Audit trail of payout bank-detail reveals and copies
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "disbursement-access-log".
+ */
+export interface DisbursementAccessLog {
+  id: string;
+  loanAccountId: string;
+  /**
+   * Billie's loan account number, for readability
+   */
+  accountNumber?: string | null;
+  action: 'reveal' | 'copy';
+  /**
+   * Which identifier was disclosed
+   */
+  field: 'accountNumber' | 'bsb' | 'holder' | 'all';
+  actor?: (string | null) | User;
+  actorEmail?: string | null;
+  occurredAt: string;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
@@ -2135,6 +2182,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'llm-costs';
         value: string | LlmCost;
+      } | null)
+    | ({
+        relationTo: 'disbursement-access-log';
+        value: string | DisbursementAccessLog;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -2569,7 +2620,15 @@ export interface LoanAccountsSelect<T extends boolean = true> {
   accountStatus?: T;
   sdkStatus?: T;
   commencementDate?: T;
+  applicationNumber?: T;
   signedLoanAgreementUrl?: T;
+  disbursementAccount?:
+    | T
+    | {
+        holder?: T;
+        bsb?: T;
+        number?: T;
+      };
   closure?:
     | T
     | {
@@ -3004,6 +3063,21 @@ export interface LlmCostsSelect<T extends boolean = true> {
   hasUsage?: T;
   priced?: T;
   calledAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "disbursement-access-log_select".
+ */
+export interface DisbursementAccessLogSelect<T extends boolean = true> {
+  loanAccountId?: T;
+  accountNumber?: T;
+  action?: T;
+  field?: T;
+  actor?: T;
+  actorEmail?: T;
+  occurredAt?: T;
   updatedAt?: T;
   createdAt?: T;
 }
