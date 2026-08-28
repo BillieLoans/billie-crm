@@ -142,6 +142,22 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         }
       : null
 
+    // Fields whose classification is narrower than this route's audience.
+    // Everything in `conversation` below ships to EVERY lending role
+    // (operations and readonly included) — that widening is deliberate, this
+    // route is their curated servicing projection of a supervisor-only
+    // collection. Any field with a narrower read rule at its source (like the
+    // llm-costs roll-up) MUST be added here, not to the base object. The
+    // response-contract test in conversationDetailLlmCostAuthz.test.ts pins
+    // the base key set and fails on unclassified additions.
+    const supervisorOnlyFields = hasApprovalAuthority(user)
+      ? {
+          llmCostTotalUsd: (doc.llmCostTotalUsd as number) ?? null,
+          llmCallCount: (doc.llmCallCount as number) ?? null,
+          llmUnpricedCount: (doc.llmUnpricedCount as number) ?? null,
+        }
+      : {}
+
     const conversation = {
       conversationId: String(doc.conversationId ?? ''),
       applicationNumber: (doc.applicationNumber as string) ?? null,
@@ -164,19 +180,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       startedAt: toIso(doc.startedAt),
       updatedAt: toIso(doc.updatedAt),
       lastMessageAt: toIso(doc.lastUtteranceTime),
-      // LLM cost roll-up (BTB-302) — supervisor/admin only, matching the read
-      // rule on the `llm-costs` collection this roll-up summarises. The rest of
-      // this route serves every lending role (operations, readonly included),
-      // so the fields are omitted per-role rather than the whole response
-      // being gated. The UI hides the section too, but that is defence in
-      // depth: without this the data would still ship in the JSON.
-      ...(hasApprovalAuthority(user)
-        ? {
-            llmCostTotalUsd: (doc.llmCostTotalUsd as number) ?? null,
-            llmCallCount: (doc.llmCallCount as number) ?? null,
-            llmUnpricedCount: (doc.llmUnpricedCount as number) ?? null,
-          }
-        : {}),
+      ...supervisorOnlyFields,
       customer: {
         fullName: customerFullName,
         customerId: (doc.customerIdString as string) ?? null,

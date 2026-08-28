@@ -37,6 +37,16 @@ let pg: StartedPostgreSqlContainer | undefined
  * never settles it throws a loud, attributable error comfortably inside
  * vitest's `hookTimeout` (120_000ms) — naming exactly which step stalled,
  * rather than surfacing as vitest's generic hook-timeout message.
+ *
+ * Observed frequency and remediation (2026-08-28, local macOS): the stall
+ * fired on ~6 separate invocations in one day, far above the historical
+ * rate, and every occurrence was the FIRST vitest run after source-file
+ * edits; an immediate rerun with no intervening edits executed normally in
+ * all but one case. Deleting `node_modules/.vite` coincided with one
+ * recovery but also preceded another stall, so it is not a reliable remedy —
+ * rerun first. The original investigation lived in an untracked
+ * `.superpowers/sdd/.../ci-harness-report.md` that no longer exists; this
+ * comment is now the durable record.
  */
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -44,8 +54,9 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
       reject(
         new Error(
           `[globalSetup] ${label} did not settle within ${ms}ms. This matches a known ` +
-            `intermittent Vite module-runner stall rather than a real code defect — see ` +
-            `ci-harness-report.md. Rerunning the job usually clears it.`,
+            `intermittent Vite module-runner stall rather than a real code defect — see the ` +
+            `withTimeout doc comment in tests/utils/globalSetup.ts. Rerunning usually ` +
+            `executes; the first run after source-file edits is the most likely to stall.`,
         ),
       )
     }, ms)
