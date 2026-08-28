@@ -114,7 +114,10 @@ describe('DisbursementPaymentPanel', () => {
     expect(screen.getByRole('alert').textContent).toMatch(/do not disburse/i)
   })
 
-  it('blocks payment when the payout account is incomplete', () => {
+  it('still lets an incomplete record be recorded once the name is confirmed', () => {
+    // "Mark disbursed" records a payment already made by hand in ANZ; it does not
+    // move money. Blocking it here would strand the payment outside the ledger.
+    const onDisburse = vi.fn()
     const item = makeItem({
       disbursementAccount: {
         holder: null,
@@ -125,23 +128,43 @@ describe('DisbursementPaymentPanel', () => {
         missing: ['account name', 'account number'],
       },
     })
-    render(<DisbursementPaymentPanel item={item} onDisburse={vi.fn()} />)
-    fireEvent.click(screen.getByLabelText(/names match/i))
-
-    // Even a confirmed name must not unlock payment against a partial record.
-    expect(screen.getByTestId('panel-disburse')).toBeDisabled()
+    render(<DisbursementPaymentPanel item={item} onDisburse={onDisburse} />)
     expect(screen.getByText(/do not pay from a partial record/i)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText(/names match/i))
+    expect(screen.getByTestId('panel-disburse')).toBeEnabled()
+    fireEvent.click(screen.getByTestId('panel-disburse'))
+    expect(onDisburse).toHaveBeenCalledTimes(1)
   })
 
-  it('directs the operator to the agreement when no account is on file', () => {
+  it('lets a legacy loan with no payout details be recorded after the name check', () => {
+    // Every loan created before the payout details rode the account event looks
+    // like this. They still have to be disbursable.
+    const onDisburse = vi.fn()
+    render(
+      <DisbursementPaymentPanel
+        item={makeItem({ disbursementAccount: null })}
+        onDisburse={onDisburse}
+      />,
+    )
+    expect(screen.getByText(/no nominated account on this loan/i)).toBeInTheDocument()
+    expect(screen.getByTestId('panel-disburse')).toBeDisabled()
+
+    fireEvent.click(screen.getByLabelText(/names match/i))
+    expect(screen.getByTestId('panel-disburse')).toBeEnabled()
+    fireEvent.click(screen.getByTestId('panel-disburse'))
+    expect(onDisburse).toHaveBeenCalledTimes(1)
+  })
+
+  it('says why Mark disbursed is disabled even with no account on file', () => {
+    // A disabled button with no stated reason is a dead end for the operator.
     render(
       <DisbursementPaymentPanel
         item={makeItem({ disbursementAccount: null })}
         onDisburse={vi.fn()}
       />,
     )
-    expect(screen.getByText(/no nominated account on this loan/i)).toBeInTheDocument()
-    expect(screen.getByTestId('panel-disburse')).toBeDisabled()
+    expect(screen.getByText(/confirm the payee name/i)).toBeInTheDocument()
   })
 
   it('does not warn when eKYC succeeded', () => {
