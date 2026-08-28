@@ -28,9 +28,13 @@ interface PendingDisbursementItem {
   applicationNumber: string | null
   customerId: string
   customerName: string
-  /** eKYC-verified name, for the Confirmation-of-Payee check. Null when unverified. */
+  /** Name to check the bank's Confirmation-of-Payee response against. */
   ekycVerifiedName: string | null
-  identityVerified: boolean
+  /**
+   * eKYC outcome for this customer. Three states, not a boolean: a failed check
+   * is a fraud signal and must not read the same as one that never ran.
+   */
+  ekycStatus: 'successful' | 'failed' | 'pending' | 'unknown'
   loanAmount: number
   loanAmountFormatted: string
   totalOutstanding: number
@@ -83,6 +87,13 @@ function buildDisbursementAccount(acc: {
     isComplete: missing.length === 0,
     missing,
   }
+}
+
+/** Narrow a stored eKYC status onto the four states the queue renders. */
+function ekycStatusOf(value: unknown): 'successful' | 'failed' | 'pending' | 'unknown' {
+  return value === 'successful' || value === 'failed' || value === 'pending'
+    ? value
+    : 'unknown'
 }
 
 /** Earliest scheduled payment date — what the customer is told to repay by. */
@@ -146,7 +157,13 @@ export async function GET(request: NextRequest) {
       const bucket = commencementDate ? classifyBucket(commencementDate) : 'today'
 
       const customer = acc.customerIdString ? customersById.get(acc.customerIdString) : undefined
-      const identityVerified = customer?.identityVerified === true
+      // `customers.identityVerified` is NOT the signal here: it is only ever written
+      // by customer.verified.v1, which nothing emits (platform-services calls it
+      // "supported if/when emitted"), so it is null for every customer in every
+      // environment. Gating on it made the queue label every payee "unverified",
+      // which is worse than silent — an always-on warning on a fraud control is one
+      // operators learn to click past. ekycStatus is the field actually populated.
+      const ekycStatus = ekycStatusOf(customer?.ekycStatus)
 
       const applicationNumber = acc.applicationNumber ?? null
       const due = firstDueDate(acc.repaymentSchedule?.payments)
@@ -157,8 +174,10 @@ export async function GET(request: NextRequest) {
         applicationNumber,
         customerId: acc.customerIdString ?? '',
         customerName: acc.customerName ?? 'Unknown',
-        ekycVerifiedName: identityVerified ? (customer?.fullName ?? null) : null,
-        identityVerified,
+        // The name is shown whatever the eKYC outcome — the operator still has to
+        // compare something against the bank. The status qualifies how much it is worth.
+        ekycVerifiedName: customer?.fullName ?? null,
+        ekycStatus,
         loanAmount,
         loanAmountFormatted: formatCurrency(loanAmount),
         totalOutstanding,
