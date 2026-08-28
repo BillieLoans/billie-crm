@@ -48,7 +48,6 @@ export function DisbursementPaymentPanel({ item, onDisburse }: Props) {
   const groupId = useId()
 
   const account = item.disbursementAccount
-  const canPay = account?.isComplete === true
 
   const handleCopyMessage = useCallback(async () => {
     try {
@@ -276,17 +275,27 @@ export function DisbursementPaymentPanel({ item, onDisburse }: Props) {
         <div className={styles.footerMeta}>
           {item.firstDueDate && <>First repayment {formatDateOnly(item.firstDueDate)}</>}
         </div>
+        {/*
+          Gated on the payee-name check ALONE, never on whether we hold the payout
+          details. "Mark disbursed" records a payment the operator has already made
+          by hand in ANZ — it does not move money. Gating it on data completeness
+          would not stop a bad payment; it would only strand a real one outside the
+          ledger, which is the worse failure. Loans created before the payout details
+          rode the account event have none, and they still have to be disbursable:
+          the banner above sends the operator to the signed agreement to read the
+          account, and this attests they checked the name the bank returned.
+        */}
         <button
           type="button"
           className={styles.primaryBtn}
-          disabled={payeeCheck !== 'match' || !canPay}
+          disabled={payeeCheck !== 'match'}
           onClick={() => onDisburse(item)}
           data-testid="panel-disburse"
         >
           Mark disbursed
         </button>
       </div>
-      {payeeCheck === 'unchecked' && canPay && (
+      {payeeCheck === 'unchecked' && (
         <p className={styles.gateHint}>
           Confirm the payee name above to enable &ldquo;Mark disbursed&rdquo;.
         </p>
