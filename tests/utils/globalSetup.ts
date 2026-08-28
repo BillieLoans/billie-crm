@@ -8,6 +8,7 @@
  */
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql'
 import type { GlobalSetupContext } from 'vitest/node'
+import { registerLexicalEsmConditions } from './registerLexicalEsmConditions'
 
 let pg: StartedPostgreSqlContainer | undefined
 
@@ -16,37 +17,27 @@ let pg: StartedPostgreSqlContainer | undefined
  * a clear error if it fires first. Deliberately never calls `.unref()` on
  * the timer.
  *
- * Why this exists: investigation of a ~40%-reproducible bug where
- * `pnpm test:int` silently exited 0 having run zero tests (see
- * `.superpowers/sdd/2026-07-31-aria-live-announcements/ci-harness-report.md`)
- * traced it to the dynamic `import()` calls below. Vite's SSR module runner
- * (which vitest uses to load this file's dynamic imports of first-party
- * source — unlike `payload`, `src/payload.config.ts`'s ~15 transitive
- * collection imports all go through Vite's transform pipeline rather than
- * being externalised) intermittently never settles the returned promise —
- * it neither resolves nor rejects, confirmed to still be pending after 500+
- * seconds of wall-clock time when kept alive artificially. Nothing in the
- * vitest/vite stack holds a ref'd timer during this window, so when it
- * happens, Node's ordinary "no more work scheduled" idle-exit detection
- * wins the race and the whole `vitest run` process exits cleanly with code
- * 0 before any test file ever loads or any error is printed.
+ * Why this exists: `import('../../src/payload.config')` used to stall
+ * ~25-40% of the time — the promise neither resolved nor rejected, and with
+ * nothing else ref'd on the event loop the process could exit 0 having run
+ * zero tests. ROOT CAUSE (found 2026-08-28, after earlier investigations
+ * blamed Vite's module runner): the lexical packages' Node ESM entrypoints
+ * (`*.node.mjs`) each top-level-await a dynamic import, and natively
+ * evaluating payload.config's graph (via @payloadcms/richtext-lexical) runs
+ * ~75 of those async modules whose dynamic imports re-enter the
+ * still-evaluating graph — deadlocking Node's async module evaluation
+ * (nodejs/node#55468 class; reproduced in pure Node 20.18.3 and 22.5.1 with a
+ * bare import of @payloadcms/richtext-lexical, ~25-40% of runs; earlier
+ * "first run after edits" and "clear node_modules/.vite" observations were
+ * sampling noise). vitest/vite-node were bystanders.
  *
- * A plain ref'd `setTimeout` fixes the *silent* half of that failure mode
- * unconditionally: merely having it pending keeps the event loop from ever
- * looking idle during the vulnerable window, and if the import genuinely
- * never settles it throws a loud, attributable error comfortably inside
- * vitest's `hookTimeout` (120_000ms) — naming exactly which step stalled,
- * rather than surfacing as vitest's generic hook-timeout message.
- *
- * Observed frequency and remediation (2026-08-28, local macOS): the stall
- * fired on ~6 separate invocations in one day, far above the historical
- * rate, and every occurrence was the FIRST vitest run after source-file
- * edits; an immediate rerun with no intervening edits executed normally in
- * all but one case. Deleting `node_modules/.vite` coincided with one
- * recovery but also preceded another stall, so it is not a reliable remedy —
- * rerun first. The original investigation lived in an untracked
- * `.superpowers/sdd/.../ci-harness-report.md` that no longer exists; this
- * comment is now the durable record.
+ * The fix is the resolution hook registered above (see
+ * lexicalEsmConditionsHook.mjs): it resolves lexical packages straight to
+ * their dev/prod builds, skipping the top-level-await shims. These
+ * withTimeout guards remain as the fail-loud safety net: merely having a
+ * ref'd timer pending prevents the silent exit-0 failure mode, and if any
+ * import stalls again the error names the step instead of vitest's generic
+ * hook-timeout message.
  */
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -75,6 +66,10 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 }
 
 export async function setup({ provide }: GlobalSetupContext) {
+  // Must precede the payload.config import below — see the hook file for the
+  // root cause of the historical stall this prevents.
+  registerLexicalEsmConditions()
+
   console.log('[globalSetup] Starting Postgres container…')
   pg = await new PostgreSqlContainer('postgres:16-alpine')
     .withDatabase('billie_crm_test')
