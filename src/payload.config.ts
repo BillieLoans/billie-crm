@@ -16,6 +16,7 @@ import { Conversations } from './collections/Conversations'
 import { Applications } from './collections/Applications'
 import { LoanAccounts } from './collections/LoanAccounts'
 import { WriteOffRequests } from './collections/WriteOffRequests'
+import { DisbursementAccessLog } from './collections/DisbursementAccessLog'
 import { ReapplicationBlockClearRequests } from './collections/ReapplicationBlockClearRequests'
 import { ContactNotes } from './collections/ContactNotes'
 import { Notifications } from './collections/Notifications'
@@ -166,7 +167,7 @@ export default buildConfig({
       },
     },
   },
-  collections: [Users, Media, Customers, Conversations, Applications, LoanAccounts, WriteOffRequests, ReapplicationBlockClearRequests, ContactNotes, Notifications, CollectionsCases, Contacts, Interactions, ContactAuditLog, Batches, Feedback, ReleaseBatches, ReleaseGrants, ReleaseGateStatus, Issues, LlmCosts],
+  collections: [Users, Media, Customers, Conversations, Applications, LoanAccounts, WriteOffRequests, ReapplicationBlockClearRequests, ContactNotes, Notifications, CollectionsCases, Contacts, Interactions, ContactAuditLog, Batches, Feedback, ReleaseBatches, ReleaseGrants, ReleaseGateStatus, Issues, LlmCosts, DisbursementAccessLog],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || 'build-placeholder-not-for-production',
   typescript: {

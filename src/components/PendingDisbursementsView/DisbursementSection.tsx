@@ -1,19 +1,35 @@
 'use client'
 
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { formatDateOnly } from '@/lib/formatters'
+import { DisbursementPaymentPanel } from './DisbursementPaymentPanel'
 import styles from './DisbursementSection.module.css'
+
+export interface DisbursementAccountView {
+  holder: string | null
+  bsb: string | null
+  bsbFormatted: string | null
+  number: string | null
+  isComplete: boolean
+  missing: string[]
+}
 
 export interface QueueItem {
   loanAccountId: string
   accountNumber: string
+  applicationNumber: string | null
   customerId: string
   customerName: string
+  ekycVerifiedName: string | null
+  identityVerified: boolean
   loanAmount: number
   loanAmountFormatted: string
   commencementDate: string | null
+  firstDueDate: string | null
   bucket: 'overdue' | 'today' | 'scheduled'
   signedLoanAgreementUrl?: string | null
+  disbursementAccount: DisbursementAccountView | null
+  oskoMessage: string
 }
 
 interface Props {
@@ -21,6 +37,13 @@ interface Props {
   items: QueueItem[]
   totalFormatted: string
   defaultCollapsed?: boolean
+  /**
+   * Loan whose payment panel is open, or null. Owned by the parent so opening a
+   * scheduled loan's panel can be gated behind the early-disburse warning — the
+   * operator must be warned BEFORE they copy details and pay, not after.
+   */
+  expandedId: string | null
+  onToggleRow: (item: QueueItem) => void
   onDisburse: (item: QueueItem) => void
   onView: (item: QueueItem) => void
 }
@@ -30,19 +53,16 @@ const META = {
     title: '⚠ MISSED — past start date, schedule at risk',
     cls: 'overdue',
     dateHead: 'Should have disbursed',
-    cta: 'Disburse now',
   },
   today: {
     title: '⏳ DISBURSE TODAY — before 3:00pm',
     cls: 'today',
     dateHead: 'Must disburse by',
-    cta: 'Disburse',
   },
   scheduled: {
     title: '→ SCHEDULED — future start dates (not yet actionable)',
     cls: 'scheduled',
     dateHead: 'Disburses on',
-    cta: '⚠ Disburse early',
   },
 } as const
 
@@ -51,6 +71,8 @@ export function DisbursementSection({
   items,
   totalFormatted,
   defaultCollapsed,
+  expandedId,
+  onToggleRow,
   onDisburse,
   onView,
 }: Props) {
@@ -75,43 +97,76 @@ export function DisbursementSection({
         <table className={styles.table}>
           <thead>
             <tr>
-              <th>Account</th>
-              <th>Customer</th>
-              <th>Loan amount</th>
-              <th>{m.dateHead}</th>
-              <th />
+              <th scope="col">Reference</th>
+              <th scope="col">Customer</th>
+              <th scope="col">Loan amount</th>
+              <th scope="col">{m.dateHead}</th>
+              <th scope="col">Payout account</th>
+              <th scope="col" />
             </tr>
           </thead>
           <tbody>
-            {items.map((it) => (
-              <tr key={it.loanAccountId}>
-                <td>{it.accountNumber}</td>
-                <td>{it.customerName}</td>
-                <td>{it.loanAmountFormatted}</td>
-                <td>
-                  {bucket === 'today'
-                    ? '3:00pm today'
-                    : it.commencementDate
-                      ? formatDateOnly(it.commencementDate)
-                      : '—'}
-                </td>
-                <td className={styles.actions}>
-                  <button
-                    type="button"
-                    className={bucket === 'scheduled' ? styles.earlyBtn : styles.disburseBtn}
-                    onClick={() => onDisburse(it)}
-                  >
-                    {m.cta}
-                  </button>
-                  <button type="button" className={styles.viewBtn} onClick={() => onView(it)}>
-                    View
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {items.map((it) => {
+              const isOpen = expandedId === it.loanAccountId
+              const panelId = `payment-panel-${it.loanAccountId}`
+              const account = it.disbursementAccount
+              return (
+                <Fragment key={it.loanAccountId}>
+                  <tr className={isOpen ? styles.rowOpen : undefined}>
+                    <td className={styles.mono}>{it.applicationNumber || it.accountNumber}</td>
+                    <td>{it.customerName}</td>
+                    <td>{it.loanAmountFormatted}</td>
+                    <td>
+                      {bucket === 'today'
+                        ? '3:00pm today'
+                        : it.commencementDate
+                          ? formatDateOnly(it.commencementDate)
+                          : '—'}
+                    </td>
+                    <td>
+                      {/* Never the full number in the list — ux-standards §4. A
+                          branch-level BSB plus a tail is enough to tell rows apart. */}
+                      {account ? (
+                        account.isComplete ? (
+                          <span className={styles.mono}>
+                            {account.bsbFormatted} ···{account.number?.slice(-3)}
+                          </span>
+                        ) : (
+                          <span className={styles.rowWarn}>⚠ incomplete</span>
+                        )
+                      ) : (
+                        <span className={styles.rowWarn}>⚠ not on file</span>
+                      )}
+                    </td>
+                    <td className={styles.actions}>
+                      <button
+                        type="button"
+                        className={bucket === 'scheduled' ? styles.earlyBtn : styles.disburseBtn}
+                        onClick={() => onToggleRow(it)}
+                        aria-expanded={isOpen}
+                        aria-controls={panelId}
+                        data-testid={`toggle-payment-${it.loanAccountId}`}
+                      >
+                        {isOpen ? 'Close' : bucket === 'scheduled' ? '⚠ Pay early' : 'Pay'}
+                      </button>
+                      <button type="button" className={styles.viewBtn} onClick={() => onView(it)}>
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                  {isOpen && (
+                    <tr>
+                      <td colSpan={6} className={styles.panelCell} id={panelId}>
+                        <DisbursementPaymentPanel item={it} onDisburse={onDisburse} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              )
+            })}
             {items.length === 0 && (
               <tr>
-                <td colSpan={5} className={styles.empty}>
+                <td colSpan={6} className={styles.empty}>
                   None
                 </td>
               </tr>

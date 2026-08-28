@@ -308,12 +308,64 @@ export const LoanAccounts: CollectionConfig = {
       },
     },
     {
+      // The customer-facing loan reference (F92C001D-AB9 style) — what goes in the
+      // Osko payment message and what a customer quotes when they call. Distinct
+      // from `accountNumber`, which is the ledger's internal 12-char id.
+      name: 'applicationNumber',
+      type: 'text',
+      index: true,
+      admin: {
+        readOnly: true,
+        description:
+          'Originating application reference (from SDK: application_number). The reference shown to the customer.',
+      },
+    },
+    {
       name: 'signedLoanAgreementUrl',
       type: 'text',
       admin: {
         readOnly: true,
         description: 'S3 URI for signed loan agreement document (from SDK: signed_loan_agreement_url, accounts-v2.7.0+)',
       },
+    },
+
+    // === Nominated salary account (from account.created.v1, accounts-v2.11.0+) ===
+    // The payout destination the customer accepted in the signed agreement's
+    // "Nominated Salary Account" block. Read-only projection like everything else
+    // here — the disbursement queue copies these out, it never edits them.
+    {
+      name: 'disbursementAccount',
+      type: 'group',
+      admin: {
+        description:
+          "Customer's nominated salary account for disbursement, as disclosed in the signed agreement (from SDK: disbursement_account, accounts-v2.11.0+). Null on loans created before that SDK version.",
+      },
+      fields: [
+        {
+          name: 'holder',
+          type: 'text',
+          admin: {
+            readOnly: true,
+            description: 'Account holder name — checked against the bank\'s Confirmation of Payee before paying',
+          },
+        },
+        {
+          name: 'bsb',
+          type: 'text',
+          admin: {
+            readOnly: true,
+            description: 'Unformatted 6-digit BSB (e.g. 013257). Text, not number — a leading zero is significant',
+          },
+        },
+        {
+          name: 'number',
+          type: 'text',
+          admin: {
+            readOnly: true,
+            description: 'Account number, digits only. Text to preserve any leading zeros',
+          },
+        },
+      ],
     },
 
     // === Closure (from account.closed.v1, accounts-v2.8.0+) ===
