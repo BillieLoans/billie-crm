@@ -23,7 +23,12 @@ yarn-error.log*
 *.swo
 
 # Testing
+# vitest harness files must be excluded along with tests/: next build
+# type-checks every .ts in the image, and vitest.setup.ts imports from
+# tests/utils — shipping one without the other breaks the image build.
 tests
+vitest.setup.ts
+vitest.config.mts
 coverage
 .nyc_output
 playwright-report
