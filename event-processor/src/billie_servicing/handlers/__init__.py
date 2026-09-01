@@ -34,6 +34,7 @@ from .collections import (
     handle_collection_case_step_advanced,
     handle_collection_case_stop_contact_applied,
 )
+from .cancellation import handle_customer_cancelled, handle_offer_cancelled
 from .conversation import (
     handle_affordability_report_downloaded,
     handle_application_detail_changed,
@@ -133,6 +134,8 @@ __all__ = [
     "handle_conversation_started",
     "handle_utterance",
     "handle_final_decision",
+    "handle_customer_cancelled",
+    "handle_offer_cancelled",
     "handle_conversation_killed",
     "handle_conversation_summary",
     "handle_conversation_summary_changed",

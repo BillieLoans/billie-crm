@@ -56,6 +56,8 @@ from .handlers import (
     # Conversation handlers
     handle_conversation_killed,
     handle_conversation_started,
+    handle_customer_cancelled,
+    handle_offer_cancelled,
     handle_conversation_summary,
     handle_conversation_summary_changed,
     handle_credit_assessment_complete,
@@ -190,6 +192,8 @@ def setup_handlers(processor: EventProcessor) -> None:
     # Final decision
     processor.register_handler("final_credit_decision", handle_final_decision)
     processor.register_handler("conversation.killed.v1", handle_conversation_killed)
+    processor.register_handler("customer_cancelled", handle_customer_cancelled)
+    processor.register_handler("offer_cancelled", handle_offer_cancelled)
 
     # Re-application block (BTB-135) — the rich "why" behind a block-decline,
     # arrives before the final_credit_decision for the same application.

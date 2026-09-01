@@ -27,6 +27,7 @@ def _event(payload=None):
 class TestConversationKilled:
     @pytest.mark.asyncio
     async def test_sets_hard_end_and_kill_record(self, mock_pool):
+        mock_pool.set_fetchrow({"status": "active", "cancellation_record": None})
         await handle_conversation_killed(mock_pool, _event())
         updates = [c for c in mock_pool.calls_against("conversations")
                    if c.op == "UPDATE" and "kill_record" in c.values]
@@ -42,11 +43,19 @@ class TestConversationKilled:
 
     @pytest.mark.asyncio
     async def test_update_only_and_version_bump(self, mock_pool):
+        mock_pool.set_fetchrow({"status": "active", "cancellation_record": None})
         await handle_conversation_killed(mock_pool, _event())
-        assert len(mock_pool.calls) == 1
-        call = mock_pool.calls[0]
-        assert call.op == "UPDATE"
-        assert "version = COALESCE(version, 1) + 1" in call.sql
+        updates = [c for c in mock_pool.calls if c.op == "UPDATE"]
+        assert len(updates) == 1
+        assert "version = COALESCE(version, 1) + 1" in updates[0].sql
+        assert not mock_pool.inserts_into("conversations")
+
+    @pytest.mark.asyncio
+    async def test_unknown_conversation_skips(self, mock_pool):
+        """Update-only: a kill for a conversation the CRM never saw writes nothing."""
+        mock_pool.set_fetchrow(None)
+        await handle_conversation_killed(mock_pool, _event())
+        assert not mock_pool.updates_to("conversations")
 
     @pytest.mark.asyncio
     async def test_missing_conversation_id_skips(self, mock_pool):

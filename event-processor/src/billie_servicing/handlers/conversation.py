@@ -25,6 +25,7 @@ import structlog
 
 from ..config import settings
 from ..db import coerce_date, merge_jsonb, update_by_key, upsert, upsert_conversation
+from .cancellation import CUSTOMER_DECLINED, terminal_rank
 from .identity_verification import mirror_lab_verification
 from .sanitize import parse_payload, safe_str, strip_dollar_keys
 
@@ -724,10 +725,24 @@ async def handle_final_decision(pool: asyncpg.Pool, event: dict[str, Any]) -> No
     decision_status = status_map.get(decision, "no_decision")
 
     set_values: dict[str, Any] = {
-        "status": status,
         "final_decision": decision,
         "decision_status": decision_status,
     }
+
+    # A terminal conversation stays terminal. final_credit_decision is delivered
+    # at-least-once, so a redelivery after a cancellation or a kill would
+    # otherwise reset the row to `approved`, re-hiding the cancellation or
+    # unmasking a fraud stop. The decision facts stay safe to re-apply.
+    row = await pool.fetchrow(
+        "SELECT status FROM conversations WHERE conversation_id = $1", conversation_id
+    )
+    if row is not None and terminal_rank(row["status"]):
+        log.info(
+            "conversation already terminal — not overwriting status",
+            current_status=row["status"],
+        )
+    else:
+        set_values["status"] = status
 
     # BTB-135: optional decision detail. Pre-existing payloads have no
     # `reason`; block-declines carry `REAPPLICATION_BLOCK:{BlockReason}` plus
@@ -776,15 +791,59 @@ async def handle_conversation_killed(pool: asyncpg.Pool, event: dict[str, Any]) 
         "note": payload.get("note"),
         "killed_at": payload.get("killed_at"),
     }
-    await pool.execute(
-        "UPDATE conversations SET status = $1, kill_record = $2::jsonb, "
-        "updated_at = NOW(), version = COALESCE(version, 1) + 1 "
-        "WHERE conversation_id = $3",
-        "hard_end",
-        json.dumps(kill_record),
+
+    reason_category = payload.get("reason_category") or ""
+    # A customer who phones to cancel is a cancellation, not an operator kill —
+    # otherwise decline reporting undercounts the phone path (the old
+    # `compliance` option was labelled "Compliance / customer request").
+    is_customer_request = reason_category == "customer_request"
+    status = "cancelled" if is_customer_request else "hard_end"
+
+    row = await pool.fetchrow(
+        "SELECT status, cancellation_record FROM conversations WHERE conversation_id = $1",
         conversation_id,
     )
-    log.info("conversation kill projected", actor=payload.get("actor"))
+    if row is None:
+        log.warning("kill for unknown conversation — skipping")
+        return
+
+    incoming = terminal_rank(status)
+    current = terminal_rank(row["status"])
+    if incoming < current or (incoming == current and row["cancellation_record"]):
+        log.info(
+            "terminal state already at least as strong — skipping kill status write",
+            current_status=row["status"],
+            incoming_status=status,
+        )
+        return
+
+    if is_customer_request:
+        cancellation_record = {
+            "reason": "customer_request",
+            "category": CUSTOMER_DECLINED,
+            "cancelled_at": payload.get("killed_at"),
+            "source_event": "conversation.killed.v1",
+            "application_number": payload.get("application_number") or None,
+        }
+        await pool.execute(
+            "UPDATE conversations SET status = $1, kill_record = $2::jsonb, "
+            "cancellation_record = $3::jsonb, updated_at = NOW(), "
+            "version = COALESCE(version, 1) + 1 WHERE conversation_id = $4",
+            status,
+            json.dumps(kill_record),
+            json.dumps(cancellation_record),
+            conversation_id,
+        )
+    else:
+        await pool.execute(
+            "UPDATE conversations SET status = $1, kill_record = $2::jsonb, "
+            "updated_at = NOW(), version = COALESCE(version, 1) + 1 "
+            "WHERE conversation_id = $3",
+            status,
+            json.dumps(kill_record),
+            conversation_id,
+        )
+    log.info("conversation kill projected", actor=payload.get("actor"), status=status)
 
 
 # =============================================================================
