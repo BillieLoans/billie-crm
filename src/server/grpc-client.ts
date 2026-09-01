@@ -51,6 +51,8 @@ export interface Transaction {
   createdBy: string
   createdAt: { seconds: string; nanos: number }
   portfolioEntryId: string
+  /** Operator-provided free-text note (proto field 19, optional). */
+  notes?: string
 }
 
 export interface GetTransactionsRequest {

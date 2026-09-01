@@ -793,6 +793,118 @@
   padding: 8px 4px !important;
 }
 
+/* ---------------------------------------------------------------------------
+   Transaction detail disclosure
+
+   Reveals the context the operator entered at the time of the action (waiver
+   reason, disbursement notes, who recorded it). Visual language mirrors the
+   repayment-schedule payment details in AccountPanel/styles.module.css.
+   --------------------------------------------------------------------------- */
+
+.txSrOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.txCellExpand {
+  width: 28px;
+  padding: 8px 2px 8px 4px !important;
+}
+
+/* 24px min target (WCAG 2.2 SC 2.5.8) with the chevron drawn smaller. */
+.txExpandButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--theme-elevation-500, #888);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.txExpandButton svg {
+  width: 12px;
+  height: 12px;
+}
+
+.txExpandButton:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--theme-text, #1a1a1a);
+}
+
+.txExpandButton:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
+.txDetailRow {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.txDetailCell {
+  padding: 0 8px 12px 36px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.txCardDetail {
+  padding-top: 10px;
+  margin-top: 8px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.txDetailGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 16px;
+  margin: 0;
+}
+
+.txDetailItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* Reasons and notes run long — give them the full width. */
+.txDetailItemWide {
+  grid-column: 1 / -1;
+}
+
+.txDetailLabel {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--theme-elevation-500, #888);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.txDetailValue {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--theme-text, #1a1a1a);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .txDetailGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Mobile card back button */
 .txCardBackRow {
   padding: 8px 0 4px;

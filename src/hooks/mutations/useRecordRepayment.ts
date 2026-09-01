@@ -102,6 +102,7 @@ async function recordRepayment(params: RecordRepaymentParams): Promise<RecordRep
       paymentId,
       paymentMethod: params.paymentMethod,
       paymentReference: params.paymentReference,
+      notes: params.notes,
       expectedVersion: params.expectedVersion,
       idempotencyKey: params.idempotencyKey,
     }),

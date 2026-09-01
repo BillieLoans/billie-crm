@@ -1,5 +1,5 @@
 import { describe, test, expect, vi, afterEach, beforeEach } from 'vitest'
-import { render, screen, cleanup, fireEvent } from '@testing-library/react'
+import { render, screen, cleanup, fireEvent, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { TransactionHistory } from '@/components/ServicingView/TransactionHistory'
 
@@ -194,3 +194,125 @@ describe('TransactionHistory component', () => {
   })
 })
 
+
+/**
+ * Operator context (waiver reason, disbursement notes, who recorded it) lives
+ * in the ledger metadata and had no home in this view. Each row gets a
+ * Disclosure control that reveals it in place.
+ */
+describe('TransactionHistory — transaction detail disclosure', () => {
+  const waiver = {
+    transactionId: 'tx-waiver',
+    loanAccountId: 'LOAN-001',
+    type: 'FEE_WAIVER',
+    typeLabel: 'Fee Waiver',
+    transactionDate: '2026-09-01T10:00:00Z',
+    effectiveDate: '2026-09-01',
+    principalDelta: '0',
+    feeDelta: '-10',
+    totalDelta: '-10',
+    principalAfter: '200',
+    feeAfter: '0',
+    totalAfter: '200',
+    description: 'Fee waiver: Goodwill - hardship call',
+    referenceType: 'waiver',
+    referenceId: 'WAIV-1',
+    metadata: { reason: 'Goodwill - hardship call', approved_by: 'k.wallace@billie.loans' },
+    createdBy: 'k.wallace@billie.loans',
+    createdAt: '2026-09-01T10:00:00Z',
+  }
+
+  const disbursement = {
+    ...waiver,
+    transactionId: 'tx-disbursement',
+    type: 'DISBURSEMENT',
+    typeLabel: 'Disbursement',
+    description: 'Loan disbursement - bank ref: DD-1',
+    metadata: { notes: 'Paid after ID recheck', bank_reference: 'DD-1' },
+  }
+
+  /** Nothing the operator typed, and no provenance — no control to offer. */
+  const bare = {
+    ...waiver,
+    transactionId: 'tx-bare',
+    type: 'REPAYMENT',
+    typeLabel: 'Repayment',
+    description: '',
+    metadata: {},
+    createdBy: '',
+    createdAt: '',
+  }
+
+  const renderWith = (transactions: unknown[]) => {
+    mockedUseTransactions.mockReturnValue({
+      data: { loanAccountId: 'LOAN-001', transactions, totalCount: transactions.length },
+      isLoading: false,
+      isError: false,
+      isFetching: false,
+    } as unknown as ReturnType<typeof useTransactions>)
+
+    render(<TransactionHistory loanAccountId="LOAN-001" />, { wrapper: createWrapper() })
+    return within(screen.getByRole('table'))
+  }
+
+  test('offers an expand control for a transaction carrying detail', () => {
+    const table = renderWith([waiver])
+    expect(table.getByRole('button', { name: /show details/i })).toBeInTheDocument()
+  })
+
+  test('offers no expand control when there is nothing to show', () => {
+    const table = renderWith([bare])
+    expect(table.queryByRole('button', { name: /show details/i })).not.toBeInTheDocument()
+  })
+
+  test('reveals the operator reason and approver when expanded', () => {
+    const table = renderWith([waiver])
+    fireEvent.click(table.getByRole('button', { name: /show details/i }))
+
+    expect(table.getByText('Reason')).toBeInTheDocument()
+    expect(table.getByText('Goodwill - hardship call')).toBeInTheDocument()
+    expect(table.getByText('Approved by')).toBeInTheDocument()
+  })
+
+  test('reports expanded state and collapses again', () => {
+    const table = renderWith([waiver])
+    const toggle = table.getByRole('button', { name: /show details/i })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+
+    fireEvent.click(toggle)
+    expect(table.getByRole('button', { name: /hide details/i })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+
+    fireEvent.click(table.getByRole('button', { name: /hide details/i }))
+    expect(table.queryByText('Goodwill - hardship call')).not.toBeInTheDocument()
+  })
+
+  test('keeps two rows open at once for comparison', () => {
+    const table = renderWith([waiver, disbursement])
+    const toggles = table.getAllByRole('button', { name: /show details/i })
+    fireEvent.click(toggles[0])
+    fireEvent.click(table.getAllByRole('button', { name: /show details/i })[0])
+
+    expect(table.getByText('Goodwill - hardship call')).toBeInTheDocument()
+    expect(table.getByText('Paid after ID recheck')).toBeInTheDocument()
+  })
+
+  test('reveals the same detail on the mobile card', () => {
+    mockedUseTransactions.mockReturnValue({
+      data: { loanAccountId: 'LOAN-001', transactions: [waiver], totalCount: 1 },
+      isLoading: false,
+      isError: false,
+      isFetching: false,
+    } as unknown as ReturnType<typeof useTransactions>)
+
+    render(<TransactionHistory loanAccountId="LOAN-001" />, { wrapper: createWrapper() })
+    const card = within(screen.getByTestId('transaction-card'))
+
+    // The card list is `display: none` until the mobile breakpoint, and the
+    // CSS module is applied in jsdom — so role queries need `hidden`.
+    fireEvent.click(card.getByRole('button', { name: /show details/i, hidden: true }))
+    expect(card.getByText('Goodwill - hardship call')).toBeInTheDocument()
+  })
+})
