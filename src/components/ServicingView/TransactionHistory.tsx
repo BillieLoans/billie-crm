@@ -4,6 +4,10 @@ import { useState, useCallback, useMemo } from 'react'
 import { useTransactions, TRANSACTION_TYPES, type Transaction } from '@/hooks/queries/useTransactions'
 import { CopyButton } from '@/components/ui'
 import { formatCurrency } from '@/lib/formatters'
+import {
+  getTransactionDetails,
+  type TransactionDetailField,
+} from '@/lib/ledger/transaction-details'
 import styles from './styles.module.css'
 
 export interface TransactionHistoryProps {
@@ -50,6 +54,59 @@ const TYPE_COLORS: Record<string, string> = {
   WRITE_OFF: 'txTypeWriteOff',
 }
 
+/**
+ * Label/value pairs for one transaction — the reason, notes and provenance the
+ * operator entered at the time of the action. Rendered identically inside the
+ * desktop detail row and the mobile card.
+ */
+const TransactionDetailPanel: React.FC<{ fields: TransactionDetailField[] }> = ({ fields }) => (
+  <dl className={styles.txDetailGrid}>
+    {fields.map((f) => (
+      <div
+        key={f.label}
+        className={`${styles.txDetailItem} ${f.variant === 'longform' ? styles.txDetailItemWide : ''}`}
+      >
+        <dt className={styles.txDetailLabel}>{f.label}</dt>
+        <dd className={`${styles.txDetailValue} ${f.variant === 'mono' ? styles.txIdMono : ''}`}>
+          {f.value}
+        </dd>
+      </div>
+    ))}
+  </dl>
+)
+
+export interface TransactionDetailToggleProps {
+  transactionId: string
+  isExpanded: boolean
+  onToggle: () => void
+  /** Id of the region this control reveals; only set while it exists. */
+  controls?: string
+}
+
+/**
+ * APG Disclosure control for one transaction's detail. Keyboard operation is
+ * the button's own — the row itself is deliberately not clickable.
+ */
+const TransactionDetailToggle: React.FC<TransactionDetailToggleProps> = ({
+  transactionId,
+  isExpanded,
+  onToggle,
+  controls,
+}) => (
+  <button
+    type="button"
+    className={styles.txExpandButton}
+    onClick={onToggle}
+    aria-expanded={isExpanded}
+    aria-controls={isExpanded ? controls : undefined}
+    aria-label={`${isExpanded ? 'Hide' : 'Show'} details for ${transactionId}`}
+  >
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+      <path d={isExpanded ? 'M6 9l6 6 6-6' : 'M9 6l6 6-6 6'} />
+    </svg>
+  </button>
+)
+
 export interface TransactionRowProps {
   transaction: Transaction
   /** Whether this transaction is highlighted (e.g., from payment link) */
@@ -58,69 +115,98 @@ export interface TransactionRowProps {
   onBackToPayment?: () => void
   /** Payment number for tooltip */
   backToPaymentNumber?: number
+  /** Operator context to reveal; an empty list means no expand control. */
+  details: TransactionDetailField[]
+  isExpanded: boolean
+  onToggleDetails: () => void
 }
 
 /**
- * Single transaction row for desktop table
+ * Single transaction row for desktop table. Renders as a pair of rows: the
+ * summary, plus the detail row while expanded.
  */
 const TransactionRow: React.FC<TransactionRowProps> = ({ 
   transaction, 
   isHighlighted,
   onBackToPayment,
   backToPaymentNumber,
+  details,
+  isExpanded,
+  onToggleDetails,
 }) => {
   const totalDelta = parseFloat(transaction.principalDelta || '0') + parseFloat(transaction.feeDelta || '0')
   const isCredit = totalDelta < 0
   const typeColor = TYPE_COLORS[transaction.type] || 'txTypeAdjustment'
+  const hasDetails = details.length > 0
+  const detailRowId = `tx-detail-${transaction.transactionId}`
 
   return (
-    <tr 
-      className={`${styles.txRow} ${isHighlighted ? styles.txRowHighlighted : ''}`}
-      data-transaction-id={transaction.transactionId}
-    >
-      <td className={`${styles.txCell} ${styles.txCellBack}`}>
-        {onBackToPayment && (
-          <button
-            type="button"
-            className={styles.txBackButton}
-            onClick={onBackToPayment}
-            data-tooltip={`Back to Payment #${backToPaymentNumber}`}
-            aria-label={`Back to Payment #${backToPaymentNumber}`}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M19 12H5M12 19l-7-7 7-7" />
-            </svg>
-          </button>
-        )}
-      </td>
-      <td className={styles.txCell}>
-        <span className={styles.txIdMono}>{transaction.transactionId}</span>
-      </td>
-      <td className={styles.txCell}>{formatDate(transaction.transactionDate)}</td>
-      <td className={styles.txCell}>
-        <span className={`${styles.txTypeBadge} ${styles[typeColor]}`}>
-          {transaction.typeLabel || transaction.type}
-        </span>
-      </td>
-      <td className={styles.txCell}>
-        <span className={isCredit ? styles.txAmountNegative : styles.txAmountPositive}>
-          {formatCurrency(totalDelta.toString())}
-        </span>
-      </td>
-      <td className={styles.txCell}>
-        {transaction.referenceId ? (
-          <span className={styles.txCopyable}>
-            <span>{transaction.referenceId}</span>
-            <CopyButton value={transaction.referenceId} label="Copy reference ID" />
+    <>
+      <tr 
+        className={`${styles.txRow} ${isHighlighted ? styles.txRowHighlighted : ''}`}
+        data-transaction-id={transaction.transactionId}
+      >
+        <td className={`${styles.txCell} ${styles.txCellExpand}`}>
+          {hasDetails && (
+            <TransactionDetailToggle
+              transactionId={transaction.transactionId}
+              isExpanded={isExpanded}
+              onToggle={onToggleDetails}
+              controls={detailRowId}
+            />
+          )}
+        </td>
+        <td className={`${styles.txCell} ${styles.txCellBack}`}>
+          {onBackToPayment && (
+            <button
+              type="button"
+              className={styles.txBackButton}
+              onClick={onBackToPayment}
+              data-tooltip={`Back to Payment #${backToPaymentNumber}`}
+              aria-label={`Back to Payment #${backToPaymentNumber}`}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M19 12H5M12 19l-7-7 7-7" />
+              </svg>
+            </button>
+          )}
+        </td>
+        <td className={styles.txCell}>
+          <span className={styles.txIdMono}>{transaction.transactionId}</span>
+        </td>
+        <td className={styles.txCell}>{formatDate(transaction.transactionDate)}</td>
+        <td className={styles.txCell}>
+          <span className={`${styles.txTypeBadge} ${styles[typeColor]}`}>
+            {transaction.typeLabel || transaction.type}
           </span>
-        ) : (
-          '—'
-        )}
-      </td>
-      <td className={`${styles.txCell} ${styles.txCellRight}`}>
-        {formatCurrency(transaction.totalAfter)}
-      </td>
-    </tr>
+        </td>
+        <td className={styles.txCell}>
+          <span className={isCredit ? styles.txAmountNegative : styles.txAmountPositive}>
+            {formatCurrency(totalDelta.toString())}
+          </span>
+        </td>
+        <td className={styles.txCell}>
+          {transaction.referenceId ? (
+            <span className={styles.txCopyable}>
+              <span>{transaction.referenceId}</span>
+              <CopyButton value={transaction.referenceId} label="Copy reference ID" />
+            </span>
+          ) : (
+            '—'
+          )}
+        </td>
+        <td className={`${styles.txCell} ${styles.txCellRight}`}>
+          {formatCurrency(transaction.totalAfter)}
+        </td>
+      </tr>
+      {hasDetails && isExpanded && (
+        <tr className={styles.txDetailRow} id={detailRowId}>
+          <td className={styles.txDetailCell} colSpan={8}>
+            <TransactionDetailPanel fields={details} />
+          </td>
+        </tr>
+      )}
+    </>
   )
 }
 
@@ -132,6 +218,10 @@ export interface TransactionCardProps {
   onBackToPayment?: () => void
   /** Payment number for tooltip */
   backToPaymentNumber?: number
+  /** Operator context to reveal; an empty list means no expand control. */
+  details: TransactionDetailField[]
+  isExpanded: boolean
+  onToggleDetails: () => void
 }
 
 /**
@@ -142,10 +232,15 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
   isHighlighted,
   onBackToPayment,
   backToPaymentNumber,
+  details,
+  isExpanded,
+  onToggleDetails,
 }) => {
   const totalDelta = parseFloat(transaction.principalDelta || '0') + parseFloat(transaction.feeDelta || '0')
   const isCredit = totalDelta < 0
   const typeColor = TYPE_COLORS[transaction.type] || 'txTypeAdjustment'
+  const hasDetails = details.length > 0
+  const detailPanelId = `tx-card-detail-${transaction.transactionId}`
 
   return (
     <div 
@@ -158,6 +253,14 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
           {transaction.typeLabel || transaction.type}
         </span>
         <span className={styles.txCardDate}>{formatDate(transaction.transactionDate)}</span>
+        {hasDetails && (
+          <TransactionDetailToggle
+            transactionId={transaction.transactionId}
+            isExpanded={isExpanded}
+            onToggle={onToggleDetails}
+            controls={detailPanelId}
+          />
+        )}
       </div>
       {onBackToPayment && (
         <div className={styles.txCardBackRow}>
@@ -199,6 +302,11 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
           </div>
         )}
       </div>
+      {hasDetails && isExpanded && (
+        <div className={styles.txCardDetail} id={detailPanelId}>
+          <TransactionDetailPanel fields={details} />
+        </div>
+      )}
     </div>
   )
 }
@@ -218,6 +326,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
   const [limit, setLimit] = useState(20)
+  const [expandedIds, setExpandedIds] = useState<ReadonlySet<string>>(() => new Set())
 
   const filters = useMemo(() => ({
     type: typeFilter || undefined,
@@ -248,6 +357,14 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
     setTypeFilter('')
     setFromDate('')
     setToDate('')
+  }, [])
+
+  const toggleDetails = useCallback((transactionId: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      if (!next.delete(transactionId)) next.add(transactionId)
+      return next
+    })
   }, [])
 
   // No account selected
@@ -347,6 +464,9 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
             <table className={styles.txTable}>
               <thead>
                 <tr>
+                  <th className={`${styles.txHeaderCell} ${styles.txCellExpand}`}>
+                    <span className={styles.txSrOnly}>Details</span>
+                  </th>
                   <th className={`${styles.txHeaderCell} ${styles.txCellBack}`}></th>
                   <th className={styles.txHeaderCell}>Transaction ID</th>
                   <th className={styles.txHeaderCell}>Date</th>
@@ -367,6 +487,9 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                       isHighlighted={isHighlighted}
                       onBackToPayment={isLinked ? onBackToPayment : undefined}
                       backToPaymentNumber={backToPaymentNumber}
+                      details={getTransactionDetails(tx)}
+                      isExpanded={expandedIds.has(tx.transactionId)}
+                      onToggleDetails={() => toggleDetails(tx.transactionId)}
                     />
                   )
                 })}
@@ -386,6 +509,9 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                   isHighlighted={isHighlighted}
                   onBackToPayment={isLinked ? onBackToPayment : undefined}
                   backToPaymentNumber={backToPaymentNumber}
+                  details={getTransactionDetails(tx)}
+                  isExpanded={expandedIds.has(tx.transactionId)}
+                  onToggleDetails={() => toggleDetails(tx.transactionId)}
                 />
               )
             })}

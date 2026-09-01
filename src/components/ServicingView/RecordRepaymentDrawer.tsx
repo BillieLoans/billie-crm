@@ -267,6 +267,7 @@ export const RecordRepaymentDrawer: React.FC<RecordRepaymentDrawerProps> = ({
             onChange={handleNotesChange}
             placeholder="Optional notes about this payment..."
             rows={2}
+            maxLength={1000}
             disabled={isDisabled}
           />
         </div>

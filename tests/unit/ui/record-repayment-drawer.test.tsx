@@ -144,6 +144,13 @@ describe('RecordRepaymentDrawer', () => {
       expect(textarea).toHaveValue('Branch payment')
     })
 
+    // The ledger caps operator notes at 1000 chars; without the attribute the
+    // operator writes a long note and gets a validation 400 on submit.
+    it('should cap notes at the length the ledger accepts', () => {
+      render(<RecordRepaymentDrawer {...defaultProps} />)
+      expect(screen.getByLabelText(/notes/i)).toHaveAttribute('maxLength', '1000')
+    })
+
     it('should disable submit when required fields are empty', () => {
       render(<RecordRepaymentDrawer {...defaultProps} />)
       const submitBtn = screen.getByRole('button', { name: /record payment/i })

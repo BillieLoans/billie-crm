@@ -9,6 +9,7 @@
  * - paymentId (required): External payment reference
  * - paymentMethod (optional): e.g., "direct_debit", "card"
  * - paymentReference (optional): Additional reference
+ * - notes (optional): Operator notes (max 1000 chars)
  * - expectedVersion (optional): Expected updatedAt for version conflict detection
  * - idempotencyKey (optional): Client key (8-128 chars) deduped by the ledger for 24h;
  *   a server-generated key is used when absent
@@ -56,6 +57,7 @@ export async function POST(request: NextRequest) {
       paymentId: data.paymentId,
       paymentMethod: data.paymentMethod,
       paymentReference: data.paymentReference,
+      notes: data.notes,
       idempotencyKey,
     })
 

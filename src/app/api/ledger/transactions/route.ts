@@ -69,6 +69,11 @@ export async function GET(request: NextRequest) {
         description: tx.description,
         referenceType: tx.referenceType,
         referenceId: tx.referenceId,
+        // The operator's reason/notes live in metadata (stamped per type by
+        // the ledger's command layer) and, for the types that take a free-text
+        // note, in `notes`. Both feed the Transactions tab detail panel.
+        metadata: tx.metadata ?? {},
+        notes: tx.notes,
         createdBy: tx.createdBy,
         createdAt: tx.createdAt,
       }))

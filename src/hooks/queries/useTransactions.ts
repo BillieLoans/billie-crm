@@ -19,6 +19,10 @@ export interface Transaction {
   description: string
   referenceType: string
   referenceId: string
+  /** Ledger-stamped context, keyed per transaction type. */
+  metadata: Record<string, string>
+  /** Operator free-text note, when the transaction type takes one. */
+  notes?: string
   createdBy: string
   createdAt: string
 }

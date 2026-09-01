@@ -51,6 +51,8 @@ export const RecordRepaymentSchema = z.object({
   paymentId: z.string().min(1, 'Payment ID is required'),
   paymentMethod: z.string().optional(),
   paymentReference: z.string().optional(),
+  /** Operator notes. Capped at the 1000 chars the ledger accepts. */
+  notes: z.string().max(1000).optional(),
   expectedVersion: z.string().optional(),
   idempotencyKey: idempotencyKeyString.optional(),
 })
