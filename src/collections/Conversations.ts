@@ -76,6 +76,8 @@ export const Conversations: CollectionConfig = {
         { label: 'Hard End', value: 'hard_end' },
         { label: 'Approved', value: 'approved' },
         { label: 'Declined', value: 'declined' },
+        { label: 'Cancelled', value: 'cancelled' },
+        { label: 'Expired', value: 'expired' },
       ],
       defaultValue: 'active',
       index: true,
@@ -472,6 +474,15 @@ export const Conversations: CollectionConfig = {
         readOnly: true,
         description:
           'Operator conversation-kill audit: {request_id, actor, reason_category, note, killed_at}',
+      },
+    },
+    {
+      name: 'cancellationRecord',
+      type: 'json',
+      admin: {
+        readOnly: true,
+        description:
+          'Cancellation / expiry audit: {reason, category, cancelled_at, source_event, application_number}',
       },
     },
     {

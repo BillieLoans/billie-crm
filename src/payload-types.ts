@@ -632,7 +632,7 @@ export interface Conversation {
    * Linked application (may be null)
    */
   applicationId?: (string | null) | Application;
-  status?: ('active' | 'paused' | 'soft_end' | 'hard_end' | 'approved' | 'declined') | null;
+  status?: ('active' | 'paused' | 'soft_end' | 'hard_end' | 'approved' | 'declined' | 'cancelled' | 'expired') | null;
   /**
    * Cumulative recomputed LLM cost for this application (BTB-302, USD — per-call rows in LLM Costs)
    */
@@ -925,6 +925,18 @@ export interface Conversation {
    * Operator conversation-kill audit: {request_id, actor, reason_category, note, killed_at}
    */
   killRecord?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Cancellation / expiry audit: {reason, category, cancelled_at, source_event, application_number}
+   */
+  cancellationRecord?:
     | {
         [k: string]: unknown;
       }
@@ -2466,6 +2478,7 @@ export interface ConversationsSelect<T extends boolean = true> {
         creditAssessmentComplete?: T;
       };
   killRecord?: T;
+  cancellationRecord?: T;
   statementCapture?: T;
   statementAccountHolders?: T;
   decisionStatus?: T;
