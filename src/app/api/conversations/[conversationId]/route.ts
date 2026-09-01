@@ -115,6 +115,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     const block = doc.reapplicationBlock as Record<string, unknown> | null | undefined
     const decisionDetail = doc.decisionDetail as Record<string, unknown> | null | undefined
     const killRecord = doc.killRecord as Record<string, unknown> | null | undefined
+    const cancellationRecord = (doc.cancellationRecord as Record<string, unknown> | null) ?? null
     const sourceApplicationNumber = (block?.sourceApplicationNumber ??
       decisionDetail?.sourceApplicationNumber) as string | null | undefined
     let sourceConversationId: string | null = null
@@ -166,6 +167,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       finalDecision: (doc.finalDecision as string) ?? null,
       decisionDetail: decisionDetail ?? null,
       killRecord: killRecordOut,
+      cancellationRecord,
       reapplicationBlock: block ?? null,
       sourceConversationId,
       identityVerificationReport: {

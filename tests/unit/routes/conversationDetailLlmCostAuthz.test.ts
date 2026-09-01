@@ -26,7 +26,7 @@ vi.mock('next/headers', () => ({
   headers: vi.fn().mockResolvedValue(new Map()),
 }))
 
-const CONVERSATION_DOC = {
+const CONVERSATION_DOC: Record<string, unknown> = {
   conversationId: 'conv-001',
   applicationNumber: 'APP-001',
   status: 'active',
@@ -103,6 +103,32 @@ describe('GET /api/conversations/:conversationId — LLM cost roll-up authz', ()
     const res = await callRoute('marketing')
     expect(res.status).toBe(403)
   })
+
+  it('serves cancellationRecord to every lending role (spec: 2026-08-28 cancellation projection)', async () => {
+    CONVERSATION_DOC.cancellationRecord = {
+      reason: 'final_offer_declined',
+      category: 'customer_declined',
+      cancelled_at: '2026-08-28T01:37:30.993832+00:00',
+      source_event: 'customer_cancelled',
+      application_number: 'C6F7C8E6-77F',
+    }
+    try {
+      const res = await callRoute('operations')
+      expect(res.status).toBe(200)
+      expect(res.body.conversation!.cancellationRecord).toMatchObject({
+        reason: 'final_offer_declined',
+        category: 'customer_declined',
+      })
+    } finally {
+      delete CONVERSATION_DOC.cancellationRecord
+    }
+  })
+
+  it('serves cancellationRecord as null when the conversation was never cancelled', async () => {
+    const res = await callRoute('operations')
+    expect(res.status).toBe(200)
+    expect(res.body.conversation!.cancellationRecord).toBeNull()
+  })
 })
 
 /**
@@ -117,6 +143,7 @@ const BASE_KEYS = [
   'application',
   'applicationNumber',
   'assessments',
+  'cancellationRecord',
   'conversationId',
   'customer',
   'decisionDetail',
