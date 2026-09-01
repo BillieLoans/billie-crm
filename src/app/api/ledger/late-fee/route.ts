@@ -25,6 +25,7 @@ export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(canService)
     if ('error' in auth) return auth.error
+    const { user } = auth
 
     const body = await request.json()
     const parseResult = ApplyLateFeeSchema.safeParse(body)
@@ -46,6 +47,7 @@ export async function POST(request: NextRequest) {
       feeAmount: data.feeAmount,
       daysPastDue: data.daysPastDue,
       reason: data.reason,
+      actionedBy: String(user.id),
       idempotencyKey,
     })
 

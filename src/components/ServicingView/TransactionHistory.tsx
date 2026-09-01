@@ -378,6 +378,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
   }
 
   const transactions = data?.transactions ?? []
+  const actors = data?.actors ?? {}
   const totalCount = data?.totalCount ?? 0
   const isFallback = data?._fallback ?? false
   const hasFilters = typeFilter || fromDate || toDate
@@ -487,7 +488,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                       isHighlighted={isHighlighted}
                       onBackToPayment={isLinked ? onBackToPayment : undefined}
                       backToPaymentNumber={backToPaymentNumber}
-                      details={getTransactionDetails(tx)}
+                      details={getTransactionDetails(tx, actors)}
                       isExpanded={expandedIds.has(tx.transactionId)}
                       onToggleDetails={() => toggleDetails(tx.transactionId)}
                     />
@@ -509,7 +510,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                   isHighlighted={isHighlighted}
                   onBackToPayment={isLinked ? onBackToPayment : undefined}
                   backToPaymentNumber={backToPaymentNumber}
-                  details={getTransactionDetails(tx)}
+                  details={getTransactionDetails(tx, actors)}
                   isExpanded={expandedIds.has(tx.transactionId)}
                   onToggleDetails={() => toggleDetails(tx.transactionId)}
                 />

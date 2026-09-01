@@ -144,6 +144,11 @@ export interface RecordRepaymentRequest {
   paymentReference?: string
   notes?: string
   idempotencyKey?: string
+  /**
+   * Operator performing the action, from the authenticated session. Omitted by
+   * automated callers, which the ledger records as "system".
+   */
+  actionedBy?: string
 }
 
 export interface ApplyLateFeeRequest {
@@ -152,6 +157,11 @@ export interface ApplyLateFeeRequest {
   daysPastDue: number
   reason?: string
   idempotencyKey?: string
+  /**
+   * Operator performing the action, from the authenticated session. Omitted by
+   * automated callers, which the ledger records as "system".
+   */
+  actionedBy?: string
 }
 
 export interface ApplyDishonourFeeRequest {
@@ -160,6 +170,11 @@ export interface ApplyDishonourFeeRequest {
   reason?: string
   referenceId?: string
   idempotencyKey?: string
+  /**
+   * Operator performing the action, from the authenticated session. Omitted by
+   * automated callers, which the ledger records as "system".
+   */
+  actionedBy?: string
 }
 
 export interface WaiveFeeRequest {
@@ -195,6 +210,11 @@ export interface DisburseLoanRequest {
   attachmentLocation: string
   notes: string
   idempotencyKey?: string
+  /**
+   * Operator performing the action, from the authenticated session. Omitted by
+   * automated callers, which the ledger records as "system".
+   */
+  actionedBy?: string
 }
 
 export interface DisburseLoanResponse {

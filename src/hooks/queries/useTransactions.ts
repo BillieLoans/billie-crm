@@ -34,6 +34,8 @@ export interface TransactionsResponse {
   loanAccountId: string
   transactions: Transaction[]
   totalCount: number
+  /** Actor id -> display name, for the ids on these transactions. */
+  actors?: Record<string, string>
   _fallback?: boolean
   _message?: string
 }

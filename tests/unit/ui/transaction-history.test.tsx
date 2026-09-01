@@ -271,7 +271,7 @@ describe('TransactionHistory — transaction detail disclosure', () => {
 
     expect(table.getByText('Reason')).toBeInTheDocument()
     expect(table.getByText('Goodwill - hardship call')).toBeInTheDocument()
-    expect(table.getByText('Approved by')).toBeInTheDocument()
+    expect(table.getByText('Waived by')).toBeInTheDocument()
   })
 
   test('reports expanded state and collapses again', () => {
