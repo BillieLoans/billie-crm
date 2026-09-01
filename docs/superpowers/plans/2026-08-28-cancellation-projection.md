@@ -1584,7 +1584,7 @@ git commit -m "fix(routing): fan cancellations to billie-crm; clear expiry timer
 ### Task 10: Backfill script
 
 **Files:**
-- Create: `scripts/backfill-cancellations.py`
+- Create: `event-processor/src/billie_servicing/scripts/backfill_cancellations.py` (ships in the image — /app/scripts does not)
 
 **Interfaces:**
 - Consumes: Tasks 1–9 deployed. Reads `chatLedger`, writes `inbox:billie-servicing`.
@@ -1655,7 +1655,7 @@ if __name__ == "__main__":
 - [ ] **Step 2: Dry-run it against prod**
 
 ```bash
-fly ssh console -a billie-crm-prod -C 'python /app/scripts/backfill-cancellations.py'
+fly ssh console -a billie-crm-prod -C 'python3 -m billie_servicing.scripts.backfill_cancellations'
 ```
 Expected: exactly 11 events — 9 `session_timeout`, 1 `final_offer_declined`, 1 duplicate `session_timeout` for C6F7C8E6-77F — and nothing written.
 
@@ -1725,8 +1725,8 @@ Repeat Steps 1 and 3 with `ENV=prod`, CRM first.
 - [ ] **Step 8: Backfill prod**
 
 ```bash
-fly ssh console -a billie-crm-prod -C 'python /app/scripts/backfill-cancellations.py'          # dry run first
-fly ssh console -a billie-crm-prod -C 'python /app/scripts/backfill-cancellations.py --apply'
+fly ssh console -a billie-crm-prod -C 'python3 -m billie_servicing.scripts.backfill_cancellations'          # dry run first
+fly ssh console -a billie-crm-prod -C 'python3 -m billie_servicing.scripts.backfill_cancellations --apply'
 ```
 
 - [ ] **Step 9: Verify the backfill**
@@ -1747,7 +1747,7 @@ Expected: both still `hard_end` with `cancellation_record` NULL.
 - [ ] **Step 11: Re-run the backfill to prove idempotency**
 
 ```bash
-fly ssh console -a billie-crm-prod -C 'python /app/scripts/backfill-cancellations.py --apply'
+fly ssh console -a billie-crm-prod -C 'python3 -m billie_servicing.scripts.backfill_cancellations --apply'
 ```
 Then re-run Step 9's query.
 Expected: identical rows — the ladder rejects every replayed event the second time.
