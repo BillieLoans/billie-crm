@@ -14,6 +14,8 @@ export const STATUS_CONFIG: Record<string, { label: string; cssClass: string }> 
   hard_end: { label: 'Hard End', cssClass: 'hard_end' },
   approved: { label: 'Approved', cssClass: 'approved' },
   declined: { label: 'Declined', cssClass: 'declined' },
+  cancelled: { label: 'Cancelled', cssClass: 'cancelled' },
+  expired: { label: 'Expired', cssClass: 'expired' },
   ended: { label: 'Ended', cssClass: 'ended' },
 }
 

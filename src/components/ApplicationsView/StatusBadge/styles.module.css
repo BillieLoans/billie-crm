@@ -97,3 +97,25 @@
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.6; transform: scale(1.2); }
 }
+
+/* Cancelled: the customer said no — amber, distinct from declined's alarm red
+   (that is a lender decision) and from ended's neutral grey. 4.5:1 on bg. */
+.cancelled {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.cancelled .dot {
+  background: #f59e0b;
+}
+
+/* Expired: system expiry / abandonment — muted neutral, one step quieter
+   than cancelled. 4.5:1 on bg. */
+.expired {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.expired .dot {
+  background: #6b7280;
+}

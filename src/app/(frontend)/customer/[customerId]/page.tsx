@@ -112,6 +112,8 @@ function getStatusColor(status: string): string {
     declined: 'bg-rose-100 text-rose-800 border-rose-200',
     soft_end: 'bg-slate-100 text-slate-600 border-slate-200',
     hard_end: 'bg-slate-200 text-slate-700 border-slate-300',
+    cancelled: 'bg-amber-100 text-amber-800 border-amber-200',
+    expired: 'bg-slate-100 text-slate-600 border-slate-200',
   }
   return colors[status] || 'bg-gray-100 text-gray-800 border-gray-200'
 }

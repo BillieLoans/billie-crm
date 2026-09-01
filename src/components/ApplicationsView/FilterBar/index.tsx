@@ -75,6 +75,8 @@ export function FilterBar() {
         <option value="paused">Conversation: Paused</option>
         <option value="soft_end">Conversation: Soft End</option>
         <option value="hard_end">Conversation: Hard End</option>
+        <option value="cancelled">Conversation: Cancelled</option>
+        <option value="expired">Conversation: Expired</option>
         <option value="ended">Conversation: Ended</option>
       </select>
 
