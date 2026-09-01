@@ -11,6 +11,8 @@ export const CONVERSATION_STATUSES = [
   'hard_end',
   'approved',
   'declined',
+  'cancelled',
+  'expired',
   'ended',
 ] as const
 
@@ -108,6 +110,15 @@ export const KillRecordSchema = z.object({
   killed_at: z.string().nullable().optional(),
 })
 
+/** Cancellation / expiry audit written by the event processor (spec: 2026-08-28). */
+export const CancellationRecordSchema = z.object({
+  reason: z.string().nullable().optional(),
+  category: z.string().nullable().optional(),
+  cancelled_at: z.string().nullable().optional(),
+  source_event: z.string().nullable().optional(),
+  application_number: z.string().nullable().optional(),
+})
+
 /**
  * Identity-recognition context attached to a review-kind halt.
  *
@@ -195,6 +206,7 @@ export const ConversationDetailSchema = z.object({
   finalDecision: z.string().nullable().optional(),
   decisionDetail: DecisionDetailSchema.nullable().optional(),
   killRecord: KillRecordSchema.nullable().optional(),
+  cancellationRecord: CancellationRecordSchema.nullable().optional(),
   reapplicationBlock: ReapplicationBlockSchema.nullable().optional(),
   /** Conversation id of the prior decline referenced by a block (deep-link target). */
   sourceConversationId: z.string().nullable().optional(),
