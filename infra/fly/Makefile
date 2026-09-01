@@ -33,6 +33,9 @@ SECRETS_EXAMPLE_FILE := $(SECRETS_DIR)/.env.$(ENV).example
 APP_NAME := $(SERVICE)-$(ENV)
 ORG_NAME := $(if $(filter $(ENV),prod),$(FLY_ORG_PROD),$(FLY_ORG_NONPROD))
 IS_PROD := $(filter $(ENV),prod)
+# How many times pg-migrate will run `payload migrate` before giving up on a
+# silent no-op (see the guard in pg-migrate). 1 disables the retry.
+MIGRATE_ATTEMPTS ?= 2
 IMAGE_LABEL ?= $(ENV)-$(shell git -C "$(WORKTREE_ROOT)" rev-parse --short HEAD 2>/dev/null || echo manual)
 # Commit sha baked into the client bundle as NEXT_PUBLIC_BUILD_SHA (see
 # Dockerfile.demo builder stage). Optional — empty outside a git checkout, in
@@ -291,6 +294,11 @@ DSN_FROM_ENV = $(if $(MIGRATE_DSN_FROM_ENV),$(MIGRATE_DSN_FROM_ENV),$(DATABASE_U
 # Whether the owner-role DSN is present (yes/empty) WITHOUT exposing its value on
 # a command line — lets pg-migrate hard-fail prod DDL when it's missing.
 MIGRATE_DSN_SET = $(if $(MIGRATE_DSN_FROM_ENV),yes,)
+
+# Passed to every payload CLI call. --no-deprecation matches what the
+# package.json script sets; --conditions=development is the mitigation for the
+# ESM import deadlock (see the pg-migrate comment).
+MIGRATE_NODE_OPTIONS := --no-deprecation --conditions=development
 REDIS_FROM_ENV = $(shell awk -F= '/^REDIS_URL=/{sub(/^REDIS_URL=/,""); gsub(/^"|"$$/,""); print; exit}' "$(SECRETS_FILE)" 2>/dev/null)
 
 # Generate a new Payload migration capturing schema drift. Run against a
@@ -301,10 +309,16 @@ pg-migrate-create:
 		echo "Set DATABASE_URI to a local Postgres before running pg-migrate-create."; \
 		exit 1; \
 	fi
-	@cd "$(WORKTREE_ROOT)" && NODE_OPTIONS="--conditions=development" pnpm payload migrate:create --name "$(or $(NAME),change)"
+	@cd "$(WORKTREE_ROOT)" && NODE_OPTIONS="$(MIGRATE_NODE_OPTIONS)" pnpm exec payload migrate:create --name "$(or $(NAME),change)"
 
-# Apply Payload migrations to the <env> Neon DB. Runs `pnpm payload
-# migrate` from your laptop with DATABASE_URI sourced from .env.<env>.
+# Apply Payload migrations to the <env> Neon DB. Runs `payload migrate` from
+# your laptop with DATABASE_URI sourced from the env secrets file.
+#
+# `pnpm exec payload`, NOT `pnpm payload`: the package.json script is
+# `cross-env NODE_OPTIONS=--no-deprecation payload`, and cross-env REPLACES
+# NODE_OPTIONS rather than appending to it — so --conditions=development
+# silently never reached node while this ran through the script. It had been
+# inert since it was added; fixed 1 Sep 2026.
 pg-migrate: check-secrets
 	$(call PROD_CHECK,pg-migrate)
 	@# Prod DDL MUST run as the owner role. Refuse to silently fall back to the
@@ -323,20 +337,32 @@ pg-migrate: check-secrets
 		exit 1; \
 	fi; \
 	echo "Applying Payload migrations to $(ENV) Postgres…"; \
-	cd "$(WORKTREE_ROOT)" && \
-	TMP=$$(mktemp) && \
-	DATABASE_URI="$$DSN" PAYLOAD_SECRET="cutover-migrate" NODE_OPTIONS="--conditions=development" \
-		pnpm payload migrate >"$$TMP" 2>&1; RC=$$?; cat "$$TMP"; \
-	if [ $$RC -ne 0 ]; then rm -f "$$TMP"; exit $$RC; fi; \
-	if ! grep -q "Reading migration files" "$$TMP"; then \
-		rm -f "$$TMP"; \
-		echo "ERROR: payload migrate exited 0 but produced no migration output."; \
-		echo "       The payload CLI can hit a Node ESM deadlock importing payload.config"; \
-		echo "       (lexical top-level-await shims) and exit silently having done NOTHING —"; \
-		echo "       this silently skipped prod migrations on 28 Aug 2026 (issue 9851ff6f)."; \
-		echo "       --conditions=development prevents it; if this still fires, re-run."; \
-		exit 1; \
-	fi; rm -f "$$TMP"
+	cd "$(WORKTREE_ROOT)" || exit 1; \
+	TMP=$$(mktemp); \
+	ATTEMPT=1; \
+	while :; do \
+		DATABASE_URI="$$DSN" PAYLOAD_SECRET="cutover-migrate" NODE_OPTIONS="$(MIGRATE_NODE_OPTIONS)" \
+			pnpm exec payload migrate >"$$TMP" 2>&1; RC=$$?; cat "$$TMP"; \
+		if [ $$RC -ne 0 ]; then rm -f "$$TMP"; exit $$RC; fi; \
+		grep -q "Reading migration files" "$$TMP" && break; \
+		if [ $$ATTEMPT -ge $(MIGRATE_ATTEMPTS) ]; then \
+			rm -f "$$TMP"; \
+			echo "ERROR: payload migrate exited 0 but produced no migration output,"; \
+			echo "       $$ATTEMPT time(s) in a row."; \
+			echo "       The payload CLI can exit silently having done NOTHING — this"; \
+			echo "       silently skipped prod migrations on 28 Aug 2026 (issue 9851ff6f),"; \
+			echo "       so the deploy stops here rather than roll an image against a"; \
+			echo "       schema that may not have been migrated."; \
+			echo "       Check what is pending with:"; \
+			echo "         make -C infra/fly pg-migrate-status ENV=$(ENV)"; \
+			exit 1; \
+		fi; \
+		echo "WARNING: payload migrate exited 0 but produced no migration output."; \
+		echo "         This is the known intermittent silent no-op — retrying"; \
+		echo "         (attempt $$((ATTEMPT + 1)) of $(MIGRATE_ATTEMPTS))."; \
+		ATTEMPT=$$((ATTEMPT + 1)); \
+	done; \
+	rm -f "$$TMP"
 
 # Show recorded/pending migrations on the <env> Neon DB without applying
 # anything. Safe read-only check before pg-migrate. DATABASE_URI sourced
@@ -348,7 +374,7 @@ pg-migrate-status: check-secrets
 		exit 1; \
 	fi; \
 	cd "$(WORKTREE_ROOT)" && \
-	DATABASE_URI="$$DSN" PAYLOAD_SECRET="cutover-migrate" NODE_OPTIONS="--conditions=development" pnpm payload migrate:status
+	DATABASE_URI="$$DSN" PAYLOAD_SECRET="cutover-migrate" NODE_OPTIONS="$(MIGRATE_NODE_OPTIONS)" pnpm exec payload migrate:status
 
 # Print row counts for every projection + CRM-owned table. Reads
 # DATABASE_URI from .env.<env> and runs psql locally.
