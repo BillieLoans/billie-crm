@@ -30,6 +30,7 @@ export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(canService)
     if ('error' in auth) return auth.error
+    const { user } = auth
 
     const body = await request.json()
     const parseResult = RecordRepaymentSchema.safeParse(body)
@@ -58,6 +59,8 @@ export async function POST(request: NextRequest) {
       paymentMethod: data.paymentMethod,
       paymentReference: data.paymentReference,
       notes: data.notes,
+      // Always the session user — never a body-supplied value.
+      actionedBy: String(user.id),
       idempotencyKey,
     })
 

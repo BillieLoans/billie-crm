@@ -25,6 +25,7 @@ export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(canService)
     if ('error' in auth) return auth.error
+    const { user } = auth
 
     const body = await request.json()
     const parseResult = ApplyDishonourFeeSchema.safeParse(body)
@@ -46,6 +47,7 @@ export async function POST(request: NextRequest) {
       feeAmount: data.feeAmount,
       reason: data.reason,
       referenceId: data.referenceId,
+      actionedBy: String(user.id),
       idempotencyKey,
     })
 

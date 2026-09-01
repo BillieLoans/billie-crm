@@ -30,6 +30,7 @@ export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(canService)
     if ('error' in auth) return auth.error
+    const { user } = auth
 
     const body = await request.json()
     const parseResult = DisburseLoanSchema.safeParse(body)
@@ -54,6 +55,7 @@ export async function POST(request: NextRequest) {
       paymentMethod: data.paymentMethod || 'bank_transfer',
       attachmentLocation: data.attachmentLocation || '',
       notes: data.notes || '',
+      actionedBy: String(user.id),
       idempotencyKey,
     })
 

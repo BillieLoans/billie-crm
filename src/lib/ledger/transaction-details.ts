@@ -127,7 +127,6 @@ const BY_TYPE: Record<
   FEE_WAIVER: (tx, m) => [
     field('Reason', m.reason ?? reasonFromDescription(tx.description, 'Fee waiver: '), 'longform'),
     field('Notes', tx.notes, 'longform'),
-    field('Approved by', m.approved_by, 'mono'),
     m.waiver_total && m.original_fee_balance
       ? field(
           'Waived',
@@ -152,21 +151,65 @@ const BY_TYPE: Record<
       m.reason ?? reasonFromDescription(tx.description, 'Manual adjustment: '),
       'longform',
     ),
-    field('Approved by', m.approved_by, 'mono'),
   ],
 
   WRITE_OFF: (tx, m) => [
     field('Reason', m.reason ?? reasonFromDescription(tx.description, 'Write-off: '), 'longform'),
-    field('Approved by', m.approved_by, 'mono'),
   ],
+}
+
+/**
+ * Label for the single "who did this" line. Only a write-off has a genuine
+ * approver: the CRM routes it through a request, records a separate
+ * `requestedBy`, and blocks self-approval. A waiver or adjustment is one
+ * person doing one thing — the route derives the id from their own session and
+ * only admits callers who already hold approval authority — so calling it
+ * "Approved by" would imply a second pair of eyes that never looked.
+ */
+const ACTOR_LABEL: Record<string, string> = {
+  FEE_WAIVER: 'Waived by',
+  ADJUSTMENT: 'Adjusted by',
+  WRITE_OFF: 'Approved by',
+}
+
+/**
+ * One actor line per transaction. `approved_by` wins over `createdBy` because
+ * transactions recorded before operator attribution existed carry a useless
+ * `createdBy: "system"` alongside a real approver in metadata.
+ */
+function actorField(
+  tx: TransactionDetailSource,
+  metadata: Record<string, string>,
+  actors: Record<string, string>,
+): Field | null {
+  const id = metadata.approved_by?.trim() || tx.createdBy?.trim()
+  if (!id) return null
+
+  const resolved = actors[id]
+  if (resolved)
+    return { label: ACTOR_LABEL[tx.type] ?? 'Recorded by', value: resolved, variant: 'text' }
+
+  // Genuinely automated — a scheduled fee, an inbound payment event.
+  if (id === 'system') {
+    return { label: ACTOR_LABEL[tx.type] ?? 'Recorded by', value: 'System', variant: 'text' }
+  }
+
+  // An id we could not resolve (deleted user, non-CRM actor). Showing it raw
+  // beats showing nothing: it is still traceable.
+  return { label: ACTOR_LABEL[tx.type] ?? 'Recorded by', value: id, variant: 'mono' }
 }
 
 /**
  * Build the detail fields for one transaction. Returns an empty array when
  * there is nothing to show — callers use that to decide whether the row gets
  * an expand control at all.
+ *
+ * @param actors Actor id -> display name, from the transactions API.
  */
-export function getTransactionDetails(tx: TransactionDetailSource): TransactionDetailField[] {
+export function getTransactionDetails(
+  tx: TransactionDetailSource,
+  actors: Record<string, string> = {},
+): TransactionDetailField[] {
   const metadata = tx.metadata ?? {}
   const build = BY_TYPE[tx.type]
 
@@ -176,7 +219,7 @@ export function getTransactionDetails(tx: TransactionDetailSource): TransactionD
 
   return [
     ...specific,
-    field('Recorded by', tx.createdBy, 'mono'),
+    actorField(tx, metadata, actors),
     field('Recorded', formatTimestamp(tx.createdAt)),
   ].filter((f): f is Field => f !== null)
 }

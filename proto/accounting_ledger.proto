@@ -465,6 +465,10 @@ message RecordRepaymentRequest {
   // Instalment targeting (optional - defaults to FIFO allocation)
   optional int32 target_payment_number = 8;  // Explicit instalment to target (overrides FIFO)
   optional string schedule_id = 9;           // Schedule reference for validation
+
+  // ID of the operator performing this action. Absent for automated
+  // callers (schedulers, event handlers), which record as "system".
+  optional string actioned_by = 10;
 }
 
 // Apply late fee
@@ -474,6 +478,9 @@ message ApplyLateFeeRequest {
   int32 days_past_due = 3;  // Number of days past due
   optional string reason = 4;  // Optional reason/notes
   optional string idempotency_key = 5;  // Client-provided key for idempotent requests (TTL: 24h)
+  // ID of the operator performing this action. Absent for automated
+  // callers (schedulers, event handlers), which record as "system".
+  optional string actioned_by = 6;
 }
 
 // Apply a dishonour fee (failed direct debit)
@@ -483,6 +490,9 @@ message ApplyDishonourFeeRequest {
   optional string reason = 3;   // Optional reason (e.g., "direct debit returned")
   optional string reference_id = 4;  // External payment reference that was dishonoured
   optional string idempotency_key = 5;  // Client-provided key for idempotent requests (TTL: 24h)
+  // ID of the operator performing this action. Absent for automated
+  // callers (schedulers, event handlers), which record as "system".
+  optional string actioned_by = 6;
 }
 
 // Waive fees
@@ -523,6 +533,9 @@ message DisburseLoanRequest {
   string attachment_location = 5;  // S3 URI for proof of payment / documentation
   string notes = 6;                // Free-text notes
   optional string idempotency_key = 7;  // Client-provided key for idempotent requests (TTL: 24h)
+  // ID of the operator performing this action. Absent for automated
+  // callers (schedulers, event handlers), which record as "system".
+  optional string actioned_by = 8;
 }
 
 message DisburseLoanResponse {

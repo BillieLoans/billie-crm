@@ -32,7 +32,8 @@ describe('getTransactionDetails', () => {
       })
 
       expect(valueOf(fields, 'Reason')).toBe('Goodwill - first missed payment')
-      expect(valueOf(fields, 'Approved by')).toBe('k.wallace@billie.loans')
+      expect(valueOf(fields, 'Waived by')).toBe('k.wallace@billie.loans')
+      expect(labels(fields)).not.toContain('Approved by')
     })
 
     test('falls back to the description prefix when metadata has no reason', () => {
@@ -159,7 +160,7 @@ describe('getTransactionDetails', () => {
       })
 
       expect(valueOf(fields, 'Reason')).toBe('Correcting duplicate fee')
-      expect(valueOf(fields, 'Approved by')).toBe('supervisor-1')
+      expect(valueOf(fields, 'Adjusted by')).toBe('supervisor-1')
     })
 
     test('falls back to the raw description for an unmapped type', () => {
@@ -183,8 +184,8 @@ describe('getTransactionDetails', () => {
         createdAt: '2026-09-01T04:14:00Z',
       })
 
-      expect(labels(fields).slice(-2)).toEqual(['Recorded by', 'Recorded'])
-      expect(valueOf(fields, 'Recorded by')).toBe('k.wallace@billie.loans')
+      expect(labels(fields).slice(-2)).toEqual(['Waived by', 'Recorded'])
+      expect(valueOf(fields, 'Waived by')).toBe('k.wallace@billie.loans')
       expect(valueOf(fields, 'Recorded')).not.toBe('')
     })
 
@@ -201,6 +202,78 @@ describe('getTransactionDetails', () => {
       const fields = getTransactionDetails({ ...base, createdAt: 'not-a-date' })
 
       expect(labels(fields)).not.toContain('Recorded')
+    })
+  })
+
+  describe('who did it', () => {
+    const ACTOR = '95979e54-7f2e-4578-a9d0-807c8951da68'
+    const actors = { [ACTOR]: 'Kathryn Wallace' }
+
+    test('labels a write-off approver as an approver — that one is a real second party', () => {
+      const fields = getTransactionDetails({
+        ...base,
+        type: 'WRITE_OFF',
+        metadata: { reason: 'Uncommercial to pursue', approved_by: ACTOR },
+      })
+
+      expect(labels(fields)).toContain('Approved by')
+      expect(labels(fields)).not.toContain('Recorded by')
+    })
+
+    test('labels a repayment actor as the recorder', () => {
+      const fields = getTransactionDetails({ ...base, type: 'REPAYMENT', createdBy: ACTOR })
+
+      expect(labels(fields)).toContain('Recorded by')
+    })
+
+    test('resolves the actor id to a person', () => {
+      const fields = getTransactionDetails(
+        { ...base, type: 'REPAYMENT', createdBy: ACTOR },
+        actors,
+      )
+
+      expect(valueOf(fields, 'Recorded by')).toBe('Kathryn Wallace')
+    })
+
+    test('falls back to the raw id when it cannot be resolved', () => {
+      const fields = getTransactionDetails({ ...base, type: 'REPAYMENT', createdBy: ACTOR }, {})
+
+      expect(valueOf(fields, 'Recorded by')).toBe(ACTOR)
+    })
+
+    test('names the automated actor readably', () => {
+      const fields = getTransactionDetails({ ...base, type: 'LATE_FEE', createdBy: 'system' })
+
+      expect(valueOf(fields, 'Recorded by')).toBe('System')
+    })
+
+    test('shows one actor line, not two, when the approver also recorded it', () => {
+      const fields = getTransactionDetails(
+        {
+          ...base,
+          type: 'FEE_WAIVER',
+          metadata: { reason: 'Goodwill', approved_by: ACTOR },
+          createdBy: ACTOR,
+        },
+        actors,
+      )
+
+      expect(labels(fields).filter((l) => l.endsWith(' by'))).toEqual(['Waived by'])
+      expect(valueOf(fields, 'Waived by')).toBe('Kathryn Wallace')
+    })
+
+    test('prefers the recorded approver over a legacy system actor', () => {
+      const fields = getTransactionDetails(
+        {
+          ...base,
+          type: 'FEE_WAIVER',
+          metadata: { reason: 'Goodwill', approved_by: ACTOR },
+          createdBy: 'system',
+        },
+        actors,
+      )
+
+      expect(valueOf(fields, 'Waived by')).toBe('Kathryn Wallace')
     })
   })
 
