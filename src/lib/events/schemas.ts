@@ -146,7 +146,7 @@ export const ConversationKillCommandSchema = z.object({
   conversationId: z.string().min(1, 'Conversation ID is required'),
   applicationNumber: z.string().optional(),
   customerId: z.string().min(1, 'Customer ID is required'),
-  reasonCategory: z.enum(['fraud_abuse', 'operational', 'compliance']),
+  reasonCategory: z.enum(['fraud_abuse', 'operational', 'compliance', 'customer_request']),
   note: z.string().max(500).optional(),
   blockRequested: z.boolean().optional(),
 })

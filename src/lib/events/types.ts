@@ -357,7 +357,7 @@ export interface ConversationKillPayload {
   conversation_id: string
   application_number: string
   customer_id: string
-  reason_category: 'fraud_abuse' | 'operational' | 'compliance'
+  reason_category: 'fraud_abuse' | 'operational' | 'compliance' | 'customer_request'
   note: string
   actor: string // "user:<staff-id>" | "system:<agent>"
   block_requested: boolean

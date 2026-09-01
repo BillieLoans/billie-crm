@@ -118,14 +118,14 @@ describe('EndConversationButton', () => {
     expect(button.getAttribute('title')).toMatch(/customer/i)
   })
 
-  it('opens a modal with the exact customer-facing copy, three reason radios, and a note textarea; confirm is disabled until a reason is chosen', () => {
+  it('opens a modal with the exact customer-facing copy, four reason radios, and a note textarea; confirm is disabled until a reason is chosen', () => {
     renderWithProviders(
       <EndConversationButton conversation={baseConversation()} conversationId="conv-001" />,
     )
     fireEvent.click(screen.getByRole('button', { name: 'End conversation' }))
 
     expect(screen.getByText(STOP_MESSAGE_COPY)).toBeInTheDocument()
-    expect(screen.getAllByRole('radio')).toHaveLength(3)
+    expect(screen.getAllByRole('radio')).toHaveLength(4)
     expect(screen.getByRole('textbox', { name: /note/i })).toBeInTheDocument()
 
     const confirm = screen.getByTestId('end-conversation-confirm')
@@ -343,7 +343,7 @@ describe('KillBanner', () => {
 
     const drawer = screen.getByTestId('context-drawer')
     expect(drawer).toHaveTextContent('Jane Smith')
-    expect(drawer).toHaveTextContent('Compliance / customer request')
+    expect(drawer).toHaveTextContent('Compliance')
     expect(drawer).toHaveTextContent(formatDateMedium(killedAt))
     expect(drawer).toHaveTextContent('Customer requested account closure via phone.')
   })
@@ -441,5 +441,80 @@ describe('KillBanner', () => {
 
     fireEvent.click(screen.getByTestId('context-drawer-close'))
     expect(screen.queryByTestId('context-drawer')).not.toBeInTheDocument()
+  })
+})
+
+describe('customer_request kill category (spec: 2026-08-28 cancellation projection)', () => {
+  beforeEach(() => {
+    mockUser = { id: '42', role: 'supervisor' }
+    mockFetch.mockReset()
+  })
+  afterEach(() => {
+    cleanup()
+    delete process.env.NEXT_PUBLIC_ENABLE_KILL_BLOCK
+  })
+
+  it('accepts customer_request as a reason category', async () => {
+    const { ConversationKillCommandSchema } = await import('@/lib/events/schemas')
+    const parsed = ConversationKillCommandSchema.safeParse({
+      conversationId: 'c1',
+      customerId: 'B81FC35E',
+      reasonCategory: 'customer_request',
+    })
+    expect(parsed.success).toBe(true)
+  })
+
+  it('offers Customer request as a fourth reason radio', () => {
+    renderWithProviders(
+      <EndConversationButton conversation={baseConversation()} conversationId="conv-001" />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'End conversation' }))
+    expect(screen.getAllByRole('radio')).toHaveLength(4)
+    expect(screen.getByLabelText('Customer request')).toBeInTheDocument()
+  })
+
+  it('relabels the compliance option so it no longer claims customer request', () => {
+    renderWithProviders(
+      <EndConversationButton conversation={baseConversation()} conversationId="conv-001" />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'End conversation' }))
+    expect(screen.getByLabelText('Compliance')).toBeInTheDocument()
+    expect(screen.queryByLabelText(/Compliance \/ customer request/)).not.toBeInTheDocument()
+  })
+
+  it('forces the block checkbox off and disabled for a customer request', () => {
+    process.env.NEXT_PUBLIC_ENABLE_KILL_BLOCK = 'true'
+    renderWithProviders(
+      <EndConversationButton conversation={baseConversation()} conversationId="conv-001" />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'End conversation' }))
+
+    const blockCheckbox = screen.getByRole('checkbox')
+    fireEvent.click(blockCheckbox)
+    expect(blockCheckbox).toBeChecked()
+
+    fireEvent.click(screen.getByLabelText('Customer request'))
+    expect(blockCheckbox).toBeDisabled()
+    expect(blockCheckbox).not.toBeChecked()
+  })
+
+  it('never sends blockRequested true for a customer request', async () => {
+    process.env.NEXT_PUBLIC_ENABLE_KILL_BLOCK = 'true'
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ eventId: 'evt-1', requestId: 'req-1', status: 'accepted' }),
+    })
+    renderWithProviders(
+      <EndConversationButton conversation={baseConversation()} conversationId="conv-001" />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'End conversation' }))
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByLabelText('Customer request'))
+    fireEvent.click(screen.getByTestId('end-conversation-confirm'))
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body)
+    expect(body.reasonCategory).toBe('customer_request')
+    expect(body.blockRequested).toBe(false)
   })
 })

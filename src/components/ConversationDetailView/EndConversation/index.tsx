@@ -19,7 +19,8 @@ type ReasonCategory = ConversationKillCommand['reasonCategory']
 const REASON_OPTIONS: { value: ReasonCategory; label: string }[] = [
   { value: 'fraud_abuse', label: 'Fraud / abuse' },
   { value: 'operational', label: 'Operational cleanup' },
-  { value: 'compliance', label: 'Compliance / customer request' },
+  { value: 'compliance', label: 'Compliance' },
+  { value: 'customer_request', label: 'Customer request' },
 ]
 
 /**
@@ -109,6 +110,12 @@ function EndConversationModal({
   // The block checkbox is a Phase 2 affordance — hidden until its flag lands.
   const showBlockCheckbox = process.env.NEXT_PUBLIC_ENABLE_KILL_BLOCK === 'true'
 
+  // A customer asking to cancel must never be blocked from re-applying — the
+  // reapplicationBlock service raises a MANUAL_ADMIN block purely on the
+  // blockRequested boolean, so the guard has to live on this side.
+  const isCustomerRequest = reasonCategory === 'customer_request'
+  const effectiveBlockRequested = isCustomerRequest ? false : blockRequested
+
   // No reset effect needed: EndConversationButton fully unmounts this modal on
   // close (see the `isModalOpen && customerId && …` guard above), so each open
   // is a fresh mount and the `useState` initializers above are the reset.
@@ -124,7 +131,7 @@ function EndConversationModal({
       applicationNumber,
       reasonCategory,
       note: note.trim() || undefined,
-      ...(showBlockCheckbox ? { blockRequested } : {}),
+      ...(showBlockCheckbox ? { blockRequested: effectiveBlockRequested } : {}),
     }
 
     try {
@@ -197,9 +204,9 @@ function EndConversationModal({
               <label className={styles.checkboxLabel}>
                 <input
                   type="checkbox"
-                  checked={blockRequested}
+                  checked={effectiveBlockRequested}
                   onChange={(e) => setBlockRequested(e.target.checked)}
-                  disabled={isPending}
+                  disabled={isPending || isCustomerRequest}
                 />
                 Also block this customer from re-applying
               </label>

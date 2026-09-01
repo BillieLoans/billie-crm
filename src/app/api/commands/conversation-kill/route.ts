@@ -48,6 +48,22 @@ export async function POST(request: NextRequest) {
     }
     const cmd = parsed.data
 
+    // A customer asking to cancel must never be blocked from re-applying. The
+    // reapplicationBlock service raises a MANUAL_ADMIN block purely on the
+    // block_requested boolean (it never inspects reason_category), so reject
+    // the combination here rather than trusting the client-side guard.
+    if (cmd.reasonCategory === 'customer_request' && cmd.blockRequested) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'A customer-requested cancellation cannot also raise a reapplication block.',
+          },
+        },
+        { status: 400 },
+      )
+    }
+
     const requestId = nanoid()
     const { eventId } = await publishConversationKill({
       request_id: requestId,
