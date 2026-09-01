@@ -7,6 +7,7 @@ import { useConversation } from '@/hooks/queries/useConversation'
 import { MessagePanel } from './MessagePanel'
 import { AssessmentPanel } from './AssessmentPanel'
 import { EndConversationButton, KillBanner } from './EndConversation'
+import { CancellationBanner } from './CancellationBanner'
 import { StatusBadge } from '../ApplicationsView/StatusBadge'
 import { CopyButton } from '@/components/ui/CopyButton'
 import { formatCurrency, formatDateOnly } from '@/lib/formatters'
@@ -151,6 +152,10 @@ export function ConversationDetailView({ conversationId, referrer }: Conversatio
       </div>
 
       {conversation?.killRecord && <KillBanner killRecord={conversation.killRecord} />}
+
+      {conversation?.cancellationRecord && (
+        <CancellationBanner cancellationRecord={conversation.cancellationRecord} />
+      )}
 
       {/* Split panel */}
       <div className={styles.splitPanel}>
