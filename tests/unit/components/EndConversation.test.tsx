@@ -325,6 +325,34 @@ describe('KillBanner', () => {
     expect(screen.queryByText(/conversation_policy/)).not.toBeInTheDocument()
   })
 
+  it.each([
+    ['otp_max_attempts', 'OTP attempts exhausted', 'OTP max attempts exceeded (sms)'],
+    [
+      'injection_attempts',
+      'Repeated injection attempts',
+      'Repeated high-severity injection attempts',
+    ],
+  ])('labels the platform-only close "%s" as "%s"', (category, label, note) => {
+    // The other two system-initiated CLA closes (OTP lockout, sanitiser
+    // stop) report through the same conversation.killed.v1 fact.
+    renderWithProviders(
+      <KillBanner
+        killRecord={{
+          request_id: `${category}:conv-002:5`,
+          actor: 'system:customerLiaisonAgent',
+          actorName: 'Customer liaison agent',
+          reason_category: category,
+          note,
+          killed_at: '2026-09-08T01:00:00.000Z',
+        }}
+      />,
+    )
+    expect(
+      screen.getByText(new RegExp(`Ended by Customer liaison agent · ${label} ·`)),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(new RegExp(category))).not.toBeInTheDocument()
+  })
+
   it('renders the compact line as a button that opens a "Conversation ended" drawer on click', () => {
     renderWithProviders(
       <KillBanner

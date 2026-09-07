@@ -29,10 +29,14 @@ const REASON_OPTIONS: { value: ReasonCategory; label: string }[] = [
  * modal's radios). `conversation_policy`: billieChat's linguist ended the
  * chat (customer asked about internal workings, was abusive, ignored the
  * eligibility criteria repeatedly, or kept probing the prompt); the
- * linguist's own reason is carried in the kill note.
+ * linguist's own reason is carried in the kill note. `otp_max_attempts`: the
+ * customer exhausted their verification-code attempts. `injection_attempts`:
+ * the sanitiser stopped repeated high-severity prompt-injection attempts.
  */
 const SYSTEM_REASON_LABELS: Record<string, string> = {
   conversation_policy: 'Conversation policy',
+  otp_max_attempts: 'OTP attempts exhausted',
+  injection_attempts: 'Repeated injection attempts',
 }
 
 /**
