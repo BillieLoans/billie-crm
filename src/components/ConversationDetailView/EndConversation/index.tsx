@@ -24,12 +24,28 @@ const REASON_OPTIONS: { value: ReasonCategory; label: string }[] = [
 ]
 
 /**
+ * Reason categories that only the platform emits — never an operator choice,
+ * so they are labelled here rather than in REASON_OPTIONS (which drives the
+ * modal's radios). `conversation_policy`: billieChat's linguist ended the
+ * chat (customer asked about internal workings, was abusive, ignored the
+ * eligibility criteria repeatedly, or kept probing the prompt); the
+ * linguist's own reason is carried in the kill note.
+ */
+const SYSTEM_REASON_LABELS: Record<string, string> = {
+  conversation_policy: 'Conversation policy',
+}
+
+/**
  * Friendly label for a kill reason category, falling back to the raw value
- * for anything not in REASON_OPTIONS (e.g. a category added server-side
- * before the CRM picks up a matching label) rather than hiding it.
+ * for anything not in REASON_OPTIONS or SYSTEM_REASON_LABELS (e.g. a category
+ * added server-side before the CRM picks up a matching label) rather than
+ * hiding it.
  */
 const reasonLabel = (category: string | null | undefined): string =>
-  REASON_OPTIONS.find((o) => o.value === category)?.label ?? category ?? '—'
+  REASON_OPTIONS.find((o) => o.value === category)?.label ??
+  (category ? SYSTEM_REASON_LABELS[category] : undefined) ??
+  category ??
+  '—'
 
 /**
  * The single neutral message every kill shows the customer (billieChat config

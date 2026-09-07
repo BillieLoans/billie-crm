@@ -51,6 +51,16 @@ describe('resolveActorDisplayName', () => {
     expect(result).toBe('user:missing-id')
   })
 
+  it('labels the linguist close actor "system:customerLiaisonAgent" for the kill banner', async () => {
+    // billieChat's summariser reports a linguist e="Y" close as
+    // conversation.killed.v1 with this actor (PROD 2026-09-07, 999549AA-6C1).
+    const payload = mockPayload(vi.fn())
+
+    const result = await resolveActorDisplayName(payload, 'system:customerLiaisonAgent')
+
+    expect(result).toBe('Customer liaison agent')
+  })
+
   it('falls back to the raw actor id when the user is not found', async () => {
     const findByID = vi.fn().mockResolvedValue(null)
     const payload = mockPayload(findByID)
