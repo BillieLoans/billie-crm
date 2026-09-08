@@ -64,3 +64,52 @@ class TestConversationKilled:
         event = {"typ": "conversation.killed.v1", "payload": payload}
         await handle_conversation_killed(mock_pool, event)
         assert not mock_pool.calls
+
+
+class TestLinguistClose:
+    """billieChat's summariser reports a linguist ``e="Y"`` close as the same
+    ``conversation.killed.v1`` fact an operator kill produces, with a system
+    actor and reason_category ``conversation_policy`` (PROD 2026-09-07,
+    application 999549AA-6C1 — the conversation stayed "Active" with no
+    reason because nothing routable carried the close). This pins the
+    contract: it lands ``hard_end`` (not ``cancelled``) and keeps the note.
+    """
+
+    LINGUIST_PAYLOAD = {
+        "request_id": "linguist-end:%s:2" % CONV,
+        "conversation_id": CONV,
+        "application_number": "999549AA-6C1",
+        "customer_id": "4ECFB177",
+        "reason_category": "conversation_policy",
+        "note": "Customer asks about internal workings.",
+        "actor": "system:customerLiaisonAgent",
+        "killed_at": "2026-09-07T04:39:55+00:00",
+    }
+
+    @pytest.mark.asyncio
+    async def test_linguist_close_lands_hard_end_with_the_reason(self, mock_pool):
+        mock_pool.set_fetchrow({"status": "active", "cancellation_record": None})
+        await handle_conversation_killed(mock_pool, _event(self.LINGUIST_PAYLOAD))
+        updates = [c for c in mock_pool.calls_against("conversations")
+                   if c.op == "UPDATE" and "kill_record" in c.values]
+        assert len(updates) == 1
+        call = updates[0]
+        assert call.values["status"] == "hard_end"
+        record = json.loads(call.args[1])
+        assert record["actor"] == "system:customerLiaisonAgent"
+        assert record["reason_category"] == "conversation_policy"
+        assert record["note"] == "Customer asks about internal workings."
+        assert record["request_id"] == "linguist-end:%s:2" % CONV
+
+    @pytest.mark.asyncio
+    async def test_linguist_close_redelivery_is_idempotent(self, mock_pool):
+        """Same (conversation, seq) request id twice → the second write is a no-op."""
+        mock_pool.set_fetchrow({"status": "hard_end", "cancellation_record": None,
+                                "kill_record": json.dumps(self.LINGUIST_PAYLOAD)})
+        await handle_conversation_killed(mock_pool, _event(self.LINGUIST_PAYLOAD))
+        # A hard_end row re-receiving a hard_end kill may be re-written with an
+        # identical record; what must never happen is a downgrade or an insert.
+        for values in mock_pool.updates_to("conversations"):
+            assert values.get("status") in (None, "hard_end")
+        assert not mock_pool.inserts_into("conversations")
+
