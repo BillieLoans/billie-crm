@@ -1,4 +1,17 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
+import * as grpc from '@grpc/grpc-js'
+
+// Hermetic: this file's `describe('promisifyGrpcCall')` block exercises the
+// real helper, which now awaits platformMetadata(). Without this mock, a
+// developer or CI environment with PLATFORM_CLIENT_* set (vitest.setup.ts
+// loads dotenv into the one shared forked process) would have these
+// deadline/`this`/error-shape tests doing real EdDSA signing and failing on
+// an unrelated key error. Mirrors the mock in
+// tests/unit/lib/grpc-base-metadata.test.ts.
+vi.mock('@/server/platform-auth', () => ({
+  platformMetadata: vi.fn(async () => new grpc.Metadata()),
+}))
+
 import { isPlaintextAddress, getDeadlineMs, promisifyGrpcCall } from '@/server/grpc-base'
 
 /**
