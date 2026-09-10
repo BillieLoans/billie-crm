@@ -1116,6 +1116,21 @@ export class LedgerClient {
   // Streaming
   // ===========================================================================
 
+  /**
+   * Server-streaming transaction watch.
+   *
+   * UNAUTHENTICATED UNDER PLATFORM AUTH — this is the one call on this client
+   * that bypasses {@link promisifyGrpcCall}, because that helper wraps unary
+   * calls only. It therefore carries NO platform auth metadata: no
+   * `authorization` bearer token from `platformMetadata()` and no `x-actor-id`
+   * (platform ADR-0001).
+   *
+   * It has no callers today, so nothing breaks. Before using it, pass
+   * `await platformMetadata()` as the call's metadata argument
+   * (`this.client.watchTransactions(request, metadata)`) — otherwise the
+   * platform rejects the stream with UNAUTHENTICATED as soon as its
+   * `GRPC_AUTH_MODE` is `enforce`.
+   */
   watchTransactions(
     loanAccountId: string,
     onTransaction: (transaction: Transaction) => void,
