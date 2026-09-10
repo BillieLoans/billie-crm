@@ -105,16 +105,17 @@ describe('getDeadlineMs', () => {
 })
 
 describe('promisifyGrpcCall', () => {
-  /** Minimal stand-in for a generated unary stub: records the CallOptions it was handed. */
+  /** Minimal stand-in for a generated unary stub: records the Metadata/CallOptions it was handed. */
   function stubMethod(result: unknown, error?: unknown) {
-    const calls: { request: unknown; options: any }[] = []
+    const calls: { request: unknown; metadata: any; options: any }[] = []
     const method = function (
       this: unknown,
       request: unknown,
+      metadata: any,
       options: any,
       callback: (err: unknown, res: unknown) => void,
     ) {
-      calls.push({ request, options })
+      calls.push({ request, metadata, options })
       if (error) callback(error, undefined)
       else callback(null, result)
     }
@@ -183,7 +184,7 @@ describe('promisifyGrpcCall', () => {
   it('calls the stub with the client as `this` and forwards the request untouched', async () => {
     const client = { marker: 'ledger-stub' }
     const seen: unknown[] = []
-    const method = function (this: unknown, request: unknown, _o: any, cb: any) {
+    const method = function (this: unknown, request: unknown, _md: any, _o: any, cb: any) {
       seen.push(this)
       cb(null, request)
     }
