@@ -1,5 +1,5 @@
 /**
- * GET /api/customer/:customerId/identity-report?artifact=<report|raw>&disposition=<inline|attachment>
+ * GET /api/customer/:customerId/identity-report?artifact=<report|screening|raw>&disposition=<inline|attachment>
  *
  * Streams an archived identity verification artifact from S3. The S3 URI is
  * resolved server-side from the customer's most recent conversation carrying an
@@ -7,7 +7,8 @@
  * `identity_verification.report.archived.v1` event) — S3 locations never reach
  * the browser.
  *
- * artifact=report (default): the verification report PDF.
+ * artifact=report (default): the identity-check verification report PDF.
+ * artifact=screening: the screening-check report PDF (LAB API v1, per-check reports).
  * artifact=raw: the raw verify-response JSON.
  * disposition=inline (default) renders in the browser; attachment downloads.
  */
@@ -20,6 +21,8 @@ import { checkRateLimit, ASSESSMENT_RATE_LIMIT } from '@/lib/utils/rateLimit'
 
 const ARTIFACTS = {
   report: 'reportFileLocation',
+  // LAB API v1: the screening check has its own PDF.
+  screening: 'screeningReportFileLocation',
   raw: 'rawResponseFileLocation',
 } as const
 type Artifact = keyof typeof ARTIFACTS

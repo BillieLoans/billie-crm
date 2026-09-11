@@ -195,6 +195,10 @@ export const IdentityVerificationReportSchema = z.object({
   reportFileName: z.string().nullable().optional(),
   rawResponseAvailable: z.boolean().optional(),
   rawResponseFileName: z.string().nullable().optional(),
+  /** LAB API v1: per-check reports — the screening PDF is a separate artifact. */
+  verificationNumber: z.string().nullable().optional(),
+  screeningReportAvailable: z.boolean().optional(),
+  screeningReportFileName: z.string().nullable().optional(),
   archivedAt: z.union([z.string(), z.date()]).nullable().optional(),
 })
 
