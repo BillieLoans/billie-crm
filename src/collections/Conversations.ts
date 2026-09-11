@@ -422,6 +422,21 @@ export const Conversations: CollectionConfig = {
           type: 'text',
         },
         {
+          // LAB Identity Verification API v1 (2026-09): reports are per check.
+          name: 'verificationNumber',
+          type: 'text',
+          admin: { description: 'LAB verificationNumber (V…)' },
+        },
+        {
+          name: 'screeningReportFileLocation',
+          type: 'text',
+          admin: { description: 'S3 URI of the screening-check report PDF' },
+        },
+        {
+          name: 'screeningReportFileName',
+          type: 'text',
+        },
+        {
           name: 'archivedAt',
           type: 'date',
         },

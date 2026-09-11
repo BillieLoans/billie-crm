@@ -31,6 +31,7 @@ import * as migration_20260827_230000_llm_costs_uuid_id from './20260827_230000_
 import * as migration_20260828_124500_conversations_llm_rollup_columns from './20260828_124500_conversations_llm_rollup_columns';
 import * as migration_20260828_150000_loan_accounts_disbursement_account from './20260828_150000_loan_accounts_disbursement_account';
 import * as migration_20260901_090000_conversation_cancellation from './20260901_090000_conversation_cancellation';
+import * as migration_20260911_090000_lab_api_v1_identity_columns from './20260911_090000_lab_api_v1_identity_columns';
 
 export const migrations = [
   {
@@ -197,5 +198,10 @@ export const migrations = [
     up: migration_20260901_090000_conversation_cancellation.up,
     down: migration_20260901_090000_conversation_cancellation.down,
     name: '20260901_090000_conversation_cancellation',
+  },
+  {
+    up: migration_20260911_090000_lab_api_v1_identity_columns.up,
+    down: migration_20260911_090000_lab_api_v1_identity_columns.down,
+    name: '20260911_090000_lab_api_v1_identity_columns',
   },
 ];

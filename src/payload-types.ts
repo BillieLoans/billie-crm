@@ -372,6 +372,26 @@ export interface Customer {
      */
     checkedAt?: string | null;
     /**
+     * LAB verificationNumber (V…) — quote in support queries
+     */
+    verificationNumber?: string | null;
+    /**
+     * identity check outcome: pass / fail / refer
+     */
+    identityOutcome?: string | null;
+    /**
+     * screening check outcome: pass / fail / refer
+     */
+    screeningOutcome?: string | null;
+    /**
+     * PEP screening: no_match / match / inconclusive / not_performed
+     */
+    pepResult?: string | null;
+    /**
+     * Sanctions screening: no_match / match / inconclusive / not_performed
+     */
+    sanctionsResult?: string | null;
+    /**
      * True once the report/raw response landed in S3
      */
     reportArchived?: boolean | null;
@@ -842,6 +862,15 @@ export interface Conversation {
      */
     rawResponseFileLocation?: string | null;
     rawResponseFileName?: string | null;
+    /**
+     * LAB verificationNumber (V…)
+     */
+    verificationNumber?: string | null;
+    /**
+     * S3 URI of the screening-check report PDF
+     */
+    screeningReportFileLocation?: string | null;
+    screeningReportFileName?: string | null;
     archivedAt?: string | null;
   };
   /**
@@ -2356,6 +2385,11 @@ export interface CustomersSelect<T extends boolean = true> {
         providerReference?: T;
         labRequestId?: T;
         checkedAt?: T;
+        verificationNumber?: T;
+        identityOutcome?: T;
+        screeningOutcome?: T;
+        pepResult?: T;
+        sanctionsResult?: T;
         reportArchived?: T;
         archivedAt?: T;
       };
@@ -2465,6 +2499,9 @@ export interface ConversationsSelect<T extends boolean = true> {
         reportFileName?: T;
         rawResponseFileLocation?: T;
         rawResponseFileName?: T;
+        verificationNumber?: T;
+        screeningReportFileLocation?: T;
+        screeningReportFileName?: T;
         archivedAt?: T;
       };
   assessments?:
