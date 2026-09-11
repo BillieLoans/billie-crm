@@ -1,4 +1,17 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
+import * as grpc from '@grpc/grpc-js'
+
+// Hermetic: this file's `describe('promisifyGrpcCall')` block exercises the
+// real helper, which now awaits platformMetadata(). Without this mock, a
+// developer or CI environment with PLATFORM_CLIENT_* set (vitest.setup.ts
+// loads dotenv into the one shared forked process) would have these
+// deadline/`this`/error-shape tests doing real EdDSA signing and failing on
+// an unrelated key error. Mirrors the mock in
+// tests/unit/lib/grpc-base-metadata.test.ts.
+vi.mock('@/server/platform-auth', () => ({
+  platformMetadata: vi.fn(async () => new grpc.Metadata()),
+}))
+
 import { isPlaintextAddress, getDeadlineMs, promisifyGrpcCall } from '@/server/grpc-base'
 
 /**
@@ -105,16 +118,17 @@ describe('getDeadlineMs', () => {
 })
 
 describe('promisifyGrpcCall', () => {
-  /** Minimal stand-in for a generated unary stub: records the CallOptions it was handed. */
+  /** Minimal stand-in for a generated unary stub: records the Metadata/CallOptions it was handed. */
   function stubMethod(result: unknown, error?: unknown) {
-    const calls: { request: unknown; options: any }[] = []
+    const calls: { request: unknown; metadata: any; options: any }[] = []
     const method = function (
       this: unknown,
       request: unknown,
+      metadata: any,
       options: any,
       callback: (err: unknown, res: unknown) => void,
     ) {
-      calls.push({ request, options })
+      calls.push({ request, metadata, options })
       if (error) callback(error, undefined)
       else callback(null, result)
     }
@@ -183,7 +197,7 @@ describe('promisifyGrpcCall', () => {
   it('calls the stub with the client as `this` and forwards the request untouched', async () => {
     const client = { marker: 'ledger-stub' }
     const seen: unknown[] = []
-    const method = function (this: unknown, request: unknown, _o: any, cb: any) {
+    const method = function (this: unknown, request: unknown, _md: any, _o: any, cb: any) {
       seen.push(this)
       cb(null, request)
     }

@@ -28,6 +28,8 @@ import * as protoLoader from '@grpc/proto-loader'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
+import { platformMetadata } from './platform-auth'
+
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
@@ -169,9 +171,10 @@ export function getDeadlineMs(kind: RpcKind): number {
   }
 }
 
-/** A generated unary stub method, called with an explicit `CallOptions` argument. */
+/** A generated unary stub method, called with explicit `Metadata` and `CallOptions` arguments. */
 export type UnaryMethodWithOptions<TRequest, TResponse> = (
   req: TRequest,
+  metadata: grpc.Metadata,
   options: grpc.CallOptions,
   callback: (err: any, res: TResponse) => void,
 ) => void
@@ -185,6 +188,9 @@ export type UnaryMethodWithOptions<TRequest, TResponse> = (
  *
  * A blown deadline rejects with code 4 (DEADLINE_EXCEEDED).
  *
+ * Every call carries the platform auth metadata from `platformMetadata()`
+ * (platform ADR-0001).
+ *
  * @param client - the stub instance (`this` for the call)
  * @param method - the stub method, e.g. `client.getBalance`
  * @param kind - deadline class, see {@link RpcKind}
@@ -196,13 +202,15 @@ export function promisifyGrpcCall<TRequest, TResponse>(
   kind: RpcKind = 'read',
   deadlineMsOverride?: number,
 ): (req: TRequest) => Promise<TResponse> {
-  return (request: TRequest) =>
-    new Promise<TResponse>((resolve, reject) => {
-      const ms = deadlineMsOverride ?? getDeadlineMs(kind)
-      const deadline = new Date(Date.now() + ms)
-      method.call(client, request, { deadline }, (err: any, response: TResponse) => {
+  return async (request: TRequest) => {
+    const metadata = await platformMetadata()
+    const ms = deadlineMsOverride ?? getDeadlineMs(kind)
+    const deadline = new Date(Date.now() + ms)
+    return new Promise<TResponse>((resolve, reject) => {
+      method.call(client, request, metadata, { deadline }, (err: any, response: TResponse) => {
         if (err) reject(err)
         else resolve(response)
       })
     })
+  }
 }
