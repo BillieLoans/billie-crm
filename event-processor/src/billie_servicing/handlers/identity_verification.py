@@ -1,13 +1,18 @@
-"""Identity verification archival handlers (PR #67).
+"""Identity verification archival handlers (PR #67, LAB API v1 2026-09).
 
 * ``identity_verification.report.archived.v1`` — emitted by identityRiskAgent
-  after KYC artifacts (report PDF and/or raw response JSON) land in S3. The S3
-  locations are stored on the conversation (joined by ``application_number``)
-  and a compact "report available" mirror lands on the canonical customer row.
+  after KYC artifacts (per-check report PDFs and/or raw response JSON) land in
+  S3. The S3 locations are stored on the conversation (joined by
+  ``application_number``) and a compact "report available" mirror lands on the
+  canonical customer row.
 * ``mirror_lab_verification`` — called from ``handle_assessment`` when an
   ``identityRisk_assessment`` payload carries the optional ``lab_verification``
-  block; mirrors the verbatim LAB EVS summary onto the customer row so the
-  servicing view reads one row.
+  block; mirrors a summary onto the customer row so the servicing view reads
+  one row. Two block shapes are accepted (old events replay from the ledger):
+  the legacy EVS block (``requestId`` / ``overallResult`` / ``pepResult``) and
+  the LAB Identity Verification API v1 ``Verification`` envelope (``id`` /
+  ``verificationNumber`` / ``result.checks[]``). The full verbatim block stays
+  in ``conversations.assessments_identity_risk``.
 
 ``identity_verification.report.archive_failed.v1`` is ledger-only (not routed
 to the CRM) — deliberately unhandled. A failed download stays recoverable via
@@ -41,6 +46,7 @@ async def handle_identity_report_archived(pool: asyncpg.Pool, event: dict[str, A
     application_number = safe_str(payload.get("application_number"), "application_number")
     lab_request_id = payload.get("lab_request_id")
     report = _artifact(payload, "report")
+    screening_report = _artifact(payload, "screening_report")
     raw_response = _artifact(payload, "raw_response")
 
     log = logger.bind(
@@ -73,6 +79,15 @@ async def handle_identity_report_archived(pool: asyncpg.Pool, event: dict[str, A
                     "file_location"
                 ),
                 "identity_verification_report_report_file_name": report.get("file_name"),
+                "identity_verification_report_verification_number": payload.get(
+                    "verification_number"
+                ),
+                "identity_verification_report_screening_report_file_location": (
+                    screening_report.get("file_location")
+                ),
+                "identity_verification_report_screening_report_file_name": (
+                    screening_report.get("file_name")
+                ),
                 "identity_verification_report_raw_response_file_location": raw_response.get(
                     "file_location"
                 ),
@@ -98,7 +113,9 @@ async def handle_identity_report_archived(pool: asyncpg.Pool, event: dict[str, A
             conflict_columns=["customer_id"],
             values={
                 "customer_id": canonical_id,
-                "identity_verification_report_archived": bool(report or raw_response),
+                "identity_verification_report_archived": bool(
+                    report or screening_report or raw_response
+                ),
                 "identity_verification_archived_at": coerce_date(payload.get("archived_at")),
                 "identity_verification_lab_request_id": str(lab_request_id)
                 if lab_request_id is not None
@@ -115,6 +132,67 @@ async def handle_identity_report_archived(pool: asyncpg.Pool, event: dict[str, A
     log.info("Identity verification report archival recorded")
 
 
+def _first_check(lab: dict[str, Any], check_type: str) -> dict[str, Any]:
+    """The ``result.checks[]`` entry for ``check_type`` (``{}`` when absent)."""
+    result = lab.get("result")
+    checks = result.get("checks") if isinstance(result, dict) else None
+    for check in checks or []:
+        if isinstance(check, dict) and check.get("checkType") == check_type:
+            return check
+    return {}
+
+
+def _screening_result(lab: dict[str, Any], category: str) -> str | None:
+    """``pep`` / ``sanctions`` verdict from the first screening provider."""
+    for provider in _first_check(lab, "screening").get("providers") or []:
+        if not isinstance(provider, dict):
+            continue
+        detail = provider.get("detail")
+        block = detail.get(category) if isinstance(detail, dict) else None
+        if isinstance(block, dict) and block.get("result") is not None:
+            return str(block["result"])
+    return None
+
+
+def is_lab_v1_block(lab: dict[str, Any]) -> bool:
+    """True for a LAB Identity Verification API v1 ``Verification`` envelope."""
+    return "id" in lab and "result" in lab
+
+
+def lab_summary_columns(lab: dict[str, Any]) -> dict[str, Any]:
+    """Customer-row summary columns for either ``lab_verification`` shape."""
+    if is_lab_v1_block(lab):
+        providers = lab.get("provider") or []
+        first = providers[0] if providers and isinstance(providers[0], dict) else {}
+        result = lab.get("result") if isinstance(lab.get("result"), dict) else {}
+        identity = _first_check(lab, "identity")
+        screening = _first_check(lab, "screening")
+        return {
+            "identity_verification_overall_result": result.get("outcome"),
+            "identity_verification_provider": first.get("name"),
+            "identity_verification_provider_reference": first.get("reference"),
+            "identity_verification_lab_request_id": str(lab["id"]) if lab.get("id") else None,
+            "identity_verification_checked_at": coerce_date(lab.get("createdAt")),
+            "identity_verification_verification_number": lab.get("verificationNumber"),
+            "identity_verification_identity_outcome": identity.get("outcome"),
+            "identity_verification_screening_outcome": screening.get("outcome"),
+            "identity_verification_pep_result": _screening_result(lab, "pep"),
+            "identity_verification_sanctions_result": _screening_result(lab, "sanctions"),
+        }
+    request_id = lab.get("requestId")
+    return {
+        "identity_verification_overall_result": lab.get("overallResult"),
+        "identity_verification_provider": lab.get("provider"),
+        "identity_verification_provider_reference": lab.get("providerReference"),
+        "identity_verification_lab_request_id": str(request_id)
+        if request_id is not None
+        else None,
+        "identity_verification_checked_at": coerce_date(lab.get("requestDateTime")),
+        "identity_verification_pep_result": lab.get("pepResult"),
+        "identity_verification_sanctions_result": lab.get("sanctionsResult"),
+    }
+
+
 async def mirror_lab_verification(
     pool: asyncpg.Pool, customer_id: str | None, lab: dict[str, Any]
 ) -> None:
@@ -122,14 +200,14 @@ async def mirror_lab_verification(
 
     The full verbatim block stays in ``conversations.assessments_identity_risk``
     (stored whole by ``handle_assessment``); this lifts the summary the customer
-    details view shows. Field names mirror the LAB EVS API response.
+    details view shows. See ``lab_summary_columns`` for both block shapes.
     """
     canonical_id = await resolve_canonical_customer_id(pool, customer_id)
     if not canonical_id:
         logger.warning("lab_verification block without customer id — no customer mirror")
         return
 
-    request_id = lab.get("requestId")
+    summary = lab_summary_columns(lab)
     now = datetime.now(UTC)
     await upsert(
         pool,
@@ -137,13 +215,7 @@ async def mirror_lab_verification(
         conflict_columns=["customer_id"],
         values={
             "customer_id": canonical_id,
-            "identity_verification_overall_result": lab.get("overallResult"),
-            "identity_verification_provider": lab.get("provider"),
-            "identity_verification_provider_reference": lab.get("providerReference"),
-            "identity_verification_lab_request_id": str(request_id)
-            if request_id is not None
-            else None,
-            "identity_verification_checked_at": coerce_date(lab.get("requestDateTime")),
+            **summary,
             "updated_at": now,
             "created_at": now,
         },
@@ -152,5 +224,6 @@ async def mirror_lab_verification(
     logger.info(
         "Mirrored lab verification onto customer",
         customer_id=canonical_id,
-        overall_result=lab.get("overallResult"),
+        overall_result=summary.get("identity_verification_overall_result"),
+        shape="v1" if is_lab_v1_block(lab) else "legacy",
     )

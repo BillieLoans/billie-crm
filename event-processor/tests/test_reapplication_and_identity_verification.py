@@ -465,6 +465,45 @@ class TestIdentityReportArchived:
         assert not mock_pool.inserts_into("conversations")
         assert mock_pool.last_insert("customers")["identity_verification_report_archived"] is True
 
+    @pytest.mark.asyncio
+    async def test_v1_screening_report_and_verification_number(self, mock_pool):
+        mock_pool.set_fetchval_sequence(["CONV-ARCH-001", None])
+        payload = dict(self.ARCHIVED_PAYLOAD)
+        payload["lab_request_id"] = "9c63b029-d3a9-4d0c-90d8-fdcca3aad5de"
+        payload["verification_number"] = "V60000296"
+        payload["screening_report"] = {
+            "file_location": (
+                "s3://bucket/871CE08C-8B6/IdentityVerification/"
+                "verification_report_screening_x.pdf"
+            ),
+            "file_name": "verification_report_screening_x.pdf",
+        }
+        await handle_identity_report_archived(
+            mock_pool, {"typ": "identity_verification.report.archived.v1", "payload": payload}
+        )
+        conv = mock_pool.last_insert("conversations")
+        assert conv["identity_verification_report_lab_request_id"] == (
+            "9c63b029-d3a9-4d0c-90d8-fdcca3aad5de"
+        )
+        assert conv["identity_verification_report_verification_number"] == "V60000296"
+        assert conv["identity_verification_report_screening_report_file_name"] == (
+            "verification_report_screening_x.pdf"
+        )
+        assert conv["identity_verification_report_screening_report_file_location"].endswith(
+            ".pdf"
+        )
+
+    @pytest.mark.asyncio
+    async def test_legacy_payload_leaves_screening_columns_null(self, mock_pool):
+        mock_pool.set_fetchval_sequence(["CONV-ARCH-001", None])
+        await handle_identity_report_archived(
+            mock_pool,
+            {"typ": "identity_verification.report.archived.v1", "payload": dict(self.ARCHIVED_PAYLOAD)},
+        )
+        conv = mock_pool.last_insert("conversations")
+        assert conv["identity_verification_report_verification_number"] is None
+        assert conv["identity_verification_report_screening_report_file_location"] is None
+
 
 class TestLabVerificationMirror:
     LAB_BLOCK = {
@@ -509,6 +548,95 @@ class TestLabVerificationMirror:
         assert cust["identity_verification_provider_reference"] == "260610-52BC8-A4A67"
         assert cust["identity_verification_lab_request_id"] == "468881"
         assert cust["identity_verification_checked_at"] is not None
+
+
+    LAB_BLOCK_V1 = {
+        "id": "9c63b029-d3a9-4d0c-90d8-fdcca3aad5de",
+        "verificationNumber": "V60000296",
+        "reference": "APP-1",
+        "status": "completed",
+        "createdAt": "2026-09-11T05:13:09Z",
+        "updatedAt": "2026-09-11T05:13:09Z",
+        "result": {
+            "outcome": "refer",
+            "checks": [
+                {"checkType": "identity", "outcome": "pass", "providers": []},
+                {
+                    "checkType": "screening",
+                    "outcome": "refer",
+                    "reasons": [{"code": "SCREENING_HIT", "message": "Potential match"}],
+                    "providers": [
+                        {
+                            "provider": "IDMatrix",
+                            "outcome": "refer",
+                            "detail": {
+                                "pep": {"result": "match"},
+                                "sanctions": {"result": "no_match"},
+                            },
+                        }
+                    ],
+                },
+            ],
+        },
+        "provider": [{"name": "IDMatrix", "reference": "260212-E3106-FD08B"}],
+        "links": {},
+    }
+
+    @pytest.mark.asyncio
+    async def test_v1_block_mirrors_summary_columns(self, mock_pool):
+        event = {
+            "typ": "identityRisk_assessment",
+            "cid": "CONV-1",
+            "usr": "4A8C91AB",
+            "payload": {"decision": "DECLINED", "lab_verification": dict(self.LAB_BLOCK_V1)},
+        }
+        await handle_assessment(mock_pool, event)
+        cust = mock_pool.last_insert("customers")
+        assert cust["customer_id"] == "4A8C91AB"
+        assert cust["identity_verification_overall_result"] == "refer"
+        assert cust["identity_verification_provider"] == "IDMatrix"
+        assert cust["identity_verification_provider_reference"] == "260212-E3106-FD08B"
+        assert cust["identity_verification_lab_request_id"] == (
+            "9c63b029-d3a9-4d0c-90d8-fdcca3aad5de"
+        )
+        assert cust["identity_verification_verification_number"] == "V60000296"
+        assert cust["identity_verification_identity_outcome"] == "pass"
+        assert cust["identity_verification_screening_outcome"] == "refer"
+        assert cust["identity_verification_pep_result"] == "match"
+        assert cust["identity_verification_sanctions_result"] == "no_match"
+        assert cust["identity_verification_checked_at"] is not None
+
+    @pytest.mark.asyncio
+    async def test_v1_block_without_screening_leaves_nulls(self, mock_pool):
+        block = dict(self.LAB_BLOCK_V1)
+        block["result"] = {"outcome": "pass", "checks": [self.LAB_BLOCK_V1["result"]["checks"][0]]}
+        event = {
+            "typ": "identityRisk_assessment",
+            "cid": "CONV-1",
+            "usr": "4A8C91AB",
+            "payload": {"decision": "APPROVED", "lab_verification": block},
+        }
+        await handle_assessment(mock_pool, event)
+        cust = mock_pool.last_insert("customers")
+        assert cust["identity_verification_overall_result"] == "pass"
+        assert cust["identity_verification_identity_outcome"] == "pass"
+        assert cust["identity_verification_screening_outcome"] is None
+        assert cust["identity_verification_pep_result"] is None
+        assert cust["identity_verification_sanctions_result"] is None
+
+    @pytest.mark.asyncio
+    async def test_legacy_block_mirrors_screening_results(self, mock_pool):
+        event = {
+            "typ": "identityRisk_assessment",
+            "cid": "CONV-1",
+            "usr": "4A8C91AB",
+            "payload": {"decision": "PASS", "lab_verification": dict(self.LAB_BLOCK)},
+        }
+        await handle_assessment(mock_pool, event)
+        cust = mock_pool.last_insert("customers")
+        assert cust["identity_verification_pep_result"] == "no-match"
+        assert cust["identity_verification_sanctions_result"] == "no-match"
+        assert "identity_verification_verification_number" not in cust
 
     @pytest.mark.asyncio
     async def test_identity_risk_without_lab_verification_no_mirror(self, mock_pool):
