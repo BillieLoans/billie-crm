@@ -27,6 +27,13 @@ const ARTIFACTS = {
 } as const
 type Artifact = keyof typeof ARTIFACTS
 
+/** Stored file-name field and fallback name per artifact (drives Content-Type). */
+const FILE_NAMES: Record<Artifact, readonly [string, string]> = {
+  report: ['reportFileName', 'verification_report.pdf'],
+  screening: ['screeningReportFileName', 'verification_report_screening.pdf'],
+  raw: ['rawResponseFileName', 'verify_response.json'],
+}
+
 interface RouteParams {
   params: Promise<{ customerId: string }>
 }
@@ -36,7 +43,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const artifact = (request.nextUrl.searchParams.get('artifact') ?? 'report') as Artifact
   const disposition = request.nextUrl.searchParams.get('disposition') ?? 'inline'
 
-  if (!(artifact in ARTIFACTS)) {
+  if (!Object.hasOwn(ARTIFACTS, artifact)) {
     return NextResponse.json(
       { error: { code: 'BAD_REQUEST', message: 'Invalid artifact.' } },
       { status: 400 },
@@ -115,11 +122,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    const fallbackName = artifact === 'report' ? 'verification_report.pdf' : 'verify_response.json'
-    const filename =
-      (artifact === 'report' ? ivr?.reportFileName : ivr?.rawResponseFileName) ||
-      s3Uri.split('/').pop() ||
-      fallbackName
+    const [nameField, fallbackName] = FILE_NAMES[artifact]
+    const filename = ivr?.[nameField] || s3Uri.split('/').pop() || fallbackName
     const contentType = filename.toLowerCase().endsWith('.json')
       ? 'application/json'
       : filename.toLowerCase().endsWith('.pdf')

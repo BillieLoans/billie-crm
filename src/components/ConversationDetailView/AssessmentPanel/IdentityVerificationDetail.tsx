@@ -111,13 +111,13 @@ function IdentitySources({ sources }: { sources: IdentitySource[] }) {
       <table className={styles.table} data-testid="identity-sources">
         <thead>
           <tr>
-            <th>Source</th>
-            <th>DVS</th>
-            <th>Result</th>
-            <th>Name</th>
-            <th>Address</th>
-            <th>DOB</th>
-            <th>Doc ID</th>
+            <th scope="col">Source</th>
+            <th scope="col">DVS</th>
+            <th scope="col">Result</th>
+            <th scope="col">Name</th>
+            <th scope="col">Address</th>
+            <th scope="col">DOB</th>
+            <th scope="col">Doc ID</th>
           </tr>
         </thead>
         <tbody>
@@ -195,13 +195,13 @@ function ScreeningCategoryPanel({
                 <table className={styles.table}>
                   <thead>
                     <tr>
-                      <th>Listed name</th>
-                      <th>Title</th>
-                      <th>List</th>
-                      <th>Country</th>
-                      <th>Listed</th>
-                      <th>Updated</th>
-                      <th>Ref / version</th>
+                      <th scope="col">Listed name</th>
+                      <th scope="col">Title</th>
+                      <th scope="col">List</th>
+                      <th scope="col">Country</th>
+                      <th scope="col">Listed</th>
+                      <th scope="col">Updated</th>
+                      <th scope="col">Ref / version</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -214,7 +214,7 @@ function ScreeningCategoryPanel({
                               {Object.entries(listing.attributes).map(([k, v]) => (
                                 <React.Fragment key={k}>
                                   <dt>{k}</dt>
-                                  <dd>{String(v)}</dd>
+                                  <dd>{typeof v === 'string' ? v : JSON.stringify(v)}</dd>
                                 </React.Fragment>
                               ))}
                             </dl>
@@ -303,13 +303,18 @@ function RawJson({ data }: { data: unknown }) {
         className={styles.rawToggle}
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
+        aria-controls="identity-raw-json"
       >
         Raw JSON data
         <span className={`${styles.rawChevron} ${open ? styles.rawChevronOpen : ''}`} aria-hidden="true">
           ▶
         </span>
       </button>
-      {open && <pre className={styles.rawJson}>{JSON.stringify(data, null, 2)}</pre>}
+      {open && (
+        <pre id="identity-raw-json" className={styles.rawJson}>
+          {JSON.stringify(data, null, 2)}
+        </pre>
+      )}
     </div>
   )
 }

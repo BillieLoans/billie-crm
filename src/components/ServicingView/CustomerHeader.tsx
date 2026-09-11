@@ -85,6 +85,12 @@ export const CustomerHeader: React.FC<CustomerHeaderProps> = ({ customer }) => {
   const verificationPassed = overallResult ? /pass/i.test(overallResult) : null
   const verificationReferred = overallResult ? /refer/i.test(overallResult) : false
   const reportBase = `/api/customer/${encodeURIComponent(customer.customerId)}/identity-report`
+  // Per-check screening PDFs only exist for LAB API v1 verifications, which are
+  // the only ones that carry a verificationNumber; legacy customers have a
+  // single merged report.
+  const screeningReportAvailable = Boolean(
+    verification?.reportArchived && verification?.verificationNumber,
+  )
   const screeningClass = (value: string | null | undefined) => {
     switch (resultTone(value, 'screening')) {
       case 'pass':
@@ -277,16 +283,20 @@ export const CustomerHeader: React.FC<CustomerHeaderProps> = ({ customer }) => {
                   >
                     View report ⤢
                   </a>
-                  <span aria-hidden> · </span>
-                  <a
-                    href={`${reportBase}?artifact=screening`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={styles.reportLink}
-                    data-testid="view-screening-report"
-                  >
-                    Screening ⤢
-                  </a>
+                  {screeningReportAvailable && (
+                    <>
+                      <span aria-hidden> · </span>
+                      <a
+                        href={`${reportBase}?artifact=screening`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={styles.reportLink}
+                        data-testid="view-screening-report"
+                      >
+                        Screening ⤢
+                      </a>
+                    </>
+                  )}
                   <span aria-hidden> · </span>
                   <a
                     href={`${reportBase}?artifact=raw&disposition=attachment`}

@@ -154,6 +154,19 @@ def _screening_result(lab: dict[str, Any], category: str) -> str | None:
     return None
 
 
+# Monotonic guard for the customer identity mirror: two prod machines process
+# the inbox concurrently and dedup is not exactly-once (event-processor
+# AGENTS.md), so a replayed OLDER verification (legacy or v1) must never
+# overwrite the columns of a NEWER one. Rows without a checked_at on either
+# side are always written (legacy events lacking requestDateTime).
+CHECKED_AT_GUARD = (
+    "EXCLUDED.identity_verification_checked_at IS NULL "
+    "OR customers.identity_verification_checked_at IS NULL "
+    "OR EXCLUDED.identity_verification_checked_at "
+    ">= customers.identity_verification_checked_at"
+)
+
+
 def is_lab_v1_block(lab: dict[str, Any]) -> bool:
     """True for a LAB Identity Verification API v1 ``Verification`` envelope."""
     return "id" in lab and "result" in lab
@@ -209,7 +222,7 @@ async def mirror_lab_verification(
 
     summary = lab_summary_columns(lab)
     now = datetime.now(UTC)
-    await upsert(
+    tag = await upsert(
         pool,
         "customers",
         conflict_columns=["customer_id"],
@@ -220,7 +233,14 @@ async def mirror_lab_verification(
             "created_at": now,
         },
         insert_only_columns=["created_at"],
+        update_where=CHECKED_AT_GUARD,
     )
+    if str(tag).endswith(" 0"):
+        logger.info(
+            "Stale lab_verification ignored (stored verification is newer)",
+            customer_id=canonical_id,
+        )
+        return
     logger.info(
         "Mirrored lab verification onto customer",
         customer_id=canonical_id,

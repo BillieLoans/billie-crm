@@ -625,6 +625,22 @@ class TestLabVerificationMirror:
         assert cust["identity_verification_sanctions_result"] is None
 
     @pytest.mark.asyncio
+    async def test_mirror_is_guarded_by_checked_at(self, mock_pool):
+        """A replayed older verification must not overwrite a newer mirror."""
+        event = {
+            "typ": "identityRisk_assessment",
+            "cid": "CONV-1",
+            "usr": "4A8C91AB",
+            "payload": {"decision": "DECLINED", "lab_verification": dict(self.LAB_BLOCK_V1)},
+        }
+        await handle_assessment(mock_pool, event)
+        call = mock_pool.calls_against("customers")[-1]
+        assert call.op == "INSERT"
+        assert "identity_verification_checked_at >= customers.identity_verification_checked_at" in (
+            call.sql
+        )
+
+    @pytest.mark.asyncio
     async def test_legacy_block_mirrors_screening_results(self, mock_pool):
         event = {
             "typ": "identityRisk_assessment",

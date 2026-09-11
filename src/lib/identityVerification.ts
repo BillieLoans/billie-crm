@@ -217,8 +217,7 @@ export function resultTone(
   if (context === 'screening') {
     switch (v) {
       case 'no_match':
-      case 'no-match':
-      case 'clear':
+      case 'no-match': // legacy EVS spelling
         return 'pass'
       case 'match':
         return 'fail'

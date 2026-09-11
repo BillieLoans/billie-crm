@@ -138,6 +138,22 @@ describe('CustomerHeader identity verification (PR #67)', () => {
     )
   })
 
+  test('legacy customer with an archived report gets no screening link', () => {
+    renderHeader(
+      createMockCustomer({
+        identityVerification: {
+          overallResult: 'Passed',
+          provider: 'IDMatrix',
+          providerReference: '260610-52BC8-A4A67',
+          reportArchived: true,
+        },
+      }),
+    )
+    expand()
+    expect(screen.getByTestId('view-identity-report')).toBeInTheDocument()
+    expect(screen.queryByTestId('view-screening-report')).not.toBeInTheDocument()
+  })
+
   test('LAB API v1 rows fall back to em-dashes without the v1 fields', () => {
     renderHeader(
       createMockCustomer({
