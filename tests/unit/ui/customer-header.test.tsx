@@ -105,6 +105,52 @@ describe('CustomerHeader identity verification (PR #67)', () => {
     expect(screen.queryByTestId('view-identity-report')).not.toBeInTheDocument()
   })
 
+  test('LAB API v1: verification number, PEP / sanctions rows and screening report link', () => {
+    renderHeader(
+      createMockCustomer({
+        identityVerification: {
+          overallResult: 'refer',
+          provider: 'IDMatrix',
+          providerReference: '260212-E3106-FD08B',
+          labRequestId: '9c63b029-d3a9-4d0c-90d8-fdcca3aad5de',
+          verificationNumber: 'V60000296',
+          identityOutcome: 'pass',
+          screeningOutcome: 'refer',
+          pepResult: 'no_match',
+          sanctionsResult: 'match',
+          checkedAt: '2026-09-11T05:13:09+00:00',
+          reportArchived: true,
+        },
+      }),
+    )
+    expand()
+    expect(screen.getByText('! refer · IDMatrix')).toBeInTheDocument()
+    expect(screen.getByTestId('identity-verification-number')).toHaveTextContent('V60000296')
+    const pep = screen.getByTestId('identity-pep')
+    expect(pep).toHaveTextContent('no match')
+    expect(pep.querySelector('[class*="idvPass"]')).not.toBeNull()
+    const sanctions = screen.getByTestId('identity-sanctions')
+    expect(sanctions).toHaveTextContent('match')
+    expect(sanctions.querySelector('[class*="idvFail"]')).not.toBeNull()
+    expect(screen.getByTestId('view-screening-report')).toHaveAttribute(
+      'href',
+      '/api/customer/CUST-12345/identity-report?artifact=screening',
+    )
+  })
+
+  test('LAB API v1 rows fall back to em-dashes without the v1 fields', () => {
+    renderHeader(
+      createMockCustomer({
+        identityVerification: { overallResult: 'Passed', provider: 'IDMatrix', reportArchived: false },
+      }),
+    )
+    expand()
+    expect(screen.getByTestId('identity-verification-number')).toHaveTextContent('—')
+    expect(screen.getByTestId('identity-pep')).toHaveTextContent('—')
+    expect(screen.getByTestId('identity-sanctions')).toHaveTextContent('—')
+    expect(screen.queryByTestId('view-screening-report')).not.toBeInTheDocument()
+  })
+
   test('verified result without archived report shows result but no links', () => {
     renderHeader(
       createMockCustomer({

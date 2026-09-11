@@ -197,6 +197,12 @@
   font-weight: 600;
 }
 
+/* LAB API v1: refer / inconclusive — needs a human decision */
+.idvWarn {
+  color: #b45309;
+  font-weight: 600;
+}
+
 .reportLinks {
   font-size: 13px;
 }

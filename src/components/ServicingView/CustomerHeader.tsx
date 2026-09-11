@@ -5,6 +5,7 @@ import type { CustomerData } from '@/hooks/queries/useCustomer'
 import { getAddressForMapLink, getGoogleMapsUrl } from '@/lib/utils'
 import { formatDateMedium } from '@/lib/formatters'
 import { CopyButton } from '@/components/ui'
+import { resultTone } from '@/lib/identityVerification'
 import { NotificationStatusPill } from './NotificationControls/NotificationStatusPill'
 import styles from './CustomerHeader.module.css'
 
@@ -80,8 +81,22 @@ export const CustomerHeader: React.FC<CustomerHeaderProps> = ({ customer }) => {
   // report links only appear once the archive event lands (reportArchived).
   const verification = customer.identityVerification
   const overallResult = verification?.overallResult ?? null
+  // LAB API v1 outcomes are pass / fail / refer; legacy EVS was Passed / Failed.
   const verificationPassed = overallResult ? /pass/i.test(overallResult) : null
+  const verificationReferred = overallResult ? /refer/i.test(overallResult) : false
   const reportBase = `/api/customer/${encodeURIComponent(customer.customerId)}/identity-report`
+  const screeningClass = (value: string | null | undefined) => {
+    switch (resultTone(value, 'screening')) {
+      case 'pass':
+        return styles.idvPass
+      case 'fail':
+        return styles.idvFail
+      case 'warn':
+        return styles.idvWarn
+      default:
+        return ''
+    }
+  }
 
   return (
     <div className={styles.headerCard} data-testid="customer-header">
@@ -191,11 +206,13 @@ export const CustomerHeader: React.FC<CustomerHeaderProps> = ({ customer }) => {
                     ? ''
                     : verificationPassed
                       ? styles.idvPass
-                      : styles.idvFail
+                      : verificationReferred
+                        ? styles.idvWarn
+                        : styles.idvFail
                 }`}
               >
                 {overallResult
-                  ? `${verificationPassed ? '✓' : '✗'} ${overallResult}${
+                  ? `${verificationPassed ? '✓' : verificationReferred ? '!' : '✗'} ${overallResult}${
                       verification?.provider ? ` · ${verification.provider}` : ''
                     }`
                   : '—'}
@@ -205,6 +222,34 @@ export const CustomerHeader: React.FC<CustomerHeaderProps> = ({ customer }) => {
               <span className={styles.detailLabel}>Checked</span>
               <span className={styles.detailValue}>
                 {verification?.checkedAt ? formatDateMedium(verification.checkedAt) : '—'}
+              </span>
+            </div>
+            <div className={styles.detailItem} data-testid="identity-verification-number">
+              <span className={styles.detailLabel}>Verification</span>
+              <span className={styles.detailValueWithIcon}>
+                <span>{verification?.verificationNumber ?? '—'}</span>
+                {verification?.verificationNumber && (
+                  <CopyButton
+                    value={verification.verificationNumber}
+                    label="Copy verification number"
+                  />
+                )}
+              </span>
+            </div>
+            <div className={styles.detailItem} data-testid="identity-pep">
+              <span className={styles.detailLabel}>PEP</span>
+              <span className={`${styles.detailValue} ${screeningClass(verification?.pepResult)}`}>
+                {verification?.pepResult ? verification.pepResult.replace(/_/g, ' ') : '—'}
+              </span>
+            </div>
+            <div className={styles.detailItem} data-testid="identity-sanctions">
+              <span className={styles.detailLabel}>Sanctions</span>
+              <span
+                className={`${styles.detailValue} ${screeningClass(verification?.sanctionsResult)}`}
+              >
+                {verification?.sanctionsResult
+                  ? verification.sanctionsResult.replace(/_/g, ' ')
+                  : '—'}
               </span>
             </div>
             <div className={styles.detailItem}>
@@ -231,6 +276,16 @@ export const CustomerHeader: React.FC<CustomerHeaderProps> = ({ customer }) => {
                     data-testid="view-identity-report"
                   >
                     View report ⤢
+                  </a>
+                  <span aria-hidden> · </span>
+                  <a
+                    href={`${reportBase}?artifact=screening`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={styles.reportLink}
+                    data-testid="view-screening-report"
+                  >
+                    Screening ⤢
                   </a>
                   <span aria-hidden> · </span>
                   <a
