@@ -1,4 +1,4 @@
-import { describe, test, expect, afterEach } from 'vitest'
+import { describe, test, expect, afterEach, vi } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import React from 'react'
@@ -152,6 +152,75 @@ describe('CustomerHeader identity verification (PR #67)', () => {
     expand()
     expect(screen.getByTestId('view-identity-report')).toBeInTheDocument()
     expect(screen.queryByTestId('view-screening-report')).not.toBeInTheDocument()
+  })
+
+  test('KYC/AML fields are grouped in their own section with a detail button', () => {
+    renderHeader(
+      createMockCustomer({
+        identityVerification: {
+          overallResult: 'pass',
+          provider: 'IDMatrix',
+          verificationNumber: 'V60000296',
+          pepResult: 'no_match',
+          sanctionsResult: 'no_match',
+          reportArchived: true,
+        },
+      }),
+    )
+    expand()
+    const group = screen.getByTestId('identity-group')
+    expect(group).toHaveTextContent('Identity & screening')
+    for (const id of [
+      'identity-verification',
+      'identity-verification-number',
+      'identity-pep',
+      'identity-sanctions',
+    ]) {
+      expect(group).toContainElement(screen.getByTestId(id))
+    }
+    expect(group).toHaveTextContent('Reference')
+    expect(group).toHaveTextContent('Report')
+    // Personal details stay outside the KYC group
+    expect(group).not.toHaveTextContent('Date of Birth')
+    expect(screen.getByTestId('view-identity-check')).toBeInTheDocument()
+  })
+
+  test('detail button opens the drawer, which fetches the identity check', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        conversationId: 'conv-1',
+        applicationNumber: 'APP-1',
+        assessedAt: null,
+        identity: { decision: 'APPROVED' },
+        report: {},
+      }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      renderHeader(
+        createMockCustomer({
+          identityVerification: { overallResult: 'pass', provider: 'IDMatrix' },
+        }),
+      )
+      expand()
+      // Other header widgets (notification pill) fetch too — only the drawer's
+      // endpoint must stay untouched until the button is clicked.
+      expect(fetchMock).not.toHaveBeenCalledWith('/api/customer/CUST-12345/identity-verification')
+      fireEvent.click(screen.getByTestId('view-identity-check'))
+      expect(fetchMock).toHaveBeenCalledWith('/api/customer/CUST-12345/identity-verification')
+      expect(await screen.findByTestId('identity-decision')).toHaveTextContent('APPROVED')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  test('no detail button before any verification', () => {
+    renderHeader(createMockCustomer())
+    expand()
+    expect(screen.getByTestId('identity-group')).toBeInTheDocument()
+    expect(screen.queryByTestId('view-identity-check')).not.toBeInTheDocument()
   })
 
   test('LAB API v1 rows fall back to em-dashes without the v1 fields', () => {

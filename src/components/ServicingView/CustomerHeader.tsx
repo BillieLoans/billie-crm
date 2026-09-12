@@ -7,6 +7,7 @@ import { formatDateMedium } from '@/lib/formatters'
 import { CopyButton } from '@/components/ui'
 import { resultTone } from '@/lib/identityVerification'
 import { NotificationStatusPill } from './NotificationControls/NotificationStatusPill'
+import { IdentityVerificationDrawer } from './IdentityVerificationDrawer'
 import styles from './CustomerHeader.module.css'
 
 export interface CustomerHeaderProps {
@@ -35,10 +36,10 @@ function formatDateOfBirth(dateString: string | null): string {
  */
 function formatAddress(address: CustomerData['residentialAddress']): string {
   if (!address) return '—'
-  
+
   // Use full address if available
   if (address.fullAddress) return address.fullAddress
-  
+
   // Build from parts
   const parts: string[] = []
   if (address.street) parts.push(address.street)
@@ -50,7 +51,7 @@ function formatAddress(address: CustomerData['residentialAddress']): string {
   } else if (address.postcode) {
     parts.push(address.postcode)
   }
-  
+
   return parts.length > 0 ? parts.join(', ') : '—'
 }
 
@@ -60,13 +61,15 @@ function formatAddress(address: CustomerData['residentialAddress']): string {
  */
 export const CustomerHeader: React.FC<CustomerHeaderProps> = ({ customer }) => {
   const [isExpanded, setIsExpanded] = useState(false)
+  const [showIdentityDetail, setShowIdentityDetail] = useState(false)
 
-  const initials = customer.fullName
-    ?.split(' ')
-    .map((n) => n[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase() || '?'
+  const initials =
+    customer.fullName
+      ?.split(' ')
+      .map((n) => n[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase() || '?'
 
   // Check for any identity flags
   const hasFlags =
@@ -192,7 +195,16 @@ export const CustomerHeader: React.FC<CustomerHeaderProps> = ({ customer }) => {
                       title="View on Google Maps"
                       aria-label="View address on Google Maps"
                     >
-                      <svg className={styles.detailIconLinkSvg} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                      <svg
+                        className={styles.detailIconLinkSvg}
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden
+                      >
                         <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
                         <polyline points="15 3 21 3 21 9" />
                         <line x1="10" y1="14" x2="21" y2="3" />
@@ -202,115 +214,140 @@ export const CustomerHeader: React.FC<CustomerHeaderProps> = ({ customer }) => {
                 })()}
               </span>
             </div>
+          </div>
 
-            {/* Identity verification (LAB EVS, PR #67) */}
-            <div className={styles.detailItem} data-testid="identity-verification">
-              <span className={styles.detailLabel}>Identity check</span>
-              <span
-                className={`${styles.detailValue} ${
-                  verificationPassed == null
-                    ? ''
-                    : verificationPassed
-                      ? styles.idvPass
-                      : verificationReferred
-                        ? styles.idvWarn
-                        : styles.idvFail
-                }`}
-              >
-                {overallResult
-                  ? `${verificationPassed ? '✓' : verificationReferred ? '!' : '✗'} ${overallResult}${
-                      verification?.provider ? ` · ${verification.provider}` : ''
-                    }`
-                  : '—'}
-              </span>
-            </div>
-            <div className={styles.detailItem}>
-              <span className={styles.detailLabel}>Checked</span>
-              <span className={styles.detailValue}>
-                {verification?.checkedAt ? formatDateMedium(verification.checkedAt) : '—'}
-              </span>
-            </div>
-            <div className={styles.detailItem} data-testid="identity-verification-number">
-              <span className={styles.detailLabel}>Verification</span>
-              <span className={styles.detailValueWithIcon}>
-                <span>{verification?.verificationNumber ?? '—'}</span>
-                {verification?.verificationNumber && (
-                  <CopyButton
-                    value={verification.verificationNumber}
-                    label="Copy verification number"
-                  />
-                )}
-              </span>
-            </div>
-            <div className={styles.detailItem} data-testid="identity-pep">
-              <span className={styles.detailLabel}>PEP</span>
-              <span className={`${styles.detailValue} ${screeningClass(verification?.pepResult)}`}>
-                {verification?.pepResult ? verification.pepResult.replace(/_/g, ' ') : '—'}
-              </span>
-            </div>
-            <div className={styles.detailItem} data-testid="identity-sanctions">
-              <span className={styles.detailLabel}>Sanctions</span>
-              <span
-                className={`${styles.detailValue} ${screeningClass(verification?.sanctionsResult)}`}
-              >
-                {verification?.sanctionsResult
-                  ? verification.sanctionsResult.replace(/_/g, ' ')
-                  : '—'}
-              </span>
-            </div>
-            <div className={styles.detailItem}>
-              <span className={styles.detailLabel}>Reference</span>
-              <span className={styles.detailValueWithIcon}>
-                <span>{verification?.providerReference ?? '—'}</span>
-                {verification?.providerReference && (
-                  <CopyButton
-                    value={verification.providerReference}
-                    label="Copy provider reference"
-                  />
-                )}
-              </span>
-            </div>
-            <div className={styles.detailItem}>
-              <span className={styles.detailLabel}>Report</span>
-              {verification?.reportArchived ? (
-                <span className={styles.reportLinks}>
-                  <a
-                    href={`${reportBase}?artifact=report`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={styles.reportLink}
-                    data-testid="view-identity-report"
-                  >
-                    View report ⤢
-                  </a>
-                  {screeningReportAvailable && (
-                    <>
-                      <span aria-hidden> · </span>
-                      <a
-                        href={`${reportBase}?artifact=screening`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={styles.reportLink}
-                        data-testid="view-screening-report"
-                      >
-                        Screening ⤢
-                      </a>
-                    </>
-                  )}
-                  <span aria-hidden> · </span>
-                  <a
-                    href={`${reportBase}?artifact=raw&disposition=attachment`}
-                    className={styles.reportLink}
-                    data-testid="download-identity-raw"
-                  >
-                    Raw JSON ⤓
-                  </a>
-                </span>
-              ) : (
-                <span className={styles.detailValue}>—</span>
+          {/* KYC / AML: identity verification + screening (LAB, PR #67 / API v1) */}
+          <section
+            className={styles.identityGroup}
+            data-testid="identity-group"
+            aria-labelledby="customer-identity-group-title"
+          >
+            <div className={styles.identityGroupHeader}>
+              <h3 id="customer-identity-group-title" className={styles.identityGroupTitle}>
+                Identity &amp; screening
+              </h3>
+              {overallResult && (
+                <button
+                  type="button"
+                  className={styles.identityDetailButton}
+                  onClick={() => setShowIdentityDetail(true)}
+                  data-testid="view-identity-check"
+                >
+                  View identity check →
+                </button>
               )}
             </div>
-          </div>
+            <div className={styles.detailsGrid}>
+              <div className={styles.detailItem} data-testid="identity-verification">
+                <span className={styles.detailLabel}>Identity check</span>
+                <span
+                  className={`${styles.detailValue} ${
+                    verificationPassed == null
+                      ? ''
+                      : verificationPassed
+                        ? styles.idvPass
+                        : verificationReferred
+                          ? styles.idvWarn
+                          : styles.idvFail
+                  }`}
+                >
+                  {overallResult
+                    ? `${verificationPassed ? '✓' : verificationReferred ? '!' : '✗'} ${overallResult}${
+                        verification?.provider ? ` · ${verification.provider}` : ''
+                      }`
+                    : '—'}
+                </span>
+              </div>
+              <div className={styles.detailItem}>
+                <span className={styles.detailLabel}>Checked</span>
+                <span className={styles.detailValue}>
+                  {verification?.checkedAt ? formatDateMedium(verification.checkedAt) : '—'}
+                </span>
+              </div>
+              <div className={styles.detailItem} data-testid="identity-verification-number">
+                <span className={styles.detailLabel}>Verification</span>
+                <span className={styles.detailValueWithIcon}>
+                  <span>{verification?.verificationNumber ?? '—'}</span>
+                  {verification?.verificationNumber && (
+                    <CopyButton
+                      value={verification.verificationNumber}
+                      label="Copy verification number"
+                    />
+                  )}
+                </span>
+              </div>
+              <div className={styles.detailItem} data-testid="identity-pep">
+                <span className={styles.detailLabel}>PEP</span>
+                <span
+                  className={`${styles.detailValue} ${screeningClass(verification?.pepResult)}`}
+                >
+                  {verification?.pepResult ? verification.pepResult.replace(/_/g, ' ') : '—'}
+                </span>
+              </div>
+              <div className={styles.detailItem} data-testid="identity-sanctions">
+                <span className={styles.detailLabel}>Sanctions</span>
+                <span
+                  className={`${styles.detailValue} ${screeningClass(verification?.sanctionsResult)}`}
+                >
+                  {verification?.sanctionsResult
+                    ? verification.sanctionsResult.replace(/_/g, ' ')
+                    : '—'}
+                </span>
+              </div>
+              <div className={styles.detailItem}>
+                <span className={styles.detailLabel}>Reference</span>
+                <span className={styles.detailValueWithIcon}>
+                  <span>{verification?.providerReference ?? '—'}</span>
+                  {verification?.providerReference && (
+                    <CopyButton
+                      value={verification.providerReference}
+                      label="Copy provider reference"
+                    />
+                  )}
+                </span>
+              </div>
+              <div className={styles.detailItem}>
+                <span className={styles.detailLabel}>Report</span>
+                {verification?.reportArchived ? (
+                  <span className={styles.reportLinks}>
+                    <a
+                      href={`${reportBase}?artifact=report`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={styles.reportLink}
+                      data-testid="view-identity-report"
+                    >
+                      View report ⤢
+                    </a>
+                    {screeningReportAvailable && (
+                      <>
+                        <span aria-hidden> · </span>
+                        <a
+                          href={`${reportBase}?artifact=screening`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={styles.reportLink}
+                          data-testid="view-screening-report"
+                        >
+                          Screening ⤢
+                        </a>
+                      </>
+                    )}
+                    <span aria-hidden> · </span>
+                    <a
+                      href={`${reportBase}?artifact=raw&disposition=attachment`}
+                      className={styles.reportLink}
+                      data-testid="download-identity-raw"
+                    >
+                      Raw JSON ⤓
+                    </a>
+                  </span>
+                ) : (
+                  <span className={styles.detailValue}>—</span>
+                )}
+              </div>
+            </div>
+          </section>
 
           {/* All badges shown when expanded */}
           {hasFlags && (
@@ -334,6 +371,11 @@ export const CustomerHeader: React.FC<CustomerHeaderProps> = ({ customer }) => {
           )}
         </div>
       )}
+      <IdentityVerificationDrawer
+        customerId={customer.customerId}
+        isOpen={showIdentityDetail}
+        onClose={() => setShowIdentityDetail(false)}
+      />
     </div>
   )
 }

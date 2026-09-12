@@ -186,6 +186,47 @@
   gap: 8px;
 }
 
+/* KYC / AML group (LAB identity verification + screening) */
+.identityGroup {
+  border: 1px solid var(--theme-elevation-100, #e5e5e5);
+  border-radius: 8px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--theme-elevation-50, #fafafa);
+}
+
+.identityGroupHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.identityGroupTitle {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--theme-elevation-600, #666);
+}
+
+.identityDetailButton {
+  background: none;
+  border: 1px solid var(--theme-elevation-200, #ddd);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: #2563eb;
+  cursor: pointer;
+}
+.identityDetailButton:hover { background: var(--theme-elevation-100, #f3f4f6); }
+
 /* Identity verification (LAB EVS, PR #67) */
 .idvPass {
   color: #15803d;
