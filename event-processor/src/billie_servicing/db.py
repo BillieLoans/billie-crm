@@ -125,8 +125,12 @@ async def upsert_conversation(
     conversation_id: str,
     set_values: dict[str, Any],
     insert_only_values: dict[str, Any] | None = None,
+    update_where: str | None = None,
 ) -> None:
     """Upsert a conversations row, incrementing ``version`` on every conflict.
+
+    ``update_where`` is an optional predicate on the ``DO UPDATE`` branch
+    (``EXCLUDED.<col>`` vs ``conversations.<col>``) for monotonic guards.
 
     Conversations are append-heavy projections — most handlers update one or
     two columns while bumping ``version`` so the optimistic-concurrency layer
@@ -167,6 +171,8 @@ async def upsert_conversation(
         f"ON CONFLICT (conversation_id) DO UPDATE SET "
         f"{set_clause}, version = COALESCE(conversations.version, 1) + 1"
     )
+    if update_where:
+        sql += f" WHERE {update_where}"
     await target.execute(sql, *args)
 
 

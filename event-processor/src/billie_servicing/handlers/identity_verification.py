@@ -1,5 +1,9 @@
 """Identity verification archival handlers (PR #67, LAB API v1 2026-09).
 
+* ``identity_verification.attempt.v1`` (spec 2026-09-15) — one per LAB verify
+  call, including a first attempt that led to the one-document step-up. Merged
+  per attempt key into ``conversations.identity_verification_attempts`` (a
+  jsonb object keyed by LAB request id, or ``attempt-<n>`` without one).
 * ``identity_verification.report.archived.v1`` — emitted by identityRiskAgent
   after KYC artifacts (per-check report PDFs and/or raw response JSON) land in
   S3. The S3 locations are stored on the conversation (joined by
@@ -27,7 +31,7 @@ from typing import Any
 import asyncpg
 import structlog
 
-from ..db import coerce_date, upsert, upsert_conversation
+from ..db import coerce_date, merge_jsonb_entry, upsert, upsert_conversation
 from .identity import resolve_canonical_customer_id
 from .sanitize import parse_payload, safe_str
 
@@ -38,6 +42,89 @@ def _artifact(payload: dict[str, Any], key: str) -> dict[str, Any]:
     """Return the ``report`` / ``raw_response`` block — each independently nullable."""
     value = payload.get(key)
     return value if isinstance(value, dict) else {}
+
+
+ATTEMPT_FIELDS = (
+    "attempt_number",
+    "step_up",
+    "step_up_requested",
+    "document_types",
+    "decision",
+    "identity_verification_failed",
+    "screening_hit",
+    "pep_result",
+    "sanctions_result",
+    "lab_verification",
+    "lab_request_id",
+    "checked_at",
+)
+
+ATTEMPTS_COLUMN = "identity_verification_attempts"
+
+# Monotonic guard for the conversation-level "latest report" columns: attempt
+# 1's artifacts are archived too now, and the two prod machines may deliver
+# the archived events out of order — an older archive must never overwrite
+# the pointers of a newer one.
+REPORT_ARCHIVED_AT_GUARD = (
+    "EXCLUDED.identity_verification_report_archived_at IS NULL "
+    "OR conversations.identity_verification_report_archived_at IS NULL "
+    "OR EXCLUDED.identity_verification_report_archived_at "
+    ">= conversations.identity_verification_report_archived_at"
+)
+CUSTOMER_ARCHIVED_AT_GUARD = (
+    "EXCLUDED.identity_verification_archived_at IS NULL "
+    "OR customers.identity_verification_archived_at IS NULL "
+    "OR EXCLUDED.identity_verification_archived_at "
+    ">= customers.identity_verification_archived_at"
+)
+
+
+def attempt_key(lab_request_id: str | int | None, attempt_number: int | str | None) -> str:
+    """Attempt entry key: the LAB request id, else ``attempt-<n>`` (mock mode)."""
+    if lab_request_id not in (None, ""):
+        return str(lab_request_id)
+    return f"attempt-{attempt_number}"
+
+
+async def handle_identity_attempt(pool: asyncpg.Pool, event: dict[str, Any]) -> None:
+    """Handle ``identity_verification.attempt.v1`` (spec 2026-09-15).
+
+    Merges the attempt INTO its entry (never replaces it) so the archived
+    handler's artifact pointers survive whichever order the two events land.
+    """
+    # Imported here: conversation.py imports mirror_lab_verification from this
+    # module, so a top-level import would be circular.
+    from .conversation import _ensure_conversation_exists
+
+    payload = parse_payload(event)
+    conversation_id = safe_str(
+        event.get("cid") or event.get("conv") or event.get("conversation_id"),
+        "conversation_id",
+    )
+    if not conversation_id:
+        logger.warning("identity_verification.attempt.v1 without conversation id — skipped")
+        return
+    entry = {field: payload.get(field) for field in ATTEMPT_FIELDS}
+    key = attempt_key(payload.get("lab_request_id"), payload.get("attempt_number"))
+    async with pool.acquire() as conn, conn.transaction():
+        await _ensure_conversation_exists(conn, conversation_id, event)
+        await merge_jsonb_entry(
+            conn,
+            "conversations",
+            column=ATTEMPTS_COLUMN,
+            key_column="conversation_id",
+            key_value=conversation_id,
+            entry_key=key,
+            patch=entry,
+            bump_version=True,
+        )
+    logger.info(
+        "Identity verification attempt recorded",
+        conversation_id=conversation_id,
+        attempt=key,
+        attempt_number=entry.get("attempt_number"),
+        step_up_requested=entry.get("step_up_requested"),
+    )
 
 
 async def handle_identity_report_archived(pool: asyncpg.Pool, event: dict[str, Any]) -> None:
@@ -98,7 +185,28 @@ async def handle_identity_report_archived(pool: asyncpg.Pool, event: dict[str, A
                     payload.get("archived_at")
                 ),
             },
+            update_where=REPORT_ARCHIVED_AT_GUARD,
         )
+        # Spec 2026-09-15: the artifacts also belong to ONE attempt — merged
+        # under the LAB request id so the attempt row can link its report.
+        if lab_request_id not in (None, ""):
+            await merge_jsonb_entry(
+                pool,
+                "conversations",
+                column=ATTEMPTS_COLUMN,
+                key_column="conversation_id",
+                key_value=str(conversation_id),
+                entry_key=str(lab_request_id),
+                patch={
+                    "report_file_location": report.get("file_location"),
+                    "report_file_name": report.get("file_name"),
+                    "raw_response_file_location": raw_response.get("file_location"),
+                    "raw_response_file_name": raw_response.get("file_name"),
+                    "archived_at": payload.get("archived_at"),
+                    "attempt_number": payload.get("attempt_number"),
+                    "step_up": payload.get("step_up"),
+                },
+            )
     else:
         log.warning("No conversation found for archived identity report")
 
@@ -125,6 +233,7 @@ async def handle_identity_report_archived(pool: asyncpg.Pool, event: dict[str, A
                 "created_at": now,
             },
             insert_only_columns=["created_at"],
+            update_where=CUSTOMER_ARCHIVED_AT_GUARD,
         )
     else:
         log.warning("Archived identity report without customer id — no customer mirror")

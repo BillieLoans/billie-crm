@@ -73,7 +73,8 @@ from .handlers import (
     # Fraud risk handlers (fraud_risk.* from billieChat FraudRiskAgent)
     handle_fraud_risk_assessment,
     handle_fraud_risk_halt,
-    # Identity verification archival (PR #67)
+    # Identity verification attempts (spec 2026-09-15) + archival (PR #67)
+    handle_identity_attempt,
     handle_identity_report_archived,
     # Aging handler (platform → CRM read-only projection of arrears state)
     handle_loan_aging_updated,
@@ -227,6 +228,9 @@ def setup_handlers(processor: EventProcessor) -> None:
     processor.register_handler(
         "identity_verification.report.archived.v1", handle_identity_report_archived
     )
+    # One event per LAB verify call (spec 2026-09-15) — the first attempt
+    # behind a step-up never reaches identityRisk_assessment.
+    processor.register_handler("identity_verification.attempt.v1", handle_identity_attempt)
 
     # Summary
     processor.register_handler("conversation_summary", handle_conversation_summary)

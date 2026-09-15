@@ -9,9 +9,11 @@ import pytest
 
 from billie_servicing.db import merge_jsonb_entry
 
+from .conftest import MockPool
+
 
 @pytest.mark.asyncio
-async def test_merges_into_the_entry_not_over_it(mock_pool):
+async def test_merges_into_the_entry_not_over_it(mock_pool: MockPool) -> None:
     await merge_jsonb_entry(
         mock_pool,
         "conversations",
@@ -32,7 +34,7 @@ async def test_merges_into_the_entry_not_over_it(mock_pool):
 
 
 @pytest.mark.asyncio
-async def test_no_version_bump_by_default(mock_pool):
+async def test_no_version_bump_by_default(mock_pool: MockPool) -> None:
     await merge_jsonb_entry(
         mock_pool,
         "conversations",
