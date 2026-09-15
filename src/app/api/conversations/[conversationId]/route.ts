@@ -13,6 +13,7 @@ import { headers } from 'next/headers'
 import configPromise from '@payload-config'
 import { hasAnyRole, hasApprovalAuthority } from '@/lib/access'
 import { resolveActorDisplayName } from '@/lib/users'
+import { shapeAttempts } from '@/lib/identityAttempts'
 
 /** Safely convert a MongoDB Date or ISO string to ISO string, or null. */
 function toIso(val: unknown): string | null {
@@ -183,6 +184,8 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         screeningReportFileName: (ivr?.screeningReportFileName as string) ?? null,
         archivedAt: toIso(ivr?.archivedAt),
       },
+      // Spec 2026-09-15: one entry per LAB verify call (locations stripped).
+      identityVerificationAttempts: shapeAttempts(doc.identityVerificationAttempts),
       startedAt: toIso(doc.startedAt),
       updatedAt: toIso(doc.updatedAt),
       lastMessageAt: toIso(doc.lastUtteranceTime),

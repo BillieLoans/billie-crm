@@ -129,4 +129,58 @@ describe('GET /api/customer/[customerId]/identity-report', () => {
     expect((await call('artifact=toString')).status).toBe(400)
     expect(mockFind).not.toHaveBeenCalled()
   })
+
+  describe('attempt=<key> (spec 2026-09-15: per-attempt artifacts)', () => {
+    const ATTEMPTS = {
+      '60000650': {
+        attempt_number: 1,
+        report_file_location: 's3://bucket/APP1/IdentityVerification/verification_report_60000650.pdf',
+        report_file_name: 'verification_report_60000650.pdf',
+        raw_response_file_location: 's3://bucket/APP1/IdentityVerification/verify_response_60000650.json',
+        raw_response_file_name: 'verify_response_60000650.json',
+      },
+      '60000651': { attempt_number: 2 },
+    }
+
+    beforeEach(() => {
+      mockFind.mockResolvedValue({
+        docs: [{ identityVerificationAttempts: null }, { identityVerificationAttempts: ATTEMPTS }],
+      })
+    })
+
+    it('serves the attempt report from the attempts map', async () => {
+      const res = await call('attempt=60000650')
+      expect(res.status).toBe(200)
+      expect(res.headers['Content-Type']).toBe('application/pdf')
+      expect(res.headers['Content-Disposition']).toBe(
+        'inline; filename="verification_report_60000650.pdf"',
+      )
+      expect(mockGetObject).toHaveBeenCalledWith(ATTEMPTS['60000650'].report_file_location)
+      const query = mockFind.mock.calls[0][0]
+      expect(query.where.and[0]).toEqual({ customerIdString: { equals: 'C1' } })
+      expect(query.select).toEqual({ identityVerificationAttempts: true })
+    })
+
+    it('serves the attempt raw response as JSON', async () => {
+      const res = await call('attempt=60000650&artifact=raw&disposition=attachment')
+      expect(res.status).toBe(200)
+      expect(res.headers['Content-Type']).toBe('application/json')
+      expect(res.headers['Content-Disposition']).toBe(
+        'attachment; filename="verify_response_60000650.json"',
+      )
+    })
+
+    it('404s when the attempt has no such artifact', async () => {
+      expect((await call('attempt=60000651')).status).toBe(404)
+      expect((await call('attempt=unknown-key')).status).toBe(404)
+      expect(mockGetObject).not.toHaveBeenCalled()
+    })
+
+    it('400s on a malformed key or a screening artifact', async () => {
+      expect((await call('attempt=../etc')).status).toBe(400)
+      expect((await call('attempt=' + 'a'.repeat(65))).status).toBe(400)
+      expect((await call('attempt=60000650&artifact=screening')).status).toBe(400)
+      expect(mockFind).not.toHaveBeenCalled()
+    })
+  })
 })

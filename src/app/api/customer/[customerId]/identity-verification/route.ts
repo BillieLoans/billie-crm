@@ -4,7 +4,7 @@
  * The latest identity risk assessment for a customer, in the same shape the
  * application view renders (`IdentityVerificationDetail`): the verbatim
  * `identityRisk_assessment` payload (incl. the LAB `lab_verification` block)
- * plus archived-artifact availability. Resolved from the customer's most
+ * plus archived-artifact availability and the per-call attempts list. Resolved from the customer's most
  * recent conversation that carries an identity assessment — the verbatim block
  * lives on the conversation, the customer row only holds the summary mirror.
  *
@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
 import { hasAnyRole } from '@/lib/access'
 import { checkRateLimit, ASSESSMENT_RATE_LIMIT } from '@/lib/utils/rateLimit'
+import { shapeAttempts } from '@/lib/identityAttempts'
 
 interface RouteParams {
   params: Promise<{ customerId: string }>
@@ -56,6 +57,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         updatedAt: true,
         assessments: true,
         identityVerificationReport: true,
+        identityVerificationAttempts: true,
       },
     })
 
@@ -75,6 +77,8 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       applicationNumber: (doc.applicationNumber as string) ?? null,
       assessedAt: toIso(doc.updatedAt),
       identity,
+      // Spec 2026-09-15: every LAB verify call behind this assessment.
+      attempts: shapeAttempts(doc.identityVerificationAttempts),
       // Same shape as the conversation-detail API's identityVerificationReport.
       report: {
         labRequestId: (ivr?.labRequestId as string) ?? null,

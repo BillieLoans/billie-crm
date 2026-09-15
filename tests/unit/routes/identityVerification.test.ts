@@ -52,6 +52,24 @@ const DOC = {
     screeningReportFileName: 'screening.pdf',
     verificationNumber: 'V1',
   },
+  identityVerificationAttempts: {
+    '60000651': {
+      attempt_number: 2,
+      step_up: true,
+      document_types: ['DRIVERS_LICENCE', 'PASSPORT'],
+      decision: 'APPROVED',
+      lab_request_id: '60000651',
+      report_file_location: 's3://b/86332415/verification_report_60000651.pdf',
+      report_file_name: 'verification_report_60000651.pdf',
+    },
+    '60000650': {
+      attempt_number: 1,
+      step_up_requested: true,
+      document_types: ['DRIVERS_LICENCE'],
+      decision: 'DECLINED',
+      lab_request_id: '60000650',
+    },
+  },
 }
 
 describe('GET /api/customer/[customerId]/identity-verification', () => {
@@ -78,6 +96,22 @@ describe('GET /api/customer/[customerId]/identity-verification', () => {
     expect(query.sort).toBe('-updatedAt')
     expect(query.where.and[0]).toEqual({ customerIdString: { equals: 'C1' } })
     expect(query.where.and[1]).toEqual({ 'assessments.identityRisk': { exists: true } })
+  })
+
+  it('returns the attempts sorted by attempt number without S3 locations', async () => {
+    mockFind.mockResolvedValue({ docs: [DOC] })
+    const res = await call()
+    const attempts = res.body.attempts as Record<string, unknown>[]
+    expect(attempts.map((a) => a.attemptNumber)).toEqual([1, 2])
+    expect(attempts[0]).toMatchObject({ key: '60000650', decision: 'DECLINED', stepUpRequested: true })
+    expect(attempts[1]).toMatchObject({ key: '60000651', stepUp: true, reportAvailable: true })
+    expect(JSON.stringify(attempts)).not.toContain('s3://')
+    expect(mockFind.mock.calls[0][0].select.identityVerificationAttempts).toBe(true)
+  })
+
+  it('returns an empty attempts list for a conversation without any', async () => {
+    mockFind.mockResolvedValue({ docs: [{ ...DOC, identityVerificationAttempts: null }] })
+    expect((await call()).body.attempts).toEqual([])
   })
 
   it('404s when the customer has no assessed conversation', async () => {
