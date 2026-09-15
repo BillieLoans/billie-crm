@@ -389,6 +389,34 @@ export const Customers: CollectionConfig = {
           admin: { description: 'requestDateTime of the verification' },
         },
         {
+          // LAB Identity Verification API v1 (2026-09): per-check summary.
+          name: 'verificationNumber',
+          type: 'text',
+          admin: { description: 'LAB verificationNumber (V…) — quote in support queries' },
+        },
+        {
+          name: 'identityOutcome',
+          type: 'text',
+          admin: { description: 'identity check outcome: pass / fail / refer' },
+        },
+        {
+          name: 'screeningOutcome',
+          type: 'text',
+          admin: { description: 'screening check outcome: pass / fail / refer' },
+        },
+        {
+          name: 'pepResult',
+          type: 'text',
+          admin: { description: 'PEP screening: no_match / match / inconclusive / not_performed' },
+        },
+        {
+          name: 'sanctionsResult',
+          type: 'text',
+          admin: {
+            description: 'Sanctions screening: no_match / match / inconclusive / not_performed',
+          },
+        },
+        {
           name: 'reportArchived',
           type: 'checkbox',
           admin: { description: 'True once the report/raw response landed in S3' },

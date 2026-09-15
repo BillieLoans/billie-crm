@@ -16,6 +16,7 @@ import { DecisionBanner } from '../DecisionBanner'
 import type { AssessmentType } from '../AssessmentDetailView'
 import type { StatementSlot } from '@/hooks'
 import { AssessmentSection } from './AssessmentSection'
+import { IdentityVerificationDetail } from './IdentityVerificationDetail'
 import { LlmCostsSection } from '../LlmCostsSection'
 import styles from './styles.module.css'
 
@@ -301,7 +302,11 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
       {/* Identity */}
       <AssessmentSection title="Identity" summary={identitySummary}>
         {identity ? (
-          <pre className={styles.jsonPreview}>{JSON.stringify(identity, null, 2)}</pre>
+          <IdentityVerificationDetail
+            identity={identity}
+            report={conversation.identityVerificationReport ?? null}
+            customerId={customer?.customerId ?? null}
+          />
         ) : (
           <p>No identity assessment data.</p>
         )}

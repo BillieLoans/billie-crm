@@ -177,6 +177,10 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         reportFileName: (ivr?.reportFileName as string) ?? null,
         rawResponseAvailable: Boolean(ivr?.rawResponseFileLocation),
         rawResponseFileName: (ivr?.rawResponseFileName as string) ?? null,
+        // LAB API v1: reports are per check; the screening PDF is separate.
+        verificationNumber: (ivr?.verificationNumber as string) ?? null,
+        screeningReportAvailable: Boolean(ivr?.screeningReportFileLocation),
+        screeningReportFileName: (ivr?.screeningReportFileName as string) ?? null,
         archivedAt: toIso(ivr?.archivedAt),
       },
       startedAt: toIso(doc.startedAt),

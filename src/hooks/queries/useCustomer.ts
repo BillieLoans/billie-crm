@@ -128,6 +128,12 @@ export interface CustomerData {
     checkedAt?: string | null
     reportArchived?: boolean | null
     archivedAt?: string | null
+    /** LAB API v1 (2026-09): per-check summary. */
+    verificationNumber?: string | null
+    identityOutcome?: string | null
+    screeningOutcome?: string | null
+    pepResult?: string | null
+    sanctionsResult?: string | null
   } | null
   /** Latest HIGH/CRITICAL fraud-risk incident (billieChat FraudRiskAgent). */
   fraudRisk?: {
