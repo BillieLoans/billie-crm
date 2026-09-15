@@ -249,3 +249,34 @@
 :global([data-theme='dark']) .badgePass, :global([data-theme='dark']) .chipPass { background: #14532d; color: #dcfce7; }
 :global([data-theme='dark']) .badgeFail, :global([data-theme='dark']) .chipFail { background: #7f1d1d; color: #fee2e2; }
 :global([data-theme='dark']) .badgeWarn, :global([data-theme='dark']) .chipWarn { background: #713f12; color: #fef9c3; }
+
+/* ── Verification attempts (spec 2026-09-15) ── */
+.attempts { border: 1px solid var(--theme-elevation-150, #e5e7eb); border-radius: 8px; overflow: hidden; }
+.attemptsTitle {
+  padding: 8px 14px;
+  background: var(--theme-elevation-50, #fafafa);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--theme-elevation-600, #666);
+}
+.attemptRow { border-top: 1px solid var(--theme-elevation-150, #e5e7eb); }
+.attemptHead { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; padding: 8px 14px; }
+.attemptName { font-weight: 600; }
+.attemptMeta { color: var(--theme-elevation-600, #666); font-size: 12px; }
+.attemptSpacer { flex: 1; }
+.attemptFinal {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #14532d;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+.attemptToggle { background: none; border: none; font: inherit; font-size: 12px; color: #2563eb; cursor: pointer; padding: 0; }
+.attemptToggle:hover { text-decoration: underline; }
+.attemptBody { padding: 0 14px 12px; }

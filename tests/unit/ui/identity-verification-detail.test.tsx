@@ -4,7 +4,7 @@
  * no block at all).
  */
 import { describe, it, expect, afterEach } from 'vitest'
-import { render, screen, cleanup, within } from '@testing-library/react'
+import { render, screen, cleanup, within, fireEvent } from '@testing-library/react'
 import React from 'react'
 import { IdentityVerificationDetail } from '@/components/ConversationDetailView/AssessmentPanel/IdentityVerificationDetail'
 
@@ -327,5 +327,139 @@ describe('IdentityVerificationDetail — legacy and no-block assessments', () =>
     const block = screen.getByTestId('identity-no-block')
     expect(block).toHaveTextContent('PEP')
     expect(within(block).getByText('match')).toBeInTheDocument()
+  })
+})
+
+
+const legacyIdentity = () => ({
+  decision: 'APPROVED',
+  application_number: '86332415-5F3',
+  pepResult: 'no-match',
+  sanctionsResult: 'no-match',
+  lab_verification: {
+    requestId: '60000651',
+    overallResult: 'Passed',
+    provider: 'IDMatrix',
+    pepResult: 'no-match',
+    sanctionsResult: 'no-match',
+  },
+})
+
+const twoAttempts = () => [
+  {
+    key: '60000650',
+    attemptNumber: 1,
+    stepUp: false,
+    stepUpRequested: true,
+    documentTypes: ['DRIVERS_LICENCE'],
+    decision: 'DECLINED',
+    identityVerificationFailed: true,
+    screeningHit: false,
+    pepResult: 'no-match',
+    sanctionsResult: 'no-match',
+    labVerification: { requestId: '60000650', overallResult: 'Failed', provider: 'IDMatrix' },
+    labRequestId: '60000650',
+    checkedAt: '2026-09-15T00:00:00+00:00',
+    reportAvailable: true,
+    reportFileName: 'verification_report_60000650.pdf',
+    rawResponseAvailable: true,
+    rawResponseFileName: 'verify_response_60000650.json',
+    archivedAt: '2026-09-15T00:00:05+00:00',
+  },
+  {
+    key: '60000651',
+    attemptNumber: 2,
+    stepUp: true,
+    stepUpRequested: false,
+    documentTypes: ['DRIVERS_LICENCE', 'PASSPORT'],
+    decision: 'APPROVED',
+    identityVerificationFailed: false,
+    screeningHit: false,
+    pepResult: 'no-match',
+    sanctionsResult: 'no-match',
+    labVerification: { requestId: '60000651', overallResult: 'Passed', provider: 'IDMatrix' },
+    labRequestId: '60000651',
+    checkedAt: '2026-09-15T00:10:00+00:00',
+    reportAvailable: true,
+    reportFileName: 'verification_report_60000651.pdf',
+    rawResponseAvailable: false,
+    rawResponseFileName: null,
+    archivedAt: '2026-09-15T00:10:05+00:00',
+  },
+]
+
+describe('IdentityVerificationDetail — verification attempts (spec 2026-09-15)', () => {
+  afterEach(() => cleanup())
+
+  it('lists both attempts above the final detail, earlier one collapsed', () => {
+    render(
+      <IdentityVerificationDetail
+        identity={legacyIdentity()}
+        attempts={twoAttempts()}
+        customerId="C1"
+      />,
+    )
+    const list = screen.getByTestId('identity-attempts')
+    expect(within(list).getByText('Verification attempts (2)')).toBeTruthy()
+
+    const first = screen.getByTestId('identity-attempt-1')
+    expect(within(first).getByText('Attempt 1')).toBeTruthy()
+    expect(within(first).getByText('Driver licence')).toBeTruthy()
+    expect(within(first).getByText('DECLINED')).toBeTruthy()
+    expect(within(first).getByText('further document requested')).toBeTruthy()
+    expect(within(first).getByText('LAB 60000650')).toBeTruthy()
+    expect(screen.getByTestId('identity-attempt-1-report').getAttribute('href')).toBe(
+      '/api/customer/C1/identity-report?artifact=report&attempt=60000650',
+    )
+
+    const second = screen.getByTestId('identity-attempt-2')
+    expect(within(second).getByText('Driver licence + Passport')).toBeTruthy()
+    expect(within(second).getByText('Final')).toBeTruthy()
+    expect(within(second).queryByRole('button', { name: /details/i })).toBeNull()
+
+    // The final assessment renders once, as the main detail; attempt 1's
+    // LAB block stays collapsed until asked for.
+    expect(screen.getAllByTestId('identity-decision')).toHaveLength(1)
+    expect(screen.getAllByTestId('identity-legacy')).toHaveLength(1)
+  })
+
+  it('expands an earlier attempt to show its LAB block, labelled as a call outcome', () => {
+    render(
+      <IdentityVerificationDetail
+        identity={legacyIdentity()}
+        attempts={twoAttempts()}
+        customerId="C1"
+      />,
+    )
+    const first = screen.getByTestId('identity-attempt-1')
+    fireEvent.click(within(first).getByRole('button', { name: 'Details' }))
+    expect(screen.getAllByTestId('identity-legacy')).toHaveLength(2)
+    expect(within(first).getByText('LAB call outcome')).toBeTruthy()
+    expect(within(first).getByText('Failed')).toBeTruthy()
+    fireEvent.click(within(first).getByRole('button', { name: 'Hide details' }))
+    expect(screen.getAllByTestId('identity-legacy')).toHaveLength(1)
+  })
+
+  it('explains a pending step-up when there is no assessment yet', () => {
+    render(
+      <IdentityVerificationDetail identity={null} attempts={[twoAttempts()[0]]} customerId="C1" />,
+    )
+    const banner = screen.getByTestId('identity-step-up-pending')
+    expect(within(banner).getByText('Awaiting a further identity document')).toBeTruthy()
+    expect(within(banner).getByText(/Attempt 1 did not verify/)).toBeTruthy()
+    expect(screen.getByTestId('identity-attempt-1')).toBeTruthy()
+    expect(screen.queryByTestId('identity-decision')).toBeNull()
+  })
+
+  it('renders nothing without an assessment or attempts', () => {
+    const { container } = render(<IdentityVerificationDetail identity={null} attempts={[]} />)
+    expect(container.innerHTML).toBe('')
+  })
+
+  it('renders exactly as before when there are no attempts', () => {
+    render(<IdentityVerificationDetail identity={legacyIdentity()} attempts={[]} />)
+    expect(screen.queryByTestId('identity-attempts')).toBeNull()
+    expect(screen.getByTestId('identity-legacy')).toBeTruthy()
+    expect(screen.getByText('Billie decision')).toBeTruthy()
   })
 })

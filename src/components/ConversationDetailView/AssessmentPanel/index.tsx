@@ -134,14 +134,20 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
   // Customer summary
   const customerSummary = customer?.fullName || customer?.customerId || 'No data'
 
-  // Identity summary
+  // Identity summary — with the per-call attempts (spec 2026-09-15) a
+  // pending step-up reads as in progress rather than "No data".
   const identity = assessments?.identityRisk as Record<string, unknown> | undefined
   const identityDecision = identity?.decision as string | undefined
+  const identityAttempts = conversation.identityVerificationAttempts ?? []
+  const lastAttempt = identityAttempts[identityAttempts.length - 1]
   const identitySummary = identityDecision
-    ? ['PASS', 'APPROVED'].includes(identityDecision.toUpperCase())
-      ? '✓ Verified'
-      : '⚠ Refer'
-    : 'No data'
+    ? (['PASS', 'APPROVED'].includes(identityDecision.toUpperCase()) ? '✓ Verified' : '⚠ Refer') +
+      (identityAttempts.length > 1 ? ` · ${identityAttempts.length} attempts` : '')
+    : lastAttempt?.stepUpRequested
+      ? '⚠ Step-up pending'
+      : lastAttempt
+        ? '⏳ In progress'
+        : 'No data'
 
   // Account Conduct
   const accountConduct = assessments?.accountConduct as Record<string, unknown> | undefined
@@ -301,9 +307,10 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
 
       {/* Identity */}
       <AssessmentSection title="Identity" summary={identitySummary}>
-        {identity ? (
+        {identity || identityAttempts.length > 0 ? (
           <IdentityVerificationDetail
             identity={identity}
+            attempts={identityAttempts}
             report={conversation.identityVerificationReport ?? null}
             customerId={customer?.customerId ?? null}
           />
