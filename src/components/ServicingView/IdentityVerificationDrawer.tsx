@@ -57,6 +57,7 @@ export function IdentityVerificationDrawer({
             </p>
             <IdentityVerificationDetail
               identity={data.identity}
+              attempts={data.attempts}
               report={data.report}
               customerId={customerId}
             />

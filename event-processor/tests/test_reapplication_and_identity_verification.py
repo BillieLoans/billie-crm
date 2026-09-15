@@ -12,7 +12,10 @@ import json
 import pytest
 
 from billie_servicing.handlers.conversation import handle_assessment, handle_final_decision
-from billie_servicing.handlers.identity_verification import handle_identity_report_archived
+from billie_servicing.handlers.identity_verification import (
+    handle_identity_attempt,
+    handle_identity_report_archived,
+)
 from billie_servicing.handlers.reapplication import handle_reapplication_blocked
 
 # Contract example payload (event 1).
@@ -665,3 +668,168 @@ class TestLabVerificationMirror:
         }
         await handle_assessment(mock_pool, event)
         assert not mock_pool.inserts_into("customers")
+
+
+ATTEMPT_PAYLOAD = {
+    "application_number": "86332415-5F3",
+    "customer_id": "46F40509",
+    "attempt_number": 1,
+    "step_up": False,
+    "step_up_requested": True,
+    "document_types": ["DRIVERS_LICENCE"],
+    "decision": "DECLINED",
+    "identity_verification_failed": True,
+    "screening_hit": False,
+    "pep_result": "no-match",
+    "sanctions_result": "no-match",
+    "lab_verification": {"requestId": "60000650", "overallResult": "Failed"},
+    "lab_request_id": "60000650",
+    "checked_at": "2026-09-15T00:00:00+00:00",
+}
+
+
+def _attempt_merges(mock_pool):
+    return [
+        c
+        for c in mock_pool.calls_against("conversations")
+        if "jsonb_set(COALESCE(identity_verification_attempts" in c.sql
+    ]
+
+
+class TestIdentityAttempt:
+    """identity_verification.attempt.v1 (spec 2026-09-15) — one row per LAB call."""
+
+    @pytest.mark.asyncio
+    async def test_merges_entry_keyed_by_request_id(self, mock_pool):
+        event = {
+            "typ": "identity_verification.attempt.v1",
+            "conv": "conv-1",
+            "usr": "46F40509",
+            "payload": dict(ATTEMPT_PAYLOAD),
+        }
+        await handle_identity_attempt(mock_pool, event)
+
+        merge = _attempt_merges(mock_pool)[-1]
+        assert merge.args[0] == "60000650"
+        entry = json.loads(merge.args[1])
+        assert entry["attempt_number"] == 1
+        assert entry["step_up_requested"] is True
+        assert entry["document_types"] == ["DRIVERS_LICENCE"]
+        assert entry["lab_verification"]["requestId"] == "60000650"
+        assert merge.args[2] == "conv-1"
+        assert "version = COALESCE(version, 1) + 1" in merge.sql
+
+    @pytest.mark.asyncio
+    async def test_string_payload_parsed_defensively(self, mock_pool):
+        event = {
+            "typ": "identity_verification.attempt.v1",
+            "conv": "conv-1",
+            "payload": json.dumps(ATTEMPT_PAYLOAD),
+        }
+        await handle_identity_attempt(mock_pool, event)
+        assert _attempt_merges(mock_pool)[-1].args[0] == "60000650"
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_attempt_n_key_without_request_id(self, mock_pool):
+        payload = {
+            **ATTEMPT_PAYLOAD,
+            "lab_verification": None,
+            "lab_request_id": None,
+            "attempt_number": 2,
+        }
+        await handle_identity_attempt(
+            mock_pool,
+            {"typ": "identity_verification.attempt.v1", "conv": "conv-1", "payload": payload},
+        )
+        assert _attempt_merges(mock_pool)[-1].args[0] == "attempt-2"
+
+    @pytest.mark.asyncio
+    async def test_ensures_conversation_row_first(self, mock_pool):
+        await handle_identity_attempt(
+            mock_pool,
+            {
+                "typ": "identity_verification.attempt.v1",
+                "conv": "conv-1",
+                "usr": "46F40509",
+                "payload": dict(ATTEMPT_PAYLOAD),
+            },
+        )
+        inserts = mock_pool.inserts_into("conversations")
+        assert inserts and inserts[0]["conversation_id"] == "conv-1"
+
+    @pytest.mark.asyncio
+    async def test_missing_conversation_id_is_skipped(self, mock_pool):
+        await handle_identity_attempt(
+            mock_pool,
+            {"typ": "identity_verification.attempt.v1", "payload": dict(ATTEMPT_PAYLOAD)},
+        )
+        assert not mock_pool.has_call_against("conversations")
+
+
+class TestArchivedMergesIntoAttempt:
+    """The archived event also links its artifacts to the attempt row and
+    the "latest report" columns only ever move forward in archived_at."""
+
+    @pytest.mark.asyncio
+    async def test_archived_event_merges_artifacts_under_request_id(self, mock_pool):
+        mock_pool.set_fetchval_sequence(["CONV-ARCH-001", None])
+        payload = {
+            **TestIdentityReportArchived.ARCHIVED_PAYLOAD,
+            "attempt_number": 1,
+            "step_up": False,
+        }
+        await handle_identity_report_archived(
+            mock_pool,
+            {"typ": "identity_verification.report.archived.v1", "payload": payload},
+        )
+        merge = _attempt_merges(mock_pool)[-1]
+        assert merge.args[0] == "468881"
+        entry = json.loads(merge.args[1])
+        assert entry["report_file_location"].endswith("verification_report_468881.pdf")
+        assert entry["raw_response_file_name"] == "verify_response_468881.json"
+        assert entry["archived_at"] == payload["archived_at"]
+        assert entry["attempt_number"] == 1
+        assert entry["step_up"] is False
+        assert merge.args[2] == "CONV-ARCH-001"
+
+    @pytest.mark.asyncio
+    async def test_no_request_id_means_no_attempt_merge(self, mock_pool):
+        mock_pool.set_fetchval_sequence(["CONV-ARCH-001", None])
+        payload = {**TestIdentityReportArchived.ARCHIVED_PAYLOAD, "lab_request_id": None}
+        await handle_identity_report_archived(
+            mock_pool,
+            {"typ": "identity_verification.report.archived.v1", "payload": payload},
+        )
+        assert not _attempt_merges(mock_pool)
+
+    @pytest.mark.asyncio
+    async def test_conversation_report_columns_guarded_on_archived_at(self, mock_pool):
+        mock_pool.set_fetchval_sequence(["CONV-ARCH-001", None])
+        await handle_identity_report_archived(
+            mock_pool,
+            {
+                "typ": "identity_verification.report.archived.v1",
+                "payload": dict(TestIdentityReportArchived.ARCHIVED_PAYLOAD),
+            },
+        )
+        conv_sql = [c.sql for c in mock_pool.calls_against("conversations") if c.op == "INSERT"][-1]
+        assert (
+            "EXCLUDED.identity_verification_report_archived_at >= "
+            "conversations.identity_verification_report_archived_at"
+        ) in conv_sql
+
+    @pytest.mark.asyncio
+    async def test_customer_mirror_guarded_on_archived_at(self, mock_pool):
+        mock_pool.set_fetchval_sequence(["CONV-ARCH-001", None])
+        await handle_identity_report_archived(
+            mock_pool,
+            {
+                "typ": "identity_verification.report.archived.v1",
+                "payload": dict(TestIdentityReportArchived.ARCHIVED_PAYLOAD),
+            },
+        )
+        cust_sql = [c.sql for c in mock_pool.calls_against("customers") if c.op == "INSERT"][-1]
+        assert (
+            "EXCLUDED.identity_verification_archived_at >= "
+            "customers.identity_verification_archived_at"
+        ) in cust_sql

@@ -69,6 +69,7 @@ from .identity import (
     handle_customer_identity_merged,
 )
 from .identity_verification import (
+    handle_identity_attempt,
     handle_identity_report_archived,
 )
 from .marketing import (
@@ -129,6 +130,7 @@ __all__ = [
     "handle_reapplication_block_auto_cleared",
     "handle_reapplication_block_state_changed",
     # Identity verification archival (PR #67)
+    "handle_identity_attempt",
     "handle_identity_report_archived",
     # Conversation handlers
     "handle_conversation_started",

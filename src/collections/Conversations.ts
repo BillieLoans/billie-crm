@@ -443,6 +443,17 @@ export const Conversations: CollectionConfig = {
       ],
     },
     {
+      // Spec 2026-09-15: one entry per LAB verify call, keyed by LAB request id
+      // (or attempt-<n> without one). Written by the event-processor only from
+      // identity_verification.attempt.v1 + identity_verification.report.archived.v1.
+      name: 'identityVerificationAttempts',
+      type: 'json',
+      admin: {
+        readOnly: true,
+        description: 'Per-attempt identity verification results (keyed by LAB request id)',
+      },
+    },
+    {
       name: 'assessments',
       type: 'group',
       admin: {

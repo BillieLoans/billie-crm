@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import type { ConversationDetail } from '@/lib/schemas/conversations'
+import type { IdentityAttempt } from '@/lib/identityAttempts'
 
 export interface CustomerIdentityVerification {
   conversationId: string
@@ -7,6 +8,8 @@ export interface CustomerIdentityVerification {
   assessedAt: string | null
   /** Verbatim `identityRisk_assessment` payload (incl. `lab_verification`). */
   identity: Record<string, unknown>
+  /** Every LAB verify call for that application (spec 2026-09-15). */
+  attempts: IdentityAttempt[]
   report: NonNullable<ConversationDetail['identityVerificationReport']>
 }
 

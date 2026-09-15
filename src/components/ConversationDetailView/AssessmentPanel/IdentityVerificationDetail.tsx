@@ -25,13 +25,22 @@ import {
   type ScreeningCategory,
   type Tone,
 } from '@/lib/identityVerification'
+import { attemptDocumentsLabel, type IdentityAttempt } from '@/lib/identityAttempts'
 import styles from './IdentityVerificationDetail.module.css'
 
 type IdentityReport = NonNullable<ConversationDetail['identityVerificationReport']>
 
 export interface IdentityVerificationDetailProps {
-  /** The verbatim `identityRisk_assessment` payload (`assessments.identityRisk`). */
-  identity: Record<string, unknown>
+  /**
+   * The verbatim `identityRisk_assessment` payload (`assessments.identityRisk`).
+   * Absent while a verification is still in progress (e.g. a step-up pending).
+   */
+  identity?: Record<string, unknown> | null
+  /**
+   * Every LAB verify call for this application (spec 2026-09-15), ascending.
+   * The final one is rendered by `identity`; earlier ones list above it.
+   */
+  attempts?: IdentityAttempt[] | null
   /** Archived artifact availability for this conversation. */
   report?: IdentityReport | null
   /** Customer id — the report download route is customer-scoped. */
@@ -322,10 +331,12 @@ function RawJson({ data }: { data: unknown }) {
 function Banner({
   decision,
   subtitle,
+  label = 'Billie decision',
   children,
 }: {
   decision: string | null | undefined
   subtitle?: string
+  label?: string
   children?: React.ReactNode
 }) {
   const tone = decisionTone(decision)
@@ -335,7 +346,7 @@ function Banner({
         {toneIcon(tone)}
       </span>
       <div>
-        <div className={styles.bannerLabel}>Billie decision</div>
+        <div className={styles.bannerLabel}>{label}</div>
         <div className={styles.bannerValue}>{decision ?? 'No decision'}</div>
         {subtitle && <div className={styles.bannerSub}>{subtitle}</div>}
       </div>
@@ -353,11 +364,13 @@ function V1Detail({
   lab,
   report,
   customerId,
+  bannerLabel,
 }: {
   identity: Record<string, unknown>
   lab: LabVerificationV1
   report?: IdentityReport | null
   customerId?: string | null
+  bannerLabel?: string
 }) {
   const decision = identity.decision as string | undefined
   const overall = lab.result?.outcome ?? null
@@ -381,7 +394,7 @@ function V1Detail({
 
   return (
     <div className={styles.root}>
-      <Banner decision={decision} subtitle={subtitle} />
+      <Banner decision={decision} subtitle={subtitle} label={bannerLabel} />
       <div className={styles.meta}>
         <MetaItem label="Verification">
           {lab.verificationNumber ? (
@@ -464,11 +477,13 @@ function LegacyDetail({
   lab,
   report,
   customerId,
+  bannerLabel,
 }: {
   identity: Record<string, unknown>
   lab: LegacyLabBlock
   report?: IdentityReport | null
   customerId?: string | null
+  bannerLabel?: string
 }) {
   const base = reportBase(customerId)
   return (
@@ -476,6 +491,7 @@ function LegacyDetail({
       <Banner
         decision={identity.decision as string | undefined}
         subtitle="Legacy LAB EVS result (pre-2026-09 API)"
+        label={bannerLabel}
       />
       <div data-testid="identity-legacy">
         {LEGACY_ROWS.map(({ key, label, screening }) => {
@@ -517,7 +533,13 @@ function LegacyDetail({
   )
 }
 
-function NoBlockDetail({ identity }: { identity: Record<string, unknown> }) {
+function NoBlockDetail({
+  identity,
+  bannerLabel,
+}: {
+  identity: Record<string, unknown>
+  bannerLabel?: string
+}) {
   const manual = identity.manual_verification === true
   const basis = identity.manual_verification_basis as string | undefined
   const reviewer = identity.manual_verification_reviewed_by as string | undefined
@@ -528,6 +550,7 @@ function NoBlockDetail({ identity }: { identity: Record<string, unknown> }) {
       <Banner
         decision={identity.decision as string | undefined}
         subtitle={manual ? 'Manual verification by a reviewer (no LAB call)' : undefined}
+        label={bannerLabel}
       />
       <div className={styles.meta} data-testid="identity-no-block">
         {manual && (
@@ -555,23 +578,227 @@ function NoBlockDetail({ identity }: { identity: Record<string, unknown> }) {
   )
 }
 
+/** The block renderer for one assessment-shaped object (final or one attempt). */
+function BlockDetail({
+  identity,
+  report,
+  customerId,
+  bannerLabel,
+}: {
+  identity: Record<string, unknown>
+  report?: IdentityReport | null
+  customerId?: string | null
+  bannerLabel?: string
+}) {
+  const lab = identity.lab_verification
+  if (isLabV1Block(lab)) {
+    return (
+      <V1Detail
+        identity={identity}
+        lab={lab}
+        report={report}
+        customerId={customerId}
+        bannerLabel={bannerLabel}
+      />
+    )
+  }
+  if (isLegacyLabBlock(lab)) {
+    return (
+      <LegacyDetail
+        identity={identity}
+        lab={lab}
+        report={report}
+        customerId={customerId}
+        bannerLabel={bannerLabel}
+      />
+    )
+  }
+  return <NoBlockDetail identity={identity} bannerLabel={bannerLabel} />
+}
+
+/** Assessment-shaped view of one attempt so the block renderers apply as-is. */
+function attemptAsIdentity(attempt: IdentityAttempt): Record<string, unknown> {
+  return {
+    decision: attempt.decision,
+    pepResult: attempt.pepResult,
+    sanctionsResult: attempt.sanctionsResult,
+    lab_verification: attempt.labVerification,
+    attempt_number: attempt.attemptNumber,
+    step_up: attempt.stepUp,
+    step_up_requested: attempt.stepUpRequested,
+    document_types: attempt.documentTypes,
+    lab_request_id: attempt.labRequestId,
+    checked_at: attempt.checkedAt,
+  }
+}
+
+function AttemptRow({
+  attempt,
+  isFinal,
+  customerId,
+}: {
+  attempt: IdentityAttempt
+  isFinal: boolean
+  customerId?: string | null
+}) {
+  const [open, setOpen] = useState(false)
+  const base = reportBase(customerId)
+  const reportHref =
+    base && attempt.reportAvailable
+      ? `${base}?artifact=report&attempt=${encodeURIComponent(attempt.key)}`
+      : null
+  const bodyId = `identity-attempt-${attempt.attemptNumber}-detail`
+  return (
+    <div className={styles.attemptRow} data-testid={`identity-attempt-${attempt.attemptNumber}`}>
+      <div className={styles.attemptHead}>
+        <span className={styles.attemptName}>Attempt {attempt.attemptNumber}</span>
+        <span className={styles.attemptMeta}>{attemptDocumentsLabel(attempt.documentTypes)}</span>
+        <Badge value={attempt.decision} tone={decisionTone(attempt.decision)} />
+        {attempt.stepUpRequested && (
+          <span className={`${styles.chip} ${styles.chipWarn}`}>further document requested</span>
+        )}
+        {attempt.checkedAt && (
+          <span className={styles.attemptMeta}>{formatDateMedium(attempt.checkedAt)}</span>
+        )}
+        {attempt.labRequestId && (
+          <span className={styles.attemptMeta}>LAB {attempt.labRequestId}</span>
+        )}
+        <span className={styles.attemptSpacer} />
+        {reportHref && (
+          <a
+            href={reportHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={styles.reportLink}
+            data-testid={`identity-attempt-${attempt.attemptNumber}-report`}
+          >
+            Report ⤢
+          </a>
+        )}
+        {isFinal ? (
+          <span className={styles.attemptFinal}>Final</span>
+        ) : (
+          <button
+            type="button"
+            className={styles.attemptToggle}
+            onClick={() => setOpen((o) => !o)}
+            aria-expanded={open}
+            aria-controls={bodyId}
+          >
+            {open ? 'Hide details' : 'Details'}
+          </button>
+        )}
+      </div>
+      {!isFinal && open && (
+        <div id={bodyId} className={styles.attemptBody}>
+          <BlockDetail
+            identity={attemptAsIdentity(attempt)}
+            customerId={customerId}
+            bannerLabel="LAB call outcome"
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function AttemptsList({
+  attempts,
+  finalKey,
+  customerId,
+}: {
+  attempts: IdentityAttempt[]
+  finalKey?: string
+  customerId?: string | null
+}) {
+  return (
+    <section className={styles.attempts} data-testid="identity-attempts">
+      <div className={styles.attemptsTitle}>
+        Verification attempts ({attempts.length})
+      </div>
+      {attempts.map((attempt) => (
+        <AttemptRow
+          key={attempt.key}
+          attempt={attempt}
+          isFinal={attempt.key === finalKey}
+          customerId={customerId}
+        />
+      ))}
+    </section>
+  )
+}
+
+/** Which attempt the final assessment came from: its LAB request id, else the last. */
+function finalAttemptKey(
+  identity: Record<string, unknown>,
+  attempts: IdentityAttempt[],
+): string | undefined {
+  const lab = identity.lab_verification
+  const id =
+    lab && typeof lab === 'object'
+      ? ((lab as Record<string, unknown>).requestId ?? (lab as Record<string, unknown>).id)
+      : undefined
+  const byId = id != null ? attempts.find((a) => a.key === String(id)) : undefined
+  return (byId ?? attempts[attempts.length - 1])?.key
+}
+
 /**
  * Structured rendering of the identity risk assessment: Billie's decision
  * plus the LAB verification evidence (per-check outcomes, identity sources,
  * PEP/sanctions coverage and matches, reason codes, per-check reports), with
  * the raw JSON kept as a collapsed escape hatch.
+ *
+ * With `attempts` (spec 2026-09-15) every LAB call lists above the detail;
+ * earlier attempts expand in place, the final one is the detail itself.
+ * Without an assessment but with attempts, the panel explains what is
+ * pending instead of showing nothing.
  */
 export function IdentityVerificationDetail({
   identity,
+  attempts,
   report,
   customerId,
 }: IdentityVerificationDetailProps) {
-  const lab = identity.lab_verification
-  if (isLabV1Block(lab)) {
-    return <V1Detail identity={identity} lab={lab} report={report} customerId={customerId} />
+  const list = attempts ?? []
+
+  if (!identity) {
+    if (list.length === 0) return null
+    const last = list[list.length - 1]
+    return (
+      <div className={styles.root}>
+        <div
+          className={`${styles.banner} ${styles.toneWarn}`}
+          data-testid="identity-step-up-pending"
+        >
+          <span className={styles.bannerIcon} aria-hidden="true">
+            !
+          </span>
+          <div>
+            <div className={styles.bannerLabel}>Verification in progress</div>
+            <div className={styles.bannerValue}>
+              {last.stepUpRequested
+                ? 'Awaiting a further identity document'
+                : 'No final assessment yet'}
+            </div>
+            {last.stepUpRequested && (
+              <div className={styles.bannerSub}>
+                Attempt {last.attemptNumber} did not verify — one further document has been
+                requested before any decline.
+              </div>
+            )}
+          </div>
+        </div>
+        <AttemptsList attempts={list} customerId={customerId} />
+      </div>
+    )
   }
-  if (isLegacyLabBlock(lab)) {
-    return <LegacyDetail identity={identity} lab={lab} report={report} customerId={customerId} />
-  }
-  return <NoBlockDetail identity={identity} />
+
+  const detail = <BlockDetail identity={identity} report={report} customerId={customerId} />
+  if (list.length === 0) return detail
+  return (
+    <div className={styles.root}>
+      <AttemptsList attempts={list} finalKey={finalAttemptKey(identity, list)} customerId={customerId} />
+      {detail}
+    </div>
+  )
 }

@@ -61,6 +61,33 @@ import {
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
+function attempt(
+  attemptNumber: number,
+  overrides: Partial<NonNullable<ConversationDetail['identityVerificationAttempts']>[number]> = {},
+): NonNullable<ConversationDetail['identityVerificationAttempts']>[number] {
+  return {
+    key: `6000065${attemptNumber}`,
+    attemptNumber,
+    stepUp: false,
+    stepUpRequested: false,
+    documentTypes: ['DRIVERS_LICENCE'],
+    decision: 'APPROVED',
+    identityVerificationFailed: false,
+    screeningHit: false,
+    pepResult: null,
+    sanctionsResult: null,
+    labVerification: null,
+    labRequestId: `6000065${attemptNumber}`,
+    checkedAt: '2026-09-15T00:00:00+00:00',
+    reportAvailable: false,
+    reportFileName: null,
+    rawResponseAvailable: false,
+    rawResponseFileName: null,
+    archivedAt: null,
+    ...overrides,
+  }
+}
+
 function baseConversation(overrides: Partial<ConversationDetail> = {}): ConversationDetail {
   return {
     conversationId: 'conv-001',
@@ -84,6 +111,11 @@ function baseConversation(overrides: Partial<ConversationDetail> = {}): Conversa
 
 describe('AssessmentPanel — identity summary', () => {
   afterEach(() => cleanup())
+
+  const openIdentitySection = () => {
+    const btn = screen.getAllByRole('button').find((b) => b.textContent?.includes('Identity'))
+    fireEvent.click(btn!)
+  }
 
   it('shows ✓ Verified when identityRisk.decision is APPROVED', () => {
     const conversation = baseConversation({
@@ -123,6 +155,32 @@ describe('AssessmentPanel — identity summary', () => {
     })
     render(<AssessmentPanel conversation={conversation} conversationId="conv-001" />)
     expect(screen.getAllByText(/⚠ Refer/).length).toBeGreaterThan(0)
+  })
+
+  it('counts the attempts behind a verified decision (spec 2026-09-15)', () => {
+    const conversation = baseConversation({
+      assessments: { identityRisk: { decision: 'APPROVED' } },
+      identityVerificationAttempts: [
+        attempt(1, { decision: 'DECLINED', stepUpRequested: true }),
+        attempt(2, { decision: 'APPROVED', stepUp: true }),
+      ],
+    })
+    render(<AssessmentPanel conversation={conversation} conversationId="conv-001" />)
+    expect(screen.getAllByText(/✓ Verified · 2 attempts/).length).toBeGreaterThan(0)
+    openIdentitySection()
+    expect(screen.getByTestId('identity-attempts')).toBeTruthy()
+  })
+
+  it('shows a pending step-up instead of "No data" while attempt 2 is awaited', () => {
+    const conversation = baseConversation({
+      assessments: {},
+      identityVerificationAttempts: [attempt(1, { decision: 'DECLINED', stepUpRequested: true })],
+    })
+    render(<AssessmentPanel conversation={conversation} conversationId="conv-001" />)
+    expect(screen.getAllByText(/⚠ Step-up pending/).length).toBeGreaterThan(0)
+    openIdentitySection()
+    expect(screen.getByTestId('identity-step-up-pending')).toBeTruthy()
+    expect(screen.queryByText('No identity assessment data.')).toBeNull()
   })
 
   it('shows "No data" when identityRisk is absent', () => {

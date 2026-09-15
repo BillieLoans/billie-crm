@@ -202,6 +202,31 @@ export const IdentityVerificationReportSchema = z.object({
   archivedAt: z.union([z.string(), z.date()]).nullable().optional(),
 })
 
+/**
+ * One LAB verify call (billieChat spec 2026-09-15). Shaped by
+ * `shapeAttempts` — S3 locations never reach the browser.
+ */
+export const IdentityVerificationAttemptSchema = z.object({
+  key: z.string(),
+  attemptNumber: z.number(),
+  stepUp: z.boolean(),
+  stepUpRequested: z.boolean(),
+  documentTypes: z.array(z.string()),
+  decision: z.string().nullable(),
+  identityVerificationFailed: z.boolean(),
+  screeningHit: z.boolean(),
+  pepResult: z.string().nullable(),
+  sanctionsResult: z.string().nullable(),
+  labVerification: z.record(z.string(), z.unknown()).nullable(),
+  labRequestId: z.string().nullable(),
+  checkedAt: z.string().nullable(),
+  reportAvailable: z.boolean(),
+  reportFileName: z.string().nullable(),
+  rawResponseAvailable: z.boolean(),
+  rawResponseFileName: z.string().nullable(),
+  archivedAt: z.string().nullable(),
+})
+
 export const ConversationDetailSchema = z.object({
   conversationId: z.string(),
   applicationNumber: z.string().nullable().optional(),
@@ -215,6 +240,8 @@ export const ConversationDetailSchema = z.object({
   /** Conversation id of the prior decline referenced by a block (deep-link target). */
   sourceConversationId: z.string().nullable().optional(),
   identityVerificationReport: IdentityVerificationReportSchema.nullable().optional(),
+  /** Every LAB verify call for this application, ascending attempt number. */
+  identityVerificationAttempts: z.array(IdentityVerificationAttemptSchema).nullable().optional(),
   startedAt: z.union([z.string(), z.date()]).nullable().optional(),
   updatedAt: z.union([z.string(), z.date()]).nullable().optional(),
   lastMessageAt: z.union([z.string(), z.date()]).nullable().optional(),

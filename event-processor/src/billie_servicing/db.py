@@ -125,8 +125,12 @@ async def upsert_conversation(
     conversation_id: str,
     set_values: dict[str, Any],
     insert_only_values: dict[str, Any] | None = None,
+    update_where: str | None = None,
 ) -> None:
     """Upsert a conversations row, incrementing ``version`` on every conflict.
+
+    ``update_where`` is an optional predicate on the ``DO UPDATE`` branch
+    (``EXCLUDED.<col>`` vs ``conversations.<col>``) for monotonic guards.
 
     Conversations are append-heavy projections — most handlers update one or
     two columns while bumping ``version`` so the optimistic-concurrency layer
@@ -167,6 +171,8 @@ async def upsert_conversation(
         f"ON CONFLICT (conversation_id) DO UPDATE SET "
         f"{set_clause}, version = COALESCE(conversations.version, 1) + 1"
     )
+    if update_where:
+        sql += f" WHERE {update_where}"
     await target.execute(sql, *args)
 
 
@@ -193,6 +199,37 @@ async def merge_jsonb(
         f"updated_at = NOW(){extra} WHERE {key_column} = $2"
     )
     await target.execute(sql, json.dumps(patch), key_value)
+
+
+async def merge_jsonb_entry(
+    target: ExecuteTarget,
+    table: str,
+    *,
+    column: str,
+    key_column: str,
+    key_value: Any,
+    entry_key: str,
+    patch: dict[str, Any],
+    bump_version: bool = False,
+) -> None:
+    """Merge ``patch`` INTO ``column -> entry_key`` of an object-of-objects column.
+
+    ``UPDATE t SET col = jsonb_set(coalesce(col,'{}'), ARRAY[key],
+    coalesce(col->key,'{}') || patch, true)``. Because the patch merges into
+    the entry's EXISTING value (never replaces it), writers of different
+    parts of one entry are order independent — two prod machines consume
+    the inbox concurrently, so e.g. the archived-artifact merge may land
+    before the attempt merge for the same LAB request id.
+    """
+    import json
+
+    extra = ", version = COALESCE(version, 1) + 1" if bump_version else ""
+    sql = (
+        f"UPDATE {table} SET {column} = jsonb_set(COALESCE({column}, '{{}}'::jsonb), "
+        f"ARRAY[$1::text], COALESCE({column} -> $1, '{{}}'::jsonb) || $2::jsonb, true), "
+        f"updated_at = NOW(){extra} WHERE {key_column} = $3"
+    )
+    await target.execute(sql, entry_key, json.dumps(patch), key_value)
 
 
 async def update_by_key(

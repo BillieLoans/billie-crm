@@ -149,6 +149,7 @@ const BASE_KEYS = [
   'decisionDetail',
   'decisionStatus',
   'finalDecision',
+  'identityVerificationAttempts',
   'identityVerificationReport',
   'killRecord',
   'lastMessageAt',

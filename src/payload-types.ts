@@ -874,6 +874,18 @@ export interface Conversation {
     archivedAt?: string | null;
   };
   /**
+   * Per-attempt identity verification results (keyed by LAB request id)
+   */
+  identityVerificationAttempts?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
    * Risk and serviceability assessments
    */
   assessments?: {
@@ -2504,6 +2516,7 @@ export interface ConversationsSelect<T extends boolean = true> {
         screeningReportFileName?: T;
         archivedAt?: T;
       };
+  identityVerificationAttempts?: T;
   assessments?:
     | T
     | {
