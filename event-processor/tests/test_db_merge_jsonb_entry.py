@@ -25,9 +25,15 @@ async def test_merges_into_the_entry_not_over_it(mock_pool: MockPool) -> None:
         bump_version=True,
     )
     call = mock_pool.calls[-1]
-    assert "jsonb_set(COALESCE(identity_verification_attempts, '{}'::jsonb)" in call.sql
-    assert "COALESCE(identity_verification_attempts -> $1, '{}'::jsonb) || $2::jsonb" in call.sql
-    assert "version = COALESCE(version, 1) + 1" in call.sql
+    # Pinned VERBATIM: tests/int/identity-attempts-merge.int.spec.ts proves
+    # this exact text is order independent on a real Postgres. Change both.
+    assert call.sql == (
+        "UPDATE conversations SET identity_verification_attempts = "
+        "jsonb_set(COALESCE(identity_verification_attempts, '{}'::jsonb), "
+        "ARRAY[$1::text], COALESCE(identity_verification_attempts -> $1, '{}'::jsonb) "
+        "|| $2::jsonb, true), updated_at = NOW(), version = COALESCE(version, 1) + 1 "
+        "WHERE conversation_id = $3"
+    )
     assert call.args[0] == "60000650"
     assert json.loads(call.args[1]) == {"attempt_number": 1}
     assert call.args[2] == "conv-1"
