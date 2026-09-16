@@ -793,6 +793,43 @@ class TestArchivedMergesIntoAttempt:
         assert merge.args[2] == "CONV-ARCH-001"
 
     @pytest.mark.asyncio
+    async def test_archived_event_merges_v1_screening_report_into_attempt(self, mock_pool):
+        mock_pool.set_fetchval_sequence(["CONV-ARCH-001", None])
+        payload = {
+            **TestIdentityReportArchived.ARCHIVED_PAYLOAD,
+            "attempt_number": 1,
+            "screening_report": {
+                "file_location": (
+                    "s3://bucket/871CE08C-8B6/IdentityVerification/"
+                    "verification_report_screening_468881.pdf"
+                ),
+                "file_name": "verification_report_screening_468881.pdf",
+                "object_id": "etag-3",
+            },
+        }
+        await handle_identity_report_archived(
+            mock_pool,
+            {"typ": "identity_verification.report.archived.v1", "payload": payload},
+        )
+        entry = json.loads(_attempt_merges(mock_pool)[-1].args[1])
+        assert entry["screening_report_file_location"].endswith(
+            "verification_report_screening_468881.pdf"
+        )
+        assert entry["screening_report_file_name"] == "verification_report_screening_468881.pdf"
+
+    @pytest.mark.asyncio
+    async def test_legacy_archived_event_leaves_screening_report_null_on_attempt(self, mock_pool):
+        mock_pool.set_fetchval_sequence(["CONV-ARCH-001", None])
+        payload = {**TestIdentityReportArchived.ARCHIVED_PAYLOAD, "attempt_number": 1}
+        await handle_identity_report_archived(
+            mock_pool,
+            {"typ": "identity_verification.report.archived.v1", "payload": payload},
+        )
+        entry = json.loads(_attempt_merges(mock_pool)[-1].args[1])
+        assert entry["screening_report_file_location"] is None
+        assert entry["screening_report_file_name"] is None
+
+    @pytest.mark.asyncio
     async def test_no_request_id_means_no_attempt_merge(self, mock_pool):
         mock_pool.set_fetchval_sequence(["CONV-ARCH-001", None])
         payload = {**TestIdentityReportArchived.ARCHIVED_PAYLOAD, "lab_request_id": None}

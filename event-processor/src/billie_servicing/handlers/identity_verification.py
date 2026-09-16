@@ -200,6 +200,9 @@ async def handle_identity_report_archived(pool: asyncpg.Pool, event: dict[str, A
                 patch={
                     "report_file_location": report.get("file_location"),
                     "report_file_name": report.get("file_name"),
+                    # LAB API v1 archives a separate per-check screening PDF.
+                    "screening_report_file_location": screening_report.get("file_location"),
+                    "screening_report_file_name": screening_report.get("file_name"),
                     "raw_response_file_location": raw_response.get("file_location"),
                     "raw_response_file_name": raw_response.get("file_name"),
                     "archived_at": payload.get("archived_at"),

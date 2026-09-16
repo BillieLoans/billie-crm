@@ -656,10 +656,12 @@ function AttemptRow({
 }) {
   const [open, setOpen] = useState(false)
   const base = reportBase(customerId)
+  const attemptQuery = `&attempt=${encodeURIComponent(attempt.key)}`
   const reportHref =
-    base && attempt.reportAvailable
-      ? `${base}?artifact=report&attempt=${encodeURIComponent(attempt.key)}`
-      : null
+    base && attempt.reportAvailable ? `${base}?artifact=report${attemptQuery}` : null
+  // LAB API v1 archives a separate per-check screening PDF for each call.
+  const screeningReportHref =
+    base && attempt.screeningReportAvailable ? `${base}?artifact=screening${attemptQuery}` : null
   const bodyId = `identity-attempt-${attempt.attemptNumber}-detail`
   return (
     <div className={styles.attemptRow} data-testid={`identity-attempt-${attempt.attemptNumber}`}>
@@ -686,6 +688,17 @@ function AttemptRow({
             data-testid={`identity-attempt-${attempt.attemptNumber}-report`}
           >
             Report ⤢
+          </a>
+        )}
+        {screeningReportHref && (
+          <a
+            href={screeningReportHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={styles.reportLink}
+            data-testid={`identity-attempt-${attempt.attemptNumber}-screening-report`}
+          >
+            Screening report ⤢
           </a>
         )}
         {isFinal ? (

@@ -402,6 +402,8 @@ const twoAttempts = () => [
     reportFileName: 'verification_report_60000650.pdf',
     rawResponseAvailable: true,
     rawResponseFileName: 'verify_response_60000650.json',
+    screeningReportAvailable: true,
+    screeningReportFileName: 'verification_report_screening_60000650.pdf',
     archivedAt: '2026-09-15T00:00:05+00:00',
   },
   {
@@ -422,6 +424,8 @@ const twoAttempts = () => [
     reportFileName: 'verification_report_60000651.pdf',
     rawResponseAvailable: false,
     rawResponseFileName: null,
+    screeningReportAvailable: false,
+    screeningReportFileName: null,
     archivedAt: '2026-09-15T00:10:05+00:00',
   },
 ]
@@ -449,6 +453,11 @@ describe('IdentityVerificationDetail — verification attempts (spec 2026-09-15)
     expect(screen.getByTestId('identity-attempt-1-report').getAttribute('href')).toBe(
       '/api/customer/C1/identity-report?artifact=report&attempt=60000650',
     )
+    // LAB API v1 archives a separate per-check screening report per call.
+    expect(screen.getByTestId('identity-attempt-1-screening-report').getAttribute('href')).toBe(
+      '/api/customer/C1/identity-report?artifact=screening&attempt=60000650',
+    )
+    expect(screen.queryByTestId('identity-attempt-2-screening-report')).toBeNull()
 
     const second = screen.getByTestId('identity-attempt-2')
     expect(within(second).getByText('Driver licence + Passport')).toBeTruthy()
