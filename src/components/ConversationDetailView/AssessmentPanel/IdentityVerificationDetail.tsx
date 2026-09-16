@@ -23,8 +23,10 @@ import {
   type LabVerificationV1,
   type LegacyLabBlock,
   type ScreeningCategory,
+  type ScreeningListing,
   type Tone,
 } from '@/lib/identityVerification'
+import { ScreeningListingModal } from './ScreeningListingModal'
 import { attemptDocumentsLabel, type IdentityAttempt } from '@/lib/identityAttempts'
 import styles from './IdentityVerificationDetail.module.css'
 
@@ -53,7 +55,9 @@ const toneClass = (tone: Tone, prefix: 'tone' | 'badge' | 'chip') =>
 const toneIcon = (tone: Tone) => (tone === 'pass' ? '✓' : tone === 'fail' ? '✗' : '!')
 
 function Badge({ value, tone }: { value: string | null | undefined; tone: Tone }) {
-  return <span className={`${styles.badge} ${toneClass(tone, 'badge')}`}>{value ?? 'no verdict'}</span>
+  return (
+    <span className={`${styles.badge} ${toneClass(tone, 'badge')}`}>{value ?? 'no verdict'}</span>
+  )
 }
 
 function Chip({
@@ -92,7 +96,9 @@ function Reasons({ reasons, outcome }: { reasons: LabReason[]; outcome?: string 
         >
           {reason.code && <span className={styles.reasonCode}>{reason.code}</span>}
           {reason.provider && <span className={styles.sourceMeta}>{reason.provider}</span>}
-          {reason.retryable && <span className={`${styles.chip} ${styles.chipMuted}`}>retryable</span>}
+          {reason.retryable && (
+            <span className={`${styles.chip} ${styles.chipMuted}`}>retryable</span>
+          )}
           {reason.message && <span className={styles.reasonMessage}>{reason.message}</span>}
           {reason.suggestedAction && (
             <span className={styles.reasonAction}>{reason.suggestedAction}</span>
@@ -106,7 +112,9 @@ function Reasons({ reasons, outcome }: { reasons: LabReason[]; outcome?: string 
 
 function sourceKind(source: IdentitySource): string {
   if (source.type === 'document') {
-    const parts = [humanise(source.documentType) !== '—' ? humanise(source.documentType) : 'document']
+    const parts = [
+      humanise(source.documentType) !== '—' ? humanise(source.documentType) : 'document',
+    ]
     if (source.issuingRegion) parts.push(source.issuingRegion)
     return parts.join(' · ')
   }
@@ -163,6 +171,12 @@ function IdentitySources({ sources }: { sources: IdentitySource[] }) {
   )
 }
 
+interface OpenListing {
+  matchedOn?: string | null
+  matchedTerm?: string | null
+  listing: ScreeningListing
+}
+
 function ScreeningCategoryPanel({
   title,
   category,
@@ -173,6 +187,7 @@ function ScreeningCategoryPanel({
   const result = category?.result
   const sources = category?.sources ?? []
   const matches = category?.matches ?? []
+  const [open, setOpen] = useState<OpenListing | null>(null)
   return (
     <div className={styles.category} data-testid={`screening-${title.toLowerCase()}`}>
       <div className={styles.categoryHeader}>
@@ -200,49 +215,38 @@ function ScreeningCategoryPanel({
               <span className={styles.matchTerm}>{match.matchedTerm ?? '—'}</span>
             </div>
             {(match.listings ?? []).length > 0 ? (
-              <div className={styles.tableWrap}>
-                <table className={styles.table}>
-                  <thead>
-                    <tr>
-                      <th scope="col">Listed name</th>
-                      <th scope="col">Title</th>
-                      <th scope="col">List</th>
-                      <th scope="col">Country</th>
-                      <th scope="col">Listed</th>
-                      <th scope="col">Updated</th>
-                      <th scope="col">Ref / version</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(match.listings ?? []).map((listing, j) => (
-                      <tr key={`${listing.reference ?? 'listing'}-${j}`}>
-                        <td>
-                          <div className={styles.sourceName}>{listing.name ?? '—'}</div>
-                          {listing.attributes && Object.keys(listing.attributes).length > 0 && (
-                            <dl className={styles.attrList}>
-                              {Object.entries(listing.attributes).map(([k, v]) => (
-                                <React.Fragment key={k}>
-                                  <dt>{k}</dt>
-                                  <dd>{typeof v === 'string' ? v : JSON.stringify(v)}</dd>
-                                </React.Fragment>
-                              ))}
-                            </dl>
-                          )}
-                        </td>
-                        <td>{listing.title ?? '—'}</td>
-                        <td>{listing.source ?? '—'}</td>
-                        <td>{listing.countryName ?? listing.country ?? '—'}</td>
-                        <td>{listing.listedDate ?? '—'}</td>
-                        <td>{listing.lastUpdated ?? '—'}</td>
-                        <td>
-                          {listing.reference ?? '—'}
-                          {listing.version ? ` / ${listing.version}` : ''}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <ul className={styles.listingCards}>
+                {(match.listings ?? []).map((listing, j) => {
+                  const meta = [listing.source, listing.countryName ?? listing.country]
+                    .filter(Boolean)
+                    .join(' · ')
+                  return (
+                    <li
+                      key={`${listing.reference ?? 'listing'}-${j}`}
+                      className={styles.listingCard}
+                    >
+                      <div className={styles.listingCardText}>
+                        <div className={styles.sourceName}>{listing.name ?? '—'}</div>
+                        {meta && <div className={styles.sourceMeta}>{meta}</div>}
+                      </div>
+                      <button
+                        type="button"
+                        className={styles.listingCardButton}
+                        onClick={() =>
+                          setOpen({
+                            matchedOn: match.matchedOn,
+                            matchedTerm: match.matchedTerm,
+                            listing,
+                          })
+                        }
+                        aria-label={`View details for ${listing.name ?? 'listing'}`}
+                      >
+                        View details
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
             ) : (
               <p className={styles.note}>No listing detail supplied.</p>
             )}
@@ -251,19 +255,25 @@ function ScreeningCategoryPanel({
       {result === 'match' && matches.length === 0 && (
         <p className={styles.note}>Match detail not supplied by provider — the match stands.</p>
       )}
+      {open && (
+        <ScreeningListingModal
+          category={title}
+          matchedOn={open.matchedOn}
+          matchedTerm={open.matchedTerm}
+          listing={open.listing}
+          onClose={() => setOpen(null)}
+        />
+      )}
     </div>
   )
 }
 
-function CheckCard({
-  check,
-  reportHref,
-}: {
-  check: LabCheck
-  reportHref?: string | null
-}) {
+function CheckCard({ check, reportHref }: { check: LabCheck; reportHref?: string | null }) {
   const tone = outcomeTone(check.outcome)
-  const providers = (check.providers ?? []).map((p) => p.provider).filter(Boolean).join(', ')
+  const providers = (check.providers ?? [])
+    .map((p) => p.provider)
+    .filter(Boolean)
+    .join(', ')
   const reasons = (check.reasons ?? []).filter(Boolean) as LabReason[]
   const type = check.checkType ?? ''
   return (
@@ -315,7 +325,10 @@ function RawJson({ data }: { data: unknown }) {
         aria-controls="identity-raw-json"
       >
         Raw JSON data
-        <span className={`${styles.rawChevron} ${open ? styles.rawChevronOpen : ''}`} aria-hidden="true">
+        <span
+          className={`${styles.rawChevron} ${open ? styles.rawChevronOpen : ''}`}
+          aria-hidden="true"
+        >
           ▶
         </span>
       </button>
@@ -713,9 +726,7 @@ function AttemptsList({
 }) {
   return (
     <section className={styles.attempts} data-testid="identity-attempts">
-      <div className={styles.attemptsTitle}>
-        Verification attempts ({attempts.length})
-      </div>
+      <div className={styles.attemptsTitle}>Verification attempts ({attempts.length})</div>
       {attempts.map((attempt) => (
         <AttemptRow
           key={attempt.key}
@@ -797,7 +808,11 @@ export function IdentityVerificationDetail({
   if (list.length === 0) return detail
   return (
     <div className={styles.root}>
-      <AttemptsList attempts={list} finalKey={finalAttemptKey(identity, list)} customerId={customerId} />
+      <AttemptsList
+        attempts={list}
+        finalKey={finalAttemptKey(identity, list)}
+        customerId={customerId}
+      />
       {detail}
     </div>
   )

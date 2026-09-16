@@ -204,9 +204,62 @@
   gap: 6px;
 }
 .matchTerm { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; }
-.attrList { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 2px 10px; font-size: 11px; }
-.attrList dt { color: var(--theme-elevation-500, #888); }
-.attrList dd { margin: 0; overflow-wrap: anywhere; }
+
+/* Compact listing cards — one per matched watchlist entry. Long-form detail
+   (title, dates, attribute map) lives in ScreeningListingModal. */
+.listingCards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.listingCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--theme-elevation-100, #f3f4f6);
+  border-radius: 6px;
+  background: var(--theme-elevation-50, #fafafa);
+  font-size: 12px;
+}
+.listingCardText { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.listingCardText .sourceName,
+.listingCardText .sourceMeta { overflow-wrap: anywhere; }
+.listingCardButton {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--theme-elevation-800, #222);
+  background: var(--theme-elevation-0, #fff);
+  border: 1px solid var(--theme-elevation-200, #ddd);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.listingCardButton:hover { background: var(--theme-elevation-100, #f3f4f6); }
+.listingCardButton:focus-visible { outline: 2px solid var(--theme-success-500, #2563eb); outline-offset: 2px; }
+
+/* ── Listing modal ── */
+.listingBody { padding: 1rem 1.5rem 1.5rem; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+.listingMatchedOn { margin: 0; font-size: 13px; color: var(--theme-elevation-600, #666); }
+.listingList {
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(120px, max-content) 1fr;
+  gap: 6px 16px;
+  font-size: 13px;
+}
+.listingLabel {
+  color: var(--theme-elevation-500, #888);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding-top: 2px;
+}
+.listingValue { margin: 0; overflow-wrap: anywhere; }
+.listingBody .subTitle { margin: 0 0 6px; }
+@media (max-width: 480px) {
+  .listingList { grid-template-columns: 1fr; gap: 2px; }
+  .listingLabel { margin-top: 8px; }
+}
 .note { color: var(--theme-elevation-600, #666); font-size: 12px; margin: 0; }
 
 /* ── Legacy KV ── */

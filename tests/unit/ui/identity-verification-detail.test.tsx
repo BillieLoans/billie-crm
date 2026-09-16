@@ -7,6 +7,7 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { render, screen, cleanup, within, fireEvent } from '@testing-library/react'
 import React from 'react'
 import { IdentityVerificationDetail } from '@/components/ConversationDetailView/AssessmentPanel/IdentityVerificationDetail'
+import { humaniseKey } from '@/components/ConversationDetailView/AssessmentPanel/ScreeningListingModal'
 
 const passSample = () => ({
   decision: 'APPROVED',
@@ -196,16 +197,52 @@ describe('IdentityVerificationDetail — LAB API v1 block', () => {
     expect(within(screening).getByText('refer')).toBeInTheDocument()
     const reasons = within(screening).getByTestId('identity-reasons')
     expect(reasons).toHaveTextContent('SCREENING_HIT')
-    expect(reasons).toHaveTextContent('Review the matched screening entries and confirm or dismiss.')
+    expect(reasons).toHaveTextContent(
+      'Review the matched screening entries and confirm or dismiss.',
+    )
 
     const sanctions = within(screening).getByTestId('screening-sanctions')
     expect(sanctions).toHaveTextContent('SMITH JOHN')
     expect(sanctions).toHaveTextContent('SMITH, JOHN ALEXANDER')
-    expect(sanctions).toHaveTextContent('FORMER MINISTER OF FINANCE')
     expect(sanctions).toHaveTextContent('DFAT')
-    expect(sanctions).toHaveTextContent('6402066 / 20251107161754')
-    expect(sanctions).toHaveTextContent('otherInformation')
     expect(sanctions).toHaveTextContent('inconclusive')
+    // The long-form listing detail lives in the modal, not the narrow panel.
+    expect(sanctions).not.toHaveTextContent('FORMER MINISTER OF FINANCE')
+    expect(sanctions).not.toHaveTextContent('otherInformation')
+    expect(within(sanctions).getByRole('button', { name: /view details/i })).toBeInTheDocument()
+  })
+
+  it('opens a dialog with the full listing detail from a screening hit', () => {
+    render(<IdentityVerificationDetail identity={hitSample()} customerId="C1" />)
+
+    const sanctions = screen.getByTestId('screening-sanctions')
+    fireEvent.click(within(sanctions).getByRole('button', { name: /view details/i }))
+
+    const dialog = screen.getByRole('dialog', { name: 'Sanctions match: SMITH, JOHN ALEXANDER' })
+    expect(dialog).toHaveTextContent('Matched on name')
+    expect(dialog).toHaveTextContent('SMITH JOHN')
+    expect(dialog).toHaveTextContent('FORMER MINISTER OF FINANCE')
+    expect(dialog).toHaveTextContent('DFAT')
+    expect(dialog).toHaveTextContent('2022-02-28')
+    expect(dialog).toHaveTextContent('2025-11-07')
+    expect(dialog).toHaveTextContent('6402066 / 20251107161754')
+    // Attribute keys are humanised; values wrap in a label/value list.
+    expect(dialog).toHaveTextContent('Other information')
+    expect(dialog).toHaveTextContent('Targeted Financial Sanction: Y')
+  })
+
+  it('closes the listing dialog on Escape and returns focus to the trigger', () => {
+    render(<IdentityVerificationDetail identity={hitSample()} customerId="C1" />)
+
+    const sanctions = screen.getByTestId('screening-sanctions')
+    const trigger = within(sanctions).getByRole('button', { name: /view details/i })
+    trigger.focus()
+    fireEvent.click(trigger)
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(document.activeElement).toBe(trigger)
   })
 
   it('links per-check reports and the raw response when archived', () => {
@@ -254,7 +291,9 @@ describe('IdentityVerificationDetail — LAB API v1 block', () => {
     sample.lab_verification.result = {
       outcome: 'fail',
       checks: [],
-      reasons: [{ code: 'SERVICE_PARTIAL_FAILURE', message: 'Processing failed.', retryable: true }],
+      reasons: [
+        { code: 'SERVICE_PARTIAL_FAILURE', message: 'Processing failed.', retryable: true },
+      ],
     } as unknown as ReturnType<typeof passSample>['lab_verification']['result']
     render(<IdentityVerificationDetail identity={sample} customerId="C1" />)
     expect(screen.getByText('Processing')).toBeInTheDocument()
@@ -329,7 +368,6 @@ describe('IdentityVerificationDetail — legacy and no-block assessments', () =>
     expect(within(block).getByText('match')).toBeInTheDocument()
   })
 })
-
 
 const legacyIdentity = () => ({
   decision: 'APPROVED',
@@ -461,5 +499,15 @@ describe('IdentityVerificationDetail — verification attempts (spec 2026-09-15)
     expect(screen.queryByTestId('identity-attempts')).toBeNull()
     expect(screen.getByTestId('identity-legacy')).toBeTruthy()
     expect(screen.getByText('Billie decision')).toBeTruthy()
+  })
+})
+
+describe('humaniseKey — watchlist attribute labels', () => {
+  it('splits camelCase into prose and keeps acronyms intact', () => {
+    expect(humaniseKey('otherInformation')).toBe('Other information')
+    expect(humaniseKey('originalID')).toBe('Original ID')
+    expect(humaniseKey('entityLevel')).toBe('Entity level')
+    expect(humaniseKey('name_source')).toBe('Name source')
+    expect(humaniseKey('watch')).toBe('Watch')
   })
 })
