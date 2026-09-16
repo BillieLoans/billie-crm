@@ -3,11 +3,7 @@
  * (billieChat spec 2026-09-15).
  */
 import { describe, it, expect } from 'vitest'
-import {
-  attemptDocumentsLabel,
-  documentTypeLabel,
-  shapeAttempts,
-} from '@/lib/identityAttempts'
+import { attemptDocumentsLabel, documentTypeLabel, shapeAttempts } from '@/lib/identityAttempts'
 
 const STORED = {
   '60000651': {
@@ -23,10 +19,14 @@ const STORED = {
     lab_verification: { requestId: '60000651', overallResult: 'Passed' },
     lab_request_id: '60000651',
     checked_at: '2026-09-15T00:10:00+00:00',
-    report_file_location: 's3://b/86332415-5F3/IdentityVerification/verification_report_60000651.pdf',
+    report_file_location:
+      's3://b/86332415-5F3/IdentityVerification/verification_report_60000651.pdf',
     report_file_name: 'verification_report_60000651.pdf',
     raw_response_file_location: 's3://b/x.json',
     raw_response_file_name: 'verify_response_60000651.json',
+    screening_report_file_location:
+      's3://b/86332415-5F3/IdentityVerification/verification_report_screening_60000651.pdf',
+    screening_report_file_name: 'verification_report_screening_60000651.pdf',
     archived_at: '2026-09-15T00:10:05+00:00',
   },
   '60000650': {
@@ -57,6 +57,8 @@ describe('shapeAttempts', () => {
       labRequestId: '60000650',
       reportAvailable: false,
       rawResponseAvailable: false,
+      screeningReportAvailable: false,
+      screeningReportFileName: null,
     })
     expect(attempts[1]).toMatchObject({
       key: '60000651',
@@ -64,6 +66,8 @@ describe('shapeAttempts', () => {
       reportAvailable: true,
       reportFileName: 'verification_report_60000651.pdf',
       rawResponseAvailable: true,
+      screeningReportAvailable: true,
+      screeningReportFileName: 'verification_report_screening_60000651.pdf',
       archivedAt: '2026-09-15T00:10:05+00:00',
     })
     expect(attempts[1].labVerification).toEqual({ requestId: '60000651', overallResult: 'Passed' })

@@ -224,6 +224,9 @@ export const IdentityVerificationAttemptSchema = z.object({
   reportFileName: z.string().nullable(),
   rawResponseAvailable: z.boolean(),
   rawResponseFileName: z.string().nullable(),
+  /** LAB API v1 only: the screening check's own report PDF for this call. */
+  screeningReportAvailable: z.boolean(),
+  screeningReportFileName: z.string().nullable(),
   archivedAt: z.string().nullable(),
 })
 

@@ -33,6 +33,9 @@ export interface IdentityAttempt {
   reportFileName: string | null
   rawResponseAvailable: boolean
   rawResponseFileName: string | null
+  /** LAB API v1 only: the screening check's own report PDF for this call. */
+  screeningReportAvailable: boolean
+  screeningReportFileName: string | null
   archivedAt: string | null
 }
 
@@ -79,6 +82,8 @@ export function shapeAttempts(raw: unknown): IdentityAttempt[] {
       reportFileName: str(value.report_file_name),
       rawResponseAvailable: Boolean(value.raw_response_file_location),
       rawResponseFileName: str(value.raw_response_file_name),
+      screeningReportAvailable: Boolean(value.screening_report_file_location),
+      screeningReportFileName: str(value.screening_report_file_name),
       archivedAt: str(value.archived_at),
     })
   }

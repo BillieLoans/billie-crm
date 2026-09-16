@@ -11,10 +11,7 @@ const FakeNextResponse = vi.hoisted(
       body: unknown
       status: number
       headers: Record<string, string>
-      constructor(
-        body: unknown,
-        init?: { status?: number; headers?: Record<string, string> },
-      ) {
+      constructor(body: unknown, init?: { status?: number; headers?: Record<string, string> }) {
         this.body = body
         this.status = init?.status ?? 200
         this.headers = init?.headers ?? {}
@@ -134,10 +131,15 @@ describe('GET /api/customer/[customerId]/identity-report', () => {
     const ATTEMPTS = {
       '60000650': {
         attempt_number: 1,
-        report_file_location: 's3://bucket/APP1/IdentityVerification/verification_report_60000650.pdf',
+        report_file_location:
+          's3://bucket/APP1/IdentityVerification/verification_report_60000650.pdf',
         report_file_name: 'verification_report_60000650.pdf',
-        raw_response_file_location: 's3://bucket/APP1/IdentityVerification/verify_response_60000650.json',
+        raw_response_file_location:
+          's3://bucket/APP1/IdentityVerification/verify_response_60000650.json',
         raw_response_file_name: 'verify_response_60000650.json',
+        screening_report_file_location:
+          's3://bucket/APP1/IdentityVerification/verification_report_screening_60000650.pdf',
+        screening_report_file_name: 'verification_report_screening_60000650.pdf',
       },
       '60000651': { attempt_number: 2 },
     }
@@ -170,16 +172,28 @@ describe('GET /api/customer/[customerId]/identity-report', () => {
       )
     })
 
+    it('serves the attempt screening report (LAB API v1 per-check report)', async () => {
+      const res = await call('attempt=60000650&artifact=screening')
+      expect(res.status).toBe(200)
+      expect(res.headers['Content-Type']).toBe('application/pdf')
+      expect(res.headers['Content-Disposition']).toBe(
+        'inline; filename="verification_report_screening_60000650.pdf"',
+      )
+      expect(mockGetObject).toHaveBeenCalledWith(
+        ATTEMPTS['60000650'].screening_report_file_location,
+      )
+    })
+
     it('404s when the attempt has no such artifact', async () => {
       expect((await call('attempt=60000651')).status).toBe(404)
+      expect((await call('attempt=60000651&artifact=screening')).status).toBe(404)
       expect((await call('attempt=unknown-key')).status).toBe(404)
       expect(mockGetObject).not.toHaveBeenCalled()
     })
 
-    it('400s on a malformed key or a screening artifact', async () => {
+    it('400s on a malformed key', async () => {
       expect((await call('attempt=../etc')).status).toBe(400)
       expect((await call('attempt=' + 'a'.repeat(65))).status).toBe(400)
-      expect((await call('attempt=60000650&artifact=screening')).status).toBe(400)
       expect(mockFind).not.toHaveBeenCalled()
     })
   })

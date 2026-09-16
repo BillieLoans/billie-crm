@@ -11,7 +11,8 @@
  * With `attempt=<key>` (billieChat spec 2026-09-15): from the matching entry of
  * `identityVerificationAttempts` on the customer's most recent conversation
  * holding that key — one specific LAB call (e.g. the failed first attempt
- * behind a step-up). Per-attempt artifacts are `report` and `raw` only.
+ * behind a step-up). All three artifacts are available per attempt; `screening`
+ * only resolves for LAB API v1 calls, which archive a per-check screening PDF.
  *
  * artifact=report (default): the identity-check verification report PDF.
  * artifact=screening: the screening-check report PDF (LAB API v1, per-check reports).
@@ -41,8 +42,9 @@ const FILE_NAMES: Record<Artifact, readonly [string, string]> = {
 }
 
 /** Per-attempt entries are written by the event-processor in snake_case. */
-const ATTEMPT_ARTIFACTS: Partial<Record<Artifact, readonly [string, string]>> = {
+const ATTEMPT_ARTIFACTS: Record<Artifact, readonly [string, string]> = {
   report: ['report_file_location', 'report_file_name'],
+  screening: ['screening_report_file_location', 'screening_report_file_name'],
   raw: ['raw_response_file_location', 'raw_response_file_name'],
 }
 
@@ -78,7 +80,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     )
   }
   const attemptArtifact = ATTEMPT_ARTIFACTS[artifact]
-  if (attemptKey !== null && (!ATTEMPT_KEY.test(attemptKey) || !attemptArtifact)) {
+  if (attemptKey !== null && !ATTEMPT_KEY.test(attemptKey)) {
     return NextResponse.json(
       { error: { code: 'BAD_REQUEST', message: 'Invalid attempt.' } },
       { status: 400 },
@@ -98,7 +100,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     let resolved: Resolved = null
-    if (attemptKey !== null && attemptArtifact) {
+    if (attemptKey !== null) {
       // Per-attempt: scan the customer's recent conversations for the key.
       // (`identity_verification.attempt.v1` joins on the conversation;
       // conversations carry the canonical customer id after identity merges.)
@@ -202,9 +204,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       headers: {
         'Content-Type': contentType,
         'Content-Disposition': `${disposition}; filename="${filename}"`,
-        ...(object.contentLength != null
-          ? { 'Content-Length': String(object.contentLength) }
-          : {}),
+        ...(object.contentLength != null ? { 'Content-Length': String(object.contentLength) } : {}),
         'Cache-Control': 'private, no-store',
       },
     })
