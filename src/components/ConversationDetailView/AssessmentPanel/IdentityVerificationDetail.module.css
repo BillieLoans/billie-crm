@@ -237,8 +237,18 @@
 .listingCardButton:focus-visible { outline: 2px solid var(--theme-success-500, #2563eb); outline-offset: 2px; }
 
 /* ── Listing modal ── */
-.listingBody { padding: 1rem 1.5rem 1.5rem; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
-.listingMatchedOn { margin: 0; font-size: 13px; color: var(--theme-elevation-600, #666); }
+/* The shared Modal panel is white in both admin themes (see ui/modal.module.css),
+   so text here is pinned to the same light greys rather than theme tokens —
+   otherwise dark mode inherits near-white text onto the white panel. */
+.listingBody {
+  padding: 1rem 1.5rem 1.5rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  color: #1f2937;
+}
+.listingMatchedOn { margin: 0; font-size: 13px; color: #6b7280; }
 .listingList {
   margin: 0;
   display: grid;
@@ -247,15 +257,15 @@
   font-size: 13px;
 }
 .listingLabel {
-  color: var(--theme-elevation-500, #888);
+  color: #6b7280;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding-top: 2px;
 }
-.listingValue { margin: 0; overflow-wrap: anywhere; }
-.listingBody .subTitle { margin: 0 0 6px; }
+.listingValue { margin: 0; overflow-wrap: anywhere; color: #1f2937; }
+.listingBody .subTitle { margin: 0 0 6px; color: #6b7280; }
 @media (max-width: 480px) {
   .listingList { grid-template-columns: 1fr; gap: 2px; }
   .listingLabel { margin-top: 8px; }
