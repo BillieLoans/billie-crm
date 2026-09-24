@@ -3,6 +3,14 @@
 import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useVersionStore } from '@/stores/version'
+import type { ContactProvenanceFields } from '@/lib/contact-provenance'
+import {
+  CustomerRedirectError,
+  isCustomerRedirectResponse,
+  type CustomerRedirectResponse,
+} from '@/lib/customer-redirect'
+
+export { CustomerRedirectError } from '@/lib/customer-redirect'
 
 /**
  * Individual scheduled payment in the repayment schedule.
@@ -77,7 +85,7 @@ export interface LoanAccountData {
  * Subset of customer data returned by the API.
  * Matches the shape used by ServicingView.
  */
-export interface CustomerData {
+export interface CustomerData extends ContactProvenanceFields {
   id: string
   customerId: string
   fullName: string | null
@@ -156,7 +164,7 @@ interface CustomerApiResponse {
   }
 }
 
-async function fetchCustomer(customerId: string): Promise<CustomerData> {
+export async function fetchCustomer(customerId: string): Promise<CustomerData> {
   const res = await fetch(`/api/customer/${customerId}`)
 
   if (!res.ok) {
@@ -166,7 +174,10 @@ async function fetchCustomer(customerId: string): Promise<CustomerData> {
     throw new Error('Failed to fetch customer')
   }
 
-  const data: CustomerApiResponse = await res.json()
+  const data: CustomerApiResponse | CustomerRedirectResponse = await res.json()
+  if (isCustomerRedirectResponse(data)) {
+    throw new CustomerRedirectError(data)
+  }
 
   // Merge customer and accounts into CustomerData shape
   return {

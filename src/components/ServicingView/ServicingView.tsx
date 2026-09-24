@@ -4,6 +4,7 @@ import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useQueryClient } from '@tanstack/react-query'
 import { useCustomer, type LoanAccountData } from '@/hooks/queries/useCustomer'
+import { CustomerRedirectError } from '@/lib/customer-redirect'
 import { transactionsQueryKey } from '@/hooks/queries/useTransactions'
 import { useFeesCount } from '@/hooks/queries/useFeesCount'
 import { accruedYieldQueryKey, accrualHistoryQueryKey } from '@/hooks/queries/useAccruedYield'
@@ -71,8 +72,38 @@ const CustomerNotFound: React.FC = () => {
  */
 export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
   const queryClient = useQueryClient()
-  const { data: customer, isLoading, isError, refetch: refetchCustomer } = useCustomer(customerId)
+  const {
+    data: customer,
+    isLoading,
+    isError,
+    error,
+    refetch: refetchCustomer,
+  } = useCustomer(customerId)
   const [isRefreshing, setIsRefreshing] = useState(false)
+
+  // BTB-392: the id is a former record an identity link folded into the
+  // canonical — open that instead. Full page load, as the command palette
+  // does, so the Payload admin template wraps the view; `via` lets the
+  // canonical page say where the staff member came from.
+  const redirect = error instanceof CustomerRedirectError ? error : null
+  useEffect(() => {
+    if (redirect) {
+      window.location.replace(
+        `/admin/servicing/${encodeURIComponent(redirect.redirectTo)}?via=${encodeURIComponent(customerId)}`,
+      )
+    }
+  }, [redirect, customerId])
+
+  // The former record this page was opened from (see the redirect above).
+  const [viaAlias, setViaAlias] = useState<string | null>(null)
+  useEffect(() => {
+    try {
+      const via = new URLSearchParams(window.location.search).get('via')
+      setViaAlias(via && via !== customerId ? via : null)
+    } catch {
+      setViaAlias(null)
+    }
+  }, [customerId])
 
   // Collections cases for this customer (BTB-197 WS4) — surfaced as attention
   // chips + per-account badges on the rail. accountId on a case === loanAccountId.
@@ -310,6 +341,17 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
     }
   }, [activeTab, selectedAccountId, refetchCustomer, queryClient])
 
+  // Former record: say so while the browser follows the redirect.
+  if (redirect) {
+    return (
+      <div className={styles.container}>
+        <p className={styles.viaNotice} role="status" aria-live="polite">
+          {customerId} is a former record. Opening the current record {redirect.redirectTo}…
+        </p>
+      </div>
+    )
+  }
+
   // Error state
   if (isError) {
     return (
@@ -352,6 +394,22 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
       <div className={styles.header}>
         <h1 className={styles.headerTitle}>Customer Servicing</h1>
       </div>
+
+      {viaAlias && (
+        <div className={styles.viaNotice} role="status" aria-live="polite" data-testid="via-notice">
+          <span>
+            Opened from former record <code>{viaAlias}</code>, which was merged into this customer.
+          </span>
+          <button
+            type="button"
+            className={styles.viaNoticeDismiss}
+            onClick={() => setViaAlias(null)}
+            aria-label="Dismiss former-record notice"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* Compact horizontal customer header */}
       {customer && <CustomerHeader customer={customer} />}

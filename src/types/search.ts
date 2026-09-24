@@ -12,6 +12,11 @@ export interface CustomerSearchResult {
   emailAddress: string | null
   identityVerified: boolean
   accountCount: number
+  /**
+   * BTB-392: set when the search matched a former record (an alias an identity
+   * link folded into `customerId`); the name/email shown are that record's.
+   */
+  matchedFormerRecord?: string | null
 }
 
 export interface CustomerSearchResponse {

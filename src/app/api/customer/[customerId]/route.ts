@@ -15,7 +15,7 @@ import { hasAnyRole } from '@/lib/access'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ customerId: string }> }
+  { params }: { params: Promise<{ customerId: string }> },
 ) {
   try {
     const auth = await requireAuth(hasAnyRole)
@@ -37,6 +37,17 @@ export async function GET(
     }
 
     const customer = customersResult.docs[0]
+
+    // BTB-392: an identity link tombstoned this row — the servicing view
+    // belongs to the surviving canonical record. Say so instead of serving
+    // the stale alias as if it were live.
+    if (customer.mergedInto && customer.mergedInto !== customer.customerId) {
+      return NextResponse.json({
+        redirectTo: customer.mergedInto,
+        viaAlias: customer.customerId,
+        mergedReason: customer.mergedReason ?? null,
+      })
+    }
 
     // 2. Get loan accounts for this customer
     const accountsResult = await payload.find({
@@ -72,7 +83,7 @@ export async function GET(
             liveBalance: null,
           }
         }
-      })
+      }),
     )
 
     // 4. Get recent conversations
@@ -108,6 +119,21 @@ export async function GET(
         reapplicationBlock: customer.reapplicationBlock ?? null,
         identityVerification: customer.identityVerification ?? null,
         fraudRisk: customer.fraudRisk ?? null,
+        // BTB-392: contact provenance and identity status from the platform's
+        // customer.changed.v1 (customers SDK 3.x), projected by the event
+        // processor. `contacts` is the SDK's ContactRecord list, verbatim.
+        canonicalId: customer.canonicalId ?? null,
+        customerIdStatus: customer.customerIdStatus ?? null,
+        emailTier: customer.emailTier ?? null,
+        emailSource: customer.emailSource ?? null,
+        emailVerifiedAt: customer.emailVerifiedAt ?? null,
+        mobilePhoneTier: customer.mobilePhoneTier ?? null,
+        mobilePhoneSource: customer.mobilePhoneSource ?? null,
+        mobilePhoneVerifiedAt: customer.mobilePhoneVerifiedAt ?? null,
+        contacts: Array.isArray(customer.contacts) ? customer.contacts : null,
+        contactsChangedBy: customer.contactsChangedBy ?? null,
+        contactsChangedAt: customer.contactsChangedAt ?? null,
+        mergedReason: customer.mergedReason ?? null,
       },
       accounts: accountsWithBalances.map((account) => ({
         id: account.id,
@@ -138,7 +164,7 @@ export async function GET(
         activeAccounts: accountsWithBalances.filter((a) => a.accountStatus === 'active').length,
         totalOutstanding: accountsWithBalances.reduce(
           (sum, a) => sum + (a.liveBalance?.totalOutstanding || a.balances?.totalOutstanding || 0),
-          0
+          0,
         ),
         totalConversations: conversationsResult.docs.length,
       },
@@ -146,8 +172,11 @@ export async function GET(
   } catch (error) {
     console.error('Error fetching customer data:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch customer data', details: 'An internal error occurred. Please try again.' },
-      { status: 500 }
+      {
+        error: 'Failed to fetch customer data',
+        details: 'An internal error occurred. Please try again.',
+      },
+      { status: 500 },
     )
   }
 }
@@ -198,4 +227,3 @@ function buildActivityTimeline(accounts: any[], conversations: any[]): TimelineI
 
   return timeline.slice(0, 20) // Limit to 20 most recent items
 }
-
