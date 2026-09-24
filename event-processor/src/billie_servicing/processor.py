@@ -849,7 +849,11 @@ class EventProcessor:
 
         else:
             # Chat/conversation events — sanitize envelope so payload JSON string
-            # is parsed into a dict before handlers receive the event
+            # is parsed into a dict before handlers receive the event. This is
+            # also the path for billieChat's `identity.*` events
+            # (identity.resolver.assessed.v1, identity.review.opened.v1,
+            # identity_verification.*): plain JSON payloads, no SDK model —
+            # never route them through the customers SDK parser (BTB-392).
             return sanitize_envelope(sanitized)
 
     async def _move_to_dlq(

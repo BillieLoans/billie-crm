@@ -68,6 +68,10 @@ from .identity import (
     handle_customer_identity_linked,
     handle_customer_identity_merged,
 )
+from .identity_resolution import (
+    handle_identity_resolver_assessed,
+    handle_identity_review_opened,
+)
 from .identity_verification import (
     handle_identity_attempt,
     handle_identity_report_archived,
@@ -123,6 +127,8 @@ __all__ = [
     "handle_customer_verified",
     "handle_customer_identity_linked",
     "handle_customer_identity_merged",
+    "handle_identity_resolver_assessed",
+    "handle_identity_review_opened",
     # Re-application block (BTB-135) + cleared/rejected projection (Task 6)
     "handle_reapplication_blocked",
     "handle_reapplication_block_cleared",
