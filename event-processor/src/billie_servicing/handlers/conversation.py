@@ -425,6 +425,31 @@ async def _upsert_application(
     logger.bind(application_number=application_number).info("Application upserted")
 
 
+async def _platform_stamped_contacts(target: Any, customer_id: str) -> set[str]:
+    """Which contact columns the platform has already written with a tier.
+
+    BTB-392 (customer data ownership SP4, D2): once ``customer.changed.v1``
+    has stamped ``email_tier`` / ``mobile_phone_tier`` on the row, that
+    contact is the survivorship-governed primary and the chat block on
+    ``applicationDetail_changed`` (an unproved fragment, possibly a stale
+    value the extractor re-lifted) must never overwrite it. Rows the platform
+    has not spoken for yet — legacy rows, the flag-off window — keep today's
+    behaviour.
+    """
+    row = await target.fetchrow(
+        "SELECT email_tier, mobile_phone_tier FROM customers WHERE customer_id = $1",
+        customer_id,
+    )
+    if not row:
+        return set()
+    stamped: set[str] = set()
+    if row["email_tier"]:
+        stamped.add("email_address")
+    if row["mobile_phone_tier"]:
+        stamped.add("mobile_phone_number")
+    return stamped
+
+
 async def _sync_customer(target: Any, customer_id: str, customer_data: dict[str, Any]) -> None:
     """Sync customer data to customers table from a chat event payload.
 
@@ -432,8 +457,12 @@ async def _sync_customer(target: Any, customer_id: str, customer_data: dict[str,
     name data at all, full_name is left untouched so a later customer.changed.v1
     can populate it — we never overwrite with a placeholder like
     ``Customer <id>``, which used to leak into the CRM list views.
+
+    Contact fields (email / mobile) are written only while the platform has
+    not yet stamped them with a tier — see ``_platform_stamped_contacts``.
     """
     log = logger.bind(customer_id=customer_id)
+    stamped = await _platform_stamped_contacts(target, customer_id)
 
     first_name = customer_data.get("first_name") or customer_data.get("firstName", "")
     last_name = customer_data.get("last_name") or customer_data.get("lastName", "")
@@ -462,14 +491,18 @@ async def _sync_customer(target: Any, customer_id: str, customer_data: dict[str,
         or customer_data.get("email_address")
         or customer_data.get("emailAddress")
     )
-    if email:
+    if email and "email_address" in stamped:
+        log.debug("Chat email skipped — platform-stamped contact on the row")
+    elif email:
         values["email_address"] = email
     phone = (
         customer_data.get("phone")
         or customer_data.get("mobile_phone_number")
         or customer_data.get("mobilePhoneNumber")
     )
-    if phone:
+    if phone and "mobile_phone_number" in stamped:
+        log.debug("Chat mobile skipped — platform-stamped contact on the row")
+    elif phone:
         values["mobile_phone_number"] = phone
     dob = customer_data.get("date_of_birth") or customer_data.get("dateOfBirth")
     if dob:

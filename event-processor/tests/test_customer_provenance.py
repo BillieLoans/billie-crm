@@ -181,3 +181,172 @@ async def test_platform_payload_upserts_legacy_columns_unchanged(make_processor,
     call = mock_pool.calls_against("customers")[-1]
     assert call.op == "INSERT"
     assert call.conflict_columns == ["customer_id"]
+
+
+# ---------------------------------------------------------------------------
+# Task 3 — provenance projected onto the customers row
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_platform_payload_projects_provenance(make_processor, mock_pool):
+    parsed = make_processor._parse_event("customer.changed.v1", envelope(platform_changed_payload()))
+
+    await handle_customer_changed(mock_pool, parsed)
+
+    doc = mock_pool.last_insert("customers")
+    assert doc["canonical_id"] == "23D47AB2"
+    assert doc["customer_id_status"] == "ADMITTED"
+    assert doc["email_tier"] == "BOUND"
+    assert doc["email_source"] == "ZITADEL_LOGIN"
+    assert doc["email_verified_at"].isoformat() == "2026-09-23T13:15:00+00:00"
+    assert doc["mobile_phone_tier"] == "VERIFIED"
+    assert doc["mobile_phone_source"] == "OTP_SMS"
+    assert doc["mobile_phone_verified_at"].isoformat() == "2026-09-23T13:15:00+00:00"
+    assert doc["contacts_changed_by"] == "reconciliation"
+    assert doc["contacts_changed_at"].isoformat() == "2026-09-23T13:15:00+00:00"
+
+    contacts = json.loads(doc["contacts"])
+    assert len(contacts) == 3
+    primaries = {c["contact_type"]: c["value"] for c in contacts if c["is_primary"]}
+    assert primaries == {"EMAIL": "rohansharp+6@gmail.com", "MOBILE": "0412345678"}
+    also_seen = [c for c in contacts if not c["is_primary"]]
+    assert also_seen[0]["value"] == "rohan.sharp@example.com"
+    assert also_seen[0]["tier"] == "ASSERTED"
+    assert also_seen[0]["origin_customer_id"] == "258DE915"
+
+
+PROVENANCE_COLUMNS = (
+    "canonical_id",
+    "customer_id_status",
+    "email_tier",
+    "email_source",
+    "email_verified_at",
+    "mobile_phone_tier",
+    "mobile_phone_source",
+    "mobile_phone_verified_at",
+    "contacts",
+    "contacts_changed_by",
+)
+
+
+@pytest.mark.asyncio
+async def test_legacy_payload_touches_no_provenance_column(make_processor, mock_pool):
+    """The flag-off path: billieChat's 2.x-shaped event upserts exactly today's
+    columns (changed_at is the one 2.x field that now lands, as
+    contacts_changed_at)."""
+    parsed = make_processor._parse_event("customer.changed.v1", envelope(legacy_changed_payload()))
+
+    await handle_customer_changed(mock_pool, parsed)
+
+    doc = mock_pool.last_insert("customers")
+    assert doc["email_address"] == "jane@example.com"
+    for column in PROVENANCE_COLUMNS:
+        assert column not in doc, column
+
+
+@pytest.mark.asyncio
+async def test_partial_event_without_contacts_leaves_contacts_untouched(make_processor, mock_pool):
+    payload = platform_changed_payload()
+    del payload["contacts"]
+    parsed = make_processor._parse_event("customer.changed.v1", envelope(payload))
+
+    await handle_customer_changed(mock_pool, parsed)
+
+    doc = mock_pool.last_insert("customers")
+    assert "contacts" not in doc
+    assert doc["email_tier"] == "BOUND"
+
+
+@pytest.mark.asyncio
+async def test_non_text_provenance_value_is_skipped_not_fatal(mock_pool):
+    """A malformed tier (anything that is not a str / str-Enum) drops only that
+    column; the rest of the row is still written — the ekyc_status precedent."""
+    from types import SimpleNamespace
+
+    payload = SimpleNamespace(
+        customer_id="X1",
+        first_name="A",
+        last_name="B",
+        email_address="a@b.c",
+        mobile_phone_number=None,
+        date_of_birth=None,
+        ekyc_status=None,
+        residential_address=None,
+        email_tier=object(),
+        email_source="OTP_EMAIL",
+        email_verified_at=12345,
+        contacts=[object()],
+        changed_by="customer.contact.verified.v1",
+    )
+
+    await handle_customer_changed(mock_pool, SimpleNamespace(payload=payload))
+
+    doc = mock_pool.last_insert("customers")
+    assert doc["email_address"] == "a@b.c"
+    assert "email_tier" not in doc
+    assert "email_verified_at" not in doc
+    assert "contacts" not in doc
+    assert doc["email_source"] == "OTP_EMAIL"
+    assert doc["contacts_changed_by"] == "customer.contact.verified.v1"
+
+
+# ---------------------------------------------------------------------------
+# Task 4 — the chat customer block never overwrites a platform-stamped contact
+# ---------------------------------------------------------------------------
+
+from billie_servicing.handlers.conversation import _sync_customer  # noqa: E402
+
+CHAT_BLOCK = {
+    "customer_id": "23D47AB2",
+    "first_name": "Rohan",
+    "email": "rohan.typed@example.com",
+    "phone": "0499999999",
+    "residential_address": {"street_name": "Smith", "suburb": "Fitzroy"},
+}
+
+
+@pytest.mark.asyncio
+async def test_chat_block_skips_email_stamped_by_platform(mock_pool):
+    mock_pool.set_fetchrow({"email_tier": "BOUND", "mobile_phone_tier": None})
+
+    await _sync_customer(mock_pool, "23D47AB2", CHAT_BLOCK)
+
+    doc = mock_pool.last_insert("customers")
+    assert "email_address" not in doc
+    assert doc["mobile_phone_number"] == "0499999999"  # mobile not stamped yet
+    assert doc["first_name"] == "Rohan"
+    assert doc["residential_address_suburb"] == "Fitzroy"
+
+
+@pytest.mark.asyncio
+async def test_chat_block_skips_mobile_stamped_by_platform(mock_pool):
+    mock_pool.set_fetchrow({"email_tier": None, "mobile_phone_tier": "VERIFIED"})
+
+    await _sync_customer(mock_pool, "23D47AB2", CHAT_BLOCK)
+
+    doc = mock_pool.last_insert("customers")
+    assert doc["email_address"] == "rohan.typed@example.com"
+    assert "mobile_phone_number" not in doc
+
+
+@pytest.mark.asyncio
+async def test_chat_block_writes_contacts_on_a_row_without_tiers(mock_pool):
+    """Legacy rows and the flag-off window: today's behaviour, unchanged."""
+    mock_pool.set_fetchrow({"email_tier": None, "mobile_phone_tier": None})
+
+    await _sync_customer(mock_pool, "23D47AB2", CHAT_BLOCK)
+
+    doc = mock_pool.last_insert("customers")
+    assert doc["email_address"] == "rohan.typed@example.com"
+    assert doc["mobile_phone_number"] == "0499999999"
+
+
+@pytest.mark.asyncio
+async def test_chat_block_writes_contacts_when_no_row_exists(mock_pool):
+    mock_pool.set_fetchrow(None)
+
+    await _sync_customer(mock_pool, "NEW-JOURNEY", {"email": "new@example.com"})
+
+    doc = mock_pool.last_insert("customers")
+    assert doc["email_address"] == "new@example.com"
