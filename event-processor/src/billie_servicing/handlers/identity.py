@@ -14,6 +14,14 @@ straight from the envelope rather than coupling to a specific SDK version.
 Idempotent: the re-attribution UPDATEs match the alias id, so a second delivery
 finds no alias rows left to move, and the ``merged_into`` tombstone is a fixed
 write. Processor-level dedup also guards exact redelivery.
+
+BTB-392 (customer data ownership SP4, D5 — links are reversible): every
+re-attributed row records the id it arrived under in
+``identity_origin_customer_id`` the first time it moves (``COALESCE`` keeps the
+first origin across a second hop), the tombstoned customers row records the
+platform's ``link_id`` / ``reason`` (``MERGED`` for a merge), and the journey's
+conversations get ``identity_resolution.link`` (or ``.merge``) for the staff
+view. ``scripts/unlink_identity_alias.py`` reverses a link from these.
 """
 
 from __future__ import annotations
@@ -25,9 +33,14 @@ from typing import Any
 import asyncpg
 import structlog
 
+from ..db import merge_jsonb
 from .sanitize import safe_str
 
 logger = structlog.get_logger()
+
+# customer.identity.linked.v1 reason codes come from the platform's ResolveLink
+# decision table; a customer.identity.merged.v1 has no reason of its own.
+MERGED_REASON = "MERGED"
 
 # Projection tables that carry a denormalised customer_id_string column we
 # re-point directly to the canonical customer. The applications table is NOT in
@@ -66,6 +79,11 @@ def _extract_payload(event: dict[str, Any]) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
+def _optional_str(value: Any, field_name: str) -> str | None:
+    text = safe_str(value, field_name) if value is not None else ""
+    return text or None
+
+
 async def handle_customer_identity_linked(pool: asyncpg.Pool, event: dict[str, Any]) -> None:
     """Handle ``customer.identity.linked.v1`` (AC-C1/AC-C2)."""
     payload = _extract_payload(event)
@@ -74,6 +92,9 @@ async def handle_customer_identity_linked(pool: asyncpg.Pool, event: dict[str, A
         canonical_id=safe_str(payload.get("canonical_id"), "canonical_id"),
         alias_id=safe_str(payload.get("journey_id"), "journey_id"),
         kind="linked",
+        link_id=_optional_str(payload.get("link_id"), "link_id"),
+        reason=_optional_str(payload.get("reason"), "reason"),
+        conversation_id=_optional_str(event.get("conv"), "conv"),
     )
 
 
@@ -85,11 +106,21 @@ async def handle_customer_identity_merged(pool: asyncpg.Pool, event: dict[str, A
         canonical_id=safe_str(payload.get("canonical_id"), "canonical_id"),
         alias_id=safe_str(payload.get("merged_canonical_id"), "merged_canonical_id"),
         kind="merged",
+        link_id=_optional_str(payload.get("link_id"), "link_id"),
+        reason=MERGED_REASON,
+        conversation_id=_optional_str(event.get("conv"), "conv"),
     )
 
 
 async def _merge_identity(
-    pool: asyncpg.Pool, canonical_id: str, alias_id: str, kind: str
+    pool: asyncpg.Pool,
+    canonical_id: str,
+    alias_id: str,
+    kind: str,
+    *,
+    link_id: str | None = None,
+    reason: str | None = None,
+    conversation_id: str | None = None,
 ) -> None:
     """Re-attribute alias records to the canonical and tombstone the alias row."""
     log = logger.bind(canonical_id=canonical_id, alias_id=alias_id, kind=kind)
@@ -112,12 +143,45 @@ async def _merge_identity(
     )
     now = datetime.now(timezone.utc)
 
+    outcome_key = "link" if kind == "linked" else "merge"
+    outcome: dict[str, Any] = {
+        "canonical_id": canonical_id,
+        "alias_id": alias_id,
+        "link_id": link_id,
+        "reason": reason,
+        "at": now.isoformat(),
+    }
+
     async with pool.acquire() as conn, conn.transaction():
+        # The staff view of the journey: what the platform decided and why.
+        # Written before the move so the alias-keyed predicate still matches;
+        # the envelope's conversation (the one the platform decided in) is
+        # patched by id as well, in case it is not yet keyed by the alias.
+        await merge_jsonb(
+            conn,
+            "conversations",
+            column="identity_resolution",
+            key_column="customer_id_string",
+            key_value=alias_id,
+            patch={outcome_key: outcome},
+        )
+        if conversation_id:
+            await merge_jsonb(
+                conn,
+                "conversations",
+                column="identity_resolution",
+                key_column="conversation_id",
+                key_value=conversation_id,
+                patch={outcome_key: outcome},
+            )
         # String-keyed projections carry customer_id_string + customer_id_id.
+        # identity_origin_customer_id keeps the FIRST id the row arrived under.
         for table in _STRING_KEYED_TABLES:
             await conn.execute(
                 f"UPDATE {table} "
-                f"SET customer_id_string = $1, customer_id_id = $2 "
+                f"SET customer_id_string = $1, customer_id_id = $2, "
+                f"identity_origin_customer_id = "
+                f"COALESCE(identity_origin_customer_id, customer_id_string) "
                 f"WHERE customer_id_string = $3",
                 canonical_id,
                 canonical_ref,
@@ -130,15 +194,22 @@ async def _merge_identity(
         # until a later canonical event re-points it.
         if alias_ref is not None and canonical_ref is not None:
             await conn.execute(
-                "UPDATE applications SET customer_id_id = $1 WHERE customer_id_id = $2",
+                "UPDATE applications SET customer_id_id = $1, "
+                "identity_origin_customer_id = COALESCE(identity_origin_customer_id, $3) "
+                "WHERE customer_id_id = $2",
                 canonical_ref,
                 alias_ref,
+                alias_id,
             )
-        # Tombstone/redirect the orphan customers row created under the alias.
+        # Tombstone/redirect the orphan customers row created under the alias,
+        # recording the platform's link id and reason behind it.
         await conn.execute(
-            "UPDATE customers SET merged_into = $1, updated_at = $2 "
-            "WHERE customer_id = $3",
+            "UPDATE customers SET merged_into = $1, merged_link_id = $2, "
+            "merged_reason = $3, updated_at = $4 "
+            "WHERE customer_id = $5",
             canonical_id,
+            link_id,
+            reason,
             now,
             alias_id,
         )
