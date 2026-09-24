@@ -48,19 +48,25 @@ async def test_apply_moves_origin_tagged_rows_back_and_clears_the_tombstone(mock
         assert upd.values["customer_id_string"] == "B"
         assert upd.values["customer_id_id"] == "b-ref"
         assert "identity_origin_customer_id = NULL" in upd.sql
-        assert upd.where["customer_id_string"] == "A"
+        # The WHERE has an OR group, which MockPool's comma-split parser cannot
+        # map into `where`; assert on the SQL text and the bound args instead.
+        assert "WHERE customer_id_string = $3" in upd.sql
+        assert upd.args[2] == "A"
         assert "identity_origin_customer_id = $1" in upd.sql  # origin = alias
     appl = _updates(mock_pool, "applications")[-1]
     assert appl.values["customer_id_id"] == "b-ref"
-    assert appl.where["customer_id_id"] == "a-ref"
+    assert "WHERE customer_id_id = $2" in appl.sql
+    assert appl.args[1] == "a-ref"
     cust = _updates(mock_pool, "customers")[-1]
     assert "merged_into = NULL" in cust.sql
     assert "merged_link_id = NULL" in cust.sql
-    assert cust.where["customer_id"] == "B"
-    assert cust.where["merged_into"] == "A"  # only a tombstone pointing at A
-    # MockConnection.execute returns a bare status; no rowcount → reported as 0/False.
-    assert result.moved["conversations"] == 0
-    assert result.tombstone_cleared is False
+    assert "WHERE customer_id = $1 AND merged_into = $2" in cust.sql
+    assert cust.args == ("B", "A")  # only a tombstone pointing at A
+    # Row counts come from asyncpg's status string; MockConnection's stub
+    # status is not a real count, so only the shape is asserted here.
+    assert set(result.moved) == {"conversations", "loan_accounts", "applications"}
+    assert all(isinstance(n, int) for n in result.moved.values())
+    assert isinstance(result.tombstone_cleared, bool)
 
 
 @pytest.mark.asyncio
