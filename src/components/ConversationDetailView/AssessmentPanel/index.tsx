@@ -17,6 +17,8 @@ import type { AssessmentType } from '../AssessmentDetailView'
 import type { StatementSlot } from '@/hooks'
 import { AssessmentSection } from './AssessmentSection'
 import { IdentityVerificationDetail } from './IdentityVerificationDetail'
+import { IdentityResolutionDetail } from './IdentityResolutionDetail'
+import { identityResolutionSummary } from '@/lib/identityResolution'
 import { LlmCostsSection } from '../LlmCostsSection'
 import styles from './styles.module.css'
 
@@ -148,6 +150,10 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
       : lastAttempt
         ? '⏳ In progress'
         : 'No data'
+
+  // Identity resolution (BTB-392): what the platform decided about who this is.
+  const identityResolution = conversation.identityResolution ?? null
+  const identityResolutionLabel = identityResolutionSummary(identityResolution)
 
   // Account Conduct
   const accountConduct = assessments?.accountConduct as Record<string, unknown> | undefined
@@ -317,6 +323,14 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
         ) : (
           <p>No identity assessment data.</p>
         )}
+      </AssessmentSection>
+
+      {/* Identity resolution — link reason, resolver verdicts, review case */}
+      <AssessmentSection title="Identity resolution" summary={identityResolutionLabel}>
+        <IdentityResolutionDetail
+          resolution={identityResolution}
+          originCustomerId={conversation.identityOriginCustomerId ?? null}
+        />
       </AssessmentSection>
 
       {/* Credit: Account Conduct */}

@@ -37,11 +37,15 @@ const CONVERSATION_DOC: Record<string, unknown> = {
   llmUnpricedCount: 1,
 }
 
-const mockUser = vi.hoisted(() => ({ current: { id: 'u-1', role: 'admin' } as { id: string; role: string } }))
+const mockUser = vi.hoisted(() => ({
+  current: { id: 'u-1', role: 'admin' } as { id: string; role: string },
+}))
 const mockFind = vi.hoisted(() =>
-  vi.fn().mockImplementation(async ({ collection }: { collection: string }) =>
-    collection === 'conversations' ? { docs: [CONVERSATION_DOC] } : { docs: [] },
-  ),
+  vi
+    .fn()
+    .mockImplementation(async ({ collection }: { collection: string }) =>
+      collection === 'conversations' ? { docs: [CONVERSATION_DOC] } : { docs: [] },
+    ),
 )
 
 vi.mock('payload', () => ({
@@ -149,6 +153,8 @@ const BASE_KEYS = [
   'decisionDetail',
   'decisionStatus',
   'finalDecision',
+  'identityOriginCustomerId',
+  'identityResolution',
   'identityVerificationAttempts',
   'identityVerificationReport',
   'killRecord',
