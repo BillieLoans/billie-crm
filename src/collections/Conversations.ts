@@ -58,6 +58,18 @@ export const Conversations: CollectionConfig = {
       },
     },
     {
+      // BTB-392: the customer id this row arrived under before an identity
+      // link re-attributed it to the canonical (set once, on the first move),
+      // so a cut link can be undone. Written by the event processor only.
+      name: 'identityOriginCustomerId',
+      type: 'text',
+      index: true,
+      admin: {
+        readOnly: true,
+        description: 'Customer id before identity re-attribution (null if never moved)',
+      },
+    },
+    {
       name: 'applicationId',
       type: 'relationship',
       relationTo: 'applications',
@@ -451,6 +463,19 @@ export const Conversations: CollectionConfig = {
       admin: {
         readOnly: true,
         description: 'Per-attempt identity verification results (keyed by LAB request id)',
+      },
+    },
+    {
+      // BTB-392: identity resolution for this journey — `link` (from
+      // customer.identity.linked.v1: canonical_id, link_id, reason, linked_at),
+      // `resolver_assessments` (identity.resolver.assessed.v1, keyed by event
+      // id) and `review_case` (identity.review.opened.v1). PII-free by
+      // construction: ids, codes, scores and factors only.
+      name: 'identityResolution',
+      type: 'json',
+      admin: {
+        readOnly: true,
+        description: 'Platform link outcome, resolver assessments and recognition review case for this journey',
       },
     },
     {

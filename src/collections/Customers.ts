@@ -45,6 +45,109 @@ export const Customers: CollectionConfig = {
       },
     },
     {
+      // BTB-392: the platform's link id and reason (customer.identity.linked.v1
+      // carries link_id + reason since SP2; legacy billieChat events carry
+      // neither, so both are nullable). "MERGED" for a customer.identity.merged.v1.
+      name: 'mergedLinkId',
+      type: 'text',
+      admin: { readOnly: true, description: 'Platform link id behind mergedInto' },
+    },
+    {
+      name: 'mergedReason',
+      type: 'text',
+      admin: {
+        readOnly: true,
+        description:
+          'Platform reason code behind mergedInto (DOCUMENT_AGREE, SCORED_LINK, LOGIN_CONTINUITY, MIGRATION, …) or MERGED',
+      },
+    },
+    {
+      // BTB-392: identity fields from the platform customerService's
+      // customer.changed.v1 (customers SDK 3.x). Written by the event
+      // processor only; the CRM applies no survivorship logic of its own.
+      name: 'canonicalId',
+      type: 'text',
+      index: true,
+      admin: {
+        readOnly: true,
+        description:
+          'Canonical customer id this record resolves to (equals customerId unless linked)',
+      },
+    },
+    {
+      name: 'customerIdStatus',
+      type: 'text',
+      admin: {
+        readOnly: true,
+        description:
+          'PROVISIONAL (registered, not yet admitted), ADMITTED, or LINKED (an alias of canonicalId)',
+      },
+    },
+    {
+      name: 'emailTier',
+      type: 'text',
+      admin: {
+        readOnly: true,
+        description: 'Survivorship tier of emailAddress: BOUND (login), VERIFIED, ASSERTED',
+      },
+    },
+    {
+      name: 'emailSource',
+      type: 'text',
+      admin: {
+        readOnly: true,
+        description: 'ZITADEL_LOGIN, OTP_EMAIL, EKYC, CHAT_ASSERTED, STAFF, MIGRATION',
+      },
+    },
+    {
+      name: 'emailVerifiedAt',
+      type: 'date',
+      admin: { readOnly: true },
+    },
+    {
+      name: 'mobilePhoneTier',
+      type: 'text',
+      admin: {
+        readOnly: true,
+        description: 'Survivorship tier of mobilePhoneNumber: BOUND, VERIFIED, ASSERTED',
+      },
+    },
+    {
+      name: 'mobilePhoneSource',
+      type: 'text',
+      admin: {
+        readOnly: true,
+        description: 'OTP_SMS, EKYC, CHAT_ASSERTED, STAFF, MIGRATION',
+      },
+    },
+    {
+      name: 'mobilePhoneVerifiedAt',
+      type: 'date',
+      admin: { readOnly: true },
+    },
+    {
+      name: 'contacts',
+      type: 'json',
+      admin: {
+        readOnly: true,
+        description:
+          'Every known contact value with provenance (customers SDK ContactRecord list, verbatim). Exactly one primary per type; the primary equals emailAddress / mobilePhoneNumber.',
+      },
+    },
+    {
+      name: 'contactsChangedBy',
+      type: 'text',
+      admin: {
+        readOnly: true,
+        description: 'changed_by of the customer.changed.v1 that last wrote this row',
+      },
+    },
+    {
+      name: 'contactsChangedAt',
+      type: 'date',
+      admin: { readOnly: true },
+    },
+    {
       name: 'title',
       type: 'text',
       admin: {

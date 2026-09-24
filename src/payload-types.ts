@@ -220,6 +220,57 @@ export interface Customer {
    */
   mergedInto?: string | null;
   /**
+   * Platform link id behind mergedInto
+   */
+  mergedLinkId?: string | null;
+  /**
+   * Platform reason code behind mergedInto (DOCUMENT_AGREE, SCORED_LINK, LOGIN_CONTINUITY, MIGRATION, …) or MERGED
+   */
+  mergedReason?: string | null;
+  /**
+   * Canonical customer id this record resolves to (equals customerId unless linked)
+   */
+  canonicalId?: string | null;
+  /**
+   * PROVISIONAL (registered, not yet admitted), ADMITTED, or LINKED (an alias of canonicalId)
+   */
+  customerIdStatus?: string | null;
+  /**
+   * Survivorship tier of emailAddress: BOUND (login), VERIFIED, ASSERTED
+   */
+  emailTier?: string | null;
+  /**
+   * ZITADEL_LOGIN, OTP_EMAIL, EKYC, CHAT_ASSERTED, STAFF, MIGRATION
+   */
+  emailSource?: string | null;
+  emailVerifiedAt?: string | null;
+  /**
+   * Survivorship tier of mobilePhoneNumber: BOUND, VERIFIED, ASSERTED
+   */
+  mobilePhoneTier?: string | null;
+  /**
+   * OTP_SMS, EKYC, CHAT_ASSERTED, STAFF, MIGRATION
+   */
+  mobilePhoneSource?: string | null;
+  mobilePhoneVerifiedAt?: string | null;
+  /**
+   * Every known contact value with provenance (customers SDK ContactRecord list, verbatim). Exactly one primary per type; the primary equals emailAddress / mobilePhoneNumber.
+   */
+  contacts?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * changed_by of the customer.changed.v1 that last wrote this row
+   */
+  contactsChangedBy?: string | null;
+  contactsChangedAt?: string | null;
+  /**
    * Mr, Mrs, Ms, Dr, etc.
    */
   title?: string | null;
@@ -470,6 +521,10 @@ export interface Application {
   id: string;
   applicationNumber: string;
   customerId?: (string | null) | Customer;
+  /**
+   * Customer id before identity re-attribution (null if never moved)
+   */
+  identityOriginCustomerId?: string | null;
   loanPurpose?: string | null;
   loanAmount?: number | null;
   /**
@@ -648,6 +703,10 @@ export interface Conversation {
    * Customer ID string for queries when relationship not yet established
    */
   customerIdString?: string | null;
+  /**
+   * Customer id before identity re-attribution (null if never moved)
+   */
+  identityOriginCustomerId?: string | null;
   /**
    * Linked application (may be null)
    */
@@ -886,6 +945,18 @@ export interface Conversation {
     | boolean
     | null;
   /**
+   * Platform link outcome, resolver assessments and recognition review case for this journey
+   */
+  identityResolution?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
    * Risk and serviceability assessments
    */
   assessments?: {
@@ -1053,6 +1124,10 @@ export interface LoanAccount {
    * Customer ID string for queries
    */
   customerIdString?: string | null;
+  /**
+   * Customer id before identity re-attribution (null if never moved)
+   */
+  identityOriginCustomerId?: string | null;
   customerName?: string | null;
   /**
    * Original loan terms at disbursement
@@ -2336,6 +2411,19 @@ export interface MediaSelect<T extends boolean = true> {
 export interface CustomersSelect<T extends boolean = true> {
   customerId?: T;
   mergedInto?: T;
+  mergedLinkId?: T;
+  mergedReason?: T;
+  canonicalId?: T;
+  customerIdStatus?: T;
+  emailTier?: T;
+  emailSource?: T;
+  emailVerifiedAt?: T;
+  mobilePhoneTier?: T;
+  mobilePhoneSource?: T;
+  mobilePhoneVerifiedAt?: T;
+  contacts?: T;
+  contactsChangedBy?: T;
+  contactsChangedAt?: T;
   title?: T;
   preferredName?: T;
   firstName?: T;
@@ -2441,6 +2529,7 @@ export interface ConversationsSelect<T extends boolean = true> {
   applicationNumber?: T;
   customerId?: T;
   customerIdString?: T;
+  identityOriginCustomerId?: T;
   applicationId?: T;
   status?: T;
   llmCostTotalUsd?: T;
@@ -2517,6 +2606,7 @@ export interface ConversationsSelect<T extends boolean = true> {
         archivedAt?: T;
       };
   identityVerificationAttempts?: T;
+  identityResolution?: T;
   assessments?:
     | T
     | {
@@ -2551,6 +2641,7 @@ export interface ConversationsSelect<T extends boolean = true> {
 export interface ApplicationsSelect<T extends boolean = true> {
   applicationNumber?: T;
   customerId?: T;
+  identityOriginCustomerId?: T;
   loanPurpose?: T;
   loanAmount?: T;
   loanFee?: T;
@@ -2649,6 +2740,7 @@ export interface LoanAccountsSelect<T extends boolean = true> {
   accountNumber?: T;
   customerId?: T;
   customerIdString?: T;
+  identityOriginCustomerId?: T;
   customerName?: T;
   loanTerms?:
     | T

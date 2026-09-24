@@ -70,14 +70,22 @@ export async function setup({ provide }: GlobalSetupContext) {
   // root cause of the historical stall this prevents.
   registerLexicalEsmConditions()
 
-  console.log('[globalSetup] Starting Postgres container…')
-  pg = await new PostgreSqlContainer('postgres:16-alpine')
-    .withDatabase('billie_crm_test')
-    .withUsername('billie_crm')
-    .withPassword('test_password')
-    .start()
-
-  const uri = pg.getConnectionUri()
+  // TEST_DATABASE_URI points the suite at an already-running Postgres (a
+  // local server, or a CI service container) instead of starting one through
+  // testcontainers — for environments without a Docker daemon. The schema is
+  // still pushed fresh below; use a throwaway database.
+  let uri = process.env.TEST_DATABASE_URI
+  if (uri) {
+    console.log('[globalSetup] Using external Postgres from TEST_DATABASE_URI')
+  } else {
+    console.log('[globalSetup] Starting Postgres container…')
+    pg = await new PostgreSqlContainer('postgres:16-alpine')
+      .withDatabase('billie_crm_test')
+      .withUsername('billie_crm')
+      .withPassword('test_password')
+      .start()
+    uri = pg.getConnectionUri()
+  }
 
   // Set DATABASE_URI before any payload import so the pg adapter picks it up.
   process.env.DATABASE_URI = uri

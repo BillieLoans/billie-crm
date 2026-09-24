@@ -83,6 +83,18 @@ export const LoanAccounts: CollectionConfig = {
       },
     },
     {
+      // BTB-392: the customer id this row arrived under before an identity
+      // link re-attributed it to the canonical (set once, on the first move),
+      // so a cut link can be undone. Written by the event processor only.
+      name: 'identityOriginCustomerId',
+      type: 'text',
+      index: true,
+      admin: {
+        readOnly: true,
+        description: 'Customer id before identity re-attribution (null if never moved)',
+      },
+    },
+    {
       // Resolved from customers.fullName at read time so the list view
       // can't drift from the source-of-truth on the customer record.
       name: 'customerName',
