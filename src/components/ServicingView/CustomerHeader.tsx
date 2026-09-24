@@ -8,6 +8,7 @@ import { CopyButton } from '@/components/ui'
 import { resultTone } from '@/lib/identityVerification'
 import { NotificationStatusPill } from './NotificationControls/NotificationStatusPill'
 import { IdentityVerificationDrawer } from './IdentityVerificationDrawer'
+import { IdStatusChip, TierBadge } from './ContactProvenance'
 import styles from './CustomerHeader.module.css'
 
 export interface CustomerHeaderProps {
@@ -118,6 +119,11 @@ export const CustomerHeader: React.FC<CustomerHeaderProps> = ({ customer }) => {
             <span className={styles.customerId}>
               {customer.customerId}
               <CopyButton value={customer.customerId} label="Copy customer ID" />
+              <IdStatusChip
+                customerId={customer.customerId}
+                customerIdStatus={customer.customerIdStatus}
+                canonicalId={customer.canonicalId}
+              />
             </span>
           </div>
         </div>
@@ -128,6 +134,12 @@ export const CustomerHeader: React.FC<CustomerHeaderProps> = ({ customer }) => {
               <span className={styles.contactIcon}>📧</span>
               <span className={styles.contactValue}>{customer.emailAddress}</span>
               <CopyButton value={customer.emailAddress} label="Copy email" />
+              <TierBadge
+                tier={customer.emailTier}
+                source={customer.emailSource}
+                verifiedAt={customer.emailVerifiedAt}
+                contactLabel="Email"
+              />
             </div>
           )}
           {customer.mobilePhoneNumber && (
@@ -135,6 +147,12 @@ export const CustomerHeader: React.FC<CustomerHeaderProps> = ({ customer }) => {
               <span className={styles.contactIcon}>📱</span>
               <span className={styles.contactValue}>{customer.mobilePhoneNumber}</span>
               <CopyButton value={customer.mobilePhoneNumber} label="Copy phone" />
+              <TierBadge
+                tier={customer.mobilePhoneTier}
+                source={customer.mobilePhoneSource}
+                verifiedAt={customer.mobilePhoneVerifiedAt}
+                contactLabel="Mobile"
+              />
             </div>
           )}
         </div>

@@ -3,6 +3,7 @@
 import type { CustomerData } from '@/hooks/queries/useCustomer'
 import { getAddressForMapLink, getGoogleMapsUrl } from '@/lib/utils'
 import { CopyButton } from '@/components/ui'
+import { AlsoSeen, ProvenanceFooter, TierBadge } from './ContactProvenance'
 import styles from './styles.module.css'
 
 export interface CustomerProfileProps {
@@ -31,10 +32,10 @@ function formatDateOfBirth(dateString: string | null): string {
  */
 function formatAddress(address: CustomerData['residentialAddress']): string {
   if (!address) return '—'
-  
+
   // Try full address first
   if (address.fullAddress) return address.fullAddress
-  
+
   // Build from parts
   const parts: string[] = []
   if (address.street) parts.push(address.street)
@@ -46,7 +47,7 @@ function formatAddress(address: CustomerData['residentialAddress']): string {
   } else if (address.postcode) {
     parts.push(address.postcode)
   }
-  
+
   return parts.length > 0 ? parts.join(', ') : '—'
 }
 
@@ -55,18 +56,19 @@ function formatAddress(address: CustomerData['residentialAddress']): string {
  * Part of the ServicingView sidebar.
  */
 export const CustomerProfile: React.FC<CustomerProfileProps> = ({ customer }) => {
-  const initials = customer.fullName
-    ?.split(' ')
-    .map((n) => n[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase() || '?'
+  const initials =
+    customer.fullName
+      ?.split(' ')
+      .map((n) => n[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase() || '?'
 
   // Check for any identity flags
-  const hasFlags = 
-    customer.identityVerified || 
-    customer.staffFlag || 
-    customer.investorFlag || 
+  const hasFlags =
+    customer.identityVerified ||
+    customer.staffFlag ||
+    customer.investorFlag ||
     customer.founderFlag ||
     customer.vulnerableFlag
 
@@ -90,22 +92,36 @@ export const CustomerProfile: React.FC<CustomerProfileProps> = ({ customer }) =>
             <span className={styles.profileCopyable}>
               <span className={styles.profileValue}>{customer.emailAddress}</span>
               <CopyButton value={customer.emailAddress} label="Copy email address" />
+              <TierBadge
+                tier={customer.emailTier}
+                source={customer.emailSource}
+                verifiedAt={customer.emailVerifiedAt}
+                contactLabel="Email"
+              />
             </span>
           ) : (
             <span className={styles.profileValue}>—</span>
           )}
         </div>
+        <AlsoSeen contacts={customer.contacts} type="EMAIL" customerId={customer.customerId} />
         <div className={styles.profileRow}>
           <span className={styles.profileLabel}>Phone</span>
           {customer.mobilePhoneNumber ? (
             <span className={styles.profileCopyable}>
               <span className={styles.profileValue}>{customer.mobilePhoneNumber}</span>
               <CopyButton value={customer.mobilePhoneNumber} label="Copy phone number" />
+              <TierBadge
+                tier={customer.mobilePhoneTier}
+                source={customer.mobilePhoneSource}
+                verifiedAt={customer.mobilePhoneVerifiedAt}
+                contactLabel="Mobile"
+              />
             </span>
           ) : (
             <span className={styles.profileValue}>—</span>
           )}
         </div>
+        <AlsoSeen contacts={customer.contacts} type="MOBILE" customerId={customer.customerId} />
         <div className={styles.profileRow}>
           <span className={styles.profileLabel}>DOB</span>
           <span className={styles.profileValue}>{formatDateOfBirth(customer.dateOfBirth)}</span>
@@ -113,7 +129,9 @@ export const CustomerProfile: React.FC<CustomerProfileProps> = ({ customer }) =>
         <div className={styles.profileRow}>
           <span className={styles.profileLabel}>Address</span>
           <span className={styles.profileCopyable}>
-            <span className={styles.profileValue}>{formatAddress(customer.residentialAddress)}</span>
+            <span className={styles.profileValue}>
+              {formatAddress(customer.residentialAddress)}
+            </span>
             {(() => {
               const mapAddress = getAddressForMapLink(customer.residentialAddress)
               const mapUrl = mapAddress ? getGoogleMapsUrl(mapAddress) : ''
@@ -126,7 +144,16 @@ export const CustomerProfile: React.FC<CustomerProfileProps> = ({ customer }) =>
                   title="View on Google Maps"
                   aria-label="View address on Google Maps"
                 >
-                  <svg className={styles.profileIconLinkSvg} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <svg
+                    className={styles.profileIconLinkSvg}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
                     <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
                     <polyline points="15 3 21 3 21 9" />
                     <line x1="10" y1="14" x2="21" y2="3" />
@@ -137,6 +164,11 @@ export const CustomerProfile: React.FC<CustomerProfileProps> = ({ customer }) =>
           </span>
         </div>
       </div>
+
+      <ProvenanceFooter
+        changedBy={customer.contactsChangedBy}
+        changedAt={customer.contactsChangedAt}
+      />
 
       {/* Identity badges */}
       {hasFlags && (
@@ -154,7 +186,7 @@ export const CustomerProfile: React.FC<CustomerProfileProps> = ({ customer }) =>
             <span className={`${styles.badge} ${styles.badgeFounder}`}>Founder</span>
           )}
           {customer.vulnerableFlag && (
-            <span 
+            <span
               className={`${styles.badge} ${styles.badgeVulnerable}`}
               data-testid="vulnerable-badge"
             >
