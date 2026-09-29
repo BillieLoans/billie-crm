@@ -268,3 +268,69 @@ async def test_merged_writes_a_merge_outcome_without_an_envelope_conversation(mo
     assert len(merges) == 1
     assert merges[0]["merge"]["reason"] == "MERGED"
     assert merges[0]["merge"]["alias_id"] == "Z"
+
+
+# ---------------------------------------------------------------------------
+# The journey's identity check follows it to the canonical
+# ---------------------------------------------------------------------------
+
+
+def _carry_calls(mock_pool):
+    return [
+        c
+        for c in _updates_to(mock_pool, "customers")
+        if "FROM customers AS alias" in c.sql
+    ]
+
+
+@pytest.mark.asyncio
+async def test_linked_carries_the_journeys_identity_check_to_the_canonical(mock_pool):
+    """The check ran under the journey id before the link; the header reads the canonical."""
+    mock_pool.set_fetchval_sequence(["canonical-ref-uuid", "alias-ref-uuid"])
+
+    await handle_customer_identity_linked(
+        mock_pool, {"payload": {"journey_id": "B", "canonical_id": "A"}}
+    )
+
+    carries = _carry_calls(mock_pool)
+    assert len(carries) == 1
+    carry = carries[0]
+    assert carry.args[:2] == ("A", "B")
+    for column in (
+        "identity_verification_overall_result",
+        "identity_verification_checked_at",
+        "identity_verification_verification_number",
+        "identity_verification_provider_reference",
+        "identity_verification_archived_at",
+    ):
+        assert f"{column} = alias.{column}" in carry.sql
+
+
+@pytest.mark.asyncio
+async def test_carry_never_replaces_a_newer_check_or_copies_an_unchecked_alias(mock_pool):
+    mock_pool.set_fetchval_sequence(["canonical-ref-uuid", "alias-ref-uuid"])
+
+    await handle_customer_identity_linked(
+        mock_pool, {"payload": {"journey_id": "B", "canonical_id": "A"}}
+    )
+
+    sql = _carry_calls(mock_pool)[0].sql
+    assert "alias.identity_verification_checked_at IS NOT NULL" in sql
+    assert (
+        "alias.identity_verification_checked_at >= customers.identity_verification_checked_at"
+        in sql
+    )
+
+
+@pytest.mark.asyncio
+async def test_carry_runs_before_the_tombstone(mock_pool):
+    """The tombstone stays the last write to customers (the alias row redirect)."""
+    mock_pool.set_fetchval_sequence(["canonical-ref-uuid", "alias-ref-uuid"])
+
+    await handle_customer_identity_linked(
+        mock_pool, {"payload": {"journey_id": "B", "canonical_id": "A"}}
+    )
+
+    last = _last_update_call(mock_pool, "customers")
+    assert "merged_into" in last.values
+    assert last.where["customer_id"] == "B"

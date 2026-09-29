@@ -22,6 +22,12 @@ first origin across a second hop), the tombstoned customers row records the
 platform's ``link_id`` / ``reason`` (``MERGED`` for a merge), and the journey's
 conversations get ``identity_resolution.link`` (or ``.merge``) for the staff
 view. ``scripts/unlink_identity_alias.py`` reverses a link from these.
+
+The link also carries the journey's identity-verification summary onto the
+canonical row when it is the newer check (see
+``_CARRY_IDENTITY_VERIFICATION_SQL``). An unlink does not take it back: the
+alias row keeps its own copy, and the canonical keeps the carried one until a
+later check replaces it.
 """
 
 from __future__ import annotations
@@ -50,6 +56,42 @@ MERGED_REASON = "MERGED"
 # ``column "customer_id_string" does not exist`` and roll back the whole
 # transaction, so no records ever moved and the event hit the DLQ.
 _STRING_KEYED_TABLES = ("conversations", "loan_accounts")
+
+# The identity-verification mirror the servicing header reads. A journey is
+# verified BEFORE the platform links it (the proof point runs on an approved
+# check), so ``identityRisk_assessment`` lands on the journey's own row and the
+# link must carry it across — otherwise the canonical keeps an older check's
+# result and date beside the newer check's archive pointers (demo 4A103C6E,
+# 2026-09-29: "Checked 14 Sept" next to that day's provider reference).
+_IDENTITY_VERIFICATION_COLUMNS = (
+    "identity_verification_overall_result",
+    "identity_verification_provider",
+    "identity_verification_provider_reference",
+    "identity_verification_lab_request_id",
+    "identity_verification_checked_at",
+    "identity_verification_verification_number",
+    "identity_verification_identity_outcome",
+    "identity_verification_screening_outcome",
+    "identity_verification_pep_result",
+    "identity_verification_sanctions_result",
+    "identity_verification_report_archived",
+    "identity_verification_archived_at",
+)
+
+# Same monotonic rule as the mirror's CHECKED_AT_GUARD: only a check at least
+# as new as the canonical's replaces it, and an alias that was never checked
+# carries nothing.
+_CARRY_IDENTITY_VERIFICATION_SQL = (
+    "UPDATE customers SET "
+    + ", ".join(f"{col} = alias.{col}" for col in _IDENTITY_VERIFICATION_COLUMNS)
+    + ", updated_at = $3 "
+    "FROM customers AS alias "
+    "WHERE customers.customer_id = $1 AND alias.customer_id = $2 "
+    "AND alias.identity_verification_checked_at IS NOT NULL "
+    "AND (customers.identity_verification_checked_at IS NULL "
+    "OR alias.identity_verification_checked_at "
+    ">= customers.identity_verification_checked_at)"
+)
 
 
 async def resolve_canonical_customer_id(target: Any, customer_id: str | None) -> str | None:
@@ -201,6 +243,8 @@ async def _merge_identity(
                 alias_ref,
                 alias_id,
             )
+        # The journey's identity check follows it to the canonical (newest wins).
+        await conn.execute(_CARRY_IDENTITY_VERIFICATION_SQL, canonical_id, alias_id, now)
         # Tombstone/redirect the orphan customers row created under the alias,
         # recording the platform's link id and reason behind it.
         await conn.execute(
