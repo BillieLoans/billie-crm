@@ -1,6 +1,6 @@
 'use client'
 
-import { useId, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import Link from 'next/link'
 import { formatDateOnly } from '@/lib/formatters'
 import {
@@ -20,8 +20,8 @@ import styles from './styles.module.css'
  * Contact provenance for the servicing view (BTB-392).
  *
  * - `TierBadge`: "Login" / "Verified" / "Unverified" beside a contact value,
- *   with its source and verification date available to hover and to screen
- *   readers (meaning never carried by colour alone).
+ *   with its source and verification date shown on hover or keyboard focus
+ *   and read to screen readers (meaning never carried by colour alone).
  * - `AlsoSeen`: a disclosure listing the other values of that type the
  *   survivorship policy declined to promote.
  * - `IdStatusChip`: Provisional / Admitted / Linked → canonical.
@@ -48,6 +48,10 @@ export interface TierBadgeProps {
 }
 
 export function TierBadge({ tier, source, verifiedAt, contactLabel }: TierBadgeProps) {
+  const badgeRef = useRef<HTMLButtonElement>(null)
+  // Fixed position from the badge's own box: the header's contact row clips
+  // its overflow, so a tooltip positioned inside it would be cut off.
+  const [tipAt, setTipAt] = useState<{ top: number; left: number } | null>(null)
   if (!tier) return null
   const label = tierLabel(tier)
   const summary = provenanceSummary({ tier, source, verifiedAtFormatted: safeDate(verifiedAt) })
@@ -55,17 +59,45 @@ export function TierBadge({ tier, source, verifiedAt, contactLabel }: TierBadgeP
   const toneClass = isContactTier(tier)
     ? styles[`tier${tier.charAt(0)}${tier.slice(1).toLowerCase()}`]
     : ''
+  const show = () => {
+    const box = badgeRef.current?.getBoundingClientRect()
+    setTipAt(box ? { top: box.bottom + 6, left: box.left } : { top: 0, left: 0 })
+  }
+  const hide = () => setTipAt(null)
   return (
-    <span
+    // A button so the detail is reachable by keyboard and by touch (tap to
+    // show), not only by a mouse hover.
+    <button
+      type="button"
+      ref={badgeRef}
       className={`${styles.tierBadge} ${toneClass ?? ''}`}
-      title={meaning ? `${summary} — ${meaning}` : summary}
+      onMouseEnter={show}
+      onMouseLeave={hide}
+      onFocus={show}
+      onBlur={hide}
+      onClick={() => (tipAt ? hide() : show())}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') hide()
+      }}
       data-testid={`tier-badge-${contactLabel.toLowerCase()}`}
     >
       {label}
       <span className={styles.srOnly}>
         {` (${contactLabel} ${summary}${meaning ? `: ${meaning}` : ''})`}
       </span>
-    </span>
+      {tipAt && (
+        // The visually hidden text above already says this to a screen reader.
+        <span
+          className={styles.tierTip}
+          style={{ top: tipAt.top, left: tipAt.left }}
+          aria-hidden="true"
+          data-testid={`tier-tip-${contactLabel.toLowerCase()}`}
+        >
+          <span className={styles.tierTipSummary}>{summary}</span>
+          {meaning && <span className={styles.tierTipMeaning}>{meaning}</span>}
+        </span>
+      )}
+    </button>
   )
 }
 

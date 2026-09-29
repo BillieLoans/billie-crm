@@ -2425,6 +2425,43 @@
   text-transform: uppercase;
   vertical-align: middle;
   white-space: nowrap;
+  font-family: inherit;
+  cursor: help;
+}
+
+.tierBadge:focus-visible {
+  outline: 2px solid var(--theme-elevation-800, #222);
+  outline-offset: 2px;
+}
+
+/* Shown on hover and keyboard focus; fixed so a clipping parent cannot hide it. */
+.tierTip {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  max-width: 20rem;
+  padding: 0.375rem 0.5rem;
+  border-radius: 6px;
+  background: #1a1a1a;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: normal;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  pointer-events: none;
+}
+
+.tierTipSummary {
+  font-weight: 600;
+}
+
+.tierTipMeaning {
+  color: #e0e0e0;
 }
 
 .tierBound {

@@ -81,7 +81,42 @@ describe('TierBadge', () => {
     // not conveyed by colour alone (WCAG 1.4.1).
     expect(badge).toHaveTextContent('portal login')
     expect(badge).toHaveTextContent('verified 23 September 2026')
-    expect(badge.getAttribute('title')).toContain('Login · portal login')
+  })
+
+  it('shows its source and date on hover, and hides them again', () => {
+    render(
+      <TierBadge
+        tier="BOUND"
+        source="ZITADEL_LOGIN"
+        verifiedAt="2026-09-23T13:15:00Z"
+        contactLabel="Email"
+      />,
+    )
+    const badge = screen.getByTestId('tier-badge-email')
+    expect(screen.queryByTestId('tier-tip-email')).not.toBeInTheDocument()
+
+    fireEvent.mouseEnter(badge)
+
+    const tip = screen.getByTestId('tier-tip-email')
+    expect(tip).toHaveTextContent('Login · portal login · verified 23 September 2026')
+    expect(tip).toHaveTextContent('the address the customer logs in with')
+
+    fireEvent.mouseLeave(badge)
+    expect(screen.queryByTestId('tier-tip-email')).not.toBeInTheDocument()
+  })
+
+  it('shows the same on keyboard focus and closes on Escape', () => {
+    render(<TierBadge tier="VERIFIED" source="OTP_SMS" contactLabel="Mobile" />)
+    const badge = screen.getByTestId('tier-badge-mobile')
+    expect(badge.tagName).toBe('BUTTON')
+
+    fireEvent.focus(badge)
+    expect(screen.getByTestId('tier-tip-mobile')).toHaveTextContent(
+      'Verified · one-time code by SMS',
+    )
+
+    fireEvent.keyDown(badge, { key: 'Escape' })
+    expect(screen.queryByTestId('tier-tip-mobile')).not.toBeInTheDocument()
   })
 
   it('renders nothing for a legacy row without a tier', () => {
