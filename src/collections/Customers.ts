@@ -148,6 +148,15 @@ export const Customers: CollectionConfig = {
       admin: { readOnly: true },
     },
     {
+      name: 'loginEmailReboundAt',
+      type: 'date',
+      admin: {
+        readOnly: true,
+        description:
+          'When the login (Zitadel) last followed the record’s BOUND email — customer.login_email.rebound.v1',
+      },
+    },
+    {
       name: 'title',
       type: 'text',
       admin: {

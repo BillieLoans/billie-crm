@@ -133,6 +133,7 @@ export async function GET(
         contacts: Array.isArray(customer.contacts) ? customer.contacts : null,
         contactsChangedBy: customer.contactsChangedBy ?? null,
         contactsChangedAt: customer.contactsChangedAt ?? null,
+        loginEmailReboundAt: customer.loginEmailReboundAt ?? null,
         mergedReason: customer.mergedReason ?? null,
       },
       accounts: accountsWithBalances.map((account) => ({

@@ -1,7 +1,12 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
-import { AlsoSeen, IdStatusChip, TierBadge } from '@/components/ServicingView/ContactProvenance'
+import {
+  AlsoSeen,
+  IdStatusChip,
+  ProvenanceFooter,
+  TierBadge,
+} from '@/components/ServicingView/ContactProvenance'
 import { CustomerProfile } from '@/components/ServicingView/CustomerProfile'
 import type { CustomerData } from '@/hooks/queries/useCustomer'
 
@@ -194,5 +199,34 @@ describe('CustomerProfile with provenance', () => {
     expect(screen.queryByTestId('tier-badge-mobile')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Also seen/ })).not.toBeInTheDocument()
     expect(screen.queryByTestId('provenance-footer')).not.toBeInTheDocument()
+  })
+})
+
+describe('ProvenanceFooter', () => {
+  it('says when the login followed the record (SP5)', () => {
+    render(
+      <ProvenanceFooter
+        changedBy="ChangePrimaryEmail:portal"
+        changedAt="2026-09-29T10:00:00Z"
+        loginEmailReboundAt="2026-09-29T10:00:30Z"
+      />,
+    )
+    const footer = screen.getByTestId('provenance-footer')
+    expect(footer).toHaveTextContent(
+      'Contact details updated by ChangePrimaryEmail:portal on 29 September 2026.',
+    )
+    expect(footer).toHaveTextContent('Login email updated 29 September 2026.')
+  })
+
+  it('renders the rebound alone when nothing else is known', () => {
+    render(<ProvenanceFooter loginEmailReboundAt="2026-09-29T10:00:30Z" />)
+    expect(screen.getByTestId('provenance-footer')).toHaveTextContent(
+      /^Login email updated 29 September 2026\.$/,
+    )
+  })
+
+  it('renders nothing for a legacy row', () => {
+    const { container } = render(<ProvenanceFooter />)
+    expect(container).toBeEmptyDOMElement()
   })
 })

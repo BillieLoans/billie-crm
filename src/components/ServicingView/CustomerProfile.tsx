@@ -168,6 +168,7 @@ export const CustomerProfile: React.FC<CustomerProfileProps> = ({ customer }) =>
       <ProvenanceFooter
         changedBy={customer.contactsChangedBy}
         changedAt={customer.contactsChangedAt}
+        loginEmailReboundAt={customer.loginEmailReboundAt}
       />
 
       {/* Identity badges */}

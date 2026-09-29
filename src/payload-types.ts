@@ -271,6 +271,10 @@ export interface Customer {
   contactsChangedBy?: string | null;
   contactsChangedAt?: string | null;
   /**
+   * When the login (Zitadel) last followed the record’s BOUND email — customer.login_email.rebound.v1
+   */
+  loginEmailReboundAt?: string | null;
+  /**
    * Mr, Mrs, Ms, Dr, etc.
    */
   title?: string | null;
@@ -2424,6 +2428,7 @@ export interface CustomersSelect<T extends boolean = true> {
   contacts?: T;
   contactsChangedBy?: T;
   contactsChangedAt?: T;
+  loginEmailReboundAt?: T;
   title?: T;
   preferredName?: T;
   firstName?: T;

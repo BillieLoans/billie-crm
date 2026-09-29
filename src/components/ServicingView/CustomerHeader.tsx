@@ -422,6 +422,7 @@ export const CustomerHeader: React.FC<CustomerHeaderProps> = ({ customer }) => {
           <ProvenanceFooter
             changedBy={customer.contactsChangedBy}
             changedAt={customer.contactsChangedAt}
+            loginEmailReboundAt={customer.loginEmailReboundAt}
           />
         </div>
       )}

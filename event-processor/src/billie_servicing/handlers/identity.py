@@ -39,7 +39,7 @@ from typing import Any
 import asyncpg
 import structlog
 
-from ..db import merge_jsonb
+from ..db import coerce_date, merge_jsonb, update_by_key
 from .sanitize import safe_str
 
 logger = structlog.get_logger()
@@ -266,3 +266,28 @@ async def _merge_identity(
         )
 
     log.info("Re-attributed alias records to canonical and tombstoned alias row")
+
+
+async def handle_customer_login_email_rebound(pool: asyncpg.Pool, event: dict[str, Any]) -> None:
+    """Handle ``customer.login_email.rebound.v1`` (SP5, BTB-400).
+
+    The identity service pushed the record's BOUND email to Zitadel: the
+    customer now logs in with the address the header already shows as
+    ``Login`` (the ``customer.changed.v1`` that carried it landed first).
+    Stamp ``login_email_rebound_at`` so the footer can say when the login
+    followed. Idempotent — the same timestamp again is a no-op update.
+    """
+    payload = _extract_payload(event)
+    customer_id = safe_str(payload.get("customer_id"), "customer_id")
+    rebound_at = coerce_date(payload.get("rebound_at"))
+    if not customer_id or rebound_at is None:
+        logger.debug("Login email rebound no-op (missing customer_id or rebound_at)")
+        return
+    status = await update_by_key(
+        pool,
+        "customers",
+        key_column="customer_id",
+        key_value=customer_id,
+        values={"login_email_rebound_at": rebound_at},
+    )
+    logger.info("Login email rebound recorded", customer_id=customer_id, status=status)

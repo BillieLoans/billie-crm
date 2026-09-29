@@ -39,6 +39,8 @@ export interface ContactProvenanceFields {
   contacts?: ContactRecord[] | null
   contactsChangedBy?: string | null
   contactsChangedAt?: string | null
+  /** SP5: when the login last followed the record's BOUND email. */
+  loginEmailReboundAt?: string | null
   mergedReason?: string | null
 }
 

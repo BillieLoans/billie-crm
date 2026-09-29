@@ -184,15 +184,32 @@ export function IdStatusChip({ customerId, customerIdStatus, canonicalId }: IdSt
 export interface ProvenanceFooterProps {
   changedBy?: string | null
   changedAt?: string | null
+  /** SP5: when the login (Zitadel) last followed the record's BOUND email. */
+  loginEmailReboundAt?: string | null
 }
 
-export function ProvenanceFooter({ changedBy, changedAt }: ProvenanceFooterProps) {
-  if (!changedBy && !changedAt) return null
+export function ProvenanceFooter({
+  changedBy,
+  changedAt,
+  loginEmailReboundAt,
+}: ProvenanceFooterProps) {
+  if (!changedBy && !changedAt && !loginEmailReboundAt) return null
   const when = safeDate(changedAt)
+  const reboundWhen = safeDate(loginEmailReboundAt)
   return (
     <p className={styles.provenanceFooter} data-testid="provenance-footer">
-      Contact details updated{changedBy ? ` by ${changedBy}` : ''}
-      {when ? ` on ${when}` : ''}.
+      {(changedBy || changedAt) && (
+        <>
+          Contact details updated{changedBy ? ` by ${changedBy}` : ''}
+          {when ? ` on ${when}` : ''}.
+        </>
+      )}
+      {loginEmailReboundAt && (
+        <>
+          {changedBy || changedAt ? ' ' : ''}
+          Login email updated{reboundWhen ? ` ${reboundWhen}` : ''}.
+        </>
+      )}
     </p>
   )
 }
