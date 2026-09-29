@@ -334,3 +334,48 @@ async def test_carry_runs_before_the_tombstone(mock_pool):
     last = _last_update_call(mock_pool, "customers")
     assert "merged_into" in last.values
     assert last.where["customer_id"] == "B"
+
+
+# ---------------------------------------------------------------------------
+# reason_code on linked.v1 (platform, 2026-09-29): the fine decision code
+# beside the alias row's coarse reason
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_linked_prefers_the_platforms_fine_reason_code(mock_pool):
+    mock_pool.set_fetchval_sequence(["canonical-ref-uuid", "alias-ref-uuid"])
+
+    await handle_customer_identity_linked(
+        mock_pool,
+        {
+            "conv": "conv-B",
+            "payload": {
+                "journey_id": "B",
+                "canonical_id": "A",
+                "link_id": "lnk_1",
+                "reason": "SCORED",
+                "reason_code": "DOCUMENT_AGREE",
+            },
+        },
+    )
+
+    cust = mock_pool.last_update("customers")
+    assert cust["merged_reason"] == "DOCUMENT_AGREE"
+    link = mock_pool.jsonb_merges("conversations", "identity_resolution")[0]["link"]
+    assert link["reason"] == "DOCUMENT_AGREE"
+    assert link["alias_reason"] == "SCORED"
+
+
+@pytest.mark.asyncio
+async def test_linked_without_a_fine_code_falls_back_to_reason(mock_pool):
+    mock_pool.set_fetchval_sequence(["canonical-ref-uuid", "alias-ref-uuid"])
+
+    await handle_customer_identity_linked(
+        mock_pool,
+        {"payload": {"journey_id": "B", "canonical_id": "A", "reason": "LOGIN_CONTINUITY"}},
+    )
+
+    assert mock_pool.last_update("customers")["merged_reason"] == "LOGIN_CONTINUITY"
+    link = mock_pool.jsonb_merges("conversations", "identity_resolution")[0]["link"]
+    assert link["reason"] == "LOGIN_CONTINUITY" and link["alias_reason"] == "LOGIN_CONTINUITY"

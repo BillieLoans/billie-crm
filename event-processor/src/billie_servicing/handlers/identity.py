@@ -135,7 +135,12 @@ async def handle_customer_identity_linked(pool: asyncpg.Pool, event: dict[str, A
         alias_id=safe_str(payload.get("journey_id"), "journey_id"),
         kind="linked",
         link_id=_optional_str(payload.get("link_id"), "link_id"),
-        reason=_optional_str(payload.get("reason"), "reason"),
+        # The platform's fine decision code (DOCUMENT_AGREE, SCORED_LINK,
+        # LOGIN_CONTINUITY, RESOLVER_SAME, …) rides as reason_code; `reason` is
+        # the alias row's coarse link_reason (SCORED / LOGIN_CONTINUITY).
+        # Legacy billieChat events carry neither.
+        reason=_optional_str(payload.get("reason_code") or payload.get("reason"), "reason_code"),
+        alias_reason=_optional_str(payload.get("reason"), "reason"),
         conversation_id=_optional_str(event.get("conv"), "conv"),
     )
 
@@ -162,6 +167,7 @@ async def _merge_identity(
     *,
     link_id: str | None = None,
     reason: str | None = None,
+    alias_reason: str | None = None,
     conversation_id: str | None = None,
 ) -> None:
     """Re-attribute alias records to the canonical and tombstone the alias row."""
@@ -191,6 +197,7 @@ async def _merge_identity(
         "alias_id": alias_id,
         "link_id": link_id,
         "reason": reason,
+        "alias_reason": alias_reason or reason,
         "at": now.isoformat(),
     }
 
