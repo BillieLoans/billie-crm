@@ -42,6 +42,18 @@ export const Applications: CollectionConfig = {
       },
     },
     {
+      // BTB-392: the customer id this application arrived under before an
+      // identity link re-attributed it to the canonical (set once, on the
+      // first move), so a cut link can be undone. Event processor only.
+      name: 'identityOriginCustomerId',
+      type: 'text',
+      index: true,
+      admin: {
+        readOnly: true,
+        description: 'Customer id before identity re-attribution (null if never moved)',
+      },
+    },
+    {
       name: 'loanPurpose',
       type: 'text',
       admin: {

@@ -230,6 +230,55 @@ export const IdentityVerificationAttemptSchema = z.object({
   archivedAt: z.string().nullable(),
 })
 
+/**
+ * BTB-392: what the platform decided about this journey's identity, shaped by
+ * `shapeIdentityResolution` from `conversations.identity_resolution`.
+ */
+export const IdentityLinkOutcomeSchema = z.object({
+  canonicalId: z.string().nullable(),
+  aliasId: z.string().nullable(),
+  linkId: z.string().nullable(),
+  reason: z.string().nullable(),
+  at: z.string().nullable(),
+})
+
+export const ResolverAssessmentSchema = z.object({
+  eventId: z.string(),
+  assessedAt: z.string().nullable(),
+  candidateId: z.string().nullable(),
+  verdict: z.string().nullable(),
+  confidence: z.number().nullable(),
+  factors: z.array(z.string()),
+  mode: z.string().nullable(),
+  applied: z.boolean().nullable(),
+  platformReasonCode: z.string().nullable(),
+  latencyMs: z.number().nullable(),
+  model: z.string().nullable(),
+})
+
+export const ReviewCaseSchema = z.object({
+  caseId: z.string().nullable(),
+  band: z.string().nullable(),
+  posterior: z.number().nullable(),
+  flags: z.array(z.string()),
+  candidateIds: z.array(z.string()),
+  perSignalBits: z.record(z.string(), z.number()).nullable(),
+  recommendation: z.string().nullable(),
+  disposition: z.string().nullable(),
+  relatedJourneys: z.array(z.string()),
+  openedAt: z.string().nullable(),
+})
+
+export const IdentityResolutionSchema = z.object({
+  link: IdentityLinkOutcomeSchema.nullable(),
+  merge: IdentityLinkOutcomeSchema.nullable(),
+  resolverAssessments: z.array(ResolverAssessmentSchema),
+  reviewCase: ReviewCaseSchema.nullable(),
+})
+
+export type IdentityResolution = z.infer<typeof IdentityResolutionSchema>
+export type ResolverAssessment = z.infer<typeof ResolverAssessmentSchema>
+
 export const ConversationDetailSchema = z.object({
   conversationId: z.string(),
   applicationNumber: z.string().nullable().optional(),
@@ -245,6 +294,10 @@ export const ConversationDetailSchema = z.object({
   identityVerificationReport: IdentityVerificationReportSchema.nullable().optional(),
   /** Every LAB verify call for this application, ascending attempt number. */
   identityVerificationAttempts: z.array(IdentityVerificationAttemptSchema).nullable().optional(),
+  /** BTB-392: platform link outcome, resolver assessments and review case for this journey. */
+  identityResolution: IdentityResolutionSchema.nullable().optional(),
+  /** BTB-392: the customer id this conversation arrived under before an identity link moved it. */
+  identityOriginCustomerId: z.string().nullable().optional(),
   startedAt: z.union([z.string(), z.date()]).nullable().optional(),
   updatedAt: z.union([z.string(), z.date()]).nullable().optional(),
   lastMessageAt: z.union([z.string(), z.date()]).nullable().optional(),

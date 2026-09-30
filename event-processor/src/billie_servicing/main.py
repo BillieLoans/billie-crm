@@ -65,7 +65,10 @@ from .handlers import (
     handle_customer_changed,
     # Identity link/merge handlers (BTB-120)
     handle_customer_identity_linked,
+    handle_customer_login_email_rebound,
     handle_customer_identity_merged,
+    handle_identity_resolver_assessed,
+    handle_identity_review_opened,
     handle_customer_verified,
     handle_feedback_received,
     handle_feedback_status_changed,
@@ -169,6 +172,17 @@ def setup_handlers(processor: EventProcessor) -> None:
     processor.register_handler(
         "customer.identity.merged.v1", handle_customer_identity_merged
     )
+    # SP5 (BTB-400): Zitadel now carries the record's BOUND email.
+    processor.register_handler(
+        "customer.login_email.rebound.v1", handle_customer_login_email_rebound
+    )
+    # Identity resolution for the in-flight application view (BTB-392): the
+    # resolver agent's verdicts and recognition review cases, PII-free, onto
+    # conversations.identity_resolution.
+    processor.register_handler(
+        "identity.resolver.assessed.v1", handle_identity_resolver_assessed
+    )
+    processor.register_handler("identity.review.opened.v1", handle_identity_review_opened)
 
     # =========================================================================
     # Conversation/Chat events (manual parsing - from worker.ts)

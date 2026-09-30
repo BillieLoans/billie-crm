@@ -14,6 +14,7 @@ import configPromise from '@payload-config'
 import { hasAnyRole, hasApprovalAuthority } from '@/lib/access'
 import { resolveActorDisplayName } from '@/lib/users'
 import { shapeAttempts } from '@/lib/identityAttempts'
+import { shapeIdentityResolution } from '@/lib/identityResolution'
 
 /** Safely convert a MongoDB Date or ISO string to ISO string, or null. */
 function toIso(val: unknown): string | null {
@@ -186,6 +187,11 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       },
       // Spec 2026-09-15: one entry per LAB verify call (locations stripped).
       identityVerificationAttempts: shapeAttempts(doc.identityVerificationAttempts),
+      // BTB-392: the platform's identity decision for this journey — link
+      // outcome, resolver assessments (ascending), review case. Ids, codes
+      // and scores only; the events carry no PII.
+      identityResolution: shapeIdentityResolution(doc.identityResolution),
+      identityOriginCustomerId: (doc.identityOriginCustomerId as string) ?? null,
       startedAt: toIso(doc.startedAt),
       updatedAt: toIso(doc.updatedAt),
       lastMessageAt: toIso(doc.lastUtteranceTime),

@@ -133,3 +133,249 @@ async def test_payload_as_json_string(mock_pool):
         {"payload": json.dumps({"journey_id": "B", "canonical_id": "A"})},
     )
     assert mock_pool.last_update("customers")["merged_into"] == "A"
+
+
+# ---------------------------------------------------------------------------
+# BTB-392 (SP4 Task 5): reversible links — origin ids, link id and reason
+# ---------------------------------------------------------------------------
+
+
+def _updates_to(mock_pool, table):
+    return [c for c in mock_pool.calls_against(table) if c.op == "UPDATE"]
+
+
+@pytest.mark.asyncio
+async def test_linked_records_origin_id_on_every_reattributed_table(mock_pool):
+    mock_pool.set_fetchval_sequence(["canonical-ref-uuid", "alias-ref-uuid"])
+
+    await handle_customer_identity_linked(
+        mock_pool,
+        {
+            "conv": "conv-B",
+            "payload": {
+                "journey_id": "B",
+                "canonical_id": "A",
+                "link_id": "lnk_1",
+                "reason": "DOCUMENT_AGREE",
+            },
+        },
+    )
+
+    for table in _STRING_KEYED_TABLES:
+        call = _last_update_call(mock_pool, table)
+        # First move only: COALESCE keeps an origin a second hop would overwrite.
+        assert (
+            "identity_origin_customer_id = COALESCE(identity_origin_customer_id, customer_id_string)"
+            in call.sql
+        )
+        assert call.where["customer_id_string"] == "B"
+    appl = _last_update_call(mock_pool, "applications")
+    assert "identity_origin_customer_id = COALESCE(identity_origin_customer_id, $3)" in appl.sql
+    assert appl.args[2] == "B"
+
+
+@pytest.mark.asyncio
+async def test_linked_records_link_id_and_reason_on_the_tombstone(mock_pool):
+    mock_pool.set_fetchval_sequence(["canonical-ref-uuid", "alias-ref-uuid"])
+
+    await handle_customer_identity_linked(
+        mock_pool,
+        {"payload": {"journey_id": "B", "canonical_id": "A", "link_id": "lnk_1", "reason": "SCORED_LINK"}},
+    )
+
+    cust = mock_pool.last_update("customers")
+    assert cust["merged_into"] == "A"
+    assert cust["merged_link_id"] == "lnk_1"
+    assert cust["merged_reason"] == "SCORED_LINK"
+
+
+@pytest.mark.asyncio
+async def test_legacy_linked_payload_lands_null_link_id_and_reason(mock_pool):
+    """billieChat's pre-cut-over linked.v1 carries neither field."""
+    mock_pool.set_fetchval_sequence(["canonical-ref-uuid", "alias-ref-uuid"])
+
+    await handle_customer_identity_linked(
+        mock_pool, {"payload": {"journey_id": "B", "canonical_id": "A"}}
+    )
+
+    cust = mock_pool.last_update("customers")
+    assert cust["merged_into"] == "A"
+    assert cust["merged_link_id"] is None
+    assert cust["merged_reason"] is None
+
+
+@pytest.mark.asyncio
+async def test_merged_tombstone_carries_the_merged_reason(mock_pool):
+    mock_pool.set_fetchval_sequence(["a-ref", "z-ref"])
+
+    await handle_customer_identity_merged(
+        mock_pool,
+        {"payload": {"canonical_id": "A", "merged_canonical_id": "Z", "link_id": "lnk_9"}},
+    )
+
+    cust = mock_pool.last_update("customers")
+    assert cust["merged_reason"] == "MERGED"
+    assert cust["merged_link_id"] == "lnk_9"
+
+
+@pytest.mark.asyncio
+async def test_linked_writes_the_link_outcome_on_the_journeys_conversations(mock_pool):
+    mock_pool.set_fetchval_sequence(["canonical-ref-uuid", "alias-ref-uuid"])
+
+    await handle_customer_identity_linked(
+        mock_pool,
+        {
+            "conv": "conv-B",
+            "payload": {
+                "journey_id": "B",
+                "canonical_id": "A",
+                "link_id": "lnk_1",
+                "reason": "LOGIN_CONTINUITY",
+            },
+        },
+    )
+
+    merges = mock_pool.jsonb_merges("conversations", "identity_resolution")
+    assert len(merges) == 2  # by alias id, and by the envelope's conversation
+    for patch in merges:
+        link = patch["link"]
+        assert link["canonical_id"] == "A"
+        assert link["alias_id"] == "B"
+        assert link["link_id"] == "lnk_1"
+        assert link["reason"] == "LOGIN_CONTINUITY"
+        assert link["at"]
+    merge_calls = [
+        c
+        for c in _updates_to(mock_pool, "conversations")
+        if "identity_resolution = COALESCE" in c.sql
+    ]
+    assert merge_calls[0].where["customer_id_string"] == "B"
+    assert merge_calls[1].where["conversation_id"] == "conv-B"
+    # The outcome is written BEFORE the move, so the alias predicate matches.
+    conv_updates = _updates_to(mock_pool, "conversations")
+    assert conv_updates[-1].values["customer_id_string"] == "A"
+
+
+@pytest.mark.asyncio
+async def test_merged_writes_a_merge_outcome_without_an_envelope_conversation(mock_pool):
+    mock_pool.set_fetchval_sequence(["a-ref", "z-ref"])
+
+    await handle_customer_identity_merged(
+        mock_pool, {"payload": {"canonical_id": "A", "merged_canonical_id": "Z"}}
+    )
+
+    merges = mock_pool.jsonb_merges("conversations", "identity_resolution")
+    assert len(merges) == 1
+    assert merges[0]["merge"]["reason"] == "MERGED"
+    assert merges[0]["merge"]["alias_id"] == "Z"
+
+
+# ---------------------------------------------------------------------------
+# The journey's identity check follows it to the canonical
+# ---------------------------------------------------------------------------
+
+
+def _carry_calls(mock_pool):
+    return [
+        c
+        for c in _updates_to(mock_pool, "customers")
+        if "FROM customers AS alias" in c.sql
+    ]
+
+
+@pytest.mark.asyncio
+async def test_linked_carries_the_journeys_identity_check_to_the_canonical(mock_pool):
+    """The check ran under the journey id before the link; the header reads the canonical."""
+    mock_pool.set_fetchval_sequence(["canonical-ref-uuid", "alias-ref-uuid"])
+
+    await handle_customer_identity_linked(
+        mock_pool, {"payload": {"journey_id": "B", "canonical_id": "A"}}
+    )
+
+    carries = _carry_calls(mock_pool)
+    assert len(carries) == 1
+    carry = carries[0]
+    assert carry.args[:2] == ("A", "B")
+    for column in (
+        "identity_verification_overall_result",
+        "identity_verification_checked_at",
+        "identity_verification_verification_number",
+        "identity_verification_provider_reference",
+        "identity_verification_archived_at",
+    ):
+        assert f"{column} = alias.{column}" in carry.sql
+
+
+@pytest.mark.asyncio
+async def test_carry_never_replaces_a_newer_check_or_copies_an_unchecked_alias(mock_pool):
+    mock_pool.set_fetchval_sequence(["canonical-ref-uuid", "alias-ref-uuid"])
+
+    await handle_customer_identity_linked(
+        mock_pool, {"payload": {"journey_id": "B", "canonical_id": "A"}}
+    )
+
+    sql = _carry_calls(mock_pool)[0].sql
+    assert "alias.identity_verification_checked_at IS NOT NULL" in sql
+    assert (
+        "alias.identity_verification_checked_at >= customers.identity_verification_checked_at"
+        in sql
+    )
+
+
+@pytest.mark.asyncio
+async def test_carry_runs_before_the_tombstone(mock_pool):
+    """The tombstone stays the last write to customers (the alias row redirect)."""
+    mock_pool.set_fetchval_sequence(["canonical-ref-uuid", "alias-ref-uuid"])
+
+    await handle_customer_identity_linked(
+        mock_pool, {"payload": {"journey_id": "B", "canonical_id": "A"}}
+    )
+
+    last = _last_update_call(mock_pool, "customers")
+    assert "merged_into" in last.values
+    assert last.where["customer_id"] == "B"
+
+
+# ---------------------------------------------------------------------------
+# reason_code on linked.v1 (platform, 2026-09-29): the fine decision code
+# beside the alias row's coarse reason
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_linked_prefers_the_platforms_fine_reason_code(mock_pool):
+    mock_pool.set_fetchval_sequence(["canonical-ref-uuid", "alias-ref-uuid"])
+
+    await handle_customer_identity_linked(
+        mock_pool,
+        {
+            "conv": "conv-B",
+            "payload": {
+                "journey_id": "B",
+                "canonical_id": "A",
+                "link_id": "lnk_1",
+                "reason": "SCORED",
+                "reason_code": "DOCUMENT_AGREE",
+            },
+        },
+    )
+
+    cust = mock_pool.last_update("customers")
+    assert cust["merged_reason"] == "DOCUMENT_AGREE"
+    link = mock_pool.jsonb_merges("conversations", "identity_resolution")[0]["link"]
+    assert link["reason"] == "DOCUMENT_AGREE"
+    assert link["alias_reason"] == "SCORED"
+
+
+@pytest.mark.asyncio
+async def test_linked_without_a_fine_code_falls_back_to_reason(mock_pool):
+    mock_pool.set_fetchval_sequence(["canonical-ref-uuid", "alias-ref-uuid"])
+
+    await handle_customer_identity_linked(
+        mock_pool,
+        {"payload": {"journey_id": "B", "canonical_id": "A", "reason": "LOGIN_CONTINUITY"}},
+    )
+
+    assert mock_pool.last_update("customers")["merged_reason"] == "LOGIN_CONTINUITY"
+    link = mock_pool.jsonb_merges("conversations", "identity_resolution")[0]["link"]
+    assert link["reason"] == "LOGIN_CONTINUITY" and link["alias_reason"] == "LOGIN_CONTINUITY"

@@ -6,6 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import type { CustomerSearchResult } from '@/types/search'
 import { requireAuth } from '@/lib/auth'
 import { hasAnyRole } from '@/lib/access'
 import { customerSearchOrClauses } from '@/lib/customer-search'
@@ -32,17 +33,28 @@ export async function GET(request: NextRequest) {
       limit: 10,
     })
 
-    return NextResponse.json({
-      results: results.docs.map((customer) => ({
+    // BTB-392: a hit on a former record (an alias an identity link folded
+    // into a canonical) points at the canonical, labelled with the record it
+    // matched. A canonical hit wins over an alias hit for the same customer.
+    const byCustomerId = new Map<string, CustomerSearchResult>()
+    for (const customer of results.docs) {
+      const isAlias = Boolean(customer.mergedInto) && customer.mergedInto !== customer.customerId
+      const targetId = isAlias ? (customer.mergedInto as string) : customer.customerId
+      const existing = byCustomerId.get(targetId)
+      if (existing && !existing.matchedFormerRecord) continue
+      byCustomerId.set(targetId, {
         id: customer.id,
-        customerId: customer.customerId,
+        customerId: targetId,
         fullName: customer.fullName ?? null,
         emailAddress: customer.emailAddress ?? null,
         identityVerified: customer.identityVerified ?? false,
-        accountCount: Array.isArray(customer.loanAccounts)
-          ? customer.loanAccounts.length
-          : 0,
-      })),
+        accountCount: Array.isArray(customer.loanAccounts) ? customer.loanAccounts.length : 0,
+        matchedFormerRecord: isAlias ? customer.customerId : null,
+      })
+    }
+
+    return NextResponse.json({
+      results: [...byCustomerId.values()],
       total: results.totalDocs,
     })
   } catch (error) {

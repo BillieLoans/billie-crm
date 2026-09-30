@@ -11,6 +11,7 @@ export interface CustomerSearchResultProps {
     emailAddress: string | null
     identityVerified: boolean
     accountCount: number
+    matchedFormerRecord?: string | null
   }
   onSelect: () => void
 }
@@ -47,21 +48,20 @@ export const CustomerSearchResult: React.FC<CustomerSearchResultProps> = ({
       </div>
       <div className={styles.resultContent}>
         <div className={styles.resultMain}>
-          <span className={styles.resultName}>
-            {customer.fullName || 'Unknown'}
-          </span>
+          <span className={styles.resultName}>{customer.fullName || 'Unknown'}</span>
           <span className={styles.resultId}>{customer.customerId}</span>
         </div>
         <div className={styles.resultMeta}>
-          <span className={styles.resultEmail}>
-            {customer.emailAddress || 'No email'}
-          </span>
-          {customer.identityVerified && (
-            <span className={styles.badgeVerified}>Verified</span>
-          )}
+          <span className={styles.resultEmail}>{customer.emailAddress || 'No email'}</span>
+          {customer.identityVerified && <span className={styles.badgeVerified}>Verified</span>}
           <span className={styles.accountCount}>
             {customer.accountCount} account{customer.accountCount !== 1 ? 's' : ''}
           </span>
+          {customer.matchedFormerRecord && (
+            <span className={styles.formerRecord}>
+              matched former record {customer.matchedFormerRecord}
+            </span>
+          )}
         </div>
       </div>
     </Command.Item>

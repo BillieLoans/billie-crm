@@ -356,3 +356,10 @@
     font-size: 16px; /* Prevent zoom on mobile */
   }
 }
+
+/* BTB-392: a hit on a former (identity-linked) record, pointing at the canonical */
+.formerRecord {
+  font-size: 0.75rem;
+  color: var(--theme-elevation-600, #666);
+  font-style: italic;
+}

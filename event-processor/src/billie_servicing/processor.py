@@ -778,11 +778,17 @@ class EventProcessor:
             # Use accounts SDK
             return parse_account_message(sdk_data)
 
-        elif event_type.startswith("customer.identity."):
+        elif event_type.startswith("customer.identity.") or event_type.startswith(
+            "customer.login_email."
+        ):
             # BTB-120 link/merge events carry a small fixed payload
             # (journey_id/canonical_id or merged_canonical_id/canonical_id).
             # Parse the envelope directly so this path stays independent of the
             # installed customers SDK version; the handler reads the payload dict.
+            # SP5's customer.login_email.rebound.v1 is the same shape of
+            # consumer: through the SDK branch below its handler got a
+            # ParsedEvent object and every delivery dead-lettered (demo,
+            # 2026-09-30).
             return sanitize_envelope(sanitized)
 
         elif event_type == "application.reapplication_blocked.v1":
@@ -849,7 +855,11 @@ class EventProcessor:
 
         else:
             # Chat/conversation events — sanitize envelope so payload JSON string
-            # is parsed into a dict before handlers receive the event
+            # is parsed into a dict before handlers receive the event. This is
+            # also the path for billieChat's `identity.*` events
+            # (identity.resolver.assessed.v1, identity.review.opened.v1,
+            # identity_verification.*): plain JSON payloads, no SDK model —
+            # never route them through the customers SDK parser (BTB-392).
             return sanitize_envelope(sanitized)
 
     async def _move_to_dlq(

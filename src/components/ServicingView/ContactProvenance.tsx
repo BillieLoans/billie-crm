@@ -1,0 +1,215 @@
+'use client'
+
+import { useId, useRef, useState } from 'react'
+import Link from 'next/link'
+import { formatDateOnly } from '@/lib/formatters'
+import {
+  alternateContacts,
+  isContactTier,
+  provenanceSummary,
+  sourceSentence,
+  statusLabel,
+  tierDescription,
+  tierLabel,
+  type ContactRecord,
+  type ContactType,
+} from '@/lib/contact-provenance'
+import styles from './styles.module.css'
+
+/**
+ * Contact provenance for the servicing view (BTB-392).
+ *
+ * - `TierBadge`: "Login" / "Verified" / "Unverified" beside a contact value,
+ *   with its source and verification date shown on hover or keyboard focus
+ *   and read to screen readers (meaning never carried by colour alone).
+ * - `AlsoSeen`: a disclosure listing the other values of that type the
+ *   survivorship policy declined to promote.
+ * - `IdStatusChip`: Provisional / Admitted / Linked → canonical.
+ *
+ * Legacy rows (no tier, no contacts) render nothing — the view looks exactly
+ * as it did before the platform spoke for the customer.
+ */
+
+function safeDate(value: string | null | undefined): string | null {
+  if (!value) return null
+  try {
+    return formatDateOnly(value)
+  } catch {
+    return null
+  }
+}
+
+export interface TierBadgeProps {
+  tier?: string | null
+  source?: string | null
+  verifiedAt?: string | null
+  /** Which contact the badge describes, for the accessible name. */
+  contactLabel: 'Email' | 'Mobile'
+}
+
+export function TierBadge({ tier, source, verifiedAt, contactLabel }: TierBadgeProps) {
+  const badgeRef = useRef<HTMLButtonElement>(null)
+  // Fixed position from the badge's own box: the header's contact row clips
+  // its overflow, so a tooltip positioned inside it would be cut off.
+  const [tipAt, setTipAt] = useState<{ top: number; left: number } | null>(null)
+  if (!tier) return null
+  const label = tierLabel(tier)
+  const summary = provenanceSummary({ tier, source, verifiedAtFormatted: safeDate(verifiedAt) })
+  const meaning = tierDescription(tier)
+  const toneClass = isContactTier(tier)
+    ? styles[`tier${tier.charAt(0)}${tier.slice(1).toLowerCase()}`]
+    : ''
+  const show = () => {
+    const box = badgeRef.current?.getBoundingClientRect()
+    setTipAt(box ? { top: box.bottom + 6, left: box.left } : { top: 0, left: 0 })
+  }
+  const hide = () => setTipAt(null)
+  return (
+    // A button so the detail is reachable by keyboard and by touch (tap to
+    // show), not only by a mouse hover.
+    <button
+      type="button"
+      ref={badgeRef}
+      className={`${styles.tierBadge} ${toneClass ?? ''}`}
+      onMouseEnter={show}
+      onMouseLeave={hide}
+      onFocus={show}
+      onBlur={hide}
+      onClick={() => (tipAt ? hide() : show())}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') hide()
+      }}
+      data-testid={`tier-badge-${contactLabel.toLowerCase()}`}
+    >
+      {label}
+      <span className={styles.srOnly}>
+        {` (${contactLabel} ${summary}${meaning ? `: ${meaning}` : ''})`}
+      </span>
+      {tipAt && (
+        // The visually hidden text above already says this to a screen reader.
+        <span
+          className={styles.tierTip}
+          style={{ top: tipAt.top, left: tipAt.left }}
+          aria-hidden="true"
+          data-testid={`tier-tip-${contactLabel.toLowerCase()}`}
+        >
+          <span className={styles.tierTipSummary}>{summary}</span>
+          {meaning && <span className={styles.tierTipMeaning}>{meaning}</span>}
+        </span>
+      )}
+    </button>
+  )
+}
+
+export interface AlsoSeenProps {
+  contacts?: ContactRecord[] | null
+  type: ContactType
+  /** The customer whose page this is — alternates from other ids say so. */
+  customerId: string
+}
+
+export function AlsoSeen({ contacts, type, customerId }: AlsoSeenProps) {
+  const [open, setOpen] = useState(false)
+  const panelId = useId()
+  const alternates = alternateContacts(contacts, type)
+  if (alternates.length === 0) return null
+  const noun = type === 'EMAIL' ? 'email address' : 'mobile number'
+  return (
+    <div className={styles.alsoSeen} data-testid={`also-seen-${type.toLowerCase()}`}>
+      <button
+        type="button"
+        className={styles.alsoSeenToggle}
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <span aria-hidden="true">{open ? '▾' : '▸'}</span>
+        Also seen ({alternates.length})
+        <span className={styles.srOnly}>
+          {` other ${noun}${alternates.length === 1 ? '' : 'es'} for this customer`}
+        </span>
+      </button>
+      {open && (
+        <ul id={panelId} className={styles.alsoSeenList}>
+          {alternates.map((c) => {
+            const seen = safeDate(c.last_seen_at)
+            const meta = [
+              tierLabel(c.tier),
+              sourceSentence(c.source),
+              seen ? `last seen ${seen}` : null,
+              c.origin_customer_id && c.origin_customer_id !== customerId
+                ? `under ${c.origin_customer_id}`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')
+            return (
+              <li key={`${c.value}-${c.origin_customer_id ?? ''}`} className={styles.alsoSeenItem}>
+                <span>{c.value}</span>
+                {meta && <span className={styles.alsoSeenMeta}> — {meta}</span>}
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+export interface IdStatusChipProps {
+  customerId: string
+  customerIdStatus?: string | null
+  canonicalId?: string | null
+}
+
+export function IdStatusChip({ customerId, customerIdStatus, canonicalId }: IdStatusChipProps) {
+  if (!customerIdStatus) return null
+  const label = statusLabel(customerIdStatus)
+  const linkedElsewhere = Boolean(canonicalId) && canonicalId !== customerId
+  return (
+    <span className={styles.statusChip} data-testid="customer-id-status">
+      {label}
+      {linkedElsewhere && (
+        <>
+          {' → '}
+          <Link href={`/admin/servicing/${encodeURIComponent(canonicalId as string)}`}>
+            {canonicalId}
+          </Link>
+        </>
+      )}
+    </span>
+  )
+}
+
+export interface ProvenanceFooterProps {
+  changedBy?: string | null
+  changedAt?: string | null
+  /** SP5: when the login (Zitadel) last followed the record's BOUND email. */
+  loginEmailReboundAt?: string | null
+}
+
+export function ProvenanceFooter({
+  changedBy,
+  changedAt,
+  loginEmailReboundAt,
+}: ProvenanceFooterProps) {
+  if (!changedBy && !changedAt && !loginEmailReboundAt) return null
+  const when = safeDate(changedAt)
+  const reboundWhen = safeDate(loginEmailReboundAt)
+  return (
+    <p className={styles.provenanceFooter} data-testid="provenance-footer">
+      {(changedBy || changedAt) && (
+        <>
+          Contact details updated{changedBy ? ` by ${changedBy}` : ''}
+          {when ? ` on ${when}` : ''}.
+        </>
+      )}
+      {loginEmailReboundAt && (
+        <>
+          {changedBy || changedAt ? ' ' : ''}
+          Login email updated{reboundWhen ? ` ${reboundWhen}` : ''}.
+        </>
+      )}
+    </p>
+  )
+}

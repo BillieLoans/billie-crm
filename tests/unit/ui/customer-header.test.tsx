@@ -253,3 +253,66 @@ describe('CustomerHeader identity verification (PR #67)', () => {
     expect(screen.queryByTestId('download-identity-raw')).not.toBeInTheDocument()
   })
 })
+
+describe('CustomerHeader contact provenance (BTB-392)', () => {
+  afterEach(cleanup)
+
+  const withProvenance = () =>
+    createMockCustomer({
+      customerIdStatus: 'ADMITTED',
+      emailTier: 'BOUND',
+      emailSource: 'ZITADEL_LOGIN',
+      contacts: [
+        {
+          contact_type: 'EMAIL',
+          value: 'john@example.com',
+          tier: 'BOUND',
+          source: 'ZITADEL_LOGIN',
+          is_primary: true,
+        },
+        {
+          contact_type: 'EMAIL',
+          value: 'john.typed@example.com',
+          tier: 'ASSERTED',
+          source: 'CHAT_ASSERTED',
+          is_primary: false,
+          origin_customer_id: 'JOURNEY1',
+        },
+        {
+          contact_type: 'MOBILE',
+          value: '0412 345 678',
+          tier: 'VERIFIED',
+          source: 'OTP_SMS',
+          is_primary: true,
+        },
+      ],
+      contactsChangedBy: 'customer.identity.linked.v1',
+      contactsChangedAt: '2026-09-29T07:05:34Z',
+    })
+
+  test('the expand lists the other addresses and says who last changed the contacts', () => {
+    renderHeader(withProvenance())
+    expect(screen.queryByTestId('contact-alternates')).not.toBeInTheDocument()
+
+    expand()
+
+    fireEvent.click(screen.getByRole('button', { name: /Also seen \(1\)/ }))
+    const alternates = screen.getByTestId('contact-alternates')
+    expect(alternates).toHaveTextContent('john.typed@example.com')
+    expect(alternates).toHaveTextContent('typed in chat')
+    expect(alternates).toHaveTextContent('under JOURNEY1')
+    // Only the type that has alternates gets a block.
+    expect(alternates).toHaveTextContent('Other emails')
+    expect(alternates).not.toHaveTextContent('Other mobiles')
+    expect(screen.getByTestId('provenance-footer')).toHaveTextContent(
+      'updated by customer.identity.linked.v1 on 29 September 2026',
+    )
+  })
+
+  test('a legacy customer gets no alternates block and no footer', () => {
+    renderHeader(createMockCustomer())
+    expand()
+    expect(screen.queryByTestId('contact-alternates')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('provenance-footer')).not.toBeInTheDocument()
+  })
+})
