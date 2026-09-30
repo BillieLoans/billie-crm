@@ -95,3 +95,49 @@ def test_identity_events_parse_via_the_envelope_path(make_processor, event_type)
     )
     assert isinstance(parsed, dict)
     assert parsed["typ"] == event_type
+
+
+def test_login_email_rebound_reaches_its_handler_as_a_dict(make_processor):
+    """SP5: customer.login_email.rebound.v1 shares the `customer.` prefix but its
+    handler reads a plain payload dict. Through the customers-SDK branch it got a
+    ParsedEvent object and failed every delivery with "'ParsedEvent' object has
+    no attribute 'get'" (demo DLQ, 2026-09-30 02:28)."""
+    assert _registrations().get("customer.login_email.rebound.v1") == (
+        "handle_customer_login_email_rebound"
+    )
+    parsed = make_processor._parse_event(
+        "customer.login_email.rebound.v1",
+        {
+            "conv": "4A103C6E",
+            "usr": "4A103C6E",
+            "typ": "customer.login_email.rebound.v1",
+            "payload": (
+                '{"customer_id": "4A103C6E", "email_address": "new@example.com", '
+                '"zitadel_user_id": "z1", "rebound_at": "2026-09-30T02:24:22.978025Z"}'
+            ),
+        },
+    )
+    assert isinstance(parsed, dict)
+    assert parsed["typ"] == "customer.login_email.rebound.v1"
+
+
+@pytest.mark.asyncio
+async def test_login_email_rebound_stamps_the_customer_end_to_end(make_processor, mock_pool):
+    """Parse → handler, as the processor runs it: the stamp is written."""
+    from billie_servicing.handlers import handle_customer_login_email_rebound
+
+    parsed = make_processor._parse_event(
+        "customer.login_email.rebound.v1",
+        {
+            "conv": "4A103C6E",
+            "usr": "4A103C6E",
+            "typ": "customer.login_email.rebound.v1",
+            "payload": (
+                '{"customer_id": "4A103C6E", "email_address": "new@example.com", '
+                '"zitadel_user_id": "z1", "rebound_at": "2026-09-30T02:24:22.978025Z"}'
+            ),
+        },
+    )
+    await handle_customer_login_email_rebound(mock_pool, parsed)
+    stamp = mock_pool.last_update("customers")
+    assert stamp is not None and stamp["login_email_rebound_at"] is not None
