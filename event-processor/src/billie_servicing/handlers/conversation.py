@@ -25,6 +25,7 @@ import structlog
 
 from ..config import settings
 from ..db import coerce_date, merge_jsonb, update_by_key, upsert, upsert_conversation
+from .attribution import sanitise_attribution
 from .cancellation import CUSTOMER_DECLINED, terminal_rank
 from .identity_verification import mirror_lab_verification
 from .sanitize import parse_payload, safe_str, strip_dollar_keys
@@ -105,6 +106,20 @@ async def handle_conversation_started(pool: asyncpg.Pool, event: dict[str, Any])
         },
         insert_only_values={"started_at": started_at},
     )
+
+    # BTB-404: ad-click attribution. First write wins — the guard makes replay
+    # and out-of-order delivery harmless. Best-effort: never fails the handler.
+    attribution = sanitise_attribution(parse_payload(event).get("attribution"))
+    if attribution:
+        try:
+            await pool.execute(
+                "UPDATE conversations SET attribution = $1::jsonb "
+                "WHERE conversation_id = $2 AND attribution IS NULL",
+                json.dumps(attribution),
+                conversation_id,
+            )
+        except Exception:  # noqa: BLE001 — attribution must never fail the projection
+            log.warning("Attribution write failed", exc_info=True)
 
     log.info("Conversation created")
 
