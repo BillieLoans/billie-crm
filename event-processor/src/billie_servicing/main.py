@@ -55,6 +55,7 @@ from .handlers import (
     handle_contact_updated,
     # Conversation handlers
     handle_conversation_killed,
+    handle_conversation_attribution,
     handle_conversation_started,
     handle_customer_cancelled,
     handle_offer_cancelled,
@@ -188,6 +189,9 @@ def setup_handlers(processor: EventProcessor) -> None:
     # Conversation/Chat events (manual parsing - from worker.ts)
     # =========================================================================
     processor.register_handler("conversation_started", handle_conversation_started)
+    # BTB-404: ad-click attribution, published only for applications that came
+    # from an ad.
+    processor.register_handler("conversation_attribution", handle_conversation_attribution)
 
     # Utterances
     processor.register_handler("user_input", handle_utterance)

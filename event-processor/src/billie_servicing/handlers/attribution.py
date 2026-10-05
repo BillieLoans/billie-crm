@@ -1,7 +1,7 @@
 """Ad-click attribution carried on ``conversation_started`` (BTB-404).
 
 The chat captures gclid/gbraid/wbraid/UTM/matchtype from the Apply URL and
-publishes them as ``payload.attribution``. The values originate in a URL
+publishes them as ``payload.attribution`` on ``conversation_attribution``. The values originate in a URL
 anyone can craft, so they are re-validated here even though the chat backend
 already sanitised them: known keys only, short plain strings only.
 """
@@ -23,8 +23,12 @@ ATTRIBUTION_KEYS = (
 )
 _TIMESTAMP_KEYS = ("captured_at", "received_at")
 _MAX_LEN = 512
-_VALUE_RE = re.compile(r"^[A-Za-z0-9 _\-.~+:|,/]+$")
-_TIMESTAMP_RE = re.compile(r"^[0-9T:.+\-Z]{10,40}$")
+# Letters and digits of any script, space, and the punctuation real keywords and
+# campaign names carry ("$500 loan", "Brand (Exact)", "R&D"). Markup, quoting,
+# assignment and control characters are excluded. Matched with fullmatch — "$"
+# would let a trailing newline through.
+_VALUE_RE = re.compile(r"[\w \-.~+:|,/$&'()\[\]#%!?@*]+")
+_TIMESTAMP_RE = re.compile(r"[0-9T:.+\-Z]{10,40}")
 
 
 def sanitise_attribution(raw: object) -> dict[str, str] | None:
@@ -37,13 +41,13 @@ def sanitise_attribution(raw: object) -> dict[str, str] | None:
         if (
             isinstance(value, str)
             and 0 < len(value) <= _MAX_LEN
-            and _VALUE_RE.match(value)
+            and _VALUE_RE.fullmatch(value)
         ):
             out[key] = value
     if not out:
         return None
     for key in _TIMESTAMP_KEYS:
         value = raw.get(key)
-        if isinstance(value, str) and _TIMESTAMP_RE.match(value):
+        if isinstance(value, str) and _TIMESTAMP_RE.fullmatch(value):
             out[key] = value
     return out

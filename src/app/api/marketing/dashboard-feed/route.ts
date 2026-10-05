@@ -92,8 +92,11 @@ export async function GET(request: NextRequest) {
         `SELECT COUNT(*)::bigint AS k, COUNT(referred_by_contact_id)::bigint AS c
            FROM contacts WHERE erased IS NOT TRUE`,
       ),
-      // BTB-404: applications that arrived from an ad click, by campaign and
-      // keyword. Click ids are deliberately not selected.
+      // BTB-404: conversations that arrived from an ad click, by campaign and
+      // keyword. Counts are conversations, not distinct clicks or applicants —
+      // one click can start more than one. A final-decision event with no
+      // decision is stored as '' and is not "decided". Click ids are
+      // deliberately not selected.
       pool.query(
         `SELECT attribution->>'utm_source'   AS utm_source,
                 attribution->>'utm_medium'   AS utm_medium,
@@ -101,12 +104,12 @@ export async function GET(request: NextRequest) {
                 attribution->>'utm_term'     AS utm_term,
                 attribution->>'matchtype'    AS matchtype,
                 COUNT(*)::bigint             AS started,
-                COUNT(final_decision)::bigint AS decided,
+                COUNT(NULLIF(final_decision, ''))::bigint AS decided,
                 (COUNT(*) FILTER (WHERE UPPER(final_decision) = 'APPROVED'))::bigint AS approved
            FROM conversations
           WHERE attribution IS NOT NULL
           GROUP BY 1, 2, 3, 4, 5
-          ORDER BY started DESC
+          ORDER BY started DESC, 3 NULLS LAST, 4 NULLS LAST, 5, 1, 2
           LIMIT 500`,
       ),
     ])

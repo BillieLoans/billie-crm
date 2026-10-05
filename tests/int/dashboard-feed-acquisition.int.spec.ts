@@ -23,7 +23,7 @@ async function insertConversation(
   finalDecision: string | null,
 ): Promise<void> {
   const attr = attribution ? `'${JSON.stringify(attribution)}'::jsonb` : 'NULL'
-  const decision = finalDecision ? `'${finalDecision}'` : 'NULL'
+  const decision = finalDecision === null ? 'NULL' : `'${finalDecision}'`
   await payload.db.drizzle.execute(
     `INSERT INTO conversations
        (conversation_id, application_number, status, started_at, updated_at, created_at, attribution, final_decision)
@@ -40,6 +40,10 @@ describe('dashboard feed — acquisition block (real SQL)', () => {
     await insertConversation('conv-btb404-int-1', click, 'APPROVED')
     await insertConversation('conv-btb404-int-2', click, 'DECLINED')
     await insertConversation('conv-btb404-int-3', click, null)
+    // a final-decision event with no decision is stored as '' — not a decision
+    await insertConversation('conv-btb404-int-5', click, '')
+    // auto-tagged click: a click id and nothing else
+    await insertConversation('conv-btb404-int-6', { gclid: 'int-autotag' }, null)
     // organic conversation: must not appear in the block
     await insertConversation('conv-btb404-int-4', null, 'APPROVED')
   })
@@ -60,10 +64,17 @@ describe('dashboard feed — acquisition block (real SQL)', () => {
       utmCampaign: CAMPAIGN,
       utmTerm: 'pay advance',
       matchtype: 'p',
-      started: 3,
+      started: 4,
       decided: 2,
       approved: 1,
     })
     expect(JSON.stringify(body.acquisition)).not.toContain('int-click')
+
+    // click-id-only traffic stays visible as a row with no campaign or keyword
+    const untagged = body.acquisition.find(
+      (r) => r.utmSource === null && r.utmCampaign === null && r.utmTerm === null,
+    )
+    expect(untagged).toBeDefined()
+    expect(Number(untagged?.started)).toBeGreaterThanOrEqual(1)
   })
 })

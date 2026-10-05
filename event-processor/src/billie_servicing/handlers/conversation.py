@@ -107,20 +107,6 @@ async def handle_conversation_started(pool: asyncpg.Pool, event: dict[str, Any])
         insert_only_values={"started_at": started_at},
     )
 
-    # BTB-404: ad-click attribution. First write wins — the guard makes replay
-    # and out-of-order delivery harmless. Best-effort: never fails the handler.
-    attribution = sanitise_attribution(parse_payload(event).get("attribution"))
-    if attribution:
-        try:
-            await pool.execute(
-                "UPDATE conversations SET attribution = $1::jsonb "
-                "WHERE conversation_id = $2 AND attribution IS NULL",
-                json.dumps(attribution),
-                conversation_id,
-            )
-        except Exception:  # noqa: BLE001 — attribution must never fail the projection
-            log.warning("Attribution write failed", exc_info=True)
-
     log.info("Conversation created")
 
 
@@ -198,6 +184,47 @@ async def _ensure_conversation_exists(
         application_number or "",
     )
     return await _get_conversation_parent_id(target, conversation_id)
+
+
+async def handle_conversation_attribution(
+    pool: asyncpg.Pool, event: dict[str, Any]
+) -> None:
+    """Project ad-click attribution onto the conversation (BTB-404).
+
+    The chat publishes ``conversation_attribution`` only for applications that
+    arrived from an ad click. The row is ensured the same way the utterance
+    handler does it (``ON CONFLICT DO NOTHING``), so nothing on an existing row
+    is overwritten, and the attribution write is guarded by ``IS NULL`` — the
+    first value wins on replay and out-of-order delivery.
+    """
+    conversation_id = safe_str(
+        event.get("cid") or event.get("conv") or event.get("conversation_id"),
+        "conversation_id",
+    )
+    payload = parse_payload(event)
+    attribution = sanitise_attribution(payload.get("attribution"))
+    log = logger.bind(conversation_id=conversation_id)
+    if not conversation_id or not attribution:
+        log.info("conversation_attribution carried nothing storable")
+        return
+
+    application_number = safe_str(
+        event.get("app_number")
+        or event.get("application_number")
+        or payload.get("application_number"),
+        "application_number",
+    )
+    await _ensure_conversation_exists(
+        pool, conversation_id, {**event, "application_number": application_number}
+    )
+    await pool.execute(
+        "UPDATE conversations SET attribution = $1::jsonb, updated_at = NOW(), "
+        "version = COALESCE(version, 1) + 1 "
+        "WHERE conversation_id = $2 AND attribution IS NULL",
+        json.dumps(attribution),
+        conversation_id,
+    )
+    log.info("Attribution projected")
 
 
 async def handle_utterance(pool: asyncpg.Pool, event: dict[str, Any]) -> None:

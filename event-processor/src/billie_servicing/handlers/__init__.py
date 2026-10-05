@@ -41,6 +41,7 @@ from .conversation import (
     handle_assessment,
     handle_data_quality_alert,
     handle_basiq_job_created,
+    handle_conversation_attribution,
     handle_conversation_killed,
     handle_conversation_started,
     handle_conversation_summary,
@@ -141,6 +142,7 @@ __all__ = [
     "handle_identity_attempt",
     "handle_identity_report_archived",
     # Conversation handlers
+    "handle_conversation_attribution",
     "handle_conversation_started",
     "handle_utterance",
     "handle_final_decision",
