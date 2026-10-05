@@ -279,6 +279,22 @@ export const IdentityResolutionSchema = z.object({
 export type IdentityResolution = z.infer<typeof IdentityResolutionSchema>
 export type ResolverAssessment = z.infer<typeof ResolverAssessmentSchema>
 
+/** BTB-404: ad-click attribution captured at chat entry. Untrusted URL input. */
+export const AttributionSchema = z.object({
+  gclid: z.string().nullable(),
+  gbraid: z.string().nullable(),
+  wbraid: z.string().nullable(),
+  utmSource: z.string().nullable(),
+  utmMedium: z.string().nullable(),
+  utmCampaign: z.string().nullable(),
+  utmContent: z.string().nullable(),
+  utmTerm: z.string().nullable(),
+  matchtype: z.string().nullable(),
+  capturedAt: z.string().nullable(),
+  receivedAt: z.string().nullable(),
+})
+export type Attribution = z.infer<typeof AttributionSchema>
+
 export const ConversationDetailSchema = z.object({
   conversationId: z.string(),
   applicationNumber: z.string().nullable().optional(),
@@ -298,6 +314,8 @@ export const ConversationDetailSchema = z.object({
   identityResolution: IdentityResolutionSchema.nullable().optional(),
   /** BTB-392: the customer id this conversation arrived under before an identity link moved it. */
   identityOriginCustomerId: z.string().nullable().optional(),
+  /** BTB-404: ad-click attribution for this application, when it came from an ad. */
+  attribution: AttributionSchema.nullable().optional(),
   startedAt: z.union([z.string(), z.date()]).nullable().optional(),
   updatedAt: z.union([z.string(), z.date()]).nullable().optional(),
   lastMessageAt: z.union([z.string(), z.date()]).nullable().optional(),

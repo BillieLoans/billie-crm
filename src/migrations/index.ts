@@ -35,6 +35,7 @@ import * as migration_20260911_090000_lab_api_v1_identity_columns from './202609
 import * as migration_20260915_090000_identity_verification_attempts from './20260915_090000_identity_verification_attempts';
 import * as migration_20260925_090000_customer_identity_provenance from './20260925_090000_customer_identity_provenance';
 import * as migration_20260929_090000_customer_login_email_rebound from './20260929_090000_customer_login_email_rebound';
+import * as migration_20261005_090000_conversation_attribution from './20261005_090000_conversation_attribution';
 
 export const migrations = [
   {
@@ -221,5 +222,10 @@ export const migrations = [
     up: migration_20260929_090000_customer_login_email_rebound.up,
     down: migration_20260929_090000_customer_login_email_rebound.down,
     name: '20260929_090000_customer_login_email_rebound',
+  },
+  {
+    up: migration_20261005_090000_conversation_attribution.up,
+    down: migration_20261005_090000_conversation_attribution.down,
+    name: '20261005_090000_conversation_attribution',
   },
 ];

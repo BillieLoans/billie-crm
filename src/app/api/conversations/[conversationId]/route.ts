@@ -14,6 +14,7 @@ import configPromise from '@payload-config'
 import { hasAnyRole, hasApprovalAuthority } from '@/lib/access'
 import { resolveActorDisplayName } from '@/lib/users'
 import { shapeAttempts } from '@/lib/identityAttempts'
+import { shapeAttribution } from '@/lib/attribution'
 import { shapeIdentityResolution } from '@/lib/identityResolution'
 
 /** Safely convert a MongoDB Date or ISO string to ISO string, or null. */
@@ -192,6 +193,8 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       // and scores only; the events carry no PII.
       identityResolution: shapeIdentityResolution(doc.identityResolution),
       identityOriginCustomerId: (doc.identityOriginCustomerId as string) ?? null,
+      // BTB-404: ad-click attribution captured at chat entry.
+      attribution: shapeAttribution(doc.attribution),
       startedAt: toIso(doc.startedAt),
       updatedAt: toIso(doc.updatedAt),
       lastMessageAt: toIso(doc.lastUtteranceTime),

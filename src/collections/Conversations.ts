@@ -252,6 +252,16 @@ export const Conversations: CollectionConfig = {
       },
     },
     {
+      // BTB-404: written by the Python event processor from conversation_started.
+      name: 'attribution',
+      type: 'json',
+      admin: {
+        readOnly: true,
+        description:
+          'Ad-click attribution captured at chat entry (click ids, UTM, match type). Untrusted URL input — display as text only.',
+      },
+    },
+    {
       // BTB-135: optional detail accompanying final_credit_decision. All fields
       // nullable — legacy/mock decision payloads carry none of these.
       name: 'decisionDetail',

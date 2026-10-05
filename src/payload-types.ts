@@ -802,6 +802,18 @@ export interface Conversation {
    */
   finalDecision?: string | null;
   /**
+   * Ad-click attribution captured at chat entry (click ids, UTM, match type). Untrusted URL input — display as text only.
+   */
+  attribution?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
    * Optional detail from final_credit_decision (reason, block info)
    */
   decisionDetail?: {
@@ -2567,6 +2579,7 @@ export interface ConversationsSelect<T extends boolean = true> {
   version?: T;
   lastUtteranceTime?: T;
   finalDecision?: T;
+  attribution?: T;
   decisionDetail?:
     | T
     | {
