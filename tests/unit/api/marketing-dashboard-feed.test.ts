@@ -2,8 +2,8 @@
  * Unit tests for B4: GET /api/marketing/dashboard-feed.
  *
  * Service-API-key auth (fail-closed) + raw-SQL aggregation over the `contacts`
- * projection. `payload`/pool are mocked; the three GROUP BY queries are stubbed
- * in order (stage, source, referral).
+ * projection. `payload`/pool are mocked; the four queries are stubbed in order
+ * (stage, source, referral, acquisition).
  */
 import { describe, test, expect, vi, beforeEach } from 'vitest'
 import type { NextRequest } from 'next/server'
@@ -76,6 +76,7 @@ describe('GET /api/marketing/dashboard-feed — aggregation', () => {
         ],
       })
       .mockResolvedValueOnce({ rows: [{ k: '14', c: '5' }] })
+      .mockResolvedValueOnce({ rows: [] })
 
     const res = (await GET(req(KEY))) as {
       body: {
@@ -109,6 +110,7 @@ describe('GET /api/marketing/dashboard-feed — aggregation', () => {
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [{ k: '0', c: '0' }] })
+      .mockResolvedValueOnce({ rows: [] })
 
     const res = (await GET(req(KEY))) as {
       body: { referral: { rate: number } }
@@ -116,5 +118,80 @@ describe('GET /api/marketing/dashboard-feed — aggregation', () => {
     }
     expect(res.status).toBe(200)
     expect(res.body.referral.rate).toBe(0)
+  })
+
+  test('acquisition rows report started/decided/approved by campaign and keyword', async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ k: '0', c: '0' }] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            utm_source: 'google',
+            utm_medium: 'cpc',
+            utm_campaign: 'borrow-200',
+            utm_term: 'pay advance',
+            matchtype: 'p',
+            started: '12',
+            decided: '9',
+            approved: '4',
+          },
+          {
+            // auto-tagged click: a click id but no UTM values
+            utm_source: null,
+            utm_medium: null,
+            utm_campaign: null,
+            utm_term: null,
+            matchtype: null,
+            started: '2',
+            decided: '0',
+            approved: '0',
+          },
+        ],
+      })
+
+    const res = (await GET(req(KEY))) as {
+      body: { acquisition: Array<Record<string, unknown>> }
+      status: number
+    }
+
+    expect(res.status).toBe(200)
+    expect(res.body.acquisition).toEqual([
+      {
+        utmSource: 'google',
+        utmMedium: 'cpc',
+        utmCampaign: 'borrow-200',
+        utmTerm: 'pay advance',
+        matchtype: 'p',
+        started: 12,
+        decided: 9,
+        approved: 4,
+      },
+      {
+        utmSource: null,
+        utmMedium: null,
+        utmCampaign: null,
+        utmTerm: null,
+        matchtype: null,
+        started: 2,
+        decided: 0,
+        approved: 0,
+      },
+    ])
+  })
+
+  test('the acquisition query never selects a click id', async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ k: '0', c: '0' }] })
+      .mockResolvedValueOnce({ rows: [] })
+
+    await GET(req(KEY))
+
+    const sql = String(mockQuery.mock.calls[3][0])
+    expect(sql).toContain('attribution IS NOT NULL')
+    expect(sql).not.toMatch(/gclid|gbraid|wbraid/)
   })
 })

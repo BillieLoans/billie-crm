@@ -25,6 +25,7 @@ import structlog
 
 from ..config import settings
 from ..db import coerce_date, merge_jsonb, update_by_key, upsert, upsert_conversation
+from .attribution import sanitise_attribution
 from .cancellation import CUSTOMER_DECLINED, terminal_rank
 from .identity_verification import mirror_lab_verification
 from .sanitize import parse_payload, safe_str, strip_dollar_keys
@@ -67,7 +68,17 @@ def _now() -> datetime:
 
 
 async def handle_conversation_started(pool: asyncpg.Pool, event: dict[str, Any]) -> None:
-    """Initialise a conversation projection row."""
+    """Initialise a conversation projection row.
+
+    This is an init event: it normally lands after the first ``user_input``
+    has already created the row, and it can be processed late. It therefore
+    fills blanks (customer link, application number) but never overwrites what
+    another event has set, and never touches ``status`` on an existing row.
+
+    BTB-404: when the application arrived from an ad click the payload carries
+    ``attribution``; it is written only while the column is still NULL, so the
+    first value wins on replay and out-of-order delivery.
+    """
     conversation_id = safe_str(
         event.get("cid") or event.get("conv") or event.get("conversation_id"),
         "conversation_id",
@@ -75,9 +86,8 @@ async def handle_conversation_started(pool: asyncpg.Pool, event: dict[str, Any])
     customer_id = safe_str(event.get("usr") or event.get("user_id"), "customer_id")
     application_number = event.get("app_number") or event.get("application_number", "")
 
-    payload = event.get("payload", {})
-    if isinstance(payload, dict):
-        application_number = application_number or payload.get("application_number", "")
+    payload = parse_payload(event)
+    application_number = application_number or payload.get("application_number", "")
 
     log = logger.bind(
         conversation_id=conversation_id,
@@ -94,17 +104,37 @@ async def handle_conversation_started(pool: asyncpg.Pool, event: dict[str, Any])
         except ValueError:
             started_at = _now()
 
-    await upsert_conversation(
-        pool,
-        conversation_id=conversation_id,
-        set_values={
-            "customer_id_id": customer_ref_id,
-            "customer_id_string": customer_id or None,
-            "application_number": application_number or "",
-            "status": "active",
-        },
-        insert_only_values={"started_at": started_at},
+    await pool.execute(
+        """
+        INSERT INTO conversations
+          (conversation_id, customer_id_id, customer_id_string, application_number,
+           status, started_at, updated_at, created_at, version)
+        VALUES ($1, $2, $3, $4, 'active', $5, NOW(), NOW(), 1)
+        ON CONFLICT (conversation_id) DO UPDATE SET
+          customer_id_id = COALESCE(conversations.customer_id_id, EXCLUDED.customer_id_id),
+          customer_id_string = COALESCE(
+            conversations.customer_id_string, EXCLUDED.customer_id_string),
+          application_number = COALESCE(
+            NULLIF(conversations.application_number, ''), EXCLUDED.application_number),
+          updated_at = EXCLUDED.updated_at,
+          version = COALESCE(conversations.version, 1) + 1
+        """,
+        conversation_id,
+        customer_ref_id,
+        customer_id or None,
+        application_number or "",
+        started_at,
     )
+
+    attribution = sanitise_attribution(payload.get("attribution"))
+    if attribution:
+        await pool.execute(
+            "UPDATE conversations SET attribution = $1::jsonb, updated_at = NOW(), "
+            "version = COALESCE(version, 1) + 1 "
+            "WHERE conversation_id = $2 AND attribution IS NULL",
+            json.dumps(attribution),
+            conversation_id,
+        )
 
     log.info("Conversation created")
 

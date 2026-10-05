@@ -17,6 +17,7 @@ import type { AssessmentType } from '../AssessmentDetailView'
 import type { StatementSlot } from '@/hooks'
 import { AssessmentSection } from './AssessmentSection'
 import { IdentityVerificationDetail } from './IdentityVerificationDetail'
+import { AttributionDetail } from './AttributionDetail'
 import { IdentityResolutionDetail } from './IdentityResolutionDetail'
 import { identityResolutionSummary } from '@/lib/identityResolution'
 import { LlmCostsSection } from '../LlmCostsSection'
@@ -331,6 +332,20 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
           resolution={identityResolution}
           originCustomerId={conversation.identityOriginCustomerId ?? null}
         />
+      </AssessmentSection>
+
+      {/* Acquisition — ad-click attribution captured at chat entry (BTB-404) */}
+      <AssessmentSection
+        title="Acquisition"
+        summary={
+          conversation.attribution
+            ? (conversation.attribution.utmCampaign ??
+              conversation.attribution.utmSource ??
+              'Ad click')
+            : 'No data'
+        }
+      >
+        <AttributionDetail attribution={conversation.attribution ?? null} />
       </AssessmentSection>
 
       {/* Credit: Account Conduct */}
