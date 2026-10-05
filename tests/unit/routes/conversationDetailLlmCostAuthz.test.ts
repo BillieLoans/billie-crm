@@ -147,6 +147,9 @@ const BASE_KEYS = [
   'application',
   'applicationNumber',
   'assessments',
+  // BTB-404: ad-click attribution (campaign, keyword, click id) — marketing
+  // metadata with no customer or financial detail, readable by all lending roles.
+  'attribution',
   'cancellationRecord',
   'conversationId',
   'customer',
