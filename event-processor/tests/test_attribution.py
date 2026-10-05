@@ -1,10 +1,11 @@
 """Ad-click attribution projection (BTB-404).
 
-The chat publishes a dedicated ``conversation_attribution`` event for
-applications that arrived from an ad click. Its handler makes sure the
-conversation row exists and writes ``conversations.attribution`` only while
+``conversation_started`` (routed liaison agent → CRM) carries
+``payload.attribution`` for applications that arrived from an ad click. The
+handler initialises the conversation row without overwriting anything a later
+event has already set, then writes ``conversations.attribution`` only while
 the column is still NULL, so the first value wins on replay and out-of-order
-delivery. No other column of an existing row is touched.
+delivery.
 """
 
 from __future__ import annotations
@@ -14,10 +15,7 @@ import json
 import pytest
 
 from billie_servicing.handlers.attribution import sanitise_attribution
-from billie_servicing.handlers.conversation import (
-    handle_conversation_attribution,
-    handle_conversation_started,
-)
+from billie_servicing.handlers.conversation import handle_conversation_started
 
 GOOD = {
     "gclid": "Cj0KCQjw-abc_123",
@@ -33,7 +31,7 @@ GOOD = {
 
 def _event(payload: object) -> dict:
     return {
-        "typ": "conversation_attribution",
+        "typ": "conversation_started",
         "cid": "CONV-ATTR-1",
         "usr": "CUS-1",
         "payload": payload,
@@ -104,14 +102,14 @@ class TestSanitiseAttribution:
         assert sanitise_attribution({"captured_at": "2026-10-12T01:02:03Z"}) is None
 
 
-class TestConversationAttribution:
+class TestConversationStartedAttribution:
     @pytest.mark.asyncio
-    async def test_creates_the_row_then_writes_attribution_only_when_null(
+    async def test_initialises_the_row_then_writes_attribution_only_when_null(
         self, mock_pool
     ) -> None:
-        """The row is ensured first; the UPDATE is guarded by
+        """The row is initialised first; the attribution UPDATE is guarded by
         ``attribution IS NULL`` (first write wins)."""
-        await handle_conversation_attribution(
+        await handle_conversation_started(
             mock_pool, _event({"application_number": "APP-1", "attribution": GOOD})
         )
 
@@ -127,56 +125,94 @@ class TestConversationAttribution:
         assert updates[0].args[1] == "CONV-ATTR-1"
 
     @pytest.mark.asyncio
-    async def test_never_overwrites_columns_of_an_existing_row(self, mock_pool) -> None:
-        """The row is created with ON CONFLICT DO NOTHING — status, customer
-        and application number of an existing row belong to other handlers —
-        and the only UPDATE is the guarded attribution write."""
-        await handle_conversation_attribution(
-            mock_pool, _event({"application_number": "APP-1", "attribution": GOOD})
-        )
-
-        insert_sql = next(c.sql for c in mock_pool.calls if c.op == "INSERT")
-        assert "ON CONFLICT (conversation_id) DO NOTHING" in insert_sql
-        updates = [c for c in mock_pool.calls if c.op == "UPDATE"]
-        assert updates == _attribution_writes(mock_pool)
-        for column in ("status", "application_number", "customer_id"):
-            assert f"{column} =" not in updates[0].sql.split("WHERE")[0]
-
-    @pytest.mark.asyncio
     async def test_accepts_a_json_string_payload(self, mock_pool) -> None:
-        """The ledger may deliver ``payload`` as a JSON-encoded string."""
-        await handle_conversation_attribution(
+        """The ledger may deliver ``payload`` as a JSON-encoded string: both the
+        application number and the attribution are still read from it."""
+        await handle_conversation_started(
             mock_pool,
             _event(json.dumps({"application_number": "APP-1", "attribution": GOOD})),
         )
+
+        assert mock_pool.last_insert("conversations")["application_number"] == "APP-1"
         updates = _attribution_writes(mock_pool)
         assert json.loads(updates[0].args[0])["gclid"] == GOOD["gclid"]
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
         "payload",
-        [{}, {"attribution": None}, {"attribution": "gclid=abc"}, {"attribution": {"x": "y"}}],
+        [
+            {"application_number": "APP-1"},
+            {"application_number": "APP-1", "attribution": None},
+            {"application_number": "APP-1", "attribution": "gclid=abc"},
+            {"application_number": "APP-1", "attribution": {"x": "y"}},
+        ],
     )
-    async def test_no_sql_at_all_without_valid_attribution(
+    async def test_no_attribution_write_without_valid_attribution(
         self, mock_pool, payload: dict
     ) -> None:
-        """An event with nothing storable touches the database not at all."""
-        await handle_conversation_attribution(mock_pool, _event(payload))
-        assert mock_pool.calls == []
+        """An organic conversation is initialised and nothing else."""
+        await handle_conversation_started(mock_pool, _event(payload))
 
-    @pytest.mark.asyncio
-    async def test_conversation_started_does_not_write_attribution(self, mock_pool) -> None:
-        """Attribution has one path in: the dedicated event."""
-        await handle_conversation_started(
-            mock_pool,
-            {"cid": "CONV-ATTR-2", "usr": "CUS-1", "payload": {"attribution": GOOD}},
-        )
+        assert mock_pool.last_insert("conversations")["conversation_id"] == "CONV-ATTR-1"
         assert _attribution_writes(mock_pool) == []
 
 
-def test_conversation_attribution_handler_is_registered() -> None:
-    """The processor must dispatch ``conversation_attribution`` to the handler —
-    an unregistered type is logged and dropped."""
+class TestConversationStartedDoesNotRegressARow:
+    """``conversation_started`` is an init event. It normally arrives after the
+    first ``user_input`` has already created the row, and it can be processed
+    late. Either way it may fill blanks but must never overwrite what a later
+    event set — a closed conversation must not come back as active, and a
+    re-keyed customer must not revert to the journey id."""
+
+    @staticmethod
+    async def _conflict_clause(mock_pool) -> str:
+        await handle_conversation_started(
+            mock_pool, _event({"application_number": "APP-1"})
+        )
+        insert_sql = next(c.sql for c in mock_pool.calls if c.op == "INSERT")
+        assert "ON CONFLICT (conversation_id) DO UPDATE SET" in insert_sql
+        # All whitespace removed, so the assertions do not depend on SQL layout.
+        return "".join(insert_sql.split("DO UPDATE SET", 1)[1].split())
+
+    @pytest.mark.asyncio
+    async def test_status_is_never_updated_on_conflict(self, mock_pool) -> None:
+        """Status belongs to the events that end or decide a conversation."""
+        assert "status" not in await self._conflict_clause(mock_pool)
+
+    @pytest.mark.asyncio
+    async def test_customer_is_filled_only_when_missing(self, mock_pool) -> None:
+        """An existing customer link or id wins over the started event's."""
+        clause = await self._conflict_clause(mock_pool)
+        assert (
+            "customer_id_id=COALESCE(conversations.customer_id_id,EXCLUDED.customer_id_id)"
+            in clause
+        )
+        assert (
+            "customer_id_string=COALESCE(conversations.customer_id_string,"
+            "EXCLUDED.customer_id_string)" in clause
+        )
+
+    @pytest.mark.asyncio
+    async def test_application_number_is_filled_only_when_blank(self, mock_pool) -> None:
+        """The row the first ``user_input`` created has a blank application
+        number; that is filled. A real one is never replaced or blanked."""
+        clause = await self._conflict_clause(mock_pool)
+        assert (
+            "application_number=COALESCE(NULLIF(conversations.application_number,''),"
+            "EXCLUDED.application_number)" in clause
+        )
+
+    @pytest.mark.asyncio
+    async def test_version_is_bumped_on_conflict(self, mock_pool) -> None:
+        """The CRM's optimistic-concurrency layer sees the change."""
+        assert "version=COALESCE(conversations.version,1)+1" in await self._conflict_clause(
+            mock_pool
+        )
+
+
+def test_attribution_has_one_way_in() -> None:
+    """Attribution arrives on ``conversation_started``; there is no separate
+    attribution event to register."""
     from billie_servicing.main import setup_handlers
 
     class Recorder:
@@ -191,4 +227,5 @@ def test_conversation_attribution_handler_is_registered() -> None:
 
     recorder = Recorder()
     setup_handlers(recorder)
-    assert recorder.handlers["conversation_attribution"] is handle_conversation_attribution
+    assert recorder.handlers["conversation_started"] is handle_conversation_started
+    assert "conversation_attribution" not in recorder.handlers

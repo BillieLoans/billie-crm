@@ -1,7 +1,7 @@
 """Ad-click attribution carried on ``conversation_started`` (BTB-404).
 
 The chat captures gclid/gbraid/wbraid/UTM/matchtype from the Apply URL and
-publishes them as ``payload.attribution`` on ``conversation_attribution``. The values originate in a URL
+publishes them as ``payload.attribution`` on ``conversation_started``. The values originate in a URL
 anyone can craft, so they are re-validated here even though the chat backend
 already sanitised them: known keys only, short plain strings only.
 """
