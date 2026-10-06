@@ -21,6 +21,7 @@ import { AttributionDetail } from './AttributionDetail'
 import { NetworkDetail } from './NetworkDetail'
 import { IdentityResolutionDetail } from './IdentityResolutionDetail'
 import { identityResolutionSummary } from '@/lib/identityResolution'
+import { networkSummary } from '@/lib/network'
 import { LlmCostsSection } from '../LlmCostsSection'
 import styles from './styles.module.css'
 
@@ -352,13 +353,7 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
       {/* Network — country / ASN / IP captured at chat entry (BTB-406). Labelling only. */}
       <AssessmentSection
         title="Network"
-        summary={
-          conversation.network
-            ? [conversation.network.country, conversation.network.asnLabel]
-                .filter(Boolean)
-                .join(' · ') || 'Recorded'
-            : 'No data'
-        }
+        summary={networkSummary(conversation.network ?? null, conversation.networkIp ?? null)}
       >
         <NetworkDetail
           network={conversation.network ?? null}

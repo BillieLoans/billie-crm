@@ -10,9 +10,14 @@ export interface NetworkDetailProps {
  * BTB-406: where this application came from on the network. Labelling only.
  * The IP row renders only when the server chose to send it; the role check
  * lives in the detail route, not here. Values are rendered as text nodes.
+ *
+ * "No network data." whenever nothing the reader can see was recorded — a
+ * record holding only the IP (which this reader was not served) and the
+ * timestamp is no data to them.
  */
 export function NetworkDetail({ network, ip }: NetworkDetailProps) {
-  if (!network && !ip) return <p>No network data.</p>
+  const hasValue = Boolean(network?.country || network?.asnLabel || ip)
+  if (!hasValue) return <p>No network data.</p>
   const rows: Array<[label: string, value: string | null]> = [
     ['Country', network?.country ?? null],
     ['Network', network?.asnLabel ?? null],

@@ -61,6 +61,17 @@ export function shapeNetwork(raw: unknown): Network | null {
   return { country, asn, asnLabel: asnLabel(asn), receivedAt: str(o.received_at) }
 }
 
+/**
+ * One-line summary for the "Network" section. Only what the reader can see
+ * counts: a record whose visible fields are all null (demo today: IP and
+ * timestamp only) is "No data" unless the reader was served the IP.
+ */
+export function networkSummary(network: Network | null, ip: string | null): string {
+  const visible = [network?.country, network?.asnLabel].filter(Boolean).join(' · ')
+  if (visible) return visible
+  return ip ? 'IP only' : 'No data'
+}
+
 /** The client IP — personal information; the route serves it to supervisors only. */
 export function networkIpOf(raw: unknown): string | null {
   const o = record(raw)

@@ -46,6 +46,19 @@ describe('NetworkDetail', () => {
     expect(screen.getByText('No network data.')).toBeTruthy()
   })
 
+  it('treats an IP-only record as no data for a reader who is not served the IP', () => {
+    // Demo today: no Cloudflare headers, so only the (proxy-hop) IP and the
+    // timestamp are stored. Operations must not see "Recorded" and a clock.
+    render(
+      <NetworkDetail
+        network={shapeNetwork({ ip: '203.0.113.9', received_at: '2026-10-12T01:02:04+00:00' })}
+        ip={null}
+      />,
+    )
+    expect(screen.getByText('No network data.')).toBeTruthy()
+    expect(screen.queryByText('Recorded')).toBeNull()
+  })
+
   it('renders a hostile value as text, not markup', () => {
     const { container } = render(
       <NetworkDetail

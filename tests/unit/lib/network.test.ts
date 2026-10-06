@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { asnLabel, networkIpOf, shapeNetwork } from '@/lib/network'
+import { asnLabel, networkIpOf, networkSummary, shapeNetwork } from '@/lib/network'
 
 const STORED = {
   country: 'AU',
@@ -61,6 +61,28 @@ describe('asnLabel', () => {
 
   it('is null for null', () => {
     expect(asnLabel(null)).toBeNull()
+  })
+})
+
+describe('networkSummary', () => {
+  it('joins country and network label', () => {
+    expect(networkSummary(shapeNetwork(STORED), null)).toBe('AU · Telstra (AS1221)')
+  })
+
+  it('uses whichever of country and network is present', () => {
+    expect(networkSummary(shapeNetwork({ country: 'AU' }), null)).toBe('AU')
+    expect(networkSummary(shapeNetwork({ asn: '1221' }), null)).toBe('Telstra (AS1221)')
+  })
+
+  it('says IP only when the IP is all a supervisor was served', () => {
+    expect(networkSummary(shapeNetwork({ ip: '203.0.113.9' }), '203.0.113.9')).toBe('IP only')
+  })
+
+  it('says No data when nothing visible was recorded', () => {
+    expect(networkSummary(null, null)).toBe('No data')
+    expect(networkSummary(shapeNetwork({ ip: '203.0.113.9', received_at: 'x' }), null)).toBe(
+      'No data',
+    )
   })
 })
 

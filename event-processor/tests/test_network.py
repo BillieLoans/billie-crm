@@ -96,7 +96,7 @@ class TestSanitiseNetwork:
 class TestConversationStartedNetwork:
     @pytest.mark.asyncio
     async def test_initialises_the_row_then_writes_network_only_when_null(
-        self, mock_pool
+        self, mock_pool: object
     ) -> None:
         """The row is initialised first; the network UPDATE is guarded by
         ``network IS NULL`` (first write wins)."""
@@ -115,7 +115,7 @@ class TestConversationStartedNetwork:
         assert updates[0].args[1] == "CONV-NET-1"
 
     @pytest.mark.asyncio
-    async def test_accepts_a_json_string_payload(self, mock_pool) -> None:
+    async def test_accepts_a_json_string_payload(self, mock_pool: object) -> None:
         """The ledger may deliver ``payload`` as a JSON-encoded string."""
         await handle_conversation_started(
             mock_pool,
@@ -126,7 +126,7 @@ class TestConversationStartedNetwork:
         assert json.loads(updates[0].args[0])["asn"] == "1221"
 
     @pytest.mark.asyncio
-    async def test_attribution_and_network_both_write(self, mock_pool) -> None:
+    async def test_attribution_and_network_both_write(self, mock_pool: object) -> None:
         """A conversation from an ad click carries both facets; each gets its
         own guarded UPDATE."""
         await handle_conversation_started(
@@ -154,7 +154,7 @@ class TestConversationStartedNetwork:
         ],
     )
     async def test_no_network_write_without_valid_network(
-        self, mock_pool, payload: dict
+        self, mock_pool: object, payload: dict
     ) -> None:
         """A conversation without usable headers is initialised and nothing else."""
         await handle_conversation_started(mock_pool, _event(payload))
