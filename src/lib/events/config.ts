@@ -181,6 +181,8 @@ export const CLEARABLE_REASONS = [
   'SERVICEABILITY',
   'ACCOUNT_CONDUCT',
   'MANUAL_ADMIN',
+  // BTB-397 in-flight claim; clearable by a single operator; billieChat releases the claim only, never touches the manual override.
+  'APPLICATION_IN_PROGRESS',
 ] as const
 
 /**

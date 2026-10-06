@@ -9,6 +9,9 @@
  * - dated windows carry a non-null `blockedUntil`: the decline windows
  *   (ID_VERIFICATION, SERVICEABILITY, ACCOUNT_CONDUCT) and PRIOR_SERIOUS_ARREARS
  *   (BTB-154 — cured serious-arrears/default, 12 months from loan closure).
+ * - APPLICATION_IN_PROGRESS (BTB-397 in-flight claim) carries a dated
+ *   `blockedUntil` (claim time + 3 h — the window self-lapses), so
+ *   `formatBlockedUntil` renders "until <date>" for it.
  */
 
 import { formatDateOnly } from '@/lib/formatters'
@@ -24,6 +27,7 @@ const BLOCK_REASON_LABELS: Record<string, string> = {
   ACCOUNT_CONDUCT: 'Account conduct',
   IDENTITY_CONFLICT: 'Identity conflict',
   MANUAL_ADMIN: 'Manually blocked (staff)',
+  APPLICATION_IN_PROGRESS: 'Application in progress',
 }
 
 export function formatBlockReason(reason: string | null | undefined): string {

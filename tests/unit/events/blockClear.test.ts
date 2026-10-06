@@ -47,6 +47,7 @@ describe('block-clear event contract', () => {
       'SERVICEABILITY',
       'ACCOUNT_CONDUCT',
       'MANUAL_ADMIN',
+      'APPLICATION_IN_PROGRESS',
     ])
     expect(REASONS_REQUIRING_APPROVAL).toEqual([
       'PRIOR_DEFAULT',
@@ -72,6 +73,21 @@ describe('block-clear event contract', () => {
       conversationId: 'conv-1',
       reasons: ['MANUAL_ADMIN'],
       justification: 'operator cleared manual block, ticket OPS-2',
+    })
+    expect(ok.success).toBe(true)
+  })
+
+  it('APPLICATION_IN_PROGRESS (BTB-397 in-flight claim) is clearable WITHOUT approval', () => {
+    expect(CLEARABLE_REASONS).toContain('APPLICATION_IN_PROGRESS')
+    expect(REASONS_REQUIRING_APPROVAL).not.toContain('APPLICATION_IN_PROGRESS')
+  })
+
+  it('accepts APPLICATION_IN_PROGRESS as a clear request reason', () => {
+    const ok = BlockClearRequestCommandSchema.safeParse({
+      canonicalCustomerId: 'c123',
+      conversationId: 'conv-1',
+      reasons: ['APPLICATION_IN_PROGRESS'],
+      justification: 'operator released in-flight claim, ticket OPS-3',
     })
     expect(ok.success).toBe(true)
   })
