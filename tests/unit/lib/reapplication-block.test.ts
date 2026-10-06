@@ -19,6 +19,7 @@ describe('formatBlockReason', () => {
     expect(formatBlockReason('ACCOUNT_CONDUCT')).toBe('Account conduct')
     expect(formatBlockReason('IDENTITY_CONFLICT')).toBe('Identity conflict')
     expect(formatBlockReason('PRIOR_SERIOUS_ARREARS')).toBe('Prior serious arrears')
+    expect(formatBlockReason('APPLICATION_IN_PROGRESS')).toBe('Application in progress')
     expect(formatBlockReason('MANUAL_ADMIN')).toBe('Manually blocked (staff)')
   })
 
@@ -58,6 +59,21 @@ describe('formatBlockedUntil', () => {
         blockedUntil: '2027-06-10T01:02:21+00:00',
       }),
     ).toBe('until 10 June 2027')
+  })
+
+  it('APPLICATION_IN_PROGRESS reads as ongoing state despite its dated backstop (BTB-397)', () => {
+    // The in-flight claim carries blockedUntil = claim + 3 h purely as a
+    // self-lapse backstop; staff should see the state, not a date that is
+    // always today.
+    expect(
+      formatBlockedUntil({
+        reason: 'APPLICATION_IN_PROGRESS',
+        blockedUntil: '2026-10-06T12:34:00+00:00',
+      }),
+    ).toBe('while application in progress')
+    expect(formatBlockedUntil({ reason: 'APPLICATION_IN_PROGRESS', blockedUntil: null })).toBe(
+      'while application in progress',
+    )
   })
 })
 

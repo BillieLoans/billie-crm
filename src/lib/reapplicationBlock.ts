@@ -9,6 +9,11 @@
  * - dated windows carry a non-null `blockedUntil`: the decline windows
  *   (ID_VERIFICATION, SERVICEABILITY, ACCOUNT_CONDUCT) and PRIOR_SERIOUS_ARREARS
  *   (BTB-154 — cured serious-arrears/default, 12 months from loan closure).
+ * - APPLICATION_IN_PROGRESS (BTB-397 in-flight claim) carries a dated
+ *   `blockedUntil` (claim time + 3 h — the window self-lapses) which still
+ *   drives `isBlockActive`, but it is an ongoing-state block like ACTIVE_LOAN,
+ *   so `formatBlockedUntil` reads "while application in progress" rather than
+ *   a date that is always today.
  */
 
 import { formatDateOnly } from '@/lib/formatters'
@@ -24,6 +29,7 @@ const BLOCK_REASON_LABELS: Record<string, string> = {
   ACCOUNT_CONDUCT: 'Account conduct',
   IDENTITY_CONFLICT: 'Identity conflict',
   MANUAL_ADMIN: 'Manually blocked (staff)',
+  APPLICATION_IN_PROGRESS: 'Application in progress',
 }
 
 export function formatBlockReason(reason: string | null | undefined): string {
@@ -39,8 +45,11 @@ export interface BlockLike {
 /**
  * Human text for the exclusion window end. Null window = "While loan open" for
  * ACTIVE_LOAN, "Permanent" otherwise (PEP, PRIOR_DEFAULT, IDENTITY_CONFLICT).
+ * APPLICATION_IN_PROGRESS is ongoing-state too — its `blockedUntil` is only the
+ * self-lapse backstop a few hours out — so it reads "while application in progress".
  */
 export function formatBlockedUntil(block: BlockLike): string {
+  if (block.reason === 'APPLICATION_IN_PROGRESS') return 'while application in progress'
   if (block.blockedUntil) return `until ${formatDateOnly(block.blockedUntil as string)}`
   return block.reason === 'ACTIVE_LOAN' ? 'while loan open' : 'permanent'
 }

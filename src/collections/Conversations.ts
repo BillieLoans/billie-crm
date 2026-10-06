@@ -320,7 +320,7 @@ export const Conversations: CollectionConfig = {
           type: 'text',
           admin: {
             description:
-              'Block reason enum: ACTIVE_LOAN, PRIOR_DEFAULT, PRIOR_SERIOUS_ARREARS, PEP, ID_VERIFICATION, SERVICEABILITY, ACCOUNT_CONDUCT, IDENTITY_CONFLICT',
+              'Block reason enum: ACTIVE_LOAN, PRIOR_DEFAULT, PRIOR_SERIOUS_ARREARS, PEP, ID_VERIFICATION, SERVICEABILITY, ACCOUNT_CONDUCT, IDENTITY_CONFLICT, APPLICATION_IN_PROGRESS',
           },
         },
         {
