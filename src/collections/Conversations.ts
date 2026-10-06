@@ -262,6 +262,16 @@ export const Conversations: CollectionConfig = {
       },
     },
     {
+      // BTB-406: written by the Python event processor from conversation_started.
+      name: 'network',
+      type: 'json',
+      admin: {
+        readOnly: true,
+        description:
+          'Network provenance captured at chat entry (country, ASN, client IP). Contains personal information (IP) — served to supervisors only by the detail route. Labelling only.',
+      },
+    },
+    {
       // BTB-135: optional detail accompanying final_credit_decision. All fields
       // nullable — legacy/mock decision payloads carry none of these.
       name: 'decisionDetail',
