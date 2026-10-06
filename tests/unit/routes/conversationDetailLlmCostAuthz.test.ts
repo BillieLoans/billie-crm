@@ -163,6 +163,9 @@ const BASE_KEYS = [
   'killRecord',
   'lastMessageAt',
   'messageCount',
+  // BTB-406: network provenance (country, ASN label) — not identifying on its
+  // own, readable by all lending roles. The IP is supervisor-only (below).
+  'network',
   'noticeboard',
   'reapplicationBlock',
   'sourceConversationId',
@@ -174,7 +177,13 @@ const BASE_KEYS = [
   'utterances',
 ].sort()
 
-const SUPERVISOR_ONLY_KEYS = ['llmCallCount', 'llmCostTotalUsd', 'llmUnpricedCount'].sort()
+const SUPERVISOR_ONLY_KEYS = [
+  'llmCallCount',
+  'llmCostTotalUsd',
+  'llmUnpricedCount',
+  // BTB-406: the client IP is personal information.
+  'networkIp',
+].sort()
 
 describe('GET /api/conversations/:conversationId — response contract', () => {
   it.each(['operations', 'readonly'])('serves exactly the base key set to %s', async (role) => {

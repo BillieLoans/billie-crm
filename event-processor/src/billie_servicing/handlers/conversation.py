@@ -28,6 +28,7 @@ from ..db import coerce_date, merge_jsonb, update_by_key, upsert, upsert_convers
 from .attribution import sanitise_attribution
 from .cancellation import CUSTOMER_DECLINED, terminal_rank
 from .identity_verification import mirror_lab_verification
+from .network import sanitise_network
 from .sanitize import parse_payload, safe_str, strip_dollar_keys
 
 logger = structlog.get_logger()
@@ -78,6 +79,9 @@ async def handle_conversation_started(pool: asyncpg.Pool, event: dict[str, Any])
     BTB-404: when the application arrived from an ad click the payload carries
     ``attribution``; it is written only while the column is still NULL, so the
     first value wins on replay and out-of-order delivery.
+
+    BTB-406: the payload may also carry ``network`` (country, ASN, IP read off
+    the Cloudflare-attested headers at chat entry); same first-write-wins rule.
     """
     conversation_id = safe_str(
         event.get("cid") or event.get("conv") or event.get("conversation_id"),
@@ -133,6 +137,16 @@ async def handle_conversation_started(pool: asyncpg.Pool, event: dict[str, Any])
             "version = COALESCE(version, 1) + 1 "
             "WHERE conversation_id = $2 AND attribution IS NULL",
             json.dumps(attribution),
+            conversation_id,
+        )
+
+    network = sanitise_network(payload.get("network"))
+    if network:
+        await pool.execute(
+            "UPDATE conversations SET network = $1::jsonb, updated_at = NOW(), "
+            "version = COALESCE(version, 1) + 1 "
+            "WHERE conversation_id = $2 AND network IS NULL",
+            json.dumps(network),
             conversation_id,
         )
 

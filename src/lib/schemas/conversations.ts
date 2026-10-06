@@ -295,6 +295,19 @@ export const AttributionSchema = z.object({
 })
 export type Attribution = z.infer<typeof AttributionSchema>
 
+/**
+ * BTB-406: network provenance captured at chat entry (country, ASN). The IP
+ * is personal information and travels separately as `networkIp`, which the
+ * detail route serves to supervisors only. Labelling only.
+ */
+export const NetworkSchema = z.object({
+  country: z.string().nullable(),
+  asn: z.string().nullable(),
+  asnLabel: z.string().nullable(),
+  receivedAt: z.string().nullable(),
+})
+export type Network = z.infer<typeof NetworkSchema>
+
 export const ConversationDetailSchema = z.object({
   conversationId: z.string(),
   applicationNumber: z.string().nullable().optional(),
@@ -316,6 +329,10 @@ export const ConversationDetailSchema = z.object({
   identityOriginCustomerId: z.string().nullable().optional(),
   /** BTB-404: ad-click attribution for this application, when it came from an ad. */
   attribution: AttributionSchema.nullable().optional(),
+  /** BTB-406: where this application came from on the network. */
+  network: NetworkSchema.nullable().optional(),
+  /** BTB-406: the client IP — present only for supervisors and admins. */
+  networkIp: z.string().nullable().optional(),
   startedAt: z.union([z.string(), z.date()]).nullable().optional(),
   updatedAt: z.union([z.string(), z.date()]).nullable().optional(),
   lastMessageAt: z.union([z.string(), z.date()]).nullable().optional(),

@@ -18,8 +18,10 @@ import type { StatementSlot } from '@/hooks'
 import { AssessmentSection } from './AssessmentSection'
 import { IdentityVerificationDetail } from './IdentityVerificationDetail'
 import { AttributionDetail } from './AttributionDetail'
+import { NetworkDetail } from './NetworkDetail'
 import { IdentityResolutionDetail } from './IdentityResolutionDetail'
 import { identityResolutionSummary } from '@/lib/identityResolution'
+import { networkSummary } from '@/lib/network'
 import { LlmCostsSection } from '../LlmCostsSection'
 import styles from './styles.module.css'
 
@@ -346,6 +348,17 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
         }
       >
         <AttributionDetail attribution={conversation.attribution ?? null} />
+      </AssessmentSection>
+
+      {/* Network — country / ASN / IP captured at chat entry (BTB-406). Labelling only. */}
+      <AssessmentSection
+        title="Network"
+        summary={networkSummary(conversation.network ?? null, conversation.networkIp ?? null)}
+      >
+        <NetworkDetail
+          network={conversation.network ?? null}
+          ip={conversation.networkIp ?? null}
+        />
       </AssessmentSection>
 
       {/* Credit: Account Conduct */}

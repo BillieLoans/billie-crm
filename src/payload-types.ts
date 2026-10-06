@@ -814,6 +814,18 @@ export interface Conversation {
     | boolean
     | null;
   /**
+   * Network provenance captured at chat entry (country, ASN, client IP). Contains personal information (IP) — served to supervisors only by the detail route. Labelling only.
+   */
+  network?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
    * Optional detail from final_credit_decision (reason, block info)
    */
   decisionDetail?: {
@@ -2580,6 +2592,7 @@ export interface ConversationsSelect<T extends boolean = true> {
   lastUtteranceTime?: T;
   finalDecision?: T;
   attribution?: T;
+  network?: T;
   decisionDetail?:
     | T
     | {
