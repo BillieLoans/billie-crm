@@ -7,7 +7,7 @@ import { shapeNetwork } from '@/lib/network'
 const STORED = {
   country: 'AU',
   asn: '1221',
-  ip: '203.0.113.9',
+  ip: '1.1.1.1',
   received_at: '2026-10-12T01:02:04+00:00',
 }
 
@@ -22,16 +22,16 @@ describe('NetworkDetail', () => {
   })
 
   it('shows the IP row only when the server sent one', () => {
-    render(<NetworkDetail network={shapeNetwork(STORED)} ip="203.0.113.9" />)
+    render(<NetworkDetail network={shapeNetwork(STORED)} ip="1.1.1.1" />)
 
     expect(screen.getByText('IP')).toBeTruthy()
-    expect(screen.getByText('203.0.113.9')).toBeTruthy()
+    expect(screen.getByText('1.1.1.1')).toBeTruthy()
   })
 
   it('shows only the IP row when that is all there is', () => {
-    render(<NetworkDetail network={shapeNetwork({ ip: '203.0.113.9' })} ip="203.0.113.9" />)
+    render(<NetworkDetail network={shapeNetwork({ ip: '1.1.1.1' })} ip="1.1.1.1" />)
 
-    expect(screen.getByText('203.0.113.9')).toBeTruthy()
+    expect(screen.getByText('1.1.1.1')).toBeTruthy()
     expect(screen.queryByText('Country')).toBeNull()
     expect(screen.queryByText('Network')).toBeNull()
   })
@@ -51,7 +51,7 @@ describe('NetworkDetail', () => {
     // timestamp are stored. Operations must not see "Recorded" and a clock.
     render(
       <NetworkDetail
-        network={shapeNetwork({ ip: '203.0.113.9', received_at: '2026-10-12T01:02:04+00:00' })}
+        network={shapeNetwork({ ip: '1.1.1.1', received_at: '2026-10-12T01:02:04+00:00' })}
         ip={null}
       />,
     )

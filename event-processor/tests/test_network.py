@@ -20,7 +20,7 @@ from billie_servicing.handlers.network import sanitise_network
 GOOD = {
     "country": "AU",
     "asn": "1221",
-    "ip": "203.0.113.9",
+    "ip": "1.1.1.1",
     "received_at": "2026-10-12T01:02:04+00:00",
 }
 
@@ -72,9 +72,24 @@ class TestSanitiseNetwork:
         out = sanitise_network({"ip": "2001:8004:6b21:16c9::1"})
         assert out == {"ip": "2001:8004:6b21:16c9::1"}
 
-    @pytest.mark.parametrize("ip", ["203.0.113", "not an ip", "1.2.3.4; DROP", "", 1234])
+    @pytest.mark.parametrize(
+        "ip",
+        [
+            "203.0.113",
+            "not an ip",
+            "1.2.3.4; DROP",
+            "",
+            1234,
+            # Not globally routable (proxy hop, private, loopback, link-local).
+            "127.0.0.1",
+            "10.0.0.7",
+            "fdaa:0:1::2",
+            "::1",
+            "169.254.1.1",
+        ],
+    )
     def test_drops_a_bad_ip(self, ip: object) -> None:
-        """Anything ``ipaddress`` rejects is dropped."""
+        """Anything ``ipaddress`` rejects, or that is not globally routable, is dropped."""
         out = sanitise_network({**GOOD, "ip": ip})
         assert out is not None and "ip" not in out
 

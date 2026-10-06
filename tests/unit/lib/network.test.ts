@@ -5,7 +5,7 @@ import { asnLabel, networkIpOf, networkSummary, shapeNetwork } from '@/lib/netwo
 const STORED = {
   country: 'AU',
   asn: '1221',
-  ip: '203.0.113.9',
+  ip: '1.1.1.1',
   received_at: '2026-10-12T01:02:04+00:00',
 }
 
@@ -31,7 +31,7 @@ describe('shapeNetwork', () => {
   })
 
   it('keeps a record that has only an IP so a supervisor can still see it', () => {
-    expect(shapeNetwork({ ip: '203.0.113.9' })).toEqual({
+    expect(shapeNetwork({ ip: '1.1.1.1' })).toEqual({
       country: null,
       asn: null,
       asnLabel: null,
@@ -75,12 +75,12 @@ describe('networkSummary', () => {
   })
 
   it('says IP only when the IP is all a supervisor was served', () => {
-    expect(networkSummary(shapeNetwork({ ip: '203.0.113.9' }), '203.0.113.9')).toBe('IP only')
+    expect(networkSummary(shapeNetwork({ ip: '1.1.1.1' }), '1.1.1.1')).toBe('IP only')
   })
 
   it('says No data when nothing visible was recorded', () => {
     expect(networkSummary(null, null)).toBe('No data')
-    expect(networkSummary(shapeNetwork({ ip: '203.0.113.9', received_at: 'x' }), null)).toBe(
+    expect(networkSummary(shapeNetwork({ ip: '1.1.1.1', received_at: 'x' }), null)).toBe(
       'No data',
     )
   })
@@ -88,7 +88,7 @@ describe('networkSummary', () => {
 
 describe('networkIpOf', () => {
   it('returns the stored IP', () => {
-    expect(networkIpOf(STORED)).toBe('203.0.113.9')
+    expect(networkIpOf(STORED)).toBe('1.1.1.1')
   })
 
   it('is null when absent or malformed', () => {

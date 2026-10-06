@@ -22,12 +22,14 @@ _TIMESTAMP_RE = re.compile(r"[0-9T:.+\-Z]{10,40}")
 
 
 def _ip(value: object) -> str | None:
+    """A globally routable address, or None (private/loopback hops are not provenance)."""
     if not isinstance(value, str):
         return None
     try:
-        return str(ipaddress.ip_address(value))
+        address = ipaddress.ip_address(value)
     except ValueError:
         return None
+    return str(address) if address.is_global else None
 
 
 def sanitise_network(raw: object) -> dict[str, str] | None:
