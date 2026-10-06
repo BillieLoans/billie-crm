@@ -60,6 +60,21 @@ describe('formatBlockedUntil', () => {
       }),
     ).toBe('until 10 June 2027')
   })
+
+  it('APPLICATION_IN_PROGRESS reads as ongoing state despite its dated backstop (BTB-397)', () => {
+    // The in-flight claim carries blockedUntil = claim + 3 h purely as a
+    // self-lapse backstop; staff should see the state, not a date that is
+    // always today.
+    expect(
+      formatBlockedUntil({
+        reason: 'APPLICATION_IN_PROGRESS',
+        blockedUntil: '2026-10-06T12:34:00+00:00',
+      }),
+    ).toBe('while application in progress')
+    expect(formatBlockedUntil({ reason: 'APPLICATION_IN_PROGRESS', blockedUntil: null })).toBe(
+      'while application in progress',
+    )
+  })
 })
 
 describe('isBlockActive', () => {
