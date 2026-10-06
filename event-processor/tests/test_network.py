@@ -91,3 +91,73 @@ class TestSanitiseNetwork:
     def test_returns_none_for_non_dicts_and_empty(self, raw: object) -> None:
         """Anything that is not a dict with a valid value yields None."""
         assert sanitise_network(raw) is None
+
+
+class TestConversationStartedNetwork:
+    @pytest.mark.asyncio
+    async def test_initialises_the_row_then_writes_network_only_when_null(
+        self, mock_pool
+    ) -> None:
+        """The row is initialised first; the network UPDATE is guarded by
+        ``network IS NULL`` (first write wins)."""
+        await handle_conversation_started(
+            mock_pool, _event({"application_number": "APP-1", "network": GOOD})
+        )
+
+        inserted = mock_pool.last_insert("conversations")
+        assert inserted["conversation_id"] == "CONV-NET-1"
+        assert inserted["application_number"] == "APP-1"
+        updates = _network_writes(mock_pool)
+        assert len(updates) == 1
+        assert updates[0].sql.startswith("UPDATE conversations")
+        assert "network IS NULL" in updates[0].sql
+        assert json.loads(updates[0].args[0]) == GOOD
+        assert updates[0].args[1] == "CONV-NET-1"
+
+    @pytest.mark.asyncio
+    async def test_accepts_a_json_string_payload(self, mock_pool) -> None:
+        """The ledger may deliver ``payload`` as a JSON-encoded string."""
+        await handle_conversation_started(
+            mock_pool,
+            _event(json.dumps({"application_number": "APP-1", "network": GOOD})),
+        )
+
+        updates = _network_writes(mock_pool)
+        assert json.loads(updates[0].args[0])["asn"] == "1221"
+
+    @pytest.mark.asyncio
+    async def test_attribution_and_network_both_write(self, mock_pool) -> None:
+        """A conversation from an ad click carries both facets; each gets its
+        own guarded UPDATE."""
+        await handle_conversation_started(
+            mock_pool,
+            _event(
+                {
+                    "application_number": "APP-1",
+                    "attribution": {"gclid": "abc"},
+                    "network": GOOD,
+                }
+            ),
+        )
+
+        assert len([c for c in mock_pool.calls if "SET attribution" in c.sql]) == 1
+        assert len(_network_writes(mock_pool)) == 1
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {"application_number": "APP-1"},
+            {"application_number": "APP-1", "network": None},
+            {"application_number": "APP-1", "network": "country=AU"},
+            {"application_number": "APP-1", "network": {"city": "Melbourne"}},
+        ],
+    )
+    async def test_no_network_write_without_valid_network(
+        self, mock_pool, payload: dict
+    ) -> None:
+        """A conversation without usable headers is initialised and nothing else."""
+        await handle_conversation_started(mock_pool, _event(payload))
+
+        assert mock_pool.last_insert("conversations")["conversation_id"] == "CONV-NET-1"
+        assert _network_writes(mock_pool) == []
