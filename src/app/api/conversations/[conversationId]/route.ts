@@ -15,6 +15,7 @@ import { hasAnyRole, hasApprovalAuthority } from '@/lib/access'
 import { resolveActorDisplayName } from '@/lib/users'
 import { shapeAttempts } from '@/lib/identityAttempts'
 import { shapeAttribution } from '@/lib/attribution'
+import { networkIpOf, shapeNetwork } from '@/lib/network'
 import { shapeIdentityResolution } from '@/lib/identityResolution'
 
 /** Safely convert a MongoDB Date or ISO string to ISO string, or null. */
@@ -159,6 +160,8 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
           llmCostTotalUsd: (doc.llmCostTotalUsd as number) ?? null,
           llmCallCount: (doc.llmCallCount as number) ?? null,
           llmUnpricedCount: (doc.llmUnpricedCount as number) ?? null,
+          // BTB-406: the client IP is personal information — supervisors only.
+          networkIp: networkIpOf(doc.network),
         }
       : {}
 
@@ -195,6 +198,8 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       identityOriginCustomerId: (doc.identityOriginCustomerId as string) ?? null,
       // BTB-404: ad-click attribution captured at chat entry.
       attribution: shapeAttribution(doc.attribution),
+      // BTB-406: network provenance (country, ASN) captured at chat entry.
+      network: shapeNetwork(doc.network),
       startedAt: toIso(doc.startedAt),
       updatedAt: toIso(doc.updatedAt),
       lastMessageAt: toIso(doc.lastUtteranceTime),
