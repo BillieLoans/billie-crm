@@ -129,6 +129,14 @@ describe('ApplicationsTable', () => {
     },
   )
 
+  it('links the customer ID to the servicing profile without also opening the row', () => {
+    render(<ApplicationsTable conversations={ROWS} sort="-updatedAt" onSortChange={vi.fn()} />)
+    const link = screen.getByRole('link', { name: 'B81FC35E' })
+    expect(link).toHaveAttribute('href', '/admin/servicing/B81FC35E')
+    fireEvent.click(link)
+    expect(push).not.toHaveBeenCalled()
+  })
+
   it('opens the conversation on row click and on Enter', () => {
     render(<ApplicationsTable conversations={ROWS} sort="-updatedAt" onSortChange={vi.fn()} />)
     const row = screen.getAllByRole('row')[1]
