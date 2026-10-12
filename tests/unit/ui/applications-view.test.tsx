@@ -14,7 +14,11 @@ import { formatDateOnly } from '@/lib/formatters'
 
 // Mock next/link to avoid router issues in unit tests
 vi.mock('next/link', () => ({
-  default: ({ children, href, ...props }: React.PropsWithChildren<{ href: string; [key: string]: unknown }>) => (
+  default: ({
+    children,
+    href,
+    ...props
+  }: React.PropsWithChildren<{ href: string; [key: string]: unknown }>) => (
     <a href={href} {...props}>
       {children}
     </a>
@@ -24,6 +28,15 @@ vi.mock('next/link', () => ({
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn() }),
   usePathname: () => '/admin/applications',
+}))
+
+// ApplicationsView reads the per-user layout preference through @payloadcms/ui;
+// importing that package unmocked pulls react-image-crop's CSS and breaks collection.
+vi.mock('@payloadcms/ui', () => ({
+  usePreferences: () => ({
+    getPreference: vi.fn().mockResolvedValue(null),
+    setPreference: vi.fn().mockResolvedValue(undefined),
+  }),
 }))
 
 // =============================================================================
@@ -111,7 +124,9 @@ describe('ConversationCard', () => {
   })
 
   it('renders singular "message" when count is 1', () => {
-    const { unmount } = render(<ConversationCard conversation={{ ...baseConversation, messageCount: 1 }} />)
+    const { unmount } = render(
+      <ConversationCard conversation={{ ...baseConversation, messageCount: 1 }} />,
+    )
     expect(screen.getAllByText(/1 message/).length).toBeGreaterThan(0)
     unmount()
   })
@@ -198,40 +213,30 @@ describe('SanitizedHTML', () => {
   })
 
   it('renders allowed tags (b, i, em, strong, a)', () => {
-    const { container } = render(
-      <SanitizedHTML html="<b>Bold</b> and <em>italic</em>" />,
-    )
+    const { container } = render(<SanitizedHTML html="<b>Bold</b> and <em>italic</em>" />)
     // In test env (JSDOM), require('dompurify') works
     expect(container.innerHTML).toContain('Bold')
     expect(container.innerHTML).toContain('italic')
   })
 
   it('strips script tags (XSS prevention — NFR7)', () => {
-    const { container } = render(
-      <SanitizedHTML html='<script>alert("xss")</script>Safe text' />,
-    )
+    const { container } = render(<SanitizedHTML html='<script>alert("xss")</script>Safe text' />)
     expect(container.innerHTML).not.toContain('<script>')
     expect(container.innerHTML).not.toContain('alert')
   })
 
   it('strips onclick attributes (NFR7)', () => {
-    const { container } = render(
-      <SanitizedHTML html='<a onclick="badFn()">Link</a>' />,
-    )
+    const { container } = render(<SanitizedHTML html='<a onclick="badFn()">Link</a>' />)
     expect(container.innerHTML).not.toContain('onclick')
   })
 
   it('strips iframe tags (NFR7)', () => {
-    const { container } = render(
-      <SanitizedHTML html='<iframe src="evil.com"></iframe>Text' />,
-    )
+    const { container } = render(<SanitizedHTML html='<iframe src="evil.com"></iframe>Text' />)
     expect(container.innerHTML).not.toContain('iframe')
   })
 
   it('strips onerror and other event handlers', () => {
-    const { container } = render(
-      <SanitizedHTML html='<img src="x" onerror="alert(1)" />' />,
-    )
+    const { container } = render(<SanitizedHTML html='<img src="x" onerror="alert(1)" />' />)
     expect(container.innerHTML).not.toContain('onerror')
   })
 })

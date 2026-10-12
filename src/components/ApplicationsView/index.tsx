@@ -3,18 +3,25 @@
 import React, { useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useConversations } from '@/hooks/queries/useConversations'
-import { useConversationFiltersStore } from '@/stores/conversationFilters'
+import {
+  useConversationFiltersStore,
+  DEFAULT_CONVERSATION_SORT_PARAM,
+} from '@/stores/conversationFilters'
 import { useMonitoringGridStore } from '@/stores/monitoringGrid'
+import { ApplicationsTable } from './ApplicationsTable'
 import { ConversationCard } from './ConversationCard'
 import { FilterBar } from './FilterBar'
 import { FreshnessIndicator } from './FreshnessIndicator'
+import { ViewToggle } from './ViewToggle'
+import { useViewModePreference } from './useViewModePreference'
 import styles from './styles.module.css'
 
 /**
  * ApplicationsView renders the conversation monitoring grid with:
  * - Real-time polling (5s)
  * - Search and filter bar
- * - Responsive card grid (3-col → 2-col → 1-col)
+ * - Tiles (responsive card grid, 3-col → 2-col → 1-col) or List (sortable table),
+ *   remembered per user
  * - Skeleton loaders on first load
  * - Cursor-based pagination ("Load more")
  * - Scroll position preservation
@@ -24,7 +31,8 @@ import styles from './styles.module.css'
  * Story 2.1-2.4: ApplicationsView scaffold, cards, grid, filters
  */
 export function ApplicationsView() {
-  const { filters, hasActiveFilters } = useConversationFiltersStore()
+  const { filters, hasActiveFilters, sort, setSort } = useConversationFiltersStore()
+  const { viewMode, setViewMode } = useViewModePreference()
   const { scrollPosition, setScrollPosition } = useMonitoringGridStore()
   const router = useRouter()
 
@@ -36,6 +44,9 @@ export function ApplicationsView() {
       to: filters.to || undefined,
       q: filters.q || undefined,
     },
+    // The default order is the API's own default — leave the param (and the
+    // query key) untouched so tiles behave exactly as before.
+    sort: sort === DEFAULT_CONVERSATION_SORT_PARAM ? undefined : sort,
   })
 
   const conversations = data.conversations
@@ -69,9 +80,7 @@ export function ApplicationsView() {
     ) {
       return
     }
-    const cards = Array.from(
-      document.querySelectorAll<HTMLElement>('[data-conversation-card]'),
-    )
+    const cards = Array.from(document.querySelectorAll<HTMLElement>('[data-conversation-card]'))
     const current = document.activeElement as HTMLElement
     const idx = cards.indexOf(current)
     if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
@@ -96,6 +105,7 @@ export function ApplicationsView() {
             </span>
           )}
           <FreshnessIndicator dataUpdatedAt={dataUpdatedAt} />
+          <ViewToggle value={viewMode} onChange={setViewMode} />
         </div>
       </div>
 
@@ -113,11 +123,7 @@ export function ApplicationsView() {
             {hasActiveFilters() ? (
               <>
                 <p className={styles.emptyStateText}>No conversations match your filters.</p>
-                <button
-                  type="button"
-                  className={styles.clearFiltersBtn}
-                  onClick={clearFilters}
-                >
+                <button type="button" className={styles.clearFiltersBtn} onClick={clearFilters}>
                   Clear filters
                 </button>
               </>
@@ -127,11 +133,15 @@ export function ApplicationsView() {
           </div>
         ) : (
           <>
-            {conversations.map((conv) => (
-              <div key={conv.conversationId} data-conversation-card="true">
-                <ConversationCard conversation={conv} />
-              </div>
-            ))}
+            {viewMode === 'list' ? (
+              <ApplicationsTable conversations={conversations} sort={sort} onSortChange={setSort} />
+            ) : (
+              conversations.map((conv) => (
+                <div key={conv.conversationId} data-conversation-card="true">
+                  <ConversationCard conversation={conv} />
+                </div>
+              ))
+            )}
 
             {hasMore && (
               <div className={styles.loadMore}>

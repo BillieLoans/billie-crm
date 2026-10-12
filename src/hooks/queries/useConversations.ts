@@ -16,6 +16,7 @@ async function fetchConversations(
   if (params.from) searchParams.set('from', params.from)
   if (params.to) searchParams.set('to', params.to)
   if (params.q) searchParams.set('q', params.q)
+  if (params.sort) searchParams.set('sort', params.sort)
   if (params.limit) searchParams.set('limit', String(params.limit))
   if (params.cursor) searchParams.set('cursor', params.cursor)
 
@@ -31,6 +32,8 @@ async function fetchConversations(
 
 interface UseConversationsOptions {
   filters?: Partial<ConversationsQuery>
+  /** `field` asc or `-field` desc (Applications list view). Omit for the default order. */
+  sort?: string
   enabled?: boolean
 }
 
@@ -55,11 +58,15 @@ export interface UseConversationsResult {
  */
 export function useConversations({
   filters = {},
+  sort,
   enabled = true,
 }: UseConversationsOptions = {}): UseConversationsResult {
   const query = useInfiniteQuery({
-    queryKey: ['conversations', filters],
-    queryFn: ({ pageParam }) => fetchConversations({ ...filters, cursor: pageParam ?? undefined }),
+    // Sort is part of the key so a change restarts from the first page — a
+    // cursor minted under one sort order is meaningless under another.
+    queryKey: ['conversations', filters, sort ?? null],
+    queryFn: ({ pageParam }) =>
+      fetchConversations({ ...filters, sort, cursor: pageParam ?? undefined }),
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.cursor : undefined),
     enabled,

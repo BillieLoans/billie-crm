@@ -33,6 +33,8 @@ export const ConversationsQuerySchema = z.object({
   q: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(20),
   cursor: z.string().optional(),
+  /** `field` asc or `-field` desc; whitelisted in `@/lib/conversation-sort`. */
+  sort: z.string().optional(),
 })
 
 export type ConversationsQuery = z.infer<typeof ConversationsQuerySchema>

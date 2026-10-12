@@ -1,0 +1,139 @@
+/* Applications list view — mirrors AccountsTable density (44px rows, 13px
+   text, monospace for IDs) and uses Payload theme variables for dark mode. */
+
+.wrapper {
+  grid-column: 1 / -1;
+  overflow-x: auto;
+  border: 1px solid var(--theme-elevation-150, #e5e7eb);
+  border-radius: 8px;
+  background: var(--theme-bg, #fff);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: 40px;
+  padding: 0;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--theme-elevation-600, #555);
+  background: var(--theme-elevation-50, #fafafa);
+  border-bottom: 1px solid var(--theme-elevation-150, #e5e7eb);
+  white-space: nowrap;
+}
+
+.headerButton {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.headerButton:hover {
+  background: var(--theme-elevation-100, #f3f4f6);
+  color: var(--theme-elevation-900, #111);
+}
+
+.headerButton:focus-visible {
+  outline: 2px solid var(--theme-success, #0ea5e9);
+  outline-offset: -2px;
+}
+
+.headerActive {
+  color: var(--theme-elevation-900, #111);
+}
+
+.headerLabel {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  padding: 0 12px;
+}
+
+.sortIndicator {
+  display: inline-block;
+  width: 10px;
+  font-size: 10px;
+}
+
+.numeric {
+  text-align: right;
+}
+
+.numeric .headerButton,
+.numeric .headerLabel {
+  justify-content: flex-end;
+}
+
+.table td {
+  height: 44px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--theme-elevation-100, #f0f0f0);
+  vertical-align: middle;
+  white-space: nowrap;
+  color: var(--theme-elevation-800, #444);
+}
+
+.row {
+  cursor: pointer;
+}
+
+.row:hover td {
+  background: var(--theme-elevation-50, #f9fafb);
+}
+
+.row:focus-visible {
+  outline: 2px solid var(--theme-success, #0ea5e9);
+  outline-offset: -2px;
+}
+
+.customer {
+  font-weight: 600;
+  color: var(--theme-elevation-900, #111);
+}
+
+.mono {
+  font-family: 'SF Mono', 'Fira Code', 'Fira Mono', monospace;
+  font-size: 12px;
+}
+
+.appLink {
+  color: inherit;
+  text-decoration: none;
+}
+
+.appLink:hover {
+  text-decoration: underline;
+}
+
+.amount {
+  font-weight: 500;
+  color: var(--theme-elevation-900, #111);
+}
+
+.purpose {
+  display: block;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.muted {
+  color: var(--theme-elevation-400, #999);
+}
