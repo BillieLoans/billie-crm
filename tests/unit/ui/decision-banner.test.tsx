@@ -111,11 +111,7 @@ describe('DecisionBanner block-decline detail', () => {
   })
 
   test('falls back to plain text when the source conversation is unknown', () => {
-    render(
-      <DecisionBanner
-        conversation={{ ...blockConversation, sourceConversationId: null }}
-      />,
-    )
+    render(<DecisionBanner conversation={{ ...blockConversation, sourceConversationId: null }} />)
     expect(screen.queryByRole('link', { name: /871CE08C-8B6/ })).not.toBeInTheDocument()
     expect(screen.getByText('871CE08C-8B6')).toBeInTheDocument()
   })
@@ -191,6 +187,73 @@ describe('DecisionBanner block-decline detail', () => {
     expect(screen.getByText('✗ Declined · Re-application block')).toBeInTheDocument()
     expect(screen.getByText(/while loan open/)).toBeInTheDocument()
     expect(screen.queryByText(/Flagged for manual review/)).not.toBeInTheDocument()
+  })
+})
+
+describe('DecisionBanner block without a decision (login-time halt)', () => {
+  afterEach(cleanup)
+
+  // The authenticated session-start path emits only
+  // application.reapplication_blocked.v1 — no final_credit_decision follows —
+  // so the row carries the block but finalDecision stays null and status
+  // stays active. The banner must still surface the block.
+  const loginBlock = createConversation({
+    finalDecision: null,
+    status: 'active',
+    reapplicationBlock: {
+      reason: 'ACTIVE_LOAN',
+      messageVariant: 'ACTIVE_LOAN',
+      dispositionKind: 'block',
+      stopMessage: 'It looks like you’ve currently got a loan with Billie – thank you!',
+      sourceApplicationNumber: null,
+      sourceAccountId: 'b69f392d-642a-4a41-a8d0-875ec908cb5f',
+      blockedUntil: null,
+      blockedAt: '2026-10-13T02:07:09.775Z',
+      canonicalCustomerId: '22F0652F',
+      clearStatus: null,
+    },
+  })
+
+  test('renders the block panel instead of "No decision yet"', () => {
+    render(<DecisionBanner conversation={loginBlock} />)
+    expect(screen.getByText('✗ Blocked · Re-application block')).toBeInTheDocument()
+    expect(screen.queryByText('○ No decision yet')).not.toBeInTheDocument()
+    expect(screen.queryByText(/✗ Declined/)).not.toBeInTheDocument()
+  })
+
+  test('explains that no credit decision was recorded', () => {
+    render(<DecisionBanner conversation={loginBlock} />)
+    expect(screen.getByText(/no credit decision recorded/i)).toBeInTheDocument()
+  })
+
+  test('shows the same block detail as a block-decline', () => {
+    render(<DecisionBanner conversation={loginBlock} />)
+    expect(screen.getByText('Active loan')).toBeInTheDocument()
+    expect(screen.getByText(/while loan open · since 13 October 2026/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /b69f392d/ })).toHaveAttribute(
+      'href',
+      '/admin/servicing/22F0652F?accountId=b69f392d-642a-4a41-a8d0-875ec908cb5f',
+    )
+    expect(screen.getByText(/currently got a loan with Billie/)).toBeInTheDocument()
+  })
+
+  test('a cleared block with no decision falls back to the neutral slot', () => {
+    render(
+      <DecisionBanner
+        conversation={{
+          ...loginBlock,
+          reapplicationBlock: { ...loginBlock.reapplicationBlock, clearStatus: 'cleared' },
+        }}
+      />,
+    )
+    expect(screen.getByText('○ No decision yet')).toBeInTheDocument()
+    expect(screen.queryByText(/Re-application block/)).not.toBeInTheDocument()
+  })
+
+  test('a block does not override a recorded approval', () => {
+    render(<DecisionBanner conversation={{ ...loginBlock, finalDecision: 'APPROVED' }} />)
+    expect(screen.getByText('✓ Approved')).toBeInTheDocument()
+    expect(screen.queryByText(/Re-application block/)).not.toBeInTheDocument()
   })
 })
 
