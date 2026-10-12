@@ -69,7 +69,9 @@ interface ApplicationsTableProps {
  * Sortable headers are buttons inside <th scope="col"> with aria-sort on the
  * active column; a new column sorts descending first, re-clicking flips it.
  * Rows carry data-conversation-card so the view's arrow-key navigation moves
- * between them; click or Enter opens the conversation.
+ * between them; click or Enter opens the conversation. The customer ID links
+ * to the servicing profile instead (its own Tab stop; the click stays on the
+ * link and does not open the row).
  */
 export function ApplicationsTable({ conversations, sort, onSortChange }: ApplicationsTableProps) {
   const router = useRouter()
@@ -144,7 +146,20 @@ export function ApplicationsTable({ conversations, sort, onSortChange }: Applica
                 }}
               >
                 <td className={styles.customer}>{heading}</td>
-                <td className={styles.mono}>{conv.customer?.customerId ?? <Blank />}</td>
+                <td className={styles.mono}>
+                  {conv.customer?.customerId ? (
+                    <Link
+                      href={`/admin/servicing/${conv.customer.customerId}`}
+                      className={styles.customerLink}
+                      onClick={(e) => e.stopPropagation()}
+                      title="Open customer profile"
+                    >
+                      {conv.customer.customerId}
+                    </Link>
+                  ) : (
+                    <Blank />
+                  )}
+                </td>
                 <td className={styles.mono}>
                   {conv.applicationNumber ? (
                     <Link

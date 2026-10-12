@@ -122,6 +122,19 @@
   text-decoration: underline;
 }
 
+.customerLink {
+  color: var(--theme-elevation-700, #444);
+  text-decoration: underline;
+  text-decoration-color: var(--theme-elevation-300, #d1d5db);
+  text-underline-offset: 2px;
+}
+
+.customerLink:hover,
+.customerLink:focus-visible {
+  color: var(--theme-elevation-900, #111);
+  text-decoration-color: currentColor;
+}
+
 .amount {
   font-weight: 500;
   color: var(--theme-elevation-900, #111);
