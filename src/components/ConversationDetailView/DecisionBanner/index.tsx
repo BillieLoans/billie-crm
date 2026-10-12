@@ -150,6 +150,9 @@ function BlockDetail({
   const sourceApplicationNumber =
     block?.sourceApplicationNumber ?? decisionDetail?.sourceApplicationNumber
   const sourceAccountId = block?.sourceAccountId
+  // Prefer the human-readable account number; the ledger GUID is the fallback
+  // (older rows, or an account the CRM has not projected yet).
+  const sourceAccountLabel = block?.sourceAccountNumber ?? sourceAccountId
   const customerId = conversation.customer?.customerId
 
   return (
@@ -191,11 +194,14 @@ function BlockDetail({
               <Link
                 href={`/admin/servicing/${customerId}?accountId=${encodeURIComponent(sourceAccountId)}`}
                 className={styles.detailLink}
+                title={sourceAccountId}
               >
-                {sourceAccountId} →
+                {sourceAccountLabel} →
               </Link>
             ) : (
-              <span className={styles.mono}>{sourceAccountId}</span>
+              <span className={styles.mono} title={sourceAccountId}>
+                {sourceAccountLabel}
+              </span>
             )}
           </span>
         </div>

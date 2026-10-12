@@ -152,6 +152,28 @@ describe('DecisionBanner block-decline detail', () => {
     expect(link).toHaveAttribute('href', '/admin/servicing/22F0652F?accountId=LA-001')
   })
 
+  test('ACTIVE_LOAN block shows the human-readable account number when resolved', () => {
+    render(
+      <DecisionBanner
+        conversation={createConversation({
+          finalDecision: 'DECLINED',
+          reapplicationBlock: {
+            reason: 'ACTIVE_LOAN',
+            sourceAccountId: 'b69f392d-642a-4a41-a8d0-875ec908cb5f',
+            sourceAccountNumber: 'GK4X5BZN5JTB',
+            blockedUntil: null,
+          },
+        })}
+      />,
+    )
+    const link = screen.getByRole('link', { name: /GK4X5BZN5JTB/ })
+    expect(link).toHaveAttribute(
+      'href',
+      '/admin/servicing/22F0652F?accountId=b69f392d-642a-4a41-a8d0-875ec908cb5f',
+    )
+    expect(screen.queryByText(/b69f392d-642a/)).not.toBeInTheDocument()
+  })
+
   test('block-decline from decision detail alone (event 1 not yet projected)', () => {
     render(
       <DecisionBanner

@@ -163,6 +163,8 @@ export const ReapplicationBlockSchema = z.object({
   stopMessage: z.string().nullable().optional(),
   sourceApplicationNumber: z.string().nullable().optional(),
   sourceAccountId: z.string().nullable().optional(),
+  /** Human-readable number of the source account, resolved server-side from loan-accounts. */
+  sourceAccountNumber: z.string().nullable().optional(),
   sourceDecidedAt: z.union([z.string(), z.date()]).nullable().optional(),
   /**
    * null = permanent (PEP, PRIOR_DEFAULT, IDENTITY_CONFLICT) or while-loan-open
