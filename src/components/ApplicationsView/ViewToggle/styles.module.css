@@ -1,0 +1,46 @@
+.group {
+  display: inline-flex;
+}
+
+.option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--theme-elevation-300, #d1d5db);
+  background: var(--theme-bg, #fff);
+  color: var(--theme-elevation-700, #555);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.option:first-child {
+  border-radius: 6px 0 0 6px;
+}
+
+.option:last-child {
+  border-radius: 0 6px 6px 0;
+  margin-left: -1px;
+}
+
+.option:hover {
+  background: var(--theme-elevation-50, #f5f5f5);
+}
+
+.option[aria-pressed='true'] {
+  background: var(--theme-elevation-900, #111);
+  border-color: var(--theme-elevation-900, #111);
+  color: var(--theme-elevation-0, #fff);
+}
+
+.option:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--theme-success, #0ea5e9);
+  outline-offset: 2px;
+}

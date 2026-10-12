@@ -2,7 +2,7 @@
  * GET /api/conversations
  *
  * Returns a paginated, filterable list of conversations for the monitoring grid.
- * Supports cursor-based pagination using (updatedAt, id).
+ * Supports cursor-based pagination using (sort column value, id).
  *
  * Query params:
  *   status    - conversation status filter (active, paused, etc.)
@@ -11,8 +11,10 @@
  *   to        - ISO date string — updatedAt <= to
  *   q         - text search on customerIdString / applicationNumber / statement account holders /
  *               customer name, email or phone
+ *   sort      - `field` (asc) or `-field` (desc); row-level columns only, see
+ *               CONVERSATION_SORT_FIELDS. Default `-updatedAt`.
  *   limit     - page size (1-100, default 20)
- *   cursor    - opaque cursor from previous response
+ *   cursor    - opaque cursor from previous response (keyset over the sort column + id)
  *
  * Story 1.4: Conversations List & Search API Route
  */
@@ -24,7 +26,18 @@ import configPromise from '@payload-config'
 import { hasAnyRole } from '@/lib/access'
 import { conversationSearchOrClauses } from '@/lib/conversation-search'
 import { customerSearchOrClauses } from '@/lib/customer-search'
-import { ConversationsQuerySchema, type ConversationsListResponse } from '@/lib/schemas/conversations'
+import {
+  cursorWhere,
+  decodeCursor,
+  encodeCursor,
+  parseConversationSort,
+  payloadSort,
+  sortValueOf,
+} from '@/lib/conversation-sort'
+import {
+  ConversationsQuerySchema,
+  type ConversationsListResponse,
+} from '@/lib/schemas/conversations'
 
 export async function GET(request: NextRequest) {
   try {
@@ -57,7 +70,15 @@ export async function GET(request: NextRequest) {
         { status: 400 },
       )
     }
-    const { status, decision, from, to, q, limit, cursor } = parseResult.data
+    const { status, decision, from, to, q, limit, cursor, sort: rawSort } = parseResult.data
+
+    const sort = parseConversationSort(rawSort)
+    if (!sort) {
+      return NextResponse.json(
+        { error: { code: 'VALIDATION_ERROR', message: 'Invalid sort column.' } },
+        { status: 400 },
+      )
+    }
 
     // 3. Build Payload `where` clause. Each constraint is AND'd together.
     const filters: Where[] = []
@@ -106,32 +127,11 @@ export async function GET(request: NextRequest) {
       filters.push({ or: conversationSearchOrClauses(term, matchedCustomerIds) })
     }
 
-    // Cursor: keyset pagination over (updatedAt DESC, id DESC).
-    // Walk to the next page with: (updatedAt < cursor.updatedAt)
-    //                          OR (updatedAt = cursor.updatedAt AND id < cursor.id)
-    let cursorTuple: { updatedAt: string; id: string } | null = null
-    if (cursor) {
-      try {
-        const decoded = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'))
-        if (decoded?.updatedAt && decoded?.id) {
-          cursorTuple = { updatedAt: String(decoded.updatedAt), id: String(decoded.id) }
-        }
-      } catch {
-        // Invalid cursor — ignore and return from start
-      }
-    }
+    // Cursor: keyset pagination over (sort column, id). An invalid cursor is
+    // ignored and the first page is returned.
+    const cursorTuple = cursor ? decodeCursor(cursor) : null
     if (cursorTuple) {
-      filters.push({
-        or: [
-          { updatedAt: { less_than: cursorTuple.updatedAt } },
-          {
-            and: [
-              { updatedAt: { equals: cursorTuple.updatedAt } },
-              { id: { less_than: cursorTuple.id } },
-            ],
-          },
-        ],
-      })
+      filters.push(cursorWhere(sort, cursorTuple))
     }
 
     const where: Where = filters.length > 0 ? { and: filters } : {}
@@ -140,7 +140,7 @@ export async function GET(request: NextRequest) {
     const findResult = await payload.find({
       collection: 'conversations',
       where,
-      sort: '-updatedAt,-id',
+      sort: payloadSort(sort),
       limit: limit + 1,
       depth: 0,
     })
@@ -174,18 +174,9 @@ export async function GET(request: NextRequest) {
     // 6. Build cursor from last document
     let nextCursor: string | null = null
     if (hasMore && results.length > 0) {
-      const last = results[results.length - 1] as { updatedAt?: string | Date; id?: string }
-      const updatedAt =
-        last.updatedAt instanceof Date
-          ? last.updatedAt.toISOString()
-          : typeof last.updatedAt === 'string'
-            ? last.updatedAt
-            : null
-      if (updatedAt && last.id) {
-        nextCursor = Buffer.from(
-          JSON.stringify({ updatedAt, id: String(last.id) }),
-          'utf8',
-        ).toString('base64url')
+      const last = results[results.length - 1] as unknown as Record<string, unknown>
+      if (last.id) {
+        nextCursor = encodeCursor({ value: sortValueOf(last, sort.field), id: String(last.id) })
       }
     }
 
@@ -236,11 +227,11 @@ export async function GET(request: NextRequest) {
         updatedAt:
           doc.updatedAt instanceof Date
             ? doc.updatedAt.toISOString()
-            : (doc.updatedAt as string) ?? null,
+            : ((doc.updatedAt as string) ?? null),
         startedAt:
           doc.startedAt instanceof Date
             ? doc.startedAt.toISOString()
-            : (doc.startedAt as string) ?? null,
+            : ((doc.startedAt as string) ?? null),
       }
     })
 

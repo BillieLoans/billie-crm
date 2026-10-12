@@ -81,6 +81,16 @@ export const SESSION_USER_STORAGE_KEY = 'billie-session-user'
  */
 export const RECENT_CUSTOMERS_STORAGE_KEY = 'billie-recent-customers'
 
+/**
+ * localStorage key for the Applications view layout (tiles | list).
+ * A per-browser hint for the first paint only — the per-user source of truth is
+ * the Payload preference `APPLICATIONS_VIEW_MODE_PREFERENCE_KEY`. No PII.
+ */
+export const APPLICATIONS_VIEW_MODE_STORAGE_KEY = 'billie-applications-view-mode'
+
+/** Payload per-user preference key for the Applications view layout. */
+export const APPLICATIONS_VIEW_MODE_PREFERENCE_KEY = 'applications-view-mode'
+
 // =============================================================================
 // Failed Actions Constants
 // =============================================================================
