@@ -36,6 +36,12 @@ export interface DecisionBannerProps {
  *   rich detail from application.reapplication_blocked.v1 (the causal "why"),
  *   including the exclusion window, the prior decline that caused it, and the
  *   exact stop message the customer saw.
+ * - Blocked, no decision → red, same block detail. The authenticated
+ *   session-start halt (BTB-139) emits application.reapplication_blocked.v1
+ *   without the follow-on final_credit_decision, so the row carries the
+ *   block while finalDecision stays null and status stays active. Rendered
+ *   whenever an uncleared "block"-kind halt exists and no credit decision has
+ *   been recorded, so the halt is never hidden behind "No decision yet".
  * - Review halt      → indigo. A "review"-kind re-application halt is
  *   NOT a decline: the applicant was flagged as a probable returning customer
  *   and auto-held for manual review. Rendered on its own axis (before the
@@ -43,7 +49,7 @@ export interface DecisionBannerProps {
  *   {@link ReviewHalt}.
  */
 export function DecisionBanner({ conversation }: DecisionBannerProps) {
-  const { finalDecision, decisionDetail, reapplicationBlock, sourceConversationId } = conversation
+  const { finalDecision, decisionDetail, reapplicationBlock } = conversation
 
   const decision = finalDecision?.toUpperCase() ?? null
 
@@ -75,6 +81,24 @@ export function DecisionBanner({ conversation }: DecisionBannerProps) {
   }
 
   if (decision !== 'DECLINED') {
+    // An uncleared eligibility block with no credit decision behind it: the
+    // halt happened at session start, before the credit FSM could decline.
+    if (block && block.clearStatus !== 'cleared') {
+      return (
+        <div className={`${styles.banner} ${styles.declined}`} data-testid="decision-banner">
+          <span className={styles.headline}>✗ Blocked · Re-application block</span>
+          <span className={styles.subhead}>
+            Application halted by an eligibility block — no credit decision recorded
+          </span>
+          <BlockDetail conversation={conversation} block={block} />
+          <ClearBlockButton
+            block={block}
+            conversationId={conversation.conversationId}
+            customerName={conversation.customer?.fullName ?? undefined}
+          />
+        </div>
+      )
+    }
     return (
       <div className={`${styles.banner} ${styles.pending}`} data-testid="decision-banner">
         <span className={styles.headline}>○ No decision yet</span>
@@ -89,88 +113,100 @@ export function DecisionBanner({ conversation }: DecisionBannerProps) {
       ? `✗ Declined · ${decisionDetail.reason}`
       : '✗ Declined'
 
-  // Prefer the rich block fields (event 1); fall back to decision detail (event 2).
-  const blockReason = block?.reason ?? decisionDetail?.reason?.replace('REAPPLICATION_BLOCK:', '')
-  const blockedUntilText = isBlockDecline
-    ? formatBlockedUntil({
-        reason: blockReason,
-        blockedUntil: (block?.blockedUntil ?? decisionDetail?.blockedUntil) as string | null,
-      })
-    : null
-  const sourceApplicationNumber =
-    block?.sourceApplicationNumber ?? decisionDetail?.sourceApplicationNumber
-  const sourceAccountId = block?.sourceAccountId
-  const customerId = conversation.customer?.customerId
-
   return (
     <div className={`${styles.banner} ${styles.declined}`} data-testid="decision-banner">
       <span className={styles.headline}>{headline}</span>
-      {isBlockDecline && (
-        <div className={styles.detail}>
-          <div className={styles.detailRow}>
-            <span className={styles.detailLabel}>Reason</span>
-            <span className={styles.detailValue}>{formatBlockReason(blockReason)}</span>
-          </div>
-          <div className={styles.detailRow}>
-            <span className={styles.detailLabel}>Blocked</span>
-            <span className={styles.detailValue}>
-              {blockedUntilText}
-              {block?.blockedAt ? ` · since ${formatDateOnly(block.blockedAt as string)}` : ''}
-            </span>
-          </div>
-          {sourceApplicationNumber && (
-            <div className={styles.detailRow}>
-              <span className={styles.detailLabel}>Source decline</span>
-              <span className={styles.detailValue}>
-                {sourceConversationId ? (
-                  <Link
-                    href={`/admin/applications/${sourceConversationId}`}
-                    className={styles.detailLink}
-                  >
-                    {sourceApplicationNumber} →
-                  </Link>
-                ) : (
-                  <span className={styles.mono}>{sourceApplicationNumber}</span>
-                )}
-                {block?.sourceDecidedAt
-                  ? ` (${formatDateOnly(block.sourceDecidedAt as string)})`
-                  : ''}
-              </span>
-            </div>
-          )}
-          {sourceAccountId && (
-            <div className={styles.detailRow}>
-              <span className={styles.detailLabel}>Source account</span>
-              <span className={styles.detailValue}>
-                {customerId ? (
-                  <Link
-                    href={`/admin/servicing/${customerId}?accountId=${encodeURIComponent(sourceAccountId)}`}
-                    className={styles.detailLink}
-                  >
-                    {sourceAccountId} →
-                  </Link>
-                ) : (
-                  <span className={styles.mono}>{sourceAccountId}</span>
-                )}
-              </span>
-            </div>
-          )}
-          {block?.stopMessage && (
-            <div className={styles.detailRow}>
-              <span className={styles.detailLabel}>Customer saw</span>
-              <span className={`${styles.detailValue} ${styles.stopMessage}`}>
-                “{block.stopMessage}”
-              </span>
-            </div>
-          )}
-        </div>
-      )}
+      {isBlockDecline && <BlockDetail conversation={conversation} block={block} />}
       {isBlockDecline && (
         <ClearBlockButton
           block={block}
           conversationId={conversation.conversationId}
           customerName={conversation.customer?.fullName ?? undefined}
         />
+      )}
+    </div>
+  )
+}
+
+/**
+ * BlockDetail — the "why was this halted" rows shared by the block-decline and
+ * the blocked-without-decision states. Prefers the rich block fields (event 1,
+ * application.reapplication_blocked.v1); falls back to the decision detail
+ * carried on final_credit_decision (event 2) when only that has projected.
+ */
+function BlockDetail({
+  conversation,
+  block,
+}: {
+  conversation: ConversationDetail
+  block: ReapplicationBlock | null
+}) {
+  const { decisionDetail, sourceConversationId } = conversation
+  const blockReason = block?.reason ?? decisionDetail?.reason?.replace('REAPPLICATION_BLOCK:', '')
+  const blockedUntilText = formatBlockedUntil({
+    reason: blockReason,
+    blockedUntil: (block?.blockedUntil ?? decisionDetail?.blockedUntil) as string | null,
+  })
+  const sourceApplicationNumber =
+    block?.sourceApplicationNumber ?? decisionDetail?.sourceApplicationNumber
+  const sourceAccountId = block?.sourceAccountId
+  const customerId = conversation.customer?.customerId
+
+  return (
+    <div className={styles.detail}>
+      <div className={styles.detailRow}>
+        <span className={styles.detailLabel}>Reason</span>
+        <span className={styles.detailValue}>{formatBlockReason(blockReason)}</span>
+      </div>
+      <div className={styles.detailRow}>
+        <span className={styles.detailLabel}>Blocked</span>
+        <span className={styles.detailValue}>
+          {blockedUntilText}
+          {block?.blockedAt ? ` · since ${formatDateOnly(block.blockedAt as string)}` : ''}
+        </span>
+      </div>
+      {sourceApplicationNumber && (
+        <div className={styles.detailRow}>
+          <span className={styles.detailLabel}>Source decline</span>
+          <span className={styles.detailValue}>
+            {sourceConversationId ? (
+              <Link
+                href={`/admin/applications/${sourceConversationId}`}
+                className={styles.detailLink}
+              >
+                {sourceApplicationNumber} →
+              </Link>
+            ) : (
+              <span className={styles.mono}>{sourceApplicationNumber}</span>
+            )}
+            {block?.sourceDecidedAt ? ` (${formatDateOnly(block.sourceDecidedAt as string)})` : ''}
+          </span>
+        </div>
+      )}
+      {sourceAccountId && (
+        <div className={styles.detailRow}>
+          <span className={styles.detailLabel}>Source account</span>
+          <span className={styles.detailValue}>
+            {customerId ? (
+              <Link
+                href={`/admin/servicing/${customerId}?accountId=${encodeURIComponent(sourceAccountId)}`}
+                className={styles.detailLink}
+              >
+                {sourceAccountId} →
+              </Link>
+            ) : (
+              <span className={styles.mono}>{sourceAccountId}</span>
+            )}
+          </span>
+        </div>
+      )}
+      {block?.stopMessage && (
+        <div className={styles.detailRow}>
+          <span className={styles.detailLabel}>Customer saw</span>
+          <span className={`${styles.detailValue} ${styles.stopMessage}`}>
+            “{block.stopMessage}”
+          </span>
+        </div>
       )}
     </div>
   )
