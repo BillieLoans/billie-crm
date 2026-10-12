@@ -133,6 +133,20 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       })
       sourceConversationId = (sourceResult.docs[0]?.conversationId as string) ?? null
     }
+    // ACTIVE_LOAN blocks reference the open loan by its ledger account id (a
+    // GUID). Resolve the human-readable account number for display; the id
+    // stays on the record and still drives the servicing deep-link.
+    let sourceAccountNumber: string | null = null
+    const sourceAccountId = block?.sourceAccountId as string | null | undefined
+    if (sourceAccountId) {
+      const accountResult = await payload.find({
+        collection: 'loan-accounts',
+        where: { loanAccountId: { equals: sourceAccountId } },
+        limit: 1,
+        select: { accountNumber: true },
+      })
+      sourceAccountNumber = (accountResult.docs[0]?.accountNumber as string) ?? null
+    }
     // applicationData may be flat {loanAmount, ...} (new format) or nested {payload: {loanAmount, ...}} (old format)
     const appDataRaw = doc.applicationData as Record<string, unknown> | undefined
     const appData = (appDataRaw?.payload as Record<string, unknown> | undefined) ?? appDataRaw
@@ -174,7 +188,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       decisionDetail: decisionDetail ?? null,
       killRecord: killRecordOut,
       cancellationRecord,
-      reapplicationBlock: block ?? null,
+      reapplicationBlock: block ? { ...block, sourceAccountNumber } : null,
       sourceConversationId,
       identityVerificationReport: {
         labRequestId: (ivr?.labRequestId as string) ?? null,
