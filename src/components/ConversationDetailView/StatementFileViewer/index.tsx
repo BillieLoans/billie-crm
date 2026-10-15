@@ -363,7 +363,11 @@ function AccountsSummary({ data }: { data: AccountsSummaryShape }) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Bank statement data — { accounts: { bank_of_statements: { accounts: [...] } } }
+// Bank statement data — { accounts: { <bankKey>: { accounts: [...] } } }
+//
+// bankstatements.com.au keys the account list by an arbitrary bank key per feed
+// (`cba`, `anz`, …). `bank_of_statements` is only the sandbox key, so the shape
+// guard must accept any key whose value carries an `accounts` array.
 // ══════════════════════════════════════════════════════════════════════════════
 
 interface StatementTxn {
@@ -391,20 +395,30 @@ interface StatementAccount {
 }
 
 interface BankStatementDataShape {
-  accounts: { bank_of_statements?: { accounts?: StatementAccount[] } }
+  accounts: Record<string, { accounts?: StatementAccount[] } | undefined>
 }
 
 function isBankStatementDataShape(v: unknown): v is BankStatementDataShape {
   if (typeof v !== 'object' || v === null) return false
   const accounts = (v as { accounts?: unknown }).accounts
-  if (typeof accounts !== 'object' || accounts === null) return false
-  return 'bank_of_statements' in accounts
+  if (typeof accounts !== 'object' || accounts === null || Array.isArray(accounts)) return false
+  return Object.values(accounts as Record<string, unknown>).some(
+    (bank) =>
+      typeof bank === 'object' &&
+      bank !== null &&
+      Array.isArray((bank as { accounts?: unknown }).accounts),
+  )
+}
+
+/** Flatten every bank key's account list into one array, in file order. */
+function collectStatementAccounts(data: BankStatementDataShape): StatementAccount[] {
+  return Object.values(data.accounts).flatMap((bank) => bank?.accounts ?? [])
 }
 
 const TXN_DISPLAY_LIMIT = 500
 
 function BankStatementData({ data }: { data: BankStatementDataShape }) {
-  const accounts = data.accounts.bank_of_statements?.accounts ?? []
+  const accounts = collectStatementAccounts(data)
   return (
     <div className={styles.content}>
       {accounts.length === 0 && <p className={styles.emptyHint}>No accounts found.</p>}
