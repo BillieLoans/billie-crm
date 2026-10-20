@@ -842,6 +842,30 @@ async def handle_final_decision(pool: asyncpg.Pool, event: dict[str, Any]) -> No
         conversation_id=conversation_id,
         set_values=set_values,
     )
+
+    # BTB-462: non-PII evidence for the decision. merge_jsonb is additive, so
+    # a legacy redelivery (no metadata) cannot wipe what an earlier event
+    # stored. It is a plain UPDATE, so it MUST follow upsert_conversation.
+    metadata = payload_dict.get("decision_metadata")
+    if isinstance(metadata, dict) and metadata:
+        await merge_jsonb(
+            pool,
+            "conversations",
+            column="decision_metadata",
+            key_column="conversation_id",
+            key_value=conversation_id,
+            patch=metadata,
+            bump_version=True,
+        )
+
+    if decision == "DECLINED" and not reason:
+        # Producer contract breach (every DECLINED carries a reason since
+        # BTB-462). Warn so it is visible in Logfire rather than discovered
+        # by a staff member looking at a bare "Declined".
+        log.warning(
+            "final_credit_decision DECLINED without reason",
+            application_number=payload_dict.get("application_number"),
+        )
     log.info("Final decision recorded", status=status)
 
 
