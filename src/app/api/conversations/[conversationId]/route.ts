@@ -118,6 +118,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     // its conversation id so the UI can deep-link to the source application.
     const block = doc.reapplicationBlock as Record<string, unknown> | null | undefined
     const decisionDetail = doc.decisionDetail as Record<string, unknown> | null | undefined
+    const decisionMetadata = (doc.decisionMetadata as Record<string, unknown> | null | undefined) ?? null
     const killRecord = doc.killRecord as Record<string, unknown> | null | undefined
     const cancellationRecord = (doc.cancellationRecord as Record<string, unknown> | null) ?? null
     const sourceApplicationNumber = (block?.sourceApplicationNumber ??
@@ -186,6 +187,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       decisionStatus: (doc.decisionStatus as string) ?? null,
       finalDecision: (doc.finalDecision as string) ?? null,
       decisionDetail: decisionDetail ?? null,
+      decisionMetadata,
       killRecord: killRecordOut,
       cancellationRecord,
       reapplicationBlock: block ? { ...block, sourceAccountNumber } : null,

@@ -842,6 +842,34 @@ async def handle_final_decision(pool: asyncpg.Pool, event: dict[str, Any]) -> No
         conversation_id=conversation_id,
         set_values=set_values,
     )
+
+    # BTB-462: non-PII evidence for the decision. Replace-when-present: a
+    # replayed application must not keep stale keys from an earlier decision
+    # on the same conversation. The no-wipe guarantee is the non-empty guard:
+    # a legacy or empty redelivery makes NO write. It is a plain UPDATE, so it
+    # MUST follow upsert_conversation. incident_ref arrives top-level on the
+    # payload (SYSTEM_FAILURE / G5_TIMEOUT) and is folded into the stored object.
+    metadata = payload_dict.get("decision_metadata")
+    if isinstance(metadata, dict) and metadata:
+        stored = dict(metadata)
+        incident_ref = payload_dict.get("incident_ref")
+        if isinstance(incident_ref, str) and incident_ref:
+            stored["incident_ref"] = incident_ref
+        await pool.execute(
+            "UPDATE conversations SET decision_metadata = $1::jsonb, updated_at = NOW(), "
+            "version = COALESCE(version, 1) + 1 WHERE conversation_id = $2",
+            json.dumps(stored),
+            conversation_id,
+        )
+
+    if decision == "DECLINED" and not reason:
+        # Producer contract breach (every DECLINED carries a reason since
+        # BTB-462). Warn so it is visible in Logfire rather than discovered
+        # by a staff member looking at a bare "Declined".
+        log.warning(
+            "final_credit_decision DECLINED without reason",
+            application_number=payload_dict.get("application_number"),
+        )
     log.info("Final decision recorded", status=status)
 
 

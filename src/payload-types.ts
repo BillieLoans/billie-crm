@@ -847,6 +847,18 @@ export interface Conversation {
     blockedUntil?: string | null;
   };
   /**
+   * Decline evidence from final_credit_decision.decision_metadata (BTB-462)
+   */
+  decisionMetadata?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
    * Re-application block details (application.reapplication_blocked.v1)
    */
   reapplicationBlock?: {
@@ -2601,6 +2613,7 @@ export interface ConversationsSelect<T extends boolean = true> {
         sourceApplicationNumber?: T;
         blockedUntil?: T;
       };
+  decisionMetadata?: T;
   reapplicationBlock?:
     | T
     | {

@@ -101,3 +101,6 @@ event-processor/.venv/*
 .superpowers/
 .playwright-mcp/
 /playwright/.auth/
+
+# Claude Code worktrees (per-session isolated checkouts)
+.claude/worktrees/

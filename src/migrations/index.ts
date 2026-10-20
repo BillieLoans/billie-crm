@@ -37,6 +37,7 @@ import * as migration_20260925_090000_customer_identity_provenance from './20260
 import * as migration_20260929_090000_customer_login_email_rebound from './20260929_090000_customer_login_email_rebound';
 import * as migration_20261005_090000_conversation_attribution from './20261005_090000_conversation_attribution';
 import * as migration_20261006_090000_conversation_network from './20261006_090000_conversation_network';
+import * as migration_20261020_090000_conversation_decision_metadata from './20261020_090000_conversation_decision_metadata';
 
 export const migrations = [
   {
@@ -233,5 +234,10 @@ export const migrations = [
     up: migration_20261006_090000_conversation_network.up,
     down: migration_20261006_090000_conversation_network.down,
     name: '20261006_090000_conversation_network',
+  },
+  {
+    up: migration_20261020_090000_conversation_decision_metadata.up,
+    down: migration_20261020_090000_conversation_decision_metadata.down,
+    name: '20261020_090000_conversation_decision_metadata',
   },
 ];

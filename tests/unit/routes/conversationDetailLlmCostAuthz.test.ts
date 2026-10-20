@@ -154,6 +154,7 @@ const BASE_KEYS = [
   'conversationId',
   'customer',
   'decisionDetail',
+  'decisionMetadata',
   'decisionStatus',
   'finalDecision',
   'identityOriginCustomerId',
