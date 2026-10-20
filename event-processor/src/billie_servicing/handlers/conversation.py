@@ -843,19 +843,23 @@ async def handle_final_decision(pool: asyncpg.Pool, event: dict[str, Any]) -> No
         set_values=set_values,
     )
 
-    # BTB-462: non-PII evidence for the decision. merge_jsonb is additive, so
-    # a legacy redelivery (no metadata) cannot wipe what an earlier event
-    # stored. It is a plain UPDATE, so it MUST follow upsert_conversation.
+    # BTB-462: non-PII evidence for the decision. Replace-when-present: a
+    # replayed application must not keep stale keys from an earlier decision
+    # on the same conversation. The no-wipe guarantee is the non-empty guard:
+    # a legacy or empty redelivery makes NO write. It is a plain UPDATE, so it
+    # MUST follow upsert_conversation. incident_ref arrives top-level on the
+    # payload (SYSTEM_FAILURE / G5_TIMEOUT) and is folded into the stored object.
     metadata = payload_dict.get("decision_metadata")
     if isinstance(metadata, dict) and metadata:
-        await merge_jsonb(
-            pool,
-            "conversations",
-            column="decision_metadata",
-            key_column="conversation_id",
-            key_value=conversation_id,
-            patch=metadata,
-            bump_version=True,
+        stored = dict(metadata)
+        incident_ref = payload_dict.get("incident_ref")
+        if isinstance(incident_ref, str) and incident_ref:
+            stored["incident_ref"] = incident_ref
+        await pool.execute(
+            "UPDATE conversations SET decision_metadata = $1::jsonb, updated_at = NOW(), "
+            "version = COALESCE(version, 1) + 1 WHERE conversation_id = $2",
+            json.dumps(stored),
+            conversation_id,
         )
 
     if decision == "DECLINED" and not reason:

@@ -111,6 +111,30 @@ describe('DecisionBanner states', () => {
     expect(screen.getByText('Customer may re-apply with a personal account')).toBeInTheDocument()
   })
 
+  test('system-failure decline with retryEligible shows the retry hint', () => {
+    render(
+      <DecisionBanner
+        conversation={createConversation({
+          finalDecision: 'DECLINED',
+          decisionDetail: { reason: 'SYSTEM_FAILURE:account_conduct', retryEligible: true },
+        })}
+      />,
+    )
+    expect(screen.getByText('System fault — customer may be retried')).toBeInTheDocument()
+  })
+
+  test('non-retryable credit decline shows no hint', () => {
+    render(
+      <DecisionBanner
+        conversation={createConversation({
+          finalDecision: 'DECLINED',
+          decisionDetail: { reason: 'CREDIT_ASSESSMENT:SERVICEABILITY', retryEligible: false },
+        })}
+      />,
+    )
+    expect(screen.queryByText(/may be retried|re-apply/)).toBeNull()
+  })
+
   test('unknown code falls back to the raw code', () => {
     render(
       <DecisionBanner

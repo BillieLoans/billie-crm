@@ -13,6 +13,8 @@
  * arbitrary fields would make a future producer slip visible to staff.
  */
 
+import { formatDateOnly } from '@/lib/formatters'
+
 const FIXED_LABELS: Record<string, string> = {
   BUSINESS_ACCOUNT: 'Business account detected',
   PERSONAL_CHECK_FAILED: 'Personal-account check failed (system)',
@@ -72,6 +74,12 @@ function str(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null
 }
 
+function formatDecidedAt(value: string | null): string | null {
+  if (!value) return null
+  const d = new Date(value)
+  return Number.isNaN(d.getTime()) ? value : formatDateOnly(d)
+}
+
 export function decisionEvidenceRows(
   metadata: Record<string, unknown> | null | undefined,
 ): EvidenceRow[] {
@@ -84,7 +92,7 @@ export function decisionEvidenceRows(
   const component = str(metadata.component)
   if (component === 'personal_account_check') {
     const names = strings(metadata.account_names)
-    const institutions = strings(metadata.institutions)
+    const institutions = [...new Set(strings(metadata.institutions))]
     // Gate v2: one row per labelled account (BTB-498); skip non-object entries.
     if (Array.isArray(metadata.accounts)) {
       for (const a of metadata.accounts) {
@@ -112,6 +120,7 @@ export function decisionEvidenceRows(
   if (component === 'g5_timeout_guard') {
     const missing = strings(metadata.missing_components).map(humaniseComponent)
     push('Missing', missing.length ? missing.join(', ') : null)
+    push('Incident', str(metadata.incident_ref))
     return rows
   }
 
@@ -130,8 +139,9 @@ export function decisionEvidenceRows(
     // CREDIT_ASSESSMENT:* and SYSTEM_FAILURE:* share the component-keyed shape.
     const failed = strings(metadata.declined_components).map(humaniseComponent)
     push('Failed checks', failed.length ? failed.join(', ') : null)
-    push('Decided', str(metadata.decided_at))
+    push('Decided', formatDecidedAt(str(metadata.decided_at)))
     push('Error', str(metadata.error_type))
+    push('Incident', str(metadata.incident_ref))
     return rows
   }
 

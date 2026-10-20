@@ -42,7 +42,7 @@ describe('decisionEvidenceRows', () => {
       decisionEvidenceRows({
         component: 'personal_account_check',
         account_names: ['Business Trans Acct', null, 'Everyday'],
-        institutions: ['CBA', null],
+        institutions: ['CBA', null, 'CBA'],
         classifier: 'gpt-5.6-luna',
       }),
     ).toEqual([
@@ -88,7 +88,7 @@ describe('decisionEvidenceRows', () => {
       }),
     ).toEqual([
       { label: 'Failed checks', value: 'serviceability, account conduct' },
-      { label: 'Decided', value: '2026-10-19T04:46:12+00:00' },
+      { label: 'Decided', value: '19 October 2026' },
     ])
   })
 
@@ -99,6 +99,32 @@ describe('decisionEvidenceRows', () => {
     expect(
       decisionEvidenceRows({ component: 'g5_timeout_guard', missing_components: ['serviceability'] }),
     ).toEqual([{ label: 'Missing', value: 'serviceability' }])
+  })
+
+  it('renders the incident ref for G5 timeout and system-failure shapes', () => {
+    const ref = 'INC-G5-20261019-abcd'
+    expect(
+      decisionEvidenceRows({
+        component: 'g5_timeout_guard',
+        missing_components: ['serviceability'],
+        incident_ref: ref,
+      }),
+    ).toEqual([
+      { label: 'Missing', value: 'serviceability' },
+      { label: 'Incident', value: ref },
+    ])
+    expect(
+      decisionEvidenceRows({ component: 'account_conduct', error_type: 'TimeoutError', incident_ref: ref }),
+    ).toEqual([
+      { label: 'Error', value: 'TimeoutError' },
+      { label: 'Incident', value: ref },
+    ])
+  })
+
+  it('falls back to the raw string when decided_at cannot be parsed', () => {
+    expect(decisionEvidenceRows({ component: 'serviceability', decided_at: 'not-a-date' })).toEqual([
+      { label: 'Decided', value: 'not-a-date' },
+    ])
   })
 
   it('returns no rows for null, empty or unknown shapes', () => {
