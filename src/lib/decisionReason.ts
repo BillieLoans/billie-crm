@@ -39,10 +39,12 @@ export function formatDecisionReason(code: string | null | undefined): string {
   if (code.startsWith('REAPPLICATION_BLOCK:')) return 'Re-application block'
   if (code.startsWith('CREDIT_ASSESSMENT:')) {
     const key = code.slice('CREDIT_ASSESSMENT:'.length)
+    if (!key) return code
     return COMPONENT_LABELS[key] ?? key
   }
   if (code.startsWith('SYSTEM_FAILURE:')) {
-    return `System failure · ${humaniseComponent(code.slice('SYSTEM_FAILURE:'.length))}`
+    const rest = code.slice('SYSTEM_FAILURE:'.length)
+    return rest ? `System failure · ${humaniseComponent(rest)}` : 'System failure'
   }
   if (code.startsWith('G5_TIMEOUT:')) {
     const parts = code
@@ -50,7 +52,7 @@ export function formatDecisionReason(code: string | null | undefined): string {
       .split(',')
       .filter(Boolean)
       .map(humaniseComponent)
-    return `Assessment timed out · ${parts.join(', ')}`
+    return parts.length ? `Assessment timed out · ${parts.join(', ')}` : 'Assessment timed out'
   }
   return code
 }
@@ -88,9 +90,13 @@ export function decisionEvidenceRows(
       for (const a of metadata.accounts) {
         if (!a || typeof a !== 'object') continue
         const acc = a as Record<string, unknown>
+        const product = str(acc.product)
+        const label = str(acc.label)
+        const rule = str(acc.rule)
+        if (!product && !label) continue
         push(
           'Account',
-          `${acc.product ?? '—'} — ${acc.label}${acc.rule ? ` (${String(acc.rule).replace(/_/g, ' ')})` : ''}`,
+          `${product ?? '—'} — ${label ?? 'unlabelled'}${rule ? ` (${rule.replace(/_/g, ' ')})` : ''}`,
         )
       }
     }

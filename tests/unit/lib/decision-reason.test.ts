@@ -22,6 +22,12 @@ describe('formatDecisionReason', () => {
     expect(formatDecisionReason('REAPPLICATION_BLOCK:ID_VERIFICATION')).toBe('Re-application block')
   })
 
+  it('handles empty suffixes on prefixed families', () => {
+    expect(formatDecisionReason('CREDIT_ASSESSMENT:')).toBe('CREDIT_ASSESSMENT:')
+    expect(formatDecisionReason('SYSTEM_FAILURE:')).toBe('System failure')
+    expect(formatDecisionReason('G5_TIMEOUT:')).toBe('Assessment timed out')
+  })
+
   it('falls back to the raw code and to "reason not recorded"', () => {
     expect(formatDecisionReason('SOMETHING_NEW')).toBe('SOMETHING_NEW')
     expect(formatDecisionReason('CREDIT_ASSESSMENT:NEW_THING')).toBe('NEW_THING')
@@ -99,5 +105,30 @@ describe('decisionEvidenceRows', () => {
     expect(decisionEvidenceRows(null)).toEqual([])
     expect(decisionEvidenceRows({})).toEqual([])
     expect(decisionEvidenceRows({ component: 'mystery', secret: 'x' })).toEqual([])
+  })
+
+  const pac = (accounts: unknown[], extra: Record<string, unknown> = {}) =>
+    decisionEvidenceRows({ component: 'personal_account_check', accounts, ...extra })
+
+  it('renders malformed account entries defensively', () => {
+    expect(pac([{ product: 'X' }])).toEqual([{ label: 'Account', value: 'X — unlabelled' }])
+    expect(pac([{ label: 'business' }])).toEqual([{ label: 'Account', value: '— — business' }])
+    expect(pac([{}])).toEqual([])
+    expect(pac([null])).toEqual([])
+    expect(pac([{ product: 'X', label: 'business', rule: { a: 1 } }])).toEqual([
+      { label: 'Account', value: 'X — business' },
+    ])
+    expect(pac([{ product: 'X', label: 'business', rule: 'holder_entity' }])).toEqual([
+      { label: 'Account', value: 'X — business (holder entity)' },
+    ])
+  })
+
+  it('puts Account rows before the Accounts row', () => {
+    expect(
+      pac([{ product: 'X', label: 'business' }], { account_names: ['X'] }),
+    ).toEqual([
+      { label: 'Account', value: 'X — business' },
+      { label: 'Accounts', value: 'X' },
+    ])
   })
 })
