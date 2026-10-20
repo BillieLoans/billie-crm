@@ -102,6 +102,10 @@ export const DecisionDetailSchema = z.object({
   blockedUntil: z.union([z.string(), z.date()]).nullable().optional(),
 })
 
+/** Non-PII evidence behind a decline (final_credit_decision.decision_metadata, BTB-462). */
+export const DecisionMetadataSchema = z.record(z.string(), z.unknown())
+export type DecisionMetadata = z.infer<typeof DecisionMetadataSchema>
+
 export const KillRecordSchema = z.object({
   request_id: z.string().nullable().optional(),
   actor: z.string().nullable().optional(),
@@ -319,6 +323,7 @@ export const ConversationDetailSchema = z.object({
   decisionStatus: z.string().nullable().optional(),
   finalDecision: z.string().nullable().optional(),
   decisionDetail: DecisionDetailSchema.nullable().optional(),
+  decisionMetadata: DecisionMetadataSchema.nullable().optional(),
   killRecord: KillRecordSchema.nullable().optional(),
   cancellationRecord: CancellationRecordSchema.nullable().optional(),
   reapplicationBlock: ReapplicationBlockSchema.nullable().optional(),
