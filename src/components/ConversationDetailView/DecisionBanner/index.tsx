@@ -14,6 +14,7 @@ import {
   groupSignalBits,
   signalLabel,
 } from '@/lib/recognition'
+import { decisionEvidenceRows, formatDecisionReason } from '@/lib/decisionReason'
 import { formatDateOnly } from '@/lib/formatters'
 import { ClearBlockButton } from '@/components/BlockClear'
 import styles from './styles.module.css'
@@ -32,7 +33,9 @@ export interface DecisionBannerProps {
  * - No decision yet  → neutral
  * - APPROVED         → green
  * - REFERRED         → amber
- * - DECLINED         → red, with the decline reason. Block-declines render the
+ * - DECLINED         → red, with the decline reason label; non-block declines
+ *   also render `decisionMetadata` evidence rows, and a row with no recorded
+ *   reason reads 'reason not recorded'. Block-declines render the
  *   rich detail from application.reapplication_blocked.v1 (the causal "why"),
  *   including the exclusion window, the prior decline that caused it, and the
  *   exact stop message the customer saw.
@@ -106,16 +109,38 @@ export function DecisionBanner({ conversation }: DecisionBannerProps) {
     )
   }
 
-  // DECLINED — answer "why?"
+  // DECLINED — answer "why?". Block-declines keep their rich detail; every
+  // other decline shows the staff label for its reason code, the evidence the
+  // chat attached, and an explicit "reason not recorded" for rows projected
+  // before the producer carried a reason (BTB-462).
   const headline = isBlockDecline
     ? '✗ Declined · Re-application block'
-    : decisionDetail?.reason
-      ? `✗ Declined · ${decisionDetail.reason}`
-      : '✗ Declined'
+    : `✗ Declined · ${formatDecisionReason(decisionDetail?.reason)}`
+  const evidence = isBlockDecline ? [] : decisionEvidenceRows(conversation.decisionMetadata)
+  const retryHint =
+    !isBlockDecline &&
+    (decisionDetail?.reason === 'BUSINESS_ACCOUNT' ||
+      decisionDetail?.reason === 'NO_PERSONAL_ACCOUNT') &&
+    decisionDetail.retryEligible
+      ? 'Customer may re-apply with a personal account'
+      : !isBlockDecline && decisionDetail?.retryEligible
+        ? 'System fault — customer may be retried'
+        : null
 
   return (
     <div className={`${styles.banner} ${styles.declined}`} data-testid="decision-banner">
       <span className={styles.headline}>{headline}</span>
+      {retryHint && <span className={styles.subhead}>{retryHint}</span>}
+      {evidence.length > 0 && (
+        <div className={styles.detail} data-testid="decision-evidence">
+          {evidence.map((row, i) => (
+            <div key={`${row.label}-${i}`} className={styles.detailRow}>
+              <span className={styles.detailLabel}>{row.label}</span>
+              <span className={styles.detailValue}>{row.value}</span>
+            </div>
+          ))}
+        </div>
+      )}
       {isBlockDecline && <BlockDetail conversation={conversation} block={block} />}
       {isBlockDecline && (
         <ClearBlockButton

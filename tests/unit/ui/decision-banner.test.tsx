@@ -49,22 +49,78 @@ describe('DecisionBanner states', () => {
     expect(screen.getByText('→ Referred')).toBeInTheDocument()
   })
 
-  test('legacy decline (no reason) renders the banner only', () => {
+  test('legacy decline (no reason) says the reason was not recorded', () => {
     render(<DecisionBanner conversation={createConversation({ finalDecision: 'DECLINED' })} />)
-    expect(screen.getByText('✗ Declined')).toBeInTheDocument()
-    expect(screen.queryByText('Reason')).not.toBeInTheDocument()
+    expect(screen.getByText('✗ Declined · reason not recorded')).toBeInTheDocument()
+    expect(screen.queryByTestId('decision-evidence')).not.toBeInTheDocument()
   })
 
-  test('assessment-based decline shows the raw reason in the headline', () => {
+  test('credit-assessment decline shows the staff label', () => {
     render(
       <DecisionBanner
         conversation={createConversation({
           finalDecision: 'DECLINED',
-          decisionDetail: { reason: 'SERVICEABILITY_FAILED' },
+          decisionDetail: { reason: 'CREDIT_ASSESSMENT:SERVICEABILITY' },
+          decisionMetadata: {
+            component: 'serviceability',
+            declined_components: ['serviceability'],
+            decided_at: '2026-10-19T04:46:12+00:00',
+          },
         })}
       />,
     )
-    expect(screen.getByText('✗ Declined · SERVICEABILITY_FAILED')).toBeInTheDocument()
+    expect(screen.getByText('✗ Declined · Serviceability')).toBeInTheDocument()
+    const evidence = screen.getByTestId('decision-evidence')
+    expect(evidence).toHaveTextContent('Failed checks')
+    expect(evidence).toHaveTextContent('serviceability')
+  })
+
+  test('business-account decline shows the classifier evidence', () => {
+    render(
+      <DecisionBanner
+        conversation={createConversation({
+          finalDecision: 'DECLINED',
+          decisionDetail: { reason: 'BUSINESS_ACCOUNT', retryEligible: true },
+          decisionMetadata: {
+            component: 'personal_account_check',
+            account_names: ['Business Trans Acct', null],
+            institutions: ['CBA'],
+            classifier: 'gpt-5.6-luna',
+          },
+        })}
+      />,
+    )
+    expect(screen.getByText('✗ Declined · Business account detected')).toBeInTheDocument()
+    const evidence = screen.getByTestId('decision-evidence')
+    expect(evidence).toHaveTextContent('Business Trans Acct')
+    expect(evidence).not.toHaveTextContent('null')
+    expect(evidence).toHaveTextContent('CBA')
+    expect(screen.getByText('Customer may re-apply with a personal account')).toBeInTheDocument()
+  })
+
+  test('no-personal-account decline shows the re-apply hint', () => {
+    render(
+      <DecisionBanner
+        conversation={createConversation({
+          finalDecision: 'DECLINED',
+          decisionDetail: { reason: 'NO_PERSONAL_ACCOUNT', retryEligible: true },
+        })}
+      />,
+    )
+    expect(screen.getByText('✗ Declined · No personal account shared')).toBeInTheDocument()
+    expect(screen.getByText('Customer may re-apply with a personal account')).toBeInTheDocument()
+  })
+
+  test('unknown code falls back to the raw code', () => {
+    render(
+      <DecisionBanner
+        conversation={createConversation({
+          finalDecision: 'DECLINED',
+          decisionDetail: { reason: 'SOMETHING_NEW' },
+        })}
+      />,
+    )
+    expect(screen.getByText('✗ Declined · SOMETHING_NEW')).toBeInTheDocument()
   })
 })
 
@@ -97,6 +153,7 @@ describe('DecisionBanner block-decline detail', () => {
     render(<DecisionBanner conversation={blockConversation} />)
     expect(screen.getByText('✗ Declined · Re-application block')).toBeInTheDocument()
     expect(screen.getByText('ID verification')).toBeInTheDocument()
+    expect(screen.queryByTestId('decision-evidence')).not.toBeInTheDocument()
   })
 
   test('renders the exclusion window', () => {
