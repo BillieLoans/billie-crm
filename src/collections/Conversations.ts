@@ -306,6 +306,19 @@ export const Conversations: CollectionConfig = {
       ],
     },
     {
+      // BTB-462: non-PII evidence behind a decline, keyed by `component`
+      // (e.g. personal_account_check → account_names, institutions,
+      // classifier; serviceability → reason_code, decided_at, detail_location;
+      // system failures → error_type / missing_components). Written by the
+      // event processor with an additive jsonb merge.
+      name: 'decisionMetadata',
+      type: 'json',
+      admin: {
+        readOnly: true,
+        description: 'Decline evidence from final_credit_decision.decision_metadata (BTB-462)',
+      },
+    },
+    {
       // BTB-135: application.reapplication_blocked.v1 — the rich "why" behind a
       // block-decline, emitted before the customer-facing stop message.
       name: 'reapplicationBlock',
