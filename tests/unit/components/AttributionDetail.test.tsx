@@ -28,9 +28,21 @@ describe('AttributionDetail', () => {
     expect(screen.queryByText('Keyword')).toBeNull()
   })
 
-  it('says so when the conversation has no ad-click data', () => {
+  it('says so when the conversation has no attribution', () => {
     render(<AttributionDetail attribution={null} />)
-    expect(screen.getByText('No ad-click data.')).toBeTruthy()
+    expect(screen.getByText('No source recorded: direct or untracked traffic.')).toBeTruthy()
+  })
+
+  it('shows an inferred source and medium without click rows', () => {
+    render(
+      <AttributionDetail
+        attribution={shapeAttribution({ utm_source: 'chatgpt', utm_medium: 'llm' })}
+      />,
+    )
+    expect(screen.getByText('chatgpt')).toBeTruthy()
+    expect(screen.getByText('llm')).toBeTruthy()
+    expect(screen.queryByText('Campaign')).toBeNull()
+    expect(screen.queryByText(/Click ID/)).toBeNull()
   })
 
   it('renders a hostile value as text, not markup', () => {

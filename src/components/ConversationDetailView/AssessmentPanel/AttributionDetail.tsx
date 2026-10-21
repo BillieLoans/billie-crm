@@ -18,11 +18,13 @@ const ROWS: Array<[label: string, key: keyof Attribution]> = [
 ]
 
 /**
- * BTB-404: where this application came from. Values are untrusted URL input,
- * so they are rendered as plain text nodes only.
+ * BTB-404 / BTB-500: where this application came from — an ad click, or a
+ * search engine, LLM assistant, social network or other site inferred from
+ * the referrer. Values are untrusted URL input, so they are rendered as plain
+ * text nodes only.
  */
 export function AttributionDetail({ attribution }: AttributionDetailProps) {
-  if (!attribution) return <p>No ad-click data.</p>
+  if (!attribution) return <p>No source recorded: direct or untracked traffic.</p>
   return (
     <dl>
       {ROWS.filter(([, key]) => attribution[key]).map(([label, key]) => (

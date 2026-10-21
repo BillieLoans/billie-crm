@@ -2,8 +2,8 @@
  * Unit tests for B4: GET /api/marketing/dashboard-feed.
  *
  * Service-API-key auth (fail-closed) + raw-SQL aggregation over the `contacts`
- * projection. `payload`/pool are mocked; the four queries are stubbed in order
- * (stage, source, referral, acquisition).
+ * projection. `payload`/pool are mocked; the five queries are stubbed in order
+ * (stage, source, referral, acquisition, channels).
  */
 import { describe, test, expect, vi, beforeEach } from 'vitest'
 import type { NextRequest } from 'next/server'
@@ -77,6 +77,7 @@ describe('GET /api/marketing/dashboard-feed — aggregation', () => {
       })
       .mockResolvedValueOnce({ rows: [{ k: '14', c: '5' }] })
       .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
 
     const res = (await GET(req(KEY))) as {
       body: {
@@ -111,6 +112,7 @@ describe('GET /api/marketing/dashboard-feed — aggregation', () => {
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [{ k: '0', c: '0' }] })
       .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
 
     const res = (await GET(req(KEY))) as {
       body: { referral: { rate: number } }
@@ -128,6 +130,7 @@ describe('GET /api/marketing/dashboard-feed — aggregation', () => {
       .mockResolvedValueOnce({
         rows: [
           {
+            channel: 'paid',
             utm_source: 'google',
             utm_medium: 'cpc',
             utm_campaign: 'borrow-200',
@@ -139,6 +142,7 @@ describe('GET /api/marketing/dashboard-feed — aggregation', () => {
           },
           {
             // auto-tagged click: a click id but no UTM values
+            channel: 'paid',
             utm_source: null,
             utm_medium: null,
             utm_campaign: null,
@@ -148,8 +152,21 @@ describe('GET /api/marketing/dashboard-feed — aggregation', () => {
             decided: '0',
             approved: '0',
           },
+          {
+            // BTB-500: inferred from the referrer — source and medium only
+            channel: 'organic',
+            utm_source: 'google',
+            utm_medium: 'organic',
+            utm_campaign: null,
+            utm_term: null,
+            matchtype: null,
+            started: '7',
+            decided: '5',
+            approved: '3',
+          },
         ],
       })
+      .mockResolvedValueOnce({ rows: [] })
 
     const res = (await GET(req(KEY))) as {
       body: { acquisition: Array<Record<string, unknown>> }
@@ -159,6 +176,7 @@ describe('GET /api/marketing/dashboard-feed — aggregation', () => {
     expect(res.status).toBe(200)
     expect(res.body.acquisition).toEqual([
       {
+        channel: 'paid',
         utmSource: 'google',
         utmMedium: 'cpc',
         utmCampaign: 'borrow-200',
@@ -169,6 +187,7 @@ describe('GET /api/marketing/dashboard-feed — aggregation', () => {
         approved: 4,
       },
       {
+        channel: 'paid',
         utmSource: null,
         utmMedium: null,
         utmCampaign: null,
@@ -178,20 +197,144 @@ describe('GET /api/marketing/dashboard-feed — aggregation', () => {
         decided: 0,
         approved: 0,
       },
+      {
+        channel: 'organic',
+        utmSource: 'google',
+        utmMedium: 'organic',
+        utmCampaign: null,
+        utmTerm: null,
+        matchtype: null,
+        started: 7,
+        decided: 5,
+        approved: 3,
+      },
     ])
   })
 
-  test('the acquisition query never selects a click id', async () => {
+  test('channels report every conversation by channel, source and medium (BTB-500)', async () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [{ k: '0', c: '0' }] })
       .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            channel: 'direct',
+            utm_source: null,
+            utm_medium: null,
+            started: '40',
+            decided: '30',
+            approved: '12',
+          },
+          {
+            channel: 'paid',
+            utm_source: 'google',
+            utm_medium: 'cpc',
+            started: '14',
+            decided: '9',
+            approved: '4',
+          },
+          {
+            channel: 'organic',
+            utm_source: 'google',
+            utm_medium: 'organic',
+            started: '7',
+            decided: '5',
+            approved: '3',
+          },
+          {
+            channel: 'llm',
+            utm_source: 'chatgpt',
+            utm_medium: 'llm',
+            started: '3',
+            decided: '2',
+            approved: '1',
+          },
+          {
+            channel: 'referral',
+            utm_source: 'finder.com.au',
+            utm_medium: 'referral',
+            started: '1',
+            decided: '0',
+            approved: '0',
+          },
+        ],
+      })
+
+    const res = (await GET(req(KEY))) as {
+      body: { channels: Array<Record<string, unknown>> }
+      status: number
+    }
+
+    expect(res.status).toBe(200)
+    expect(res.body.channels).toEqual([
+      {
+        channel: 'direct',
+        utmSource: null,
+        utmMedium: null,
+        started: 40,
+        decided: 30,
+        approved: 12,
+      },
+      {
+        channel: 'paid',
+        utmSource: 'google',
+        utmMedium: 'cpc',
+        started: 14,
+        decided: 9,
+        approved: 4,
+      },
+      {
+        channel: 'organic',
+        utmSource: 'google',
+        utmMedium: 'organic',
+        started: 7,
+        decided: 5,
+        approved: 3,
+      },
+      {
+        channel: 'llm',
+        utmSource: 'chatgpt',
+        utmMedium: 'llm',
+        started: 3,
+        decided: 2,
+        approved: 1,
+      },
+      {
+        channel: 'referral',
+        utmSource: 'finder.com.au',
+        utmMedium: 'referral',
+        started: 1,
+        decided: 0,
+        approved: 0,
+      },
+    ])
+
+    // the channel query covers conversations without attribution too
+    const sql = String(mockQuery.mock.calls[4][0])
+    expect(sql).not.toContain('attribution IS NOT NULL')
+    expect(sql).toContain("WHEN attribution IS NULL THEN 'direct'")
+  })
+
+  test('the acquisition and channel queries never select a click id', async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ k: '0', c: '0' }] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
 
     await GET(req(KEY))
 
-    const sql = String(mockQuery.mock.calls[3][0])
-    expect(sql).toContain('attribution IS NOT NULL')
-    expect(sql).not.toMatch(/gclid|gbraid|wbraid/)
+    const acquisitionSql = String(mockQuery.mock.calls[3][0])
+    expect(acquisitionSql).toContain('attribution IS NOT NULL')
+    for (const sql of [acquisitionSql, String(mockQuery.mock.calls[4][0])]) {
+      // click ids may be tested for presence (channel = paid) but never selected
+      expect(sql).not.toMatch(/'(gclid|gbraid|wbraid)'\s+AS\b/)
+      for (const line of sql.split('\n')) {
+        if (/\b(gclid|gbraid|wbraid)\b/.test(line)) expect(line).toMatch(/IS NOT NULL/)
+      }
+    }
   })
 })

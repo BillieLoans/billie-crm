@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { shapeAttribution } from '@/lib/attribution'
+import { attributionSummary, shapeAttribution } from '@/lib/attribution'
 
 const STORED = {
   gclid: 'Cj0KCQjw-abc_123',
@@ -43,5 +43,39 @@ describe('shapeAttribution', () => {
 
   it('ignores non-string values', () => {
     expect(shapeAttribution({ gclid: 'abc', utm_term: { $ne: null } })?.utmTerm).toBeNull()
+  })
+})
+
+describe('attributionSummary', () => {
+  it('names the campaign for an ad click', () => {
+    expect(
+      attributionSummary(
+        shapeAttribution({
+          gclid: 'abc',
+          utm_source: 'google',
+          utm_medium: 'cpc',
+          utm_campaign: 'borrow-200',
+        }),
+      ),
+    ).toBe('borrow-200')
+  })
+
+  it('reads "source / medium" for an inferred source (BTB-500)', () => {
+    expect(
+      attributionSummary(shapeAttribution({ utm_source: 'google', utm_medium: 'organic' })),
+    ).toBe('google / organic')
+    expect(attributionSummary(shapeAttribution({ utm_source: 'chatgpt', utm_medium: 'llm' }))).toBe(
+      'chatgpt / llm',
+    )
+  })
+
+  it('falls back to whichever of source or medium is present, then to "Ad click"', () => {
+    expect(attributionSummary(shapeAttribution({ utm_source: 'google' }))).toBe('google')
+    expect(attributionSummary(shapeAttribution({ gclid: 'abc', utm_medium: 'cpc' }))).toBe('cpc')
+    expect(attributionSummary(shapeAttribution({ gclid: 'abc' }))).toBe('Ad click')
+  })
+
+  it('reads "No data" without attribution', () => {
+    expect(attributionSummary(null)).toBe('No data')
   })
 })

@@ -1,9 +1,13 @@
-"""Ad-click attribution carried on ``conversation_started`` (BTB-404).
+"""Traffic attribution carried on ``conversation_started`` (BTB-404, BTB-500).
 
 The chat captures gclid/gbraid/wbraid/UTM/matchtype from the Apply URL and
-publishes them as ``payload.attribution`` on ``conversation_started``. The values originate in a URL
-anyone can craft, so they are re-validated here even though the chat backend
-already sanitised them: known keys only, short plain strings only.
+publishes them as ``payload.attribution`` on ``conversation_started``. For
+visitors without click parameters the chat and website infer
+``utm_source``/``utm_medium`` from the referrer host (``google``/``organic``,
+``chatgpt``/``llm``, ``reddit``/``social``, ``<host>``/``referral``) and send
+them under the same keys. The values originate in a URL anyone can craft, so
+they are re-validated here even though the chat backend already sanitised
+them: known keys only, short plain strings only.
 """
 
 from __future__ import annotations

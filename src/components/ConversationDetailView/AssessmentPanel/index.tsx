@@ -22,6 +22,7 @@ import { NetworkDetail } from './NetworkDetail'
 import { IdentityResolutionDetail } from './IdentityResolutionDetail'
 import { identityResolutionSummary } from '@/lib/identityResolution'
 import { networkSummary } from '@/lib/network'
+import { attributionSummary } from '@/lib/attribution'
 import { LlmCostsSection } from '../LlmCostsSection'
 import styles from './styles.module.css'
 
@@ -336,16 +337,11 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
         />
       </AssessmentSection>
 
-      {/* Acquisition — ad-click attribution captured at chat entry (BTB-404) */}
+      {/* Acquisition — ad click (BTB-404) or inferred search / LLM / social /
+          referral source (BTB-500) captured at chat entry */}
       <AssessmentSection
         title="Acquisition"
-        summary={
-          conversation.attribution
-            ? (conversation.attribution.utmCampaign ??
-              conversation.attribution.utmSource ??
-              'Ad click')
-            : 'No data'
-        }
+        summary={attributionSummary(conversation.attribution ?? null)}
       >
         <AttributionDetail attribution={conversation.attribution ?? null} />
       </AssessmentSection>

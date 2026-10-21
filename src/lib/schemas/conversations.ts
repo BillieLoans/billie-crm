@@ -287,7 +287,7 @@ export const IdentityResolutionSchema = z.object({
 export type IdentityResolution = z.infer<typeof IdentityResolutionSchema>
 export type ResolverAssessment = z.infer<typeof ResolverAssessmentSchema>
 
-/** BTB-404: ad-click attribution captured at chat entry. Untrusted URL input. */
+/** BTB-404 / BTB-500: ad-click or referrer-inferred attribution captured at chat entry. Untrusted URL input. */
 export const AttributionSchema = z.object({
   gclid: z.string().nullable(),
   gbraid: z.string().nullable(),
@@ -336,7 +336,7 @@ export const ConversationDetailSchema = z.object({
   identityResolution: IdentityResolutionSchema.nullable().optional(),
   /** BTB-392: the customer id this conversation arrived under before an identity link moved it. */
   identityOriginCustomerId: z.string().nullable().optional(),
-  /** BTB-404: ad-click attribution for this application, when it came from an ad. */
+  /** BTB-404 / BTB-500: where this application came from (ad click, search, LLM, social, referral); absent means direct or untracked. */
   attribution: AttributionSchema.nullable().optional(),
   /** BTB-406: where this application came from on the network. */
   network: NetworkSchema.nullable().optional(),

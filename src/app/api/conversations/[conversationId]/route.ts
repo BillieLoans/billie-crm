@@ -212,7 +212,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       // and scores only; the events carry no PII.
       identityResolution: shapeIdentityResolution(doc.identityResolution),
       identityOriginCustomerId: (doc.identityOriginCustomerId as string) ?? null,
-      // BTB-404: ad-click attribution captured at chat entry.
+      // BTB-404 / BTB-500: ad-click or referrer-inferred attribution captured at chat entry.
       attribution: shapeAttribution(doc.attribution),
       // BTB-406: network provenance (country, ASN) captured at chat entry.
       network: shapeNetwork(doc.network),
