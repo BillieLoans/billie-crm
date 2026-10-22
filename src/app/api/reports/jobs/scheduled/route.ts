@@ -2,18 +2,23 @@
  * POST /api/reports/jobs/scheduled — scheduled report delivery (BTB-507).
  *
  * Called by .github/workflows/scheduled-reports.yml with `Authorization:
- * Bearer $REPORTING_JOB_TOKEN`. `?schedule=weekly_monday` picks the reports;
- * `?sydneyHour=8` makes the call a no-op outside 08:00 Sydney, so the
- * workflow can fire at both daylight-saving offsets and exactly one call
- * sends. A repeat call on the same Sydney day sends nothing new.
+ * Bearer $REPORTING_JOB_TOKEN`. `?schedule=weekly_monday` picks the reports.
+ *
+ * Scheduled calls also pass `?notBeforeSydneyHour=8`: the call does nothing
+ * unless it is Monday in Sydney and at least 08:00. GitHub cron is UTC and
+ * may run late, so the workflow fires several times on Monday morning; the
+ * first call at or after 08:00 sends, and each report's per-day claim makes
+ * the others send nothing.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
+import { staffEmailConfigured } from '@/server/email/staff-email'
 import { isReportingJobAuthorised } from '@/server/reporting/job-auth'
-import { deliverScheduledReports, sydneyHour } from '@/server/reporting/scheduled'
+import { deliverScheduledReports, sydneyClock } from '@/server/reporting/scheduled'
 
 const SCHEDULES = ['weekly_monday'] as const
+const MONDAY = 1
 
 export async function POST(request: NextRequest) {
   if (!isReportingJobAuthorised(request)) {
@@ -27,18 +32,18 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     )
   }
-  const hourParam = params.get('sydneyHour')
-  if (hourParam !== null) {
-    const wanted = Number(hourParam)
-    if (!Number.isInteger(wanted) || wanted < 0 || wanted > 23) {
-      return NextResponse.json({ error: 'sydneyHour must be 0-23' }, { status: 400 })
+  const notBefore = params.get('notBeforeSydneyHour')
+  if (notBefore !== null) {
+    const hour = Number(notBefore)
+    if (notBefore === '' || !Number.isInteger(hour) || hour < 0 || hour > 23) {
+      return NextResponse.json({ error: 'notBeforeSydneyHour must be 0-23' }, { status: 400 })
     }
-    const now = sydneyHour()
-    if (now !== wanted) {
-      return NextResponse.json({ skipped: `It is ${now}:00 in Sydney, not ${wanted}:00` })
+    const now = sydneyClock()
+    if (now.weekday !== MONDAY || now.hour < hour) {
+      return NextResponse.json({ skipped: 'Not Monday after the scheduled hour in Sydney' })
     }
   }
-  if (process.env.NODE_ENV === 'production' && !process.env.RESEND_API_KEY) {
+  if (!staffEmailConfigured()) {
     return NextResponse.json({ error: 'Email is not configured (RESEND_API_KEY)' }, { status: 503 })
   }
   const appUrl = process.env.NEXT_PUBLIC_APP_URL
@@ -52,7 +57,10 @@ export async function POST(request: NextRequest) {
       schedule: schedule as (typeof SCHEDULES)[number],
       appUrl,
     })
-    const failed = summary.reports.some((r) => r.status === 'failed')
+    // Red in the workflow whenever something that should have gone out did not.
+    const failed = summary.reports.some(
+      (r) => r.status === 'failed' || r.status === 'no_recipients',
+    )
     return NextResponse.json(summary, { status: failed ? 502 : 200 })
   } catch (error) {
     console.error('[reports] scheduled delivery failed:', error)

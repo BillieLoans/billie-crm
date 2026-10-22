@@ -101,7 +101,7 @@ export const ReportDefinitions: CollectionConfig = {
       validate: validateSlug,
       admin: { description: 'Used in the report link: /admin/reports/<slug>' },
     },
-    { name: 'description', type: 'textarea', maxLength: 500 },
+    { name: 'description', type: 'textarea', maxLength: 1000 },
     {
       name: 'sql',
       label: 'SQL',

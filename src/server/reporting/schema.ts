@@ -80,6 +80,13 @@ export const ACQUISITION_CHANNEL_SQL = (column: string): string => `CASE
   ELSE 'other'
 END`
 
+/**
+ * The first Sydney day attribution was captured (BTB-404). Earlier
+ * conversations have no attribution at all, which is not the same as a
+ * direct visit.
+ */
+export const ATTRIBUTION_CAPTURE_START = '2026-10-06'
+
 /** Views, in dependency order (dropped in reverse). */
 const VIEW_NAMES = ['application', 'decision', 'loan', 'instalment'] as const
 
@@ -169,12 +176,19 @@ export const REPORTING_SCHEMA_STATEMENTS: readonly string[] = [
      c.attribution->>'utm_medium'                     AS medium,
      c.attribution->>'utm_campaign'                   AS campaign,
      reporting.acquisition_channel(c.attribution)     AS channel,
+     -- channel, except that a conversation from before attribution capture
+     -- reads 'not recorded' rather than 'direct'. Reports group by this.
+     CASE WHEN c.attribution IS NULL
+               AND reporting.sydney_date(c.started_at) < DATE '${ATTRIBUTION_CAPTURE_START}'
+          THEN 'not recorded'
+          ELSE reporting.acquisition_channel(c.attribution) END
+                                                      AS acquisition,
      c.status::text                                   AS status,
      COALESCE(c.decision_status::text, 'no_decision') AS decision_status,
      -- Funnel stages (BTB-507). Submitted: bank statements shared, or
      -- decided (a block-decline is decided without statements).
-     COALESCE(c.statement_capture->>'consentStatus' = 'complete', false)
-       OR c.decision_status::text IN ('approved', 'declined', 'referred')
+     COALESCE(c.statement_capture->>'consentStatus' = 'complete'
+              OR c.decision_status::text IN ('approved', 'declined', 'referred'), false)
                                                       AS submitted,
      COALESCE(c.decision_status::text IN ('approved', 'declined', 'referred'), false)
                                                       AS decided,
@@ -235,10 +249,11 @@ export const REPORTING_SCHEMA_STATEMENTS: readonly string[] = [
      a.conversation_id,
      a.source,
      a.medium,
-     COALESCE(a.channel, 'direct')                          AS channel
+     COALESCE(a.channel, 'direct')                          AS channel,
+     COALESCE(a.acquisition, 'not recorded')                AS acquisition
    FROM public.loan_accounts la
    LEFT JOIN LATERAL (
-     SELECT ap.conversation_id, ap.source, ap.medium, ap.channel
+     SELECT ap.conversation_id, ap.source, ap.medium, ap.channel, ap.acquisition
        FROM reporting.application ap
       WHERE ap.application_number = NULLIF(la.application_number, '')
       ORDER BY ap.started_at DESC

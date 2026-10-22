@@ -22,7 +22,7 @@ Defined in `src/server/reporting/schema.ts`. Every statement is idempotent.
 
 | Object | Kind | One row per | Source |
 |---|---|---|---|
-| `application` | view | conversation (an application attempt), with funnel flags `submitted`, `decided`, `approved`, `funded` | `conversations`, `loan_accounts` |
+| `application` | view | conversation (an application attempt), with funnel flags `submitted`, `decided`, `approved`, `funded` and `acquisition` | `conversations`, `loan_accounts` |
 | `decision` | view | conversation, its latest decision event | `decision_event` |
 | `loan` | view | loan account, with the source of its application | `loan_accounts`, `application` |
 | `instalment` | view | scheduled instalment | `loan_accounts_repayment_schedule_payments` |
@@ -35,7 +35,11 @@ Functions:
 - `sydney_date(timestamptz)`: the Sydney calendar date of an instant.
 - `acquisition_channel(attribution jsonb)`: `paid`, `organic`, `llm`, `social`,
   `referral`, `email`, `sms`, `other` or `direct`. Same rules as the BTB-500
-  marketing feed.
+  marketing feed. The `channel` columns use it as is.
+- The `acquisition` columns are `channel`, except that a conversation from
+  before attribution capture (6 October 2026) reads `not recorded` rather than
+  `direct`. Reports group by `acquisition`. `referral` means the visitor came
+  from another website, not the referral programme.
 - `decline_category(reason text)`: `capacity`, `character`, `identity`,
   `eligibility` or `other`, by longest matching prefix in
   `decline_reason_category`. Unmapped reasons are `other`. Change the mapping by
@@ -128,8 +132,8 @@ ledger's decimal strings. A re-run for the same day replaces that day's row.
 
 It authenticates with `Authorization: Bearer $REPORTING_JOB_TOKEN`; with no
 token configured every call is refused. Calls through Cloudflare also need the
-`x-origin-secret` header like any other request. `.github/workflows/scheduled-reports.yml`
-calls it daily at 23:50 Sydney (see Scheduling below).
+`x-origin-secret` header, which Cloudflare adds. `.github/workflows/scheduled-reports.yml`
+calls it nightly for the Sydney day just ended (see Scheduling below).
 
 ## Reports (BTB-506)
 
@@ -212,46 +216,65 @@ Setting up an environment (once, as the owner role):
 
 ## First reports (BTB-507)
 
-Delivered as data by the `20261025_090000_first_reports` migration, which
+Delivered as data by the `20261025_100000_first_reports` migration, which
 publishes each one whose slug is free. After that, authors own them in the
 admin. The definitions are in `src/server/reporting/definitions/first-reports.ts`
 and are checked against TEST data in `tests/int/first-reports.int.spec.ts`.
 
 | Report | Slug | Roles | For |
 |---|---|---|---|
-| Decline rate and reasons | `decline-rate` | admin, supervisor | BTB-462: by source or ruleset version, with reason categories. Emailed Monday |
+| Decline rate and reasons | `decline-rate` | admin, supervisor | BTB-462: by source or ruleset version, with reason categories and a total. Emailed Monday |
 | Application funnel by source | `application-funnel` | admin, supervisor, operations | BTB-500's split in the CRM: started, submitted, decided, approved, funded |
-| Go-to-market numbers | `gtm-numbers` | admin, supervisor | BTB-460: share of starts (incl. referral share), pass rate, funded rate, median hours to money, repayment health |
+| Go-to-market numbers | `gtm-numbers` | admin, supervisor | BTB-460: share of starts, pass rate, funded rate, median hours to money, repayment health, with an All sources row |
 
 "Submitted" means bank statements were shared, or the application was decided
-(a block-decline is decided without statements). Mock decisions are excluded
-from all three. Applications before 6 October 2026 have no attribution and read
-as "(not recorded)". Not answerable yet, and listed in the GTM report rather
-than approximated: cash cost per funded customer (needs ad spend) and place
+(a block-decline is decided without statements). Declines with no recorded
+reason count as "other". Mock decisions, and loans from them, are excluded from
+all three. Not answerable yet, and listed in the GTM report rather than
+approximated: referral-programme share (applications are not linked to
+referring contacts), cash cost per funded customer (needs ad spend) and place
 turnover (needs queue data).
 
 ## Monday email (BTB-507)
 
 `POST /api/reports/jobs/scheduled?schedule=weekly_monday` runs every published
 report whose schedule is "Weekly, Monday morning" on its parameter defaults
-(so each parameter needs one) and emails each supervisor a summary, a link to
-the report and the CSV attached (not attached above 5 MB). Each delivery is
-logged to `report-runs` with the Sydney date it was for; a second call that day
-sends nothing. A failed send is logged and the day stays undelivered, so a
-re-run sends it.
+(so each parameter needs one) and sends one email to all supervisors: a
+summary, a link to the report and the CSV attached (not attached above 5 MB).
 
-Email goes through Payload's Resend adapter (`RESEND_API_KEY`), the provider
-platform-services already uses. The notification dispatcher could not be used:
-it emails customers by customer id and has no attachments. Without the key,
-Payload writes emails to the console (dev); in production the job refuses to
-run.
+At most once per report per Sydney day. Before running, a delivery claims its
+day by inserting a `sending` run with `scheduledFor`, which is unique with the
+report slug; a concurrent or repeated call finds the claim and sends nothing.
+A failed run or send releases the claim, so the next call retries. The email
+also carries a Resend idempotency key. If a process dies mid-send, the run
+stays `sending` and holds the day: delete that run in Report runs to let the
+day send again.
+
+Email goes through `src/server/email/staff-email.ts`, which calls Resend
+directly (`RESEND_API_KEY`), the provider platform-services already uses. It is
+not Payload's email adapter on purpose: configuring one would also make
+Payload's forgot-password email live for staff accounts. The notification
+dispatcher could not be used: it emails customers by customer id and has no
+attachments. Without the key the job refuses to run.
+
+Set `REPORTS_EMAIL_LABEL=DEMO` on demo so its emails say `[DEMO]` in the
+subject and are not mistaken for production figures.
 
 ## Scheduling
 
-`.github/workflows/scheduled-reports.yml` calls both jobs for demo and prod.
-GitHub cron is UTC, so each job fires at both daylight-saving offsets and passes
-`?sydneyHour`; the CRM ignores the call that lands at the wrong Sydney hour.
-"Run workflow" in GitHub runs either job now, ignoring the hour.
+`.github/workflows/scheduled-reports.yml` calls both jobs. GitHub cron is UTC
+and can run late or not at all, so each job fires more than once and the CRM
+makes repeats harmless:
+
+- Weekly email, prod only on schedule: three runs on Monday morning, each
+  with `?notBeforeSydneyHour=8`. A call sends only on a Sydney Monday at or
+  after 08:00, so a late run still sends, and the claim stops the others.
+- Portfolio snapshot, demo and prod: two runs between midnight and 03:00
+  Sydney, each with `?asOfDate=` the Sydney day just ended. The snapshot is an
+  upsert, so the second run rewrites the same row.
+
+"Run workflow" in GitHub runs either job now for demo or prod; a manual email
+run ignores the Monday 08:00 rule but still sends at most once a day.
 
 Repository secrets (an environment is skipped while its URL is unset):
 
@@ -259,14 +282,17 @@ Repository secrets (an environment is skipped while its URL is unset):
 |---|---|
 | `CRM_URL_DEMO`, `CRM_URL_PROD` | e.g. `https://crm.billie.loans` |
 | `REPORTING_JOB_TOKEN_DEMO`, `_PROD` | the app's `REPORTING_JOB_TOKEN` |
-| `CF_SECRET_DEMO`, `_PROD` | the app's `CF_SECRET` (the `x-origin-secret` header) |
+
+Cloudflare adds the `x-origin-secret` header to requests itself, so the
+workflow does not hold `CF_SECRET`.
 
 ## Environment
 
 | Variable | Used by | Notes |
 |---|---|---|
 | `REPORTING_JOB_TOKEN` | scheduled jobs | Long random string, Fly secret |
-| `RESEND_API_KEY` | Monday email | Resend API key; required in production for scheduled delivery |
+| `RESEND_API_KEY` | Monday email | Resend API key; the job refuses to run without it |
 | `RESEND_FROM_ADDRESS` | Monday email | Defaults to `noreply@billie.loans`, the verified sender platform-services uses |
 | `NEXT_PUBLIC_APP_URL` | Monday email | Already set for Payload; used for the report link |
+| `REPORTS_EMAIL_LABEL` | Monday email | `DEMO` on demo; unset on prod |
 | `REPORTING_DATABASE_URI` | report runner | Logged in as `reporting_reader`; the Neon read replica in deployed environments. Required everywhere |

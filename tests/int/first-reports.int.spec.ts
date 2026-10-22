@@ -2,13 +2,14 @@
  * Integration coverage for the first reports and the Monday email (BTB-507).
  *
  * Built and checked with clearly marked TEST data only (BTB-462): every row
- * here is prefixed TEST-BTB507 and dated March 2001, far from real data.
+ * here is prefixed TEST-BTB507 and dated early 2001, far from real data.
  * Creates the reports exactly as the 20261025 migration does, runs each as
- * reporting_reader, and checks the numbers by hand-computed expectations.
+ * reporting_reader, and checks the numbers against hand-computed
+ * expectations. Email is captured, never sent.
  */
 import { getPayload, Payload } from 'payload'
 import config from '@/payload.config'
-import { describe, it, beforeAll, afterAll, expect, vi } from 'vitest'
+import { describe, it, beforeAll, afterAll, beforeEach, expect, vi } from 'vitest'
 import type { Pool } from 'pg'
 import { getDashboardPool } from '@/lib/dashboard-aggregates'
 import { createFirstReports, FIRST_REPORTS } from '@/server/reporting/definitions/first-reports'
@@ -16,11 +17,18 @@ import { runReport } from '@/server/reporting/run-report'
 import { deliverScheduledReports } from '@/server/reporting/scheduled'
 import { reportingReaderPool } from '../utils/reportingReader'
 
+const sendStaffEmail = vi.fn()
+vi.mock('@/server/email/staff-email', () => ({
+  sendStaffEmail: (...args: unknown[]) => sendStaffEmail(...args),
+  staffEmailConfigured: () => true,
+}))
+
 let payload: Payload
 let pool: Pool
 let reader: Pool
 const P = 'TEST-BTB507'
 const RANGE = { from: '2001-03-01', to: '2001-03-31' }
+const MARCH_5 = '2001-03-05T01:00:00Z' // 12:00 Sydney
 let admin: { id: string; role: string }
 let supervisorEmail: string
 
@@ -48,16 +56,18 @@ async function conversation(
     ruleset?: string | null
     statementComplete?: boolean
     appNumber?: string
+    startedAt?: string
   },
 ) {
   await pool.query(
     `INSERT INTO conversations
        (conversation_id, application_number, status, started_at, attribution, decision_status,
         decision_detail_reason, decision_detail_ruleset_version, statement_capture, version)
-     VALUES ($1, $2, 'active', '2001-03-05T01:00:00Z', $3::jsonb, $4, $5, $6, $7::jsonb, 1)`,
+     VALUES ($1, $2, 'active', $3, $4::jsonb, $5, $6, $7, $8::jsonb, 1)`,
     [
       `${P}-${suffix}`,
       opts.appNumber ?? '',
+      opts.startedAt ?? MARCH_5,
       opts.attribution ? JSON.stringify(opts.attribution) : null,
       opts.decisionStatus ?? null,
       opts.reason ?? null,
@@ -82,6 +92,16 @@ async function decided(
   )
 }
 
+async function loan(suffix: string, appNumber: string, disbursedAt: string) {
+  await pool.query(
+    `INSERT INTO loan_accounts
+       (loan_account_id, account_number, account_status, loan_terms_loan_amount,
+        loan_terms_disbursed_date, application_number)
+     VALUES ($1, $2, 'active', 300, $3, $4)`,
+    [`${P}-${suffix}`, `ACC-${P}-${suffix}`, disbursedAt, appNumber],
+  )
+}
+
 beforeAll(async () => {
   payload = await getPayload({ config })
   pool = getDashboardPool(payload) as unknown as Pool
@@ -97,13 +117,7 @@ beforeAll(async () => {
     appNumber: `${P}-APP1`,
   })
   await decided('C1', 'APPROVED', null, 'r1')
-  await pool.query(
-    `INSERT INTO loan_accounts
-       (loan_account_id, account_number, account_status, loan_terms_loan_amount,
-        loan_terms_disbursed_date, application_number)
-     VALUES ($1, 'ACC-TEST-BTB507', 'active', 300, '2001-03-06T03:00:00Z', $2)`,
-    [`${P}-L1`, `${P}-APP1`],
-  )
+  await loan('L1', `${P}-APP1`, '2001-03-06T03:00:00Z')
   // C2: paid, declined for capacity under r1.
   await conversation('C2', {
     attribution: paid,
@@ -112,7 +126,7 @@ beforeAll(async () => {
     ruleset: 'r1',
   })
   await decided('C2', 'DECLINED', 'CREDIT_ASSESSMENT:SERVICEABILITY', 'r1')
-  // C3: referral, declined for eligibility under r2.
+  // C3: referring website, declined for eligibility under r2.
   await conversation('C3', {
     attribution: { utm_source: 'friend', utm_medium: 'referral' },
     decisionStatus: 'declined',
@@ -120,13 +134,30 @@ beforeAll(async () => {
     ruleset: 'r2',
   })
   await decided('C3', 'DECLINED', 'BUSINESS_ACCOUNT', 'r2')
-  // C4: no attribution (before capture began), started only.
+  // C4: no attribution, before capture began: "not recorded", not "direct".
   await conversation('C4', {})
-  // C5: a mock approval, excluded everywhere.
-  await conversation('C5', { decisionStatus: 'approved' })
+  // C5: a mock approval with a loan, excluded everywhere, health included.
+  await conversation('C5', { decisionStatus: 'approved', appNumber: `${P}-APP5` })
   await decided('C5', 'APPROVED', null, 'r1', true)
+  await loan('L5', `${P}-APP5`, '2001-03-06T03:00:00Z')
   // C6: paid, statements shared, not yet decided.
   await conversation('C6', { attribution: paid, statementComplete: true })
+  // C7: organic, declined with no recorded reason: counted as "other".
+  await conversation('C7', {
+    attribution: { utm_source: 'google', utm_medium: 'organic' },
+    decisionStatus: 'declined',
+  })
+  await decided('C7', 'DECLINED', null, 'r2')
+  // C8: an ad click with no UTM tags: paid, labelled "(paid)".
+  await conversation('C8', { attribution: { gclid: 'test-click' } })
+  // C9: email, started in February, funded in March: health without starts.
+  await conversation('C9', {
+    attribution: { utm_source: 'newsletter', utm_medium: 'email' },
+    decisionStatus: 'approved',
+    appNumber: `${P}-APP9`,
+    startedAt: '2001-02-20T01:00:00Z',
+  })
+  await loan('L9', `${P}-APP9`, '2001-03-02T03:00:00Z')
 
   await createFirstReports(payload)
   const a = await payload.create({
@@ -164,6 +195,8 @@ async function rows(slug: string, parameters: Record<string, unknown>) {
   return outcome.body.rows
 }
 
+const zero = { capacity: 0, character: 0, identity: 0, eligibility: 0, other: 0 }
+
 describe('first reports', () => {
   it('are created once, published, and left alone when they exist', async () => {
     expect(await createFirstReports(payload)).toEqual([])
@@ -175,29 +208,27 @@ describe('first reports', () => {
     expect(docs.docs.map((d) => d._status)).toEqual(['published', 'published', 'published'])
   })
 
-  it('decline rate by source', async () => {
+  it('decline rate by source, with no-reason declines as "other" and a total', async () => {
     expect(await rows('decline-rate', { ...RANGE, group_by: 'source' })).toEqual([
-      {
-        segment: 'paid',
-        decided: 2,
-        declined: 1,
-        decline_rate_pct: 50,
-        capacity: 1,
-        character: 0,
-        identity: 0,
-        eligibility: 0,
-        other: 0,
-      },
+      { segment: 'paid', decided: 2, declined: 1, decline_rate_pct: 50, ...zero, capacity: 1 },
+      { segment: 'organic', decided: 1, declined: 1, decline_rate_pct: 100, ...zero, other: 1 },
       {
         segment: 'referral',
         decided: 1,
         declined: 1,
         decline_rate_pct: 100,
-        capacity: 0,
-        character: 0,
-        identity: 0,
+        ...zero,
         eligibility: 1,
-        other: 0,
+      },
+      {
+        segment: 'All',
+        decided: 4,
+        declined: 3,
+        decline_rate_pct: 75,
+        ...zero,
+        capacity: 1,
+        eligibility: 1,
+        other: 1,
       },
     ])
   })
@@ -206,7 +237,8 @@ describe('first reports', () => {
     const result = await rows('decline-rate', { ...RANGE, group_by: 'ruleset' })
     expect(result.map((r) => [r.segment, r.decided, r.declined])).toEqual([
       ['r1', 2, 1],
-      ['r2', 1, 1],
+      ['r2', 2, 2],
+      ['All', 4, 3],
     ])
   })
 
@@ -214,7 +246,7 @@ describe('first reports', () => {
     expect(await rows('application-funnel', RANGE)).toEqual([
       {
         source_medium: 'google / cpc',
-        channel: 'paid',
+        acquisition: 'paid',
         started: 3,
         submitted: 3,
         decided: 2,
@@ -223,7 +255,16 @@ describe('first reports', () => {
       },
       {
         source_medium: '(not recorded) / (none)',
-        channel: 'direct',
+        acquisition: 'not recorded',
+        started: 1,
+        submitted: 0,
+        decided: 0,
+        approved: 0,
+        funded: 0,
+      },
+      {
+        source_medium: '(paid) / (none)',
+        acquisition: 'paid',
         started: 1,
         submitted: 0,
         decided: 0,
@@ -232,7 +273,16 @@ describe('first reports', () => {
       },
       {
         source_medium: 'friend / referral',
-        channel: 'referral',
+        acquisition: 'referral',
+        started: 1,
+        submitted: 1,
+        decided: 1,
+        approved: 0,
+        funded: 0,
+      },
+      {
+        source_medium: 'google / organic',
+        acquisition: 'organic',
         started: 1,
         submitted: 1,
         decided: 1,
@@ -242,118 +292,128 @@ describe('first reports', () => {
     ])
   })
 
-  it('go-to-market numbers', async () => {
+  it('go-to-market numbers, excluding mock loans and keeping health without starts', async () => {
     const result = await rows('gtm-numbers', RANGE)
-    expect(result.map((r) => r.source)).toEqual(['paid', 'direct', 'referral', 'All sources'])
+    expect(result.map((r) => r.source)).toEqual([
+      'paid',
+      'not recorded',
+      'organic',
+      'referral',
+      'email',
+      'All sources',
+    ])
     expect(result[0]).toEqual({
       source: 'paid',
-      starts: 3,
-      share_of_starts_pct: 60,
+      starts: 4,
+      share_of_starts_pct: 57.1,
       decided: 2,
       approved: 1,
       pass_rate_pct: 50,
       funded: 1,
-      funded_rate_pct: 33.3,
+      funded_rate_pct: 25,
       median_hours_to_money: 26,
       loans_disbursed: 1,
       loans_in_arrears: 0,
       arrears_rate_pct: 0,
     })
-    expect(result[2]).toMatchObject({
-      source: 'referral',
-      share_of_starts_pct: 20,
-      pass_rate_pct: 0,
-    })
-    expect(result[3]).toMatchObject({
+    expect(result[4]).toMatchObject({ source: 'email', starts: 0, loans_disbursed: 1 })
+    expect(result[5]).toMatchObject({
       source: 'All sources',
-      starts: 5,
+      starts: 7,
       share_of_starts_pct: 100,
-      decided: 3,
-      pass_rate_pct: 33.3,
-      funded_rate_pct: 20,
+      decided: 4,
+      approved: 1,
+      pass_rate_pct: 25,
+      funded: 1,
+      funded_rate_pct: 14.3,
       median_hours_to_money: 26,
-      loans_disbursed: 1,
+      // L1 and L9; the mock approval's loan L5 is excluded.
+      loans_disbursed: 2,
     })
   })
 })
 
 describe('Monday email', () => {
-  it('sends the scheduled report to supervisors with the CSV, once per Sydney day', async () => {
-    const sent: Array<Record<string, unknown>> = []
-    const spy = vi
-      .spyOn(payload, 'sendEmail')
-      .mockImplementation(async (message: Record<string, unknown>) => {
-        sent.push(message)
-        return { id: 'test' }
-      })
-    try {
-      // Monday 2001-03-12 08:00 Sydney (AEDT): defaults cover 5-11 March.
-      const now = new Date('2001-03-11T21:00:00Z')
-      const first = await deliverScheduledReports(payload, {
-        schedule: 'weekly_monday',
-        now,
-        appUrl: 'https://crm.example.test/',
-        runOptions: { pool: reader },
-      })
-      expect(first.scheduledFor).toBe('2001-03-12')
-      expect(first.reports).toEqual([
-        { slug: 'decline-rate', status: 'sent', recipients: 1, rows: 2, attached: true },
-      ])
-      const toSupervisor = sent.filter((m) => m.to === supervisorEmail)
-      expect(toSupervisor).toHaveLength(1)
-      const [email] = toSupervisor
-      expect(email.subject).toBe('Weekly report: Decline rate and reasons (2001-03-12)')
-      expect(email.html).toContain('https://crm.example.test/admin/reports/decline-rate')
-      expect(email.html).toContain('From: 2001-03-05, To: 2001-03-11')
-      const [attachment] = email.attachments as Array<{ filename: string; content: string }>
-      expect(attachment.filename).toBe('decline-rate-2001-03-12.csv')
-      const csv = Buffer.from(attachment.content, 'base64').toString('utf8')
-      expect(csv).toContain('segment,decided,declined,decline_rate_pct')
-      expect(csv).toContain('paid,2,1,50,1,0,0,0,0')
+  // Monday 2001-03-12 08:00 Sydney (AEDT): defaults cover 5-11 March.
+  const MONDAY = new Date('2001-03-11T21:00:00Z')
+  const deliver = (now: Date = MONDAY) =>
+    deliverScheduledReports(payload, {
+      schedule: 'weekly_monday',
+      now,
+      appUrl: 'https://crm.example.test/',
+      runOptions: { pool: reader },
+    })
 
-      const runs = await payload.find({
-        collection: 'report-runs',
-        where: {
-          and: [{ reportSlug: { equals: 'decline-rate' } }, { trigger: { equals: 'schedule' } }],
-        },
-        overrideAccess: true,
-      })
-      expect(runs.docs[0]).toMatchObject({ outcome: 'ok', scheduledFor: '2001-03-12', rowCount: 2 })
-
-      const again = await deliverScheduledReports(payload, {
-        schedule: 'weekly_monday',
-        now: new Date('2001-03-11T22:00:00Z'),
-        appUrl: 'https://crm.example.test',
-        runOptions: { pool: reader },
-      })
-      expect(again.reports).toEqual([
-        { slug: 'decline-rate', status: 'already_sent', recipients: 0 },
-      ])
-      expect(sent.filter((m) => m.to === supervisorEmail)).toHaveLength(1)
-    } finally {
-      spy.mockRestore()
-    }
+  beforeEach(async () => {
+    await pool.query(`DELETE FROM report_runs WHERE report_slug = 'decline-rate'`)
+    sendStaffEmail.mockReset().mockResolvedValue('email-id')
+    delete process.env.REPORTS_EMAIL_LABEL
   })
 
-  it('records a failed send and does not mark the day as delivered', async () => {
-    await pool.query(`DELETE FROM report_runs WHERE report_slug = 'decline-rate'`)
-    const spy = vi.spyOn(payload, 'sendEmail').mockRejectedValue(new Error('Resend is down'))
-    try {
-      const result = await deliverScheduledReports(payload, {
-        schedule: 'weekly_monday',
-        now: new Date('2001-03-18T21:00:00Z'),
-        appUrl: 'https://crm.example.test',
-        runOptions: { pool: reader },
-      })
-      expect(result.reports[0]).toMatchObject({ status: 'failed', error: 'EMAIL_FAILED' })
-      const delivered = await payload.find({
-        collection: 'report-runs',
-        where: { scheduledFor: { equals: '2001-03-19' } },
-        overrideAccess: true,
-      })
-      expect(delivered.docs).toHaveLength(0)
-    } finally {
-      spy.mockRestore()
-    }
+  it('sends one email to supervisors with the CSV, then nothing more that day', async () => {
+    const first = await deliver()
+    expect(first.scheduledFor).toBe('2001-03-12')
+    expect(first.reports).toHaveLength(1)
+    expect(first.reports[0]).toMatchObject({ slug: 'decline-rate', status: 'sent', rows: 4 })
+    expect(sendStaffEmail).toHaveBeenCalledTimes(1)
+    const [email, key] = sendStaffEmail.mock.calls[0]
+    expect(key).toBe('report-decline-rate-2001-03-12')
+    expect(email.to).toContain(supervisorEmail)
+    expect(email.subject).toBe('Weekly report: Decline rate and reasons (2001-03-12)')
+    expect(email.html).toContain('https://crm.example.test/admin/reports/decline-rate')
+    expect(email.html).toContain('From: 2001-03-05, To: 2001-03-11')
+    const [attachment] = email.attachments
+    expect(attachment.filename).toBe('decline-rate-2001-03-12.csv')
+    const csv = Buffer.from(attachment.contentBase64, 'base64').toString('utf8')
+    expect(csv).toContain('segment,decided,declined,decline_rate_pct')
+    expect(csv).toContain('paid,2,1,50,1,0,0,0,0')
+
+    const runs = await payload.find({
+      collection: 'report-runs',
+      where: { reportSlug: { equals: 'decline-rate' } },
+      overrideAccess: true,
+    })
+    expect(runs.docs).toHaveLength(1)
+    expect(runs.docs[0]).toMatchObject({
+      outcome: 'ok',
+      trigger: 'schedule',
+      scheduledFor: '2001-03-12',
+      rowCount: 4,
+    })
+
+    const again = await deliver(new Date('2001-03-12T03:00:00Z'))
+    expect(again.reports).toEqual([{ slug: 'decline-rate', status: 'already_sent', recipients: 0 }])
+    expect(sendStaffEmail).toHaveBeenCalledTimes(1)
+  })
+
+  it('sends once when two calls race', async () => {
+    const [a, b] = await Promise.all([deliver(), deliver()])
+    expect([a.reports[0].status, b.reports[0].status].sort()).toEqual(['already_sent', 'sent'])
+    expect(sendStaffEmail).toHaveBeenCalledTimes(1)
+  })
+
+  it('a failed send is logged, releases the day, and the next call sends', async () => {
+    sendStaffEmail.mockRejectedValueOnce(new Error('Resend is down'))
+    const failed = await deliver()
+    expect(failed.reports[0]).toMatchObject({ status: 'failed', error: 'EMAIL_FAILED' })
+    const logged = await payload.find({
+      collection: 'report-runs',
+      where: { reportSlug: { equals: 'decline-rate' } },
+      overrideAccess: true,
+    })
+    expect(logged.docs[0]).toMatchObject({ outcome: 'error', errorCode: 'EMAIL_FAILED' })
+    expect(logged.docs[0].scheduledFor ?? null).toBeNull()
+
+    const retry = await deliver()
+    expect(retry.reports[0].status).toBe('sent')
+    expect(sendStaffEmail).toHaveBeenCalledTimes(2)
+  })
+
+  it('labels a non-production environment in the subject and body', async () => {
+    process.env.REPORTS_EMAIL_LABEL = 'DEMO'
+    await deliver()
+    const [email] = sendStaffEmail.mock.calls[0]
+    expect(email.subject).toBe('[DEMO] Weekly report: Decline rate and reasons (2001-03-12)')
+    expect(email.html).toContain('DEMO</strong> environment, not production data')
   })
 })

@@ -1,36 +1,40 @@
 name: scheduled reports
 
-# Calls the CRM's reporting jobs (docs/reporting.md):
-#   - weekly report email, Monday 08:00 Sydney (BTB-507)
-#   - portfolio snapshot, daily 23:50 Sydney (BTB-504)
-# GitHub cron is UTC and has no time zones, so each job fires at both
-# daylight-saving offsets and passes ?sydneyHour; the CRM ignores the call
-# that lands at the wrong Sydney hour. Both jobs are safe to repeat.
+# Calls the CRM's reporting jobs (docs/reporting.md, "Scheduling"):
+#   - weekly report email, Monday from 08:00 Sydney, prod only on schedule
+#     (BTB-507). Demo: run the workflow by hand.
+#   - portfolio snapshot for the previous Sydney day, nightly (BTB-504).
+# GitHub cron is UTC, has no time zones and can run late or not at all, so
+# each job fires more than once. The CRM makes repeats harmless: the email
+# sends only on Monday at or after 08:00 Sydney and once per report per day;
+# the snapshot is an upsert for an explicit date.
 #
-# Secrets per environment (skipped when CRM_URL_<ENV> is unset):
-#   CRM_URL_DEMO / CRM_URL_PROD                    e.g. https://crm.billie.loans
-#   REPORTING_JOB_TOKEN_DEMO / _PROD               the app's REPORTING_JOB_TOKEN
-#   CF_SECRET_DEMO / _PROD                         the app's CF_SECRET (x-origin-secret)
+# Secrets per environment (an environment is skipped while its URL is unset):
+#   CRM_URL_DEMO / CRM_URL_PROD             e.g. https://crm.billie.loans
+#   REPORTING_JOB_TOKEN_DEMO / _PROD        the app's REPORTING_JOB_TOKEN
+# Cloudflare adds the x-origin-secret header itself; it is not stored here.
 
 on:
   schedule:
-    - cron: '0 21 * * 0' # Monday 08:00 AEDT (UTC+11)
-    - cron: '0 22 * * 0' # Monday 08:00 AEST (UTC+10)
-    - cron: '50 12 * * *' # 23:50 AEDT
-    - cron: '50 13 * * *' # 23:50 AEST
+    - cron: '0 21 * * 0' # Monday 08:00 AEDT / 07:00 AEST
+    - cron: '0 22 * * 0' # Monday 09:00 AEDT / 08:00 AEST
+    - cron: '30 23 * * 0' # Monday 10:30 AEDT / 09:30 AEST, in case the others ran late
+    - cron: '0 14 * * *' # 01:00 AEDT / 00:00 AEST
+    - cron: '0 16 * * *' # 03:00 AEDT / 02:00 AEST
   workflow_dispatch:
     inputs:
       job:
-        description: Job to run now (ignores the Sydney hour)
+        description: Job to run now (the email ignores the Monday 08:00 rule)
         type: choice
         options: [weekly-email, portfolio-snapshot]
         required: true
+      environment:
+        description: Where
+        type: choice
+        options: [DEMO, PROD]
+        required: true
 
 permissions: {}
-
-concurrency:
-  group: scheduled-reports-${{ github.event.schedule || inputs.job }}
-  cancel-in-progress: false
 
 jobs:
   call:
@@ -41,32 +45,48 @@ jobs:
       fail-fast: false
       matrix:
         env: [DEMO, PROD]
+    concurrency:
+      group: scheduled-reports-${{ matrix.env }}-${{ inputs.job || (contains(github.event.schedule, ' * * 0') && 'weekly-email' || 'portfolio-snapshot') }}
+      cancel-in-progress: false
     env:
       CRM_URL: ${{ secrets[format('CRM_URL_{0}', matrix.env)] }}
       JOB_TOKEN: ${{ secrets[format('REPORTING_JOB_TOKEN_{0}', matrix.env)] }}
-      CF_SECRET: ${{ secrets[format('CF_SECRET_{0}', matrix.env)] }}
-      SCHEDULE: ${{ github.event.schedule }}
-      MANUAL_JOB: ${{ inputs.job }}
+      ENV_NAME: ${{ matrix.env }}
+      JOB: ${{ inputs.job || (contains(github.event.schedule, ' * * 0') && 'weekly-email' || 'portfolio-snapshot') }}
+      MANUAL_ENV: ${{ inputs.environment }}
+      SCHEDULED: ${{ github.event_name == 'schedule' }}
     steps:
       - name: Call the job
         run: |
           if [ -z "$CRM_URL" ]; then
-            echo "CRM_URL_${{ matrix.env }} is not set; skipping."
+            echo "CRM_URL_${ENV_NAME} is not set; skipping."
             exit 0
           fi
-          case "$SCHEDULE" in
-            "0 21 * * 0"|"0 22 * * 0") path="/api/reports/jobs/scheduled?schedule=weekly_monday&sydneyHour=8" ;;
-            "50 12 * * *"|"50 13 * * *") path="/api/reports/jobs/portfolio-snapshot?sydneyHour=23" ;;
-            *)
-              case "$MANUAL_JOB" in
-                weekly-email) path="/api/reports/jobs/scheduled?schedule=weekly_monday" ;;
-                portfolio-snapshot) path="/api/reports/jobs/portfolio-snapshot" ;;
-                *) echo "Unknown trigger"; exit 1 ;;
-              esac
+          if [ -n "$MANUAL_ENV" ] && [ "$MANUAL_ENV" != "$ENV_NAME" ]; then
+            echo "Run by hand for ${MANUAL_ENV}; skipping ${ENV_NAME}."
+            exit 0
+          fi
+          case "$JOB" in
+            weekly-email)
+              if [ "$SCHEDULED" = "true" ] && [ "$ENV_NAME" != "PROD" ]; then
+                echo "The weekly email is scheduled for prod only; skipping ${ENV_NAME}."
+                exit 0
+              fi
+              path="/api/reports/jobs/scheduled?schedule=weekly_monday"
+              if [ "$SCHEDULED" = "true" ]; then path="${path}&notBeforeSydneyHour=8"; fi
               ;;
+            portfolio-snapshot)
+              as_of=$(TZ=Australia/Sydney date -d yesterday +%F)
+              path="/api/reports/jobs/portfolio-snapshot?asOfDate=${as_of}"
+              ;;
+            *) echo "Unknown job: $JOB"; exit 1 ;;
           esac
-          curl --fail-with-body -sS -X POST "${CRM_URL%/}${path}" \
-            -H "Authorization: Bearer ${JOB_TOKEN}" \
-            -H "x-origin-secret: ${CF_SECRET}" \
-            --max-time 300
-          echo
+          status=$(curl -sS -o response.json -w '%{http_code}' -X POST "${CRM_URL%/}${path}" \
+            -H "Authorization: Bearer ${JOB_TOKEN}" --max-time 300)
+          echo "HTTP ${status} for ${JOB} on ${ENV_NAME}"
+          if [ "$status" -ge 300 ]; then
+            # Error bodies carry a message only, never report data.
+            jq -c '{error, reports: [.reports[]? | {slug, status, error}]}' response.json || true
+            exit 1
+          fi
+          jq -c '{skipped, scheduledFor, reports: [.reports[]? | {slug, status}]}' response.json || true

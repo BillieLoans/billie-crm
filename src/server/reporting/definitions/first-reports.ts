@@ -31,31 +31,36 @@ const declineRate: ReportDefinitionSeed = {
   slug: 'decline-rate',
   description:
     'Decisions made in the period (Sydney dates), split by acquisition source or by credit ' +
-    'ruleset version, with declines by reason category. Mock decisions are excluded. ' +
-    'Decisions made before ruleset versions were recorded show as "(not recorded)".',
+    'ruleset version, with declines by reason category and an "All" total. Declines with no ' +
+    'recorded reason count as "other". Mock decisions are excluded. Decisions made before ' +
+    'ruleset versions were recorded show as "(not recorded)"; applications from before ' +
+    'attribution capture (6 October 2026) show as "not recorded".',
   sql: `WITH d AS (
-  SELECT dec.decision, dec.decline_category, dec.ruleset_version, a.channel
+  SELECT dec.decision,
+         COALESCE(dec.decline_category, 'other') AS category,
+         CASE $3::text
+           WHEN 'ruleset' THEN COALESCE(dec.ruleset_version, '(not recorded)')
+           ELSE a.acquisition
+         END AS seg
     FROM decision AS dec
     JOIN application AS a USING (conversation_id)
    WHERE dec.decided_on BETWEEN $1::date AND $2::date
      AND NOT dec.mock_origin
 )
-SELECT CASE $3::text
-         WHEN 'ruleset' THEN COALESCE(ruleset_version, '(not recorded)')
-         ELSE channel
-       END AS segment,
+SELECT CASE WHEN GROUPING(seg) = 1 THEN 'All' ELSE seg END AS segment,
        count(*) AS decided,
        count(*) FILTER (WHERE decision = 'DECLINED') AS declined,
        round(100.0 * count(*) FILTER (WHERE decision = 'DECLINED') / NULLIF(count(*), 0), 1)
          AS decline_rate_pct,
-       count(*) FILTER (WHERE decline_category = 'capacity') AS capacity,
-       count(*) FILTER (WHERE decline_category = 'character') AS character,
-       count(*) FILTER (WHERE decline_category = 'identity') AS identity,
-       count(*) FILTER (WHERE decline_category = 'eligibility') AS eligibility,
-       count(*) FILTER (WHERE decline_category = 'other') AS other
+       count(*) FILTER (WHERE decision = 'DECLINED' AND category = 'capacity') AS capacity,
+       count(*) FILTER (WHERE decision = 'DECLINED' AND category = 'character') AS character,
+       count(*) FILTER (WHERE decision = 'DECLINED' AND category = 'identity') AS identity,
+       count(*) FILTER (WHERE decision = 'DECLINED' AND category = 'eligibility') AS eligibility,
+       count(*) FILTER (WHERE decision = 'DECLINED' AND category = 'other') AS other
   FROM d
- GROUP BY 1
- ORDER BY decided DESC, segment`,
+ GROUP BY GROUPING SETS ((seg), ())
+HAVING count(*) > 0
+ ORDER BY GROUPING(seg), decided DESC, segment`,
   parameters: [
     ...DATE_RANGE,
     {
@@ -92,14 +97,13 @@ const funnel: ReportDefinitionSeed = {
   slug: 'application-funnel',
   description:
     'Applications started in the period (Sydney dates) and how far they got: submitted ' +
-    '(bank statements shared, or decided), decided, approved, funded. No attribution reads ' +
-    'as "(direct)"; applications before 6 October 2026, when attribution capture began, ' +
-    'read as "(not recorded)". Mock decisions are excluded.',
-  sql: `SELECT COALESCE(a.source,
-                CASE WHEN a.started_on < DATE '2026-10-06' THEN '(not recorded)'
-                     ELSE '(direct)' END)
+    '(bank statements shared, or decided), decided, approved, funded. Without a recorded ' +
+    'source the row is named by its acquisition group: "(direct)" for no attribution, ' +
+    '"(paid)" for an ad click with no UTM tags, and "(not recorded)" before attribution ' +
+    'capture began on 6 October 2026. Mock decisions are excluded.',
+  sql: `SELECT COALESCE(a.source, '(' || a.acquisition || ')')
          || ' / ' || COALESCE(a.medium, '(none)') AS source_medium,
-       a.channel,
+       a.acquisition,
        count(*) AS started,
        count(*) FILTER (WHERE a.submitted) AS submitted,
        count(*) FILTER (WHERE a.decided) AS decided,
@@ -133,11 +137,13 @@ const gtm: ReportDefinitionSeed = {
   slug: 'gtm-numbers',
   description:
     'By acquisition source, for applications started and loans disbursed in the period ' +
-    '(Sydney dates): share of starts (the referral row is the referral share), pass rate ' +
-    '(approved of decided), funded rate (funded of started), median hours from starting ' +
-    'an application to money, and repayment health of the loans disbursed. Not answerable ' +
-    'yet: cash cost per funded customer (needs ad spend) and place turnover (needs queue ' +
-    'data). Mock decisions are excluded.',
+    '(Sydney dates): share of starts, pass rate (approved of decided), funded rate (funded ' +
+    'of started), median hours from starting an application to money, and repayment health ' +
+    'of the loans disbursed. The "referral" row is applications that arrived from another ' +
+    'website (utm_medium=referral), not the referral programme. Not answerable yet: ' +
+    'referral-programme share (applications are not linked to referring contacts), cash ' +
+    'cost per funded customer (needs ad spend) and place turnover (needs queue data). Mock ' +
+    'decisions and their loans are excluded.',
   sql: `WITH apps AS (
   SELECT a.*
     FROM application AS a
@@ -146,7 +152,7 @@ const gtm: ReportDefinitionSeed = {
      AND d.mock_origin IS NOT TRUE
 ),
 by_source AS (
-  SELECT channel AS source,
+  SELECT CASE WHEN GROUPING(acquisition) = 1 THEN 'All sources' ELSE acquisition END AS source,
          count(*) AS starts,
          count(*) FILTER (WHERE decided) AS decided,
          count(*) FILTER (WHERE approved) AS approved,
@@ -155,47 +161,37 @@ by_source AS (
            ORDER BY extract(epoch FROM funded_at - started_at) / 3600
          ) FILTER (WHERE funded) AS median_hours
     FROM apps
-   GROUP BY channel
-  UNION ALL
-  SELECT 'All sources',
-         count(*),
-         count(*) FILTER (WHERE decided),
-         count(*) FILTER (WHERE approved),
-         count(*) FILTER (WHERE funded),
-         percentile_cont(0.5) WITHIN GROUP (
-           ORDER BY extract(epoch FROM funded_at - started_at) / 3600
-         ) FILTER (WHERE funded)
-    FROM apps
+   GROUP BY GROUPING SETS ((acquisition), ())
 ),
 health AS (
-  SELECT channel AS source,
+  SELECT CASE WHEN GROUPING(l.acquisition) = 1 THEN 'All sources' ELSE l.acquisition END
+           AS source,
          count(*) AS loans,
-         count(*) FILTER (WHERE in_arrears) AS in_arrears
-    FROM loan
-   WHERE disbursed_on BETWEEN $1::date AND $2::date
-   GROUP BY channel
-  UNION ALL
-  SELECT 'All sources', count(*), count(*) FILTER (WHERE in_arrears)
-    FROM loan
-   WHERE disbursed_on BETWEEN $1::date AND $2::date
+         count(*) FILTER (WHERE l.in_arrears) AS in_arrears
+    FROM loan AS l
+    LEFT JOIN decision AS d ON d.conversation_id = l.conversation_id
+   WHERE l.disbursed_on BETWEEN $1::date AND $2::date
+     AND d.mock_origin IS NOT TRUE
+   GROUP BY GROUPING SETS ((l.acquisition), ())
 )
-SELECT b.source,
-       b.starts,
-       round(100.0 * b.starts
+SELECT source,
+       COALESCE(b.starts, 0) AS starts,
+       round(100.0 * COALESCE(b.starts, 0)
              / NULLIF((SELECT starts FROM by_source WHERE source = 'All sources'), 0), 1)
          AS share_of_starts_pct,
-       b.decided,
-       b.approved,
+       COALESCE(b.decided, 0) AS decided,
+       COALESCE(b.approved, 0) AS approved,
        round(100.0 * b.approved / NULLIF(b.decided, 0), 1) AS pass_rate_pct,
-       b.funded,
+       COALESCE(b.funded, 0) AS funded,
        round(100.0 * b.funded / NULLIF(b.starts, 0), 1) AS funded_rate_pct,
        round(b.median_hours::numeric, 1) AS median_hours_to_money,
        COALESCE(h.loans, 0) AS loans_disbursed,
        COALESCE(h.in_arrears, 0) AS loans_in_arrears,
        round(100.0 * h.in_arrears / NULLIF(h.loans, 0), 1) AS arrears_rate_pct
   FROM by_source AS b
-  LEFT JOIN health AS h USING (source)
- ORDER BY b.source = 'All sources', b.starts DESC, b.source`,
+  FULL JOIN health AS h USING (source)
+ WHERE source <> 'All sources' OR b.starts > 0 OR h.loans > 0
+ ORDER BY source = 'All sources', COALESCE(b.starts, 0) DESC, source`,
   parameters: [
     { name: 'from', label: 'From', type: 'date', required: true, default: 'today-30' },
     { name: 'to', label: 'To', type: 'date', required: true, default: 'today-1' },

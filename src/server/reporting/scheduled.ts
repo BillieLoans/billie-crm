@@ -3,10 +3,15 @@
  *
  * The weekly job runs every published report whose schedule matches and
  * emails the result to supervisors: a short summary, a link to the report
- * and the CSV attached. Each delivery is logged to `report-runs` with the
- * Sydney date it was for, so a second call on the same day sends nothing.
+ * and the CSV attached.
  *
- * Email goes through Payload's Resend adapter (`RESEND_API_KEY`). The
+ * At most once per report per Sydney day: a delivery first claims its day
+ * by inserting a `sending` run with `scheduledFor` (unique with the report
+ * slug), so a concurrent or repeated call finds the claim and sends
+ * nothing. A failed run or send releases the claim so a later call retries.
+ * The single email to all recipients also carries a Resend idempotency key.
+ *
+ * Email goes through `src/server/email/staff-email.ts` (Resend). The
  * notification dispatcher cannot be used: it only emails customers, by
  * customer id, and sends no attachments.
  */
@@ -15,7 +20,14 @@ import { sydneyDateString } from '@/lib/disbursement-cutoff'
 import { formatNumber } from '@/lib/formatters'
 import { bindParameters, reportParametersSchema } from '@/lib/schemas/reports'
 import { toCsv } from '@/components/ReportsView/csv'
-import { logRun, loggedParameters, publishedVersionId, type ReportDoc } from './run-report'
+import { sendStaffEmail } from '@/server/email/staff-email'
+import {
+  logRun,
+  loggedParameters,
+  publishedVersionId,
+  type ReportDoc,
+  type RunLogEntry,
+} from './run-report'
 import { ReportRunError, runReportSql, type RunOptions } from './runner'
 
 export type ReportSchedule = 'weekly_monday'
@@ -71,22 +83,48 @@ async function recipients(payload: Payload): Promise<string[]> {
   ]
 }
 
-async function alreadyDelivered(payload: Payload, slug: string, day: string): Promise<boolean> {
-  const runs = await payload.find({
-    collection: 'report-runs',
-    where: {
-      and: [
-        { reportSlug: { equals: slug } },
-        { trigger: { equals: 'schedule' } },
-        { scheduledFor: { equals: day } },
-        { outcome: { equals: 'ok' } },
-      ],
-    },
-    limit: 1,
-    depth: 0,
-    overrideAccess: true,
-  })
-  return runs.docs.length > 0
+/**
+ * Claim a report's delivery for a Sydney day.
+ *
+ * @returns the claiming run's id, or null when the day is already claimed.
+ */
+async function claimDay(payload: Payload, entry: RunLogEntry, day: string): Promise<string | null> {
+  try {
+    const run = await payload.create({
+      collection: 'report-runs',
+      data: { ...entry, outcome: 'sending', scheduledFor: day } as never,
+      overrideAccess: true,
+    })
+    return String(run.id)
+  } catch (error) {
+    // A unique-key conflict means another call holds the day.
+    const existing = await payload.find({
+      collection: 'report-runs',
+      where: {
+        and: [{ reportSlug: { equals: entry.reportSlug } }, { scheduledFor: { equals: day } }],
+      },
+      limit: 1,
+      depth: 0,
+      overrideAccess: true,
+    })
+    if (existing.docs.length > 0) return null
+    throw error
+  }
+}
+
+/** Finish a claimed run. Releasing (`scheduledFor: null`) lets a later call retry. */
+async function finishClaim(
+  payload: Payload,
+  id: string,
+  data: Record<string, unknown>,
+): Promise<void> {
+  try {
+    await payload.update({ collection: 'report-runs', id, data, overrideAccess: true })
+  } catch (error) {
+    // The claim still holds the day, so nothing is sent twice; the run
+    // just keeps its `sending` outcome. Logged for follow-up.
+    console.error('[reports] could not finish a scheduled run record:', error)
+  }
 }
 
 /**
@@ -114,16 +152,17 @@ export async function deliverScheduledReports(
   const results: DeliveryResult[] = []
 
   for (const doc of found.docs as unknown as ReportDoc[]) {
-    const base = { reportSlug: doc.slug, report: String(doc.id), trigger: 'schedule' as const }
-    if (await alreadyDelivered(payload, doc.slug, day)) {
-      results.push({ slug: doc.slug, status: 'already_sent', recipients: 0 })
-      continue
+    const base: RunLogEntry = {
+      reportSlug: doc.slug,
+      report: String(doc.id),
+      trigger: 'schedule',
+      outcome: 'error',
     }
     const params = reportParametersSchema.safeParse(doc.parameters ?? [])
     const bound = params.success ? bindParameters(params.data, {}, now) : null
     if (!params.success || !bound?.ok) {
       // A scheduled report runs on its defaults, so every parameter needs one.
-      await logRun(payload, null, { ...base, outcome: 'error', errorCode: 'NO_DEFAULTS' })
+      await logRun(payload, null, { ...base, errorCode: 'NO_DEFAULTS' })
       results.push({
         slug: doc.slug,
         status: 'failed',
@@ -132,41 +171,30 @@ export async function deliverScheduledReports(
       })
       continue
     }
+    if (to.length === 0) {
+      await logRun(payload, null, { ...base, errorCode: 'NO_RECIPIENTS' })
+      results.push({ slug: doc.slug, status: 'no_recipients', recipients: 0 })
+      continue
+    }
     const parameters = loggedParameters(params.data, bound.values)
     const version = await publishedVersionId(payload, String(doc.id))
+    const claim = await claimDay(payload, { ...base, version, parameters }, day)
+    if (claim === null) {
+      results.push({ slug: doc.slug, status: 'already_sent', recipients: 0 })
+      continue
+    }
 
     let result
     try {
       result = await runReportSql(doc.sql, bound.values, runOptions)
     } catch (error) {
       const code = error instanceof ReportRunError ? error.code : 'QUERY_FAILED'
-      await logRun(payload, null, {
-        ...base,
-        version,
-        parameters,
+      await finishClaim(payload, claim, {
         outcome: code === 'TIMEOUT' ? 'timeout' : 'error',
         errorCode: code,
+        scheduledFor: null,
       })
       results.push({ slug: doc.slug, status: 'failed', recipients: 0, error: code })
-      continue
-    }
-
-    if (to.length === 0) {
-      await logRun(payload, null, {
-        ...base,
-        version,
-        parameters,
-        outcome: 'error',
-        errorCode: 'NO_RECIPIENTS',
-        durationMs: result.durationMs,
-        rowCount: result.rowCount,
-      })
-      results.push({
-        slug: doc.slug,
-        status: 'no_recipients',
-        recipients: 0,
-        rows: result.rowCount,
-      })
       continue
     }
 
@@ -177,7 +205,9 @@ export async function deliverScheduledReports(
       .map((p, i) => `${escapeHtml(p.label)}: ${escapeHtml(String(bound.values[i] ?? '–'))}`)
       .join(', ')
     const rowsText = `${formatNumber(result.rowCount)} row${result.rowCount === 1 ? '' : 's'}${result.truncated ? ' (cut at the row limit)' : ''}`
+    const label = process.env.REPORTS_EMAIL_LABEL?.trim()
     const html = [
+      label ? `<p><strong>${escapeHtml(label)}</strong> environment, not production data.</p>` : '',
       `<p>${escapeHtml(doc.title)}: ${rowsText}${paramText ? ` for ${paramText}` : ''}.</p>`,
       attach
         ? '<p>The results are attached as a CSV.</p>'
@@ -186,48 +216,45 @@ export async function deliverScheduledReports(
           : '<p>The results are too large to attach; open the report to see them.</p>',
       `<p><a href="${escapeHtml(link)}">Open the report in the CRM</a></p>`,
       '<p>Sent by the Billie CRM to supervisors every Monday morning.</p>',
-    ].join('\n')
+    ]
+      .filter(Boolean)
+      .join('\n')
 
     try {
-      for (const address of to) {
-        await payload.sendEmail({
-          to: address,
-          subject: `Weekly report: ${doc.title} (${day})`,
+      await sendStaffEmail(
+        {
+          to,
+          subject: `${label ? `[${label}] ` : ''}Weekly report: ${doc.title} (${day})`,
           html,
           attachments: attach
             ? [
                 {
                   filename: `${doc.slug}-${day}.csv`,
-                  content: Buffer.from(`﻿${csv}`, 'utf8').toString('base64'),
+                  contentBase64: Buffer.from(`\ufeff${csv}`, 'utf8').toString('base64'),
                 },
               ]
             : undefined,
-        })
-      }
+        },
+        `report-${doc.slug}-${day}`,
+      )
     } catch (error) {
       console.error(`[reports] could not email ${doc.slug}:`, error)
-      await logRun(payload, null, {
-        ...base,
-        version,
-        parameters,
+      await finishClaim(payload, claim, {
         outcome: 'error',
         errorCode: 'EMAIL_FAILED',
         durationMs: result.durationMs,
         rowCount: result.rowCount,
+        scheduledFor: null,
       })
       results.push({ slug: doc.slug, status: 'failed', recipients: 0, error: 'EMAIL_FAILED' })
       continue
     }
 
-    await logRun(payload, null, {
-      ...base,
-      version,
-      parameters,
+    await finishClaim(payload, claim, {
       outcome: 'ok',
       durationMs: result.durationMs,
       rowCount: result.rowCount,
       truncated: result.truncated,
-      scheduledFor: day,
     })
     results.push({
       slug: doc.slug,
@@ -240,12 +267,16 @@ export async function deliverScheduledReports(
   return { scheduledFor: day, reports: results }
 }
 
-/** The hour of day in Sydney, 0-23. */
-export function sydneyHour(now: Date = new Date()): number {
-  const hour = new Intl.DateTimeFormat('en-AU', {
+/** The hour (0-23) and weekday (1 = Monday ... 7 = Sunday) in Sydney. */
+export function sydneyClock(now: Date = new Date()): { hour: number; weekday: number } {
+  const parts = new Intl.DateTimeFormat('en-AU', {
     timeZone: 'Australia/Sydney',
     hour: '2-digit',
     hourCycle: 'h23',
-  }).format(now)
-  return Number(hour)
+    weekday: 'short',
+  }).formatToParts(now)
+  const hour = Number(parts.find((p) => p.type === 'hour')?.value)
+  const day = parts.find((p) => p.type === 'weekday')?.value ?? ''
+  const weekday = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].indexOf(day) + 1
+  return { hour, weekday }
 }

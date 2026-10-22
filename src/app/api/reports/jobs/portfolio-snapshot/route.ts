@@ -2,9 +2,10 @@
  * POST /api/reports/jobs/portfolio-snapshot — nightly ledger portfolio copy
  * (BTB-504).
  *
- * Called by a Fly scheduled machine with `Authorization: Bearer
- * $REPORTING_JOB_TOKEN`, shortly before midnight Sydney time. `?asOfDate=`
- * (YYYY-MM-DD) re-takes a past day; it defaults to today in Sydney.
+ * Called nightly by .github/workflows/scheduled-reports.yml with
+ * `Authorization: Bearer $REPORTING_JOB_TOKEN` and `?asOfDate=` the Sydney
+ * day just ended (YYYY-MM-DD); without it, today in Sydney. A repeat call
+ * for the same day replaces that day's row.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
@@ -14,17 +15,10 @@ import { isReportingJobAuthorised } from '@/server/reporting/job-auth'
 import { saveSnapshot, toSnapshotRow } from '@/server/reporting/portfolio-snapshot'
 import { getDashboardPool } from '@/lib/dashboard-aggregates'
 import { sydneyDateString } from '@/lib/disbursement-cutoff'
-import { sydneyHour } from '@/server/reporting/scheduled'
 
 export async function POST(request: NextRequest) {
   if (!isReportingJobAuthorised(request)) {
     return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
-  }
-  // ?sydneyHour=23 makes the call a no-op outside that Sydney hour, so the
-  // workflow can fire at both daylight-saving offsets (BTB-507).
-  const hourParam = request.nextUrl.searchParams.get('sydneyHour')
-  if (hourParam !== null && Number(hourParam) !== sydneyHour()) {
-    return NextResponse.json({ skipped: `Not ${hourParam}:00 in Sydney` })
   }
   const requested = request.nextUrl.searchParams.get('asOfDate') ?? sydneyDateString(new Date())
   if (!/^\d{4}-\d{2}-\d{2}$/.test(requested)) {

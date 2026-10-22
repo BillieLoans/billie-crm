@@ -2324,11 +2324,11 @@ export interface ReportRun {
     | number
     | boolean
     | null;
-  outcome: 'ok' | 'timeout' | 'refused' | 'error';
+  outcome: 'ok' | 'sending' | 'timeout' | 'refused' | 'error';
   errorCode?: string | null;
   trigger?: ('view' | 'schedule') | null;
   /**
-   * Sydney date a scheduled delivery was sent for (YYYY-MM-DD)
+   * Sydney date a scheduled delivery claimed (YYYY-MM-DD). Delete a stuck "sending" run to let the day send again.
    */
   scheduledFor?: string | null;
   durationMs?: number | null;

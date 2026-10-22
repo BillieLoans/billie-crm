@@ -42,6 +42,7 @@ export const ReportRuns: CollectionConfig = {
       required: true,
       options: [
         { label: 'Succeeded', value: 'ok' },
+        { label: 'Sending', value: 'sending' },
         { label: 'Timed out', value: 'timeout' },
         { label: 'Refused', value: 'refused' },
         { label: 'Failed', value: 'error' },
@@ -58,10 +59,13 @@ export const ReportRuns: CollectionConfig = {
       ],
     },
     {
+      // Unique per report with reportSlug (payload.config.ts afterSchemaInit).
       name: 'scheduledFor',
       type: 'text',
-      index: true,
-      admin: { description: 'Sydney date a scheduled delivery was sent for (YYYY-MM-DD)' },
+      admin: {
+        description:
+          'Sydney date a scheduled delivery claimed (YYYY-MM-DD). Delete a stuck "sending" run to let the day send again.',
+      },
     },
     { name: 'durationMs', type: 'number' },
     { name: 'rowCount', type: 'number' },

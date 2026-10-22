@@ -40,7 +40,8 @@ import * as migration_20261006_090000_conversation_network from './20261006_0900
 import * as migration_20261020_090000_conversation_decision_metadata from './20261020_090000_conversation_decision_metadata';
 import * as migration_20261023_090000_reporting_schema from './20261023_090000_reporting_schema';
 import * as migration_20261024_090000_report_definitions from './20261024_090000_report_definitions';
-import * as migration_20261025_090000_first_reports from './20261025_090000_first_reports';
+import * as migration_20261025_090000_report_delivery from './20261025_090000_report_delivery';
+import * as migration_20261025_100000_first_reports from './20261025_100000_first_reports';
 
 export const migrations = [
   {
@@ -254,8 +255,13 @@ export const migrations = [
     name: '20261024_090000_report_definitions',
   },
   {
-    up: migration_20261025_090000_first_reports.up,
-    down: migration_20261025_090000_first_reports.down,
-    name: '20261025_090000_first_reports',
+    up: migration_20261025_090000_report_delivery.up,
+    down: migration_20261025_090000_report_delivery.down,
+    name: '20261025_090000_report_delivery',
+  },
+  {
+    up: migration_20261025_100000_first_reports.up,
+    down: migration_20261025_100000_first_reports.down,
+    name: '20261025_100000_first_reports',
   },
 ];
