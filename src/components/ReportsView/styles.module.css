@@ -63,6 +63,7 @@
 
 .reportLink:focus-visible,
 .textLink:focus-visible,
+.askLink:focus-visible,
 .sortButton:focus-visible,
 .primaryButton:focus-visible,
 .secondaryButton:focus-visible,
@@ -218,6 +219,58 @@
 .secondaryButton:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--theme-elevation-500, #767676);
+  border-radius: 6px;
+  background: var(--theme-input-bg, var(--theme-elevation-0, #fff));
+  color: var(--theme-text, #111);
+  font: inherit;
+  font-size: 14px;
+  resize: vertical;
+}
+
+.textarea:focus-visible {
+  outline: 2px solid var(--theme-success-500, #0ea5e9);
+  outline-offset: 2px;
+}
+
+.code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.sectionTitle {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0 0 0.25rem;
+  color: var(--theme-text, #111);
+}
+
+.subheading {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0 0 0.25rem;
+  color: var(--theme-text, #111);
+}
+
+.plainList {
+  margin: 0.25rem 0 0;
+  padding-left: 1.25rem;
+  font-size: 14px;
+  color: var(--theme-text, #111);
+}
+
+.askLink {
+  display: block;
+  margin: 0.25rem 0 0.75rem;
+  font-size: 14px;
+  color: var(--theme-text, #111);
+  text-decoration: underline;
 }
 
 /* Error summary (ux-standards §3) */

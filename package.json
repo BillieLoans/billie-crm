@@ -21,6 +21,7 @@
     "e2e:auth": "node scripts/e2e-auth.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.1.0",
     "@aws-sdk/client-s3": "^3.989.0",
     "@grpc/grpc-js": "^1.14.4",
     "@grpc/proto-loader": "^0.8.1",

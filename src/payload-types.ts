@@ -91,6 +91,7 @@ export interface Config {
     'disbursement-access-log': DisbursementAccessLog;
     'report-definitions': ReportDefinition;
     'report-runs': ReportRun;
+    'report-asks': ReportAsk;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -122,6 +123,7 @@ export interface Config {
     'disbursement-access-log': DisbursementAccessLogSelect<false> | DisbursementAccessLogSelect<true>;
     'report-definitions': ReportDefinitionsSelect<false> | ReportDefinitionsSelect<true>;
     'report-runs': ReportRunsSelect<false> | ReportRunsSelect<true>;
+    'report-asks': ReportAsksSelect<false> | ReportAsksSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -2297,6 +2299,8 @@ export interface ReportDefinition {
    * Who can run the published report. Authors can always run it.
    */
   roles: ('admin' | 'supervisor' | 'operations' | 'readonly')[];
+  author?: (string | null) | User;
+  origin?: ('manual' | 'ask') | null;
   schedule?: ('none' | 'weekly_monday') | null;
   updatedAt: string;
   createdAt: string;
@@ -2334,6 +2338,40 @@ export interface ReportRun {
   durationMs?: number | null;
   rowCount?: number | null;
   truncated?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "report-asks".
+ */
+export interface ReportAsk {
+  id: string;
+  user?: (string | null) | User;
+  kind: 'ask' | 'refine' | 'check';
+  question?: string | null;
+  refinement?: string | null;
+  outcome: 'ok' | 'invalid' | 'unanswerable' | 'refused' | 'invalid_output' | 'error';
+  model?: string | null;
+  effort?: string | null;
+  promptVersion?: string | null;
+  schemaVersion?: string | null;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  cacheReadTokens?: number | null;
+  cacheWriteTokens?: number | null;
+  latencyMs?: number | null;
+  errorCount?: number | null;
+  warningCount?: number | null;
+  definition?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -2456,6 +2494,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'report-runs';
         value: string | ReportRun;
+      } | null)
+    | ({
+        relationTo: 'report-asks';
+        value: string | ReportAsk;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -3395,6 +3437,8 @@ export interface ReportDefinitionsSelect<T extends boolean = true> {
   parameters?: T;
   chart?: T;
   roles?: T;
+  author?: T;
+  origin?: T;
   schedule?: T;
   updatedAt?: T;
   createdAt?: T;
@@ -3417,6 +3461,31 @@ export interface ReportRunsSelect<T extends boolean = true> {
   durationMs?: T;
   rowCount?: T;
   truncated?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "report-asks_select".
+ */
+export interface ReportAsksSelect<T extends boolean = true> {
+  user?: T;
+  kind?: T;
+  question?: T;
+  refinement?: T;
+  outcome?: T;
+  model?: T;
+  effort?: T;
+  promptVersion?: T;
+  schemaVersion?: T;
+  inputTokens?: T;
+  outputTokens?: T;
+  cacheReadTokens?: T;
+  cacheWriteTokens?: T;
+  latencyMs?: T;
+  errorCount?: T;
+  warningCount?: T;
+  definition?: T;
   updatedAt?: T;
   createdAt?: T;
 }

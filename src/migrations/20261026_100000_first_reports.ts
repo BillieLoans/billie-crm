@@ -6,6 +6,12 @@ import { FIRST_REPORTS, createFirstReports } from '../server/reporting/definitio
  * funnel, go-to-market numbers) in each environment. Reports are data, so
  * this only creates the ones whose slug is free; after this, authors own
  * them in the admin.
+ *
+ * It uses the Local API, which reads and writes every column of the
+ * *current* report-definitions config. On a fresh database (every migration
+ * replayed with today's code) it must therefore run after every migration
+ * that adds a report-definitions column. When you add one, give your
+ * migration an earlier timestamp than this one, or move this one later.
  */
 export async function up({ payload, req }: MigrateUpArgs): Promise<void> {
   const created = await createFirstReports(payload, req)

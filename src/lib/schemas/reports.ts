@@ -16,7 +16,7 @@ export type ReportViewerRole = (typeof REPORT_VIEWER_ROLES)[number]
 export const REPORT_AUTHOR_ROLES: readonly string[] = ['admin', 'supervisor']
 
 /** Slugs the `/api/reports/*` routes already use. */
-export const RESERVED_REPORT_SLUGS: readonly string[] = ['jobs']
+export const RESERVED_REPORT_SLUGS: readonly string[] = ['jobs', 'ask']
 
 export const REPORT_SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 

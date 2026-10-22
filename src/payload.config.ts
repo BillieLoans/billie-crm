@@ -33,6 +33,7 @@ import { ReleaseGateStatus } from './collections/ReleaseGateStatus'
 import { Issues } from './collections/Issues'
 import { ReportDefinitions } from './collections/ReportDefinitions'
 import { ReportRuns } from './collections/ReportRuns'
+import { ReportAsks } from './collections/ReportAsks'
 import { applyReportingSchema, dropReportingViews } from './server/reporting/schema'
 import { getDashboardPool } from './lib/dashboard-aggregates'
 
@@ -178,7 +179,7 @@ export default buildConfig({
       },
     },
   },
-  collections: [Users, Media, Customers, Conversations, Applications, LoanAccounts, WriteOffRequests, ReapplicationBlockClearRequests, ContactNotes, Notifications, CollectionsCases, Contacts, Interactions, ContactAuditLog, Batches, Feedback, ReleaseBatches, ReleaseGrants, ReleaseGateStatus, Issues, LlmCosts, DisbursementAccessLog, ReportDefinitions, ReportRuns],
+  collections: [Users, Media, Customers, Conversations, Applications, LoanAccounts, WriteOffRequests, ReapplicationBlockClearRequests, ContactNotes, Notifications, CollectionsCases, Contacts, Interactions, ContactAuditLog, Batches, Feedback, ReleaseBatches, ReleaseGrants, ReleaseGateStatus, Issues, LlmCosts, DisbursementAccessLog, ReportDefinitions, ReportRuns, ReportAsks],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || 'build-placeholder-not-for-production',
   typescript: {

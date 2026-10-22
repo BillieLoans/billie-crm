@@ -10,6 +10,7 @@ import { bindParameters, parameterDefault, type ReportParameter } from '@/lib/sc
 import { useReports, type ReportSpec, type ReportSummary } from '@/hooks/queries/useReports'
 import { ReportRunFailure, useReportRun, type ReportRunRequest } from '@/hooks/queries/useReportRun'
 import { ParameterForm, parameterInputId, type ParameterValues } from './ParameterForm'
+import { AskPanel } from './AskPanel'
 import { ReportChart } from './ReportChart'
 import { ReportTable } from './ReportTable'
 import { csvFileName, downloadText, toCsv } from './csv'
@@ -64,6 +65,15 @@ export function ReportsView({ slug }: ReportsViewProps) {
               </Link>
             )}
           </div>
+          {canAuthor && (
+            <Link
+              className={styles.askLink}
+              href="/admin/reports/ask"
+              aria-current={slug === 'ask' ? 'page' : undefined}
+            >
+              Ask Claude for a report
+            </Link>
+          )}
           {isLoading && <p className={styles.note}>Loading reports…</p>}
           {error && (
             <p className={styles.fieldError} role="alert">
@@ -94,7 +104,9 @@ export function ReportsView({ slug }: ReportsViewProps) {
         </nav>
 
         <div className={styles.main}>
-          {selected ? (
+          {slug === 'ask' && canAuthor ? (
+            <AskPanel />
+          ) : selected ? (
             <ReportEntry key={selected.slug} report={selected} canAuthor={canAuthor} />
           ) : slug && !isLoading && !error ? (
             <div data-testid="report-not-found">

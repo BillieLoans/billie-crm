@@ -41,7 +41,8 @@ import * as migration_20261020_090000_conversation_decision_metadata from './202
 import * as migration_20261023_090000_reporting_schema from './20261023_090000_reporting_schema';
 import * as migration_20261024_090000_report_definitions from './20261024_090000_report_definitions';
 import * as migration_20261025_090000_report_delivery from './20261025_090000_report_delivery';
-import * as migration_20261025_100000_first_reports from './20261025_100000_first_reports';
+import * as migration_20261026_090000_report_asks from './20261026_090000_report_asks';
+import * as migration_20261026_100000_first_reports from './20261026_100000_first_reports';
 
 export const migrations = [
   {
@@ -260,8 +261,13 @@ export const migrations = [
     name: '20261025_090000_report_delivery',
   },
   {
-    up: migration_20261025_100000_first_reports.up,
-    down: migration_20261025_100000_first_reports.down,
-    name: '20261025_100000_first_reports',
+    up: migration_20261026_090000_report_asks.up,
+    down: migration_20261026_090000_report_asks.down,
+    name: '20261026_090000_report_asks',
+  },
+  {
+    up: migration_20261026_100000_first_reports.up,
+    down: migration_20261026_100000_first_reports.down,
+    name: '20261026_100000_first_reports',
   },
 ];

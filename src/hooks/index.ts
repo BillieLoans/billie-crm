@@ -155,6 +155,8 @@ export { useReports, reportsKeys } from './queries/useReports'
 export type { ReportsResponse, ReportSummary, ReportSpec } from './queries/useReports'
 export { useReportRun, ReportRunFailure } from './queries/useReportRun'
 export type { ReportRunRequest, ReportRunResponse } from './queries/useReportRun'
+export { useAskClaude, useSaveAskDraft, AskClaudeFailure } from './mutations/useAskClaude'
+export type { AskClaudeParams, DraftOutcome } from './mutations/useAskClaude'
 
 // Conversation-kill mutation (End conversation)
 export { useKillConversation } from './mutations/useKillConversation'

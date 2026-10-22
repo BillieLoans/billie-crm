@@ -216,7 +216,7 @@ Setting up an environment (once, as the owner role):
 
 ## First reports (BTB-507)
 
-Delivered as data by the `20261025_100000_first_reports` migration, which
+Delivered as data by the `20261026_100000_first_reports` migration, which
 publishes each one whose slug is free. After that, authors own them in the
 admin. The definitions are in `src/server/reporting/definitions/first-reports.ts`
 and are checked against TEST data in `tests/int/first-reports.int.spec.ts`.
@@ -260,6 +260,64 @@ attachments. Without the key the job refuses to run.
 Set `REPORTS_EMAIL_LABEL=DEMO` on demo so its emails say `[DEMO]` in the
 subject and are not mistaken for production figures.
 
+## Ask Claude (BTB-508)
+
+Authors (admin, supervisor) open **Reports → Ask Claude for a report**
+(`/admin/reports/ask`), describe a report in words, and get a draft
+definition: title, description, SQL, parameters and chart. Claude is sent the
+question and the schema description in
+`src/server/reporting/schema-description.ts`, never result rows. The draft is
+then checked, run on its defaults through the runner as `reporting_reader`,
+and previewed. The author can ask for a change in words, or edit the SQL and
+"Check the edited SQL" (no Claude call). "Save as a draft report" creates an
+unpublished `report-definitions` draft with `origin: ask` and the author
+recorded; a supervisor publishes it from its edit page as usual. Nothing
+Claude writes runs anywhere but the runner, and nothing is published without
+a person.
+
+Checks (`src/server/reporting/ask/validate.ts`). Errors block saving:
+
+| Code | Error when |
+|---|---|
+| `TITLE`, `DESCRIPTION`, `PARAMETERS`, `CHART` | the field is missing or invalid |
+| `SQL`, `SCHEMA` | the SQL fails the runner's static check, or names a schema other than `reporting` |
+| `PLACEHOLDERS` | `$n` placeholders and parameters do not match one to one |
+| `RUN` | the query fails on its defaults |
+| `RATE_RANGE` | a `*_rate` column falls outside 0–1 or a `*_pct` outside 0–100 |
+
+Warnings are shown before saving: a parameter with no default (`NO_DEFAULT`),
+filtering on a `*_at` timestamp instead of the Sydney `*_on` date
+(`DATE_COLUMN`), reading `decision_event` (every revision) rather than
+`decision` (`DECISION_EVENT`), no `mock_origin` filter where decisions,
+applications or loans are read (`MOCK`), and an All/Total row that is not the
+sum of the other rows (`TOTAL`).
+
+Every request (ask, refine, check) is logged to **Report asks** (admin only):
+user, question, outcome, model, effort, prompt and schema-description
+versions, tokens, latency and the definition. The model call is in
+`src/server/reporting/ask/claude.ts`: structured output against the
+definition schema, the system prompt cached, server-side fallback on.
+Change `ASK_PROMPT_VERSION` or `SCHEMA_DESCRIPTION_VERSION` whenever the
+prompt or description changes, so logged results stay comparable.
+
+Without `ANTHROPIC_API_KEY` the panel answers that Ask is not configured; the
+rest of Reports is unaffected.
+
+### When the schema changes
+
+`schema-description.ts` must describe every view, table and column the
+reporting schema has; `tests/int/reporting-schema-description.int.spec.ts`
+fails when they drift. Describe what a column means and how to use it, not
+just its type, and add business rules there rather than in the prompt.
+
+### The benchmark
+
+`scripts/report-benchmark/` holds the R&D experiment: 40 questions with
+reference SQL, synthetic TEST data, a runner comparing raw DDL (H0) with the
+annotated description plus checks (H1), and a reviewer packet. It costs
+money to run and never runs in CI; see its README. The reference queries are
+drafts until a second engineer reviews each.
+
 ## Scheduling
 
 `.github/workflows/scheduled-reports.yml` calls both jobs. GitHub cron is UTC
@@ -296,3 +354,4 @@ workflow does not hold `CF_SECRET`.
 | `NEXT_PUBLIC_APP_URL` | Monday email | Already set for Payload; used for the report link |
 | `REPORTS_EMAIL_LABEL` | Monday email | `DEMO` on demo; unset on prod |
 | `REPORTING_DATABASE_URI` | report runner | Logged in as `reporting_reader`; the Neon read replica in deployed environments. Required everywhere |
+| `ANTHROPIC_API_KEY` | Ask Claude | Fly secret on the CRM app; Ask is unavailable without it |

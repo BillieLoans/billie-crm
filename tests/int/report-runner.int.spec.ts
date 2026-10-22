@@ -15,7 +15,7 @@ import { describe, it, beforeAll, afterAll, expect } from 'vitest'
 import type { Pool } from 'pg'
 import { getDashboardPool } from '@/lib/dashboard-aggregates'
 import { reportingReaderPool } from '../utils/reportingReader'
-import { ReportRunError, runReportSql } from '@/server/reporting/runner'
+import { ReportRunError, runReportSql, type RunOptions } from '@/server/reporting/runner'
 import { listReports, runReport } from '@/server/reporting/run-report'
 
 let payload: Payload

@@ -149,6 +149,29 @@ export const ReportDefinitions: CollectionConfig = {
       admin: { description: 'Who can run the published report. Authors can always run it.' },
     },
     {
+      name: 'author',
+      type: 'relationship',
+      relationTo: 'users',
+      admin: { position: 'sidebar', readOnly: true },
+      hooks: {
+        // Set once, from whoever creates the report.
+        beforeChange: [
+          ({ value, operation, req }) =>
+            operation === 'create' && !value && req.user ? req.user.id : value,
+        ],
+      },
+    },
+    {
+      name: 'origin',
+      type: 'select',
+      defaultValue: 'manual',
+      options: [
+        { label: 'Written by hand', value: 'manual' },
+        { label: 'Drafted with Claude', value: 'ask' },
+      ],
+      admin: { position: 'sidebar', readOnly: true },
+    },
+    {
       name: 'schedule',
       type: 'select',
       defaultValue: 'none',
