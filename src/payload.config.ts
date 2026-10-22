@@ -31,6 +31,8 @@ import { ReleaseBatches } from './collections/ReleaseBatches'
 import { ReleaseGrants } from './collections/ReleaseGrants'
 import { ReleaseGateStatus } from './collections/ReleaseGateStatus'
 import { Issues } from './collections/Issues'
+import { ReportDefinitions } from './collections/ReportDefinitions'
+import { ReportRuns } from './collections/ReportRuns'
 import { applyReportingSchema, dropReportingViews } from './server/reporting/schema'
 import { getDashboardPool } from './lib/dashboard-aggregates'
 
@@ -73,6 +75,7 @@ export default buildConfig({
         '@/components/navigation/NavPeriodCloseLink#NavPeriodCloseLink',
         '@/components/navigation/NavECLConfigLink#NavECLConfigLink',
         '@/components/navigation/NavExportsLink#NavExportsLink',
+        '@/components/navigation/NavReportsLink#NavReportsLink',
         '@/components/navigation/NavInvestigationLink#NavInvestigationLink',
         '@/components/navigation/NavMarketingLink#NavMarketingLink',
         '@/components/navigation/NavIssueReportsLink#NavIssueReportsLink',
@@ -166,10 +169,16 @@ export default buildConfig({
             '@/components/IssueReportsView/IssueReportsViewWithTemplate#IssueReportsViewWithTemplate',
           path: '/issue-reports/:segments*',
         },
+        // Reports (BTB-506). Definitions live in the report-definitions
+        // collection; /admin/reports does not collide with /admin/collections/*.
+        reports: {
+          Component: '@/components/ReportsView/ReportsViewWithTemplate#ReportsViewWithTemplate',
+          path: '/reports/:segments*',
+        },
       },
     },
   },
-  collections: [Users, Media, Customers, Conversations, Applications, LoanAccounts, WriteOffRequests, ReapplicationBlockClearRequests, ContactNotes, Notifications, CollectionsCases, Contacts, Interactions, ContactAuditLog, Batches, Feedback, ReleaseBatches, ReleaseGrants, ReleaseGateStatus, Issues, LlmCosts, DisbursementAccessLog],
+  collections: [Users, Media, Customers, Conversations, Applications, LoanAccounts, WriteOffRequests, ReapplicationBlockClearRequests, ContactNotes, Notifications, CollectionsCases, Contacts, Interactions, ContactAuditLog, Batches, Feedback, ReleaseBatches, ReleaseGrants, ReleaseGateStatus, Issues, LlmCosts, DisbursementAccessLog, ReportDefinitions, ReportRuns],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || 'build-placeholder-not-for-production',
   typescript: {

@@ -150,6 +150,12 @@ export type { ReportIssueParams, ReportIssueResult } from './mutations/useReport
 export { useResolveIssue } from './mutations/useResolveIssue'
 export type { ResolveIssueParams, ResolveIssueResult } from './mutations/useResolveIssue'
 
+// Reports (BTB-506)
+export { useReports, reportsKeys } from './queries/useReports'
+export type { ReportsResponse, ReportSummary } from './queries/useReports'
+export { useRunReport, ReportRunFailure } from './mutations/useRunReport'
+export type { RunReportParams, ReportRunResponse } from './mutations/useRunReport'
+
 // Conversation-kill mutation (End conversation)
 export { useKillConversation } from './mutations/useKillConversation'
 export type { KillConversationResult } from './mutations/useKillConversation'

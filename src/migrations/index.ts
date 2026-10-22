@@ -39,6 +39,7 @@ import * as migration_20261005_090000_conversation_attribution from './20261005_
 import * as migration_20261006_090000_conversation_network from './20261006_090000_conversation_network';
 import * as migration_20261020_090000_conversation_decision_metadata from './20261020_090000_conversation_decision_metadata';
 import * as migration_20261023_090000_reporting_schema from './20261023_090000_reporting_schema';
+import * as migration_20261024_090000_report_definitions from './20261024_090000_report_definitions';
 
 export const migrations = [
   {
@@ -245,5 +246,10 @@ export const migrations = [
     up: migration_20261023_090000_reporting_schema.up,
     down: migration_20261023_090000_reporting_schema.down,
     name: '20261023_090000_reporting_schema',
+  },
+  {
+    up: migration_20261024_090000_report_definitions.up,
+    down: migration_20261024_090000_report_definitions.down,
+    name: '20261024_090000_report_definitions',
   },
 ];

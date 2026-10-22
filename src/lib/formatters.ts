@@ -156,3 +156,13 @@ export function formatUsd(amount: number | null | undefined): string {
   if (amount == null || Number.isNaN(amount)) return '—'
   return usdCostFormatter.format(amount)
 }
+
+/** Australian number formatter with digit grouping (e.g. 12,345.6). */
+export const numberFormatter = new Intl.NumberFormat('en-AU', { maximumFractionDigits: 2 })
+
+/** Format a count or measure for display; non-numbers pass through as text. */
+export function formatNumber(value: number | string | null | undefined): string {
+  if (value === null || value === undefined || value === '') return ''
+  const n = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(n) ? numberFormatter.format(n) : String(value)
+}

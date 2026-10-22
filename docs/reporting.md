@@ -131,8 +131,67 @@ token configured every call is refused. Calls through Cloudflare also need the
 `x-origin-secret` header like any other request. Schedule it daily at 23:50
 Australia/Sydney.
 
+## Reports (BTB-506)
+
+A report is a document in the `report-definitions` collection, not code:
+SQL over the `reporting` schema, a parameter list, an optional chart and the
+roles that may run it. Publishing a new version changes the report with no
+deploy. Staff run reports at `/admin/reports`; authors (admin, supervisor)
+edit them at `/admin/collections/report-definitions`.
+
+### Writing a report
+
+- One `SELECT` or `WITH` statement. Unqualified names resolve in `reporting`.
+- Parameter N is `$N`, in the order the parameters are listed. Every
+  parameter must be used and nothing beyond them. Cast where Postgres cannot
+  infer the type: `$1::date`.
+- Parameters: `{name, label, type, required, default, options, help}`. Types
+  `date`, `text`, `integer`, `number`, `select`, `boolean`. Date defaults are
+  `today`, `today-N` or `YYYY-MM-DD`, resolved in Sydney when the report
+  runs. A report whose parameters all have defaults runs as soon as it opens.
+- Chart (optional): `{type: line | bar | area, x, series: [{column, label}],
+  stacked}`. One y-axis; up to eight series; series must be numeric columns.
+- Save as a draft, tick "Run the latest draft" in the Reports view to try it,
+  then publish. Viewers only ever run the published version.
+
+### The runner
+
+`src/server/reporting/runner.ts` is the only path a report query takes. Each
+run:
+
+1. passes `sql-guard.ts` (single statement, SELECT or WITH, no `set_config`);
+2. opens a `READ ONLY` transaction and `SET LOCAL ROLE reporting_reader`;
+3. sets `statement_timeout` to 15 s and `search_path` to `reporting`;
+4. binds parameters, never interpolates;
+5. wraps the SQL as `SELECT * FROM (…) LIMIT 50001`, which caps the rows at
+   50,000 (the view says when it cut) and makes a second statement or a
+   data-modifying CTE a Postgres error;
+6. rolls back.
+
+Every run, refused ones included, is logged to `report-runs`: report,
+published version id (or `draft`), user, bound parameters, outcome, duration,
+rows. Only admins can read the log; nobody can change it through the API.
+Database error text is shown to authors only.
+
+### Connection and isolation
+
+| Environment | Connection | Isolation |
+|---|---|---|
+| prod, demo | `REPORTING_DATABASE_URI`: Neon read replica, logged in as `reporting_reader` | the login role; the runner refuses any other login when `NODE_ENV=production` |
+| dev, test | falls back to `DATABASE_URI` | `SET LOCAL ROLE reporting_reader`, backed by the guard refusing `set_config` |
+
+Setting up an environment (once, as the owner role):
+
+1. In Neon, add a read replica (read-only compute) to the CRM project.
+2. Create `reporting_reader` with a generated password (see "Roles and
+   grants" above), then re-run the reporting migration's grant block.
+3. `fly secrets set REPORTING_DATABASE_URI=postgresql://reporting_reader:…@<replica-host>/<db>?sslmode=verify-full`
+   on the CRM app. Without it, reports answer "Reporting is not configured".
+
+
 ## Environment
 
 | Variable | Used by | Notes |
 |---|---|---|
 | `REPORTING_JOB_TOKEN` | scheduled jobs | Long random string, Fly secret |
+| `REPORTING_DATABASE_URI` | report runner | Neon read replica as `reporting_reader`; required in deployed environments |

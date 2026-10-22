@@ -61,6 +61,7 @@ ruff check .                        # Lint Python
 ### Data flow — read/write split
 - **Reads**: Payload reads from Postgres (collections) and gRPC (ledger service for transactions/balances).
 - **Writes to Postgres**: Only the Python event processor writes domain data (accounts, customers, conversations) — Payload treats these collections as **read-only projections** via `create/update/delete: () => false` access. Do not add Payload hooks or API routes that mutate these collections directly.
+- **Reporting** (`docs/reporting.md`): reports read only the `reporting` schema, through `src/server/reporting/runner.ts`. `report-definitions` (report SQL, parameters, chart, roles; drafts and versions) and `report-runs` (append-only run log) are CRM-owned configuration, not projections, and are the exception to the rule above. Report SQL never runs anywhere but the runner.
 - **Writes to Ledger**: Payload API routes (`src/app/api/ledger/`) call gRPC to post transactions (repayments, fees, write-offs, adjustments).
 - **CRM-originated events**: Payload publishes events to Redis stream `inbox:billie-servicing:internal` via `src/server/event-publisher.ts`. The Python processor consumes these alongside external events.
 

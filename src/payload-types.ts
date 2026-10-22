@@ -89,6 +89,8 @@ export interface Config {
     issues: Issue;
     'llm-costs': LlmCost;
     'disbursement-access-log': DisbursementAccessLog;
+    'report-definitions': ReportDefinition;
+    'report-runs': ReportRun;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -118,6 +120,8 @@ export interface Config {
     issues: IssuesSelect<false> | IssuesSelect<true>;
     'llm-costs': LlmCostsSelect<false> | LlmCostsSelect<true>;
     'disbursement-access-log': DisbursementAccessLogSelect<false> | DisbursementAccessLogSelect<true>;
+    'report-definitions': ReportDefinitionsSelect<false> | ReportDefinitionsSelect<true>;
+    'report-runs': ReportRunsSelect<false> | ReportRunsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -2248,6 +2252,87 @@ export interface DisbursementAccessLog {
   createdAt: string;
 }
 /**
+ * Report definitions. Staff run published reports from Reports in the sidebar.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "report-definitions".
+ */
+export interface ReportDefinition {
+  id: string;
+  title: string;
+  /**
+   * Used in the report link: /admin/reports/<slug>
+   */
+  slug: string;
+  description?: string | null;
+  /**
+   * One SELECT or WITH statement over the reporting schema (docs/reporting.md). Read parameter 1 as $1, parameter 2 as $2, and so on.
+   */
+  sql: string;
+  /**
+   * A list of {name, label, type, required, default, options, help}. Types: date, text, integer, number, select, boolean. Date defaults: today, today-N or YYYY-MM-DD.
+   */
+  parameters?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Optional: {type: line | bar | area, x: column, series: [{column, label}], stacked}.
+   */
+  chart?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Who can run the published report. Authors can always run it.
+   */
+  roles: ('admin' | 'supervisor' | 'operations' | 'readonly')[];
+  schedule?: ('none' | 'weekly_monday') | null;
+  updatedAt: string;
+  createdAt: string;
+  _status?: ('draft' | 'published') | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "report-runs".
+ */
+export interface ReportRun {
+  id: string;
+  reportSlug?: string | null;
+  report?: (string | null) | ReportDefinition;
+  /**
+   * Published version id, or "draft"
+   */
+  version?: string | null;
+  user?: (string | null) | User;
+  parameters?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  outcome: 'ok' | 'timeout' | 'refused' | 'error';
+  errorCode?: string | null;
+  durationMs?: number | null;
+  rowCount?: number | null;
+  truncated?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
@@ -2358,6 +2443,14 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'disbursement-access-log';
         value: string | DisbursementAccessLog;
+      } | null)
+    | ({
+        relationTo: 'report-definitions';
+        value: string | ReportDefinition;
+      } | null)
+    | ({
+        relationTo: 'report-runs';
+        value: string | ReportRun;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -3282,6 +3375,41 @@ export interface DisbursementAccessLogSelect<T extends boolean = true> {
   actor?: T;
   actorEmail?: T;
   occurredAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "report-definitions_select".
+ */
+export interface ReportDefinitionsSelect<T extends boolean = true> {
+  title?: T;
+  slug?: T;
+  description?: T;
+  sql?: T;
+  parameters?: T;
+  chart?: T;
+  roles?: T;
+  schedule?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  _status?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "report-runs_select".
+ */
+export interface ReportRunsSelect<T extends boolean = true> {
+  reportSlug?: T;
+  report?: T;
+  version?: T;
+  user?: T;
+  parameters?: T;
+  outcome?: T;
+  errorCode?: T;
+  durationMs?: T;
+  rowCount?: T;
+  truncated?: T;
   updatedAt?: T;
   createdAt?: T;
 }
