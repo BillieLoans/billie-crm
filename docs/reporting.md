@@ -338,20 +338,30 @@ through the runner as `reporting_reader`.
 | Tool | Does |
 |---|---|
 | `describe_reporting_schema` | Returns the schema description and business rules Ask Claude uses |
-| `run_report_query` | Runs one SELECT through the runner, `$n` parameters bound, at most 1,000 rows (and 200,000 characters). Logged in Report asks as `mcp_query` |
-| `run_report` | Runs a published report by slug on its parameters. Logged in Report runs with trigger `mcp`. Dashboards use this, so they show reviewed, aggregate reports |
-| `findReportDefinitions`, `createReportDefinitions`, `updateReportDefinitions` | The plugin's tools for `report-definitions`. Every write is a draft (`mcpDraftsOnly`): an update writes a new draft version and leaves the published report alone; bulk updates and deletes are refused. New reports get `origin: mcp` and the key's person as author |
+| `run_report_query` | Runs one SELECT through the runner, `$n` parameters bound, at most 1,000 rows (and 200,000 characters). The whole statement is logged in Report asks as `mcp_query` |
+| `run_report` | Runs a published report by slug on its parameters, with the same caps. Logged in Report runs with trigger `mcp`. Dashboards use this, so they show reviewed, aggregate reports |
+| `findReportDefinitions`, `createReportDefinitions` | The plugin's tools for `report-definitions`. Reads are always depth 0, so no user record reaches Claude. A new report is a draft with `origin: mcp` and the key's person as author |
+| `update_report_draft` | Changes a report by id and saves a new draft version; the published report is unchanged until a supervisor publishes. Never overrides an editor's lock. (The plugin's own update tool is off: it takes a server file path that it reads before any hook runs) |
+
+Every write over MCP is a draft (`mcpDraftsOnly` in `ReportDefinitions.ts`);
+bulk updates and deletes are refused. Reports keep up to 500 versions, so
+drafting does not push published versions out of the history. The tools use
+their own pool of two reporting connections, so a busy agent cannot hold up
+the Reports view or the scheduled jobs.
 
 Keys:
 
 - An admin creates one per person in **Reporting → MCP API keys**, for report
-  authors (admin, supervisor) only. The key is generated on save; copy it
-  from the key's page to the person. Delete the key to revoke it.
-- The report tools (find, create, update) are off on a new key; tick the
+  authors (admin, supervisor) only. The key is generated on save and can be
+  read on the key's page for 15 minutes: copy it to the person then. If it
+  is lost, delete the key and create another. Delete a key to revoke it.
+- The plugin's report tools (find, create) are off on a new key; tick the
   ones the person needs. The custom tools are on; untick any a key should
   not have (for example, a dashboard key needs only `run_report`).
-- Every request re-checks that the key's person is still a report author,
-  so changing their role revokes the key.
+- Every request re-checks that the key's person is still a report author.
+  When someone stops being one, or is deleted, their keys are deleted
+  (`mcp-keys.ts`), so promoting them again later does not revive an old
+  key.
 - Keys are not Payload logins. The plugin makes its key collection an auth
   collection; `restrictApiKeys` removes that, so a key works at `/api/mcp`
   and nowhere else. It is stored encrypted with `PAYLOAD_SECRET`, and found

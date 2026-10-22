@@ -4,33 +4,39 @@
  * Reports view, at `POST /api/mcp`.
  *
  * Built on `@payloadcms/plugin-mcp`, which provides the endpoint, the
- * per-key switches (`payload-mcp-api-keys`) and find/create/update tools for
+ * per-key switches (`payload-mcp-api-keys`) and find/create tools for
  * `report-definitions`. Around it:
  *
  * - Only admins mint, see or revoke keys, and only for report authors
  *   (admin, supervisor). Every request re-checks that the key's person is
- *   still an author, so changing their role revokes the key too.
- * - Report definitions: find, create and update, never delete. Every write
- *   is a draft (`ReportDefinitions` forces it for MCP requests), so nothing
- *   is published without a person in the admin.
+ *   still an author, and a person's keys are deleted when they stop being
+ *   one (`mcp-keys.ts`).
+ * - Report definitions: find and create from the plugin, and our own
+ *   `update_report_draft` (the plugin's update tool takes a server file path
+ *   it reads before any hook runs). Never delete. Every write is a draft and
+ *   every read has depth 0 (`mcpDraftsOnly`), so nothing is published
+ *   without a person in the admin and no user record reaches Claude.
  * - Custom tools: `describe_reporting_schema`, `run_report_query` (SQL
  *   through the runner as `reporting_reader`, `MCP_ROW_CAP` rows) and
  *   `run_report` (a report by slug, for dashboards built on reviewed,
- *   aggregate reports).
+ *   aggregate reports), on a connection pool of their own so a busy agent
+ *   cannot hold up the Reports view or the scheduled jobs.
  *
  * Over MCP, Claude sees query results. That is why only the `reporting`
  * schema is reachable (the runner's login role) and rows are capped.
  * Every query is logged: `run_report` in Report runs, `run_report_query` in
  * Report asks.
  */
-import { createHmac, randomBytes } from 'node:crypto'
+import { randomBytes } from 'node:crypto'
 import { mcpPlugin } from '@payloadcms/plugin-mcp'
 import type { CollectionConfig, Payload, PayloadRequest } from 'payload'
 import { Forbidden, UnauthorizedError, ValidationError } from 'payload'
 import { z } from 'zod/v3'
 import { hideFromNonAdmins, isAdmin } from '@/lib/access'
+import { REPORT_VIEWER_ROLES } from '@/lib/schemas/reports'
 import { isReportAuthor, runReport } from './run-report'
-import { ReportRunError, runReportSql } from './runner'
+import { ReportRunError, getReportingPool, runReportSql } from './runner'
+import { MCP_API_KEYS_SLUG, apiKeyIndex } from './mcp-keys'
 import { renderSchemaDescription, SCHEMA_DESCRIPTION_VERSION } from './schema-description'
 
 /** Rows a tool returns. Lower than the Reports view's cap: Claude reads them. */
@@ -38,7 +44,10 @@ export const MCP_ROW_CAP = 1_000
 /** Characters of JSON a tool returns; rows past it are dropped. */
 export const MCP_MAX_RESULT_CHARS = 200_000
 
-export const MCP_API_KEYS_SLUG = 'payload-mcp-api-keys' as const
+/** How long after creation an admin can read a key, to hand it over. */
+export const MCP_KEY_VISIBLE_MS = 15 * 60_000
+
+export { MCP_API_KEYS_SLUG, apiKeyIndex }
 
 type ToolResult = { content: Array<{ type: 'text'; text: string }> }
 
@@ -76,7 +85,8 @@ async function logQuery(
       data: {
         user: (user as { id?: string } | null)?.id ?? null,
         kind: 'mcp_query',
-        question: sql.slice(0, 2000),
+        // The whole statement (at most 20,000 characters), so the log shows what ran.
+        question: sql,
         outcome,
         schemaVersion: SCHEMA_DESCRIPTION_VERSION,
         latencyMs: typeof detail.durationMs === 'number' ? detail.durationMs : undefined,
@@ -133,7 +143,10 @@ export const reportingTools: ReportingTool[] = [
       const sql = String(args.sql ?? '')
       const values = Array.isArray(args.parameters) ? args.parameters : []
       try {
-        const result = await runReportSql(sql, values, { rowCap: MCP_ROW_CAP })
+        const result = await runReportSql(sql, values, {
+          rowCap: MCP_ROW_CAP,
+          pool: await getReportingPool('mcp'),
+        })
         const fitted = fitRows(result.rows)
         await logQuery(req.payload, req.user, sql, 'ok', {
           rowCount: result.rowCount,
@@ -180,7 +193,7 @@ export const reportingTools: ReportingTool[] = [
           parameters: (args.parameters as Record<string, unknown> | undefined) ?? {},
           trigger: 'mcp',
         },
-        { rowCap: MCP_ROW_CAP },
+        { rowCap: MCP_ROW_CAP, pool: await getReportingPool('mcp') },
       )
       if (outcome.status !== 200) {
         return text(`Error: ${outcome.body.error.code}: ${outcome.body.error.message}`)
@@ -194,12 +207,49 @@ export const reportingTools: ReportingTool[] = [
       })
     },
   },
+  {
+    name: 'update_report_draft',
+    description:
+      'Change a report definition by id (find ids with findReportDefinitions). Saves a new draft version for a supervisor to publish; the published report, if any, is unchanged until then. Send only the fields to change.',
+    parameters: {
+      id: z.string().min(1).max(100),
+      title: z.string().min(1).max(120).optional(),
+      description: z.string().max(1000).optional(),
+      sql: z.string().min(1).max(20_000).optional(),
+      parameters: z
+        .array(z.record(z.string(), z.unknown()))
+        .max(20)
+        .optional()
+        .describe(
+          'The whole parameter list: {name, label, type, required, default, options, help}',
+        ),
+      chart: z.record(z.string(), z.unknown()).nullable().optional(),
+      roles: z.array(z.enum(REPORT_VIEWER_ROLES)).optional(),
+      schedule: z.enum(['none', 'weekly_monday']).optional(),
+    },
+    handler: async (args: Record<string, unknown>, req: PayloadRequest) => {
+      assertAuthor(req)
+      const { id, ...changes } = args
+      try {
+        const doc = await req.payload.update({
+          collection: 'report-definitions',
+          id: String(id),
+          data: changes as never,
+          draft: true,
+          depth: 0,
+          overrideAccess: false,
+          overrideLock: false,
+          req,
+        })
+        return json({ id: doc.id, slug: doc.slug, title: doc.title, status: 'draft' })
+      } catch (error) {
+        return text(
+          `Error: ${error instanceof Error ? error.message : 'The draft could not be saved.'}`,
+        )
+      }
+    },
+  },
 ]
-
-/** The HMAC a key is found by; the key itself is stored encrypted. */
-export function apiKeyIndex(secret: string, key: string): string {
-  return createHmac('sha256', secret).update(key).digest('hex')
-}
 
 const adminOnly = ({ req }: { req: PayloadRequest }) => isAdmin(req.user)
 
@@ -210,8 +260,9 @@ const adminOnly = ({ req }: { req: PayloadRequest }) => isAdmin(req.user)
  * The plugin makes it a Payload auth collection (`useAPIKey`). That would
  * also let every key log in to the REST API and admin as a principal of its
  * own, so `auth` is removed and `authenticateMcp` checks keys instead, the
- * same way Payload does: an HMAC index to find the key, the key encrypted
- * with the app secret so an admin can copy it.
+ * same way Payload does: an HMAC index to find the key, and the key
+ * encrypted with the app secret. An admin can read it only for
+ * `MCP_KEY_VISIBLE_MS` after creating it, to hand it over.
  */
 export function restrictApiKeys(collection: CollectionConfig): CollectionConfig {
   const { auth: _auth, ...plain } = collection
@@ -235,12 +286,19 @@ export function restrictApiKeys(collection: CollectionConfig): CollectionConfig 
         admin: {
           readOnly: true,
           description:
-            'Generated when the key is saved. The person adds it to Claude as a bearer token.',
+            'Generated when the key is saved and shown for 15 minutes: copy it to the person, who adds it to Claude as a bearer token. If it is lost, delete the key and create another.',
         },
         access: { update: () => false },
         hooks: {
           beforeChange: [({ req, value }) => (value ? req.payload.encrypt(value) : value)],
-          afterRead: [({ req, value }) => (value ? req.payload.decrypt(value) : value)],
+          afterRead: [
+            ({ req, value, siblingData }) => {
+              const created = Date.parse(String(siblingData?.createdAt ?? ''))
+              const fresh = Number.isFinite(created) && Date.now() - created < MCP_KEY_VISIBLE_MS
+              // null, not undefined: undefined keeps the stored (encrypted) value.
+              return value && fresh ? req.payload.decrypt(value) : null
+            },
+          ],
         },
       },
       {
@@ -312,7 +370,8 @@ export const reportingMcp = mcpPlugin({
     'report-definitions': {
       description:
         'Report definitions: title, description, SQL over the reporting schema, parameters and chart. Writes over MCP are always saved as drafts for a supervisor to publish.',
-      enabled: { find: true, create: true, update: true, delete: false },
+      // No plugin update or delete: see update_report_draft.
+      enabled: { find: true, create: true, update: false, delete: false },
     },
   },
   mcp: {
@@ -320,7 +379,7 @@ export const reportingMcp = mcpPlugin({
     serverOptions: {
       serverInfo: { name: 'Billie CRM reporting', version: '1.0.0' },
       instructions:
-        'Billie CRM reporting. Call describe_reporting_schema before writing SQL, test it with run_report_query, then save it with createReportDefinitions (always a draft). Prefer aggregates; never pull customer-level rows you do not need.',
+        'Billie CRM reporting. Call describe_reporting_schema before writing SQL, test it with run_report_query, then save it with createReportDefinitions or update_report_draft (always a draft). Prefer aggregates; never pull customer-level rows you do not need.',
     },
   },
   overrideApiKeyCollection: restrictApiKeys,

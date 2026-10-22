@@ -13,7 +13,7 @@ import { describe, it, beforeAll, afterAll, expect } from 'vitest'
 import type { Pool } from 'pg'
 import { getDashboardPool } from '@/lib/dashboard-aggregates'
 import { getReportingPool } from '@/server/reporting/runner'
-import { MCP_API_KEYS_SLUG } from '@/server/reporting/mcp'
+import { MCP_API_KEYS_SLUG, MCP_KEY_VISIBLE_MS } from '@/server/reporting/mcp'
 import { reportingReaderPool, reportingReaderUri } from '../utils/reportingReader'
 
 const P = 'TEST-BTB509'
@@ -120,7 +120,7 @@ beforeAll(async () => {
       label: `${P} supervisor`,
       user: users.supervisor.id,
       // Report tools are off on a new key until an admin turns them on.
-      reportDefinitions: { find: true, create: true, update: true },
+      reportDefinitions: { find: true, create: true },
     } as never,
     overrideAccess: false,
     user: { ...users.admin, collection: 'users' } as never,
@@ -131,7 +131,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await cleanup()
   await reader?.end()
-  await (await getReportingPool()).end()
+  await (await getReportingPool('mcp')).end()
   process.env.REPORTING_DATABASE_URI = previousReportingUri
 })
 
@@ -144,6 +144,29 @@ describe('MCP API keys', () => {
     )
     expect(rows[0].api_key).not.toContain(key)
     expect(rows[0].api_key_index).toMatch(/^[0-9a-f]{64}$/)
+  })
+
+  it('can be read back only for a short time after creation', async () => {
+    const [doc] = (
+      await payload.find({
+        collection: MCP_API_KEYS_SLUG,
+        where: { label: { equals: `${P} supervisor` } },
+        overrideAccess: true,
+      })
+    ).docs as unknown as Array<{ id: string; apiKey?: string }>
+    expect(doc.apiKey).toBe(key)
+    await pool.query(
+      `UPDATE payload_mcp_api_keys SET created_at = now() - make_interval(secs => $1) WHERE id = $2`,
+      [MCP_KEY_VISIBLE_MS / 1000 + 60, doc.id],
+    )
+    const later = (await payload.findByID({
+      collection: MCP_API_KEYS_SLUG,
+      id: doc.id,
+      overrideAccess: true,
+    })) as unknown as { apiKey?: string }
+    expect(later.apiKey ?? null).toBeNull()
+    // The key still works: only reading it back is closed.
+    expect((await rpc('tools/list', {}, key)).status).toBe(200)
   })
 
   it('are managed by admins only, and issued to report authors only', async () => {
@@ -187,7 +210,7 @@ describe('MCP API keys', () => {
 })
 
 describe('MCP tools', () => {
-  it('lists the reporting tools and report find/create/update, never delete', async () => {
+  it('lists the reporting tools and report find/create, never the plugin update or delete', async () => {
     const r = await rpc('tools/list', {}, key)
     expect(r.status).toBe(200)
     const names = r.body?.result?.tools?.map((t) => t.name) ?? []
@@ -196,11 +219,13 @@ describe('MCP tools', () => {
         'describe_reporting_schema',
         'run_report_query',
         'run_report',
+        'update_report_draft',
         'findReportDefinitions',
         'createReportDefinitions',
-        'updateReportDefinitions',
       ]),
     )
+    // The plugin's update takes a server file path, read before any hook runs.
+    expect(names).not.toContain('updateReportDefinitions')
     expect(names.some((n) => /delete/i.test(n))).toBe(false)
   })
 
@@ -268,12 +293,11 @@ describe('MCP tools', () => {
       } as never,
       overrideAccess: true,
     })
-    const updated = await callText('updateReportDefinitions', {
+    const updated = await callText('update_report_draft', {
       id: published.id,
       title: `${P} published, changed`,
-      _status: 'published',
     })
-    expect(updated).toMatch(/updated successfully/i)
+    expect(JSON.parse(updated)).toMatchObject({ status: 'draft' })
     const live = await payload.findByID({
       collection: 'report-definitions',
       id: published.id,
@@ -299,28 +323,70 @@ describe('MCP tools', () => {
     expect(runs.docs[0]).toMatchObject({ trigger: 'mcp', outcome: 'ok' })
   })
 
-  it('refuses a bulk update', async () => {
-    const text = await callText('updateReportDefinitions', {
-      where: JSON.stringify({ slug: { like: 'test-btb509' } }),
-      title: `${P} everything`,
-    })
-    expect(text).toMatch(/error|not allowed/i)
-    const { docs } = await payload.find({
-      collection: 'report-definitions',
-      where: { title: { equals: `${P} everything` } },
+  it("never returns the author's user record, whatever depth is asked for", async () => {
+    const text = await callText('findReportDefinitions', {
+      where: JSON.stringify({ slug: { equals: 'test-btb509-decisions' } }),
+      depth: 3,
       draft: true,
-      overrideAccess: true,
     })
-    expect(docs).toHaveLength(0)
+    expect(text).toContain('test-btb509-decisions')
+    expect(text).not.toContain('test-btb509-supervisor')
+    expect(text).not.toMatch(/"email"/)
   })
 
-  it('a key stops working when its person is no longer a report author', async () => {
+  it('refuses a bulk update and a delete, even through the Local API on an MCP request', async () => {
+    const req = { payloadAPI: 'MCP', user: { ...users.supervisor, collection: 'users' } }
+    await expect(
+      payload.update({
+        collection: 'report-definitions',
+        where: { slug: { like: 'test-btb509' } },
+        data: { title: `${P} everything` },
+        req: req as never,
+        overrideAccess: false,
+      }),
+    ).rejects.toThrow()
+    await expect(
+      payload.delete({
+        collection: 'report-definitions',
+        where: { slug: { like: 'test-btb509' } },
+        req: req as never,
+        overrideAccess: false,
+      }),
+    ).rejects.toThrow()
+  })
+
+  it('a key is deleted when its person is no longer a report author', async () => {
     await payload.update({
       collection: 'users',
       id: users.supervisor.id,
       data: { role: 'operations' },
       overrideAccess: true,
     })
-    expect((await rpc('tools/list', {}, key)).status).toBe(403)
+    expect((await rpc('tools/list', {}, key)).status).toBe(401)
+    // Promoting them again does not bring the old key back.
+    await payload.update({
+      collection: 'users',
+      id: users.supervisor.id,
+      data: { role: 'supervisor' },
+      overrideAccess: true,
+    })
+    expect((await rpc('tools/list', {}, key)).status).toBe(401)
+  })
+
+  it("a deleted person's keys go with them", async () => {
+    const admin = { ...users.admin, collection: 'users' }
+    const created = await payload.create({
+      collection: MCP_API_KEYS_SLUG,
+      data: { label: `${P} admin`, user: users.admin.id } as never,
+      overrideAccess: false,
+      user: admin as never,
+    })
+    await payload.delete({ collection: 'users', id: users.admin.id, overrideAccess: true })
+    const left = await payload.find({
+      collection: MCP_API_KEYS_SLUG,
+      where: { id: { equals: created.id } },
+      overrideAccess: true,
+    })
+    expect(left.docs).toHaveLength(0)
   })
 })

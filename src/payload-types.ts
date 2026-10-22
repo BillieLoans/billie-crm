@@ -2406,10 +2406,6 @@ export interface PayloadMcpApiKey {
      * Allow clients to create report-definitions.
      */
     create?: boolean | null;
-    /**
-     * Allow clients to update report-definitions.
-     */
-    update?: boolean | null;
   };
   'payload-mcp-tool'?: {
     /**
@@ -2424,9 +2420,13 @@ export interface PayloadMcpApiKey {
      * Run a published report by its slug on the given parameters (blank ones take their defaults) and return its columns and rows. Find slugs with findReportDefinitions. Dashboards should use this, so they show reviewed, aggregate reports only.
      */
     runReport?: boolean | null;
+    /**
+     * Change a report definition by id (find ids with findReportDefinitions). Saves a new draft version for a supervisor to publish; the published report, if any, is unchanged until then. Send only the fields to change.
+     */
+    updateReportDraft?: boolean | null;
   };
   /**
-   * Generated when the key is saved. The person adds it to Claude as a bearer token.
+   * Generated when the key is saved and shown for 15 minutes: copy it to the person, who adds it to Claude as a bearer token. If it is lost, delete the key and create another.
    */
   apiKey?: string | null;
   apiKeyIndex?: string | null;
@@ -3564,7 +3564,6 @@ export interface PayloadMcpApiKeysSelect<T extends boolean = true> {
     | {
         find?: T;
         create?: T;
-        update?: T;
       };
   'payload-mcp-tool'?:
     | T
@@ -3572,6 +3571,7 @@ export interface PayloadMcpApiKeysSelect<T extends boolean = true> {
         describeReportingSchema?: T;
         runReportQuery?: T;
         runReport?: T;
+        updateReportDraft?: T;
       };
   apiKey?: T;
   apiKeyIndex?: T;

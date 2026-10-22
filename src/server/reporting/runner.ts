@@ -136,24 +136,39 @@ const typeParsers = {
   },
 }
 
-let sharedPool: Promise<Pool> | undefined
+const pools = new Map<string, Promise<Pool>>()
 
-/** The pool for the reporting connection, created once on first use. */
-export function getReportingPool(): Promise<Pool> {
+/**
+ * The pool for the reporting connection, created once per purpose on first
+ * use. The MCP connector (BTB-509) has its own, smaller pool, so an agent
+ * running queries cannot hold every connection the Reports view and the
+ * scheduled jobs need.
+ */
+export function getReportingPool(purpose: 'reports' | 'mcp' = 'reports'): Promise<Pool> {
   const connectionString = process.env.REPORTING_DATABASE_URI
   if (!connectionString) {
     return Promise.reject(
       new ReportRunError('UNAVAILABLE', 'Reporting is not configured in this environment'),
     )
   }
-  sharedPool ??= import('pg').then(({ Pool: PgPool }) => {
-    const pool = new PgPool({ connectionString, max: 4, idleTimeoutMillis: 30_000 })
-    // An idle client dropped by the server (a replica restart, a network
-    // blip) emits 'error' on the pool; unhandled, it would crash the process.
-    pool.on('error', (error) => console.error('[reports] idle reporting connection failed:', error))
-    return pool
-  })
-  return sharedPool
+  let pool = pools.get(purpose)
+  if (!pool) {
+    pool = import('pg').then(({ Pool: PgPool }) => {
+      const created = new PgPool({
+        connectionString,
+        max: purpose === 'mcp' ? 2 : 4,
+        idleTimeoutMillis: 30_000,
+      })
+      // An idle client dropped by the server (a replica restart, a network
+      // blip) emits 'error' on the pool; unhandled, it would crash the process.
+      created.on('error', (error) =>
+        console.error('[reports] idle reporting connection failed:', error),
+      )
+      return created
+    })
+    pools.set(purpose, pool)
+  }
+  return pool
 }
 
 function classify(error: unknown, timeoutMs: number): ReportRunError {

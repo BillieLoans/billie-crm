@@ -81,19 +81,26 @@ const setOrigin: CollectionBeforeChangeHook = ({ data, operation, context }) => 
  * Over the MCP connector (BTB-509) every write is a draft, so nothing Claude
  * saves is published without a person: creates and single updates are forced
  * to drafts (an update writes a new draft version and leaves the published
- * one alone), and bulk updates and deletes are refused.
+ * one alone) and never override another editor's lock; bulk updates and
+ * deletes are refused. Every read has depth 0, so the author's user record
+ * never reaches Claude.
  */
 export const mcpDraftsOnly: CollectionBeforeOperationHook = ({ args, context, operation, req }) => {
   if ((req.payloadAPI as string) !== 'MCP') return args
   // Payload names both a single and a bulk update 'update' here; only a
   // single one carries an id.
-  const single = operation === 'create' || (operation === 'update' && 'id' in args && !!args.id)
-  if (single) {
+  if (operation === 'create' || (operation === 'update' && 'id' in args && !!args.id)) {
     if (operation === 'create') context.reportOrigin = 'mcp'
-    return { ...args, data: { ...(args.data ?? {}), _status: 'draft' }, draft: true }
+    return {
+      ...args,
+      data: { ...(args.data ?? {}), _status: 'draft' },
+      draft: true,
+      depth: 0,
+      ...(operation === 'update' ? { overrideLock: false } : {}),
+    }
   }
   if (operation === 'update' || operation === 'delete') throw new Forbidden(req.t)
-  return args
+  return { ...args, depth: 0 }
 }
 
 /**
@@ -129,7 +136,9 @@ export const ReportDefinitions: CollectionConfig = {
   },
   versions: {
     drafts: true,
-    maxPerDoc: 50,
+    // Payload prunes the oldest versions past this, published ones included;
+    // high enough that drafting (by hand or over MCP) does not lose history.
+    maxPerDoc: 500,
   },
   hooks: { beforeOperation: [mcpDraftsOnly], beforeChange: [setOrigin] },
   fields: [
