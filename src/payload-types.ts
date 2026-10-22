@@ -2326,6 +2326,11 @@ export interface ReportRun {
     | null;
   outcome: 'ok' | 'timeout' | 'refused' | 'error';
   errorCode?: string | null;
+  trigger?: ('view' | 'schedule') | null;
+  /**
+   * Sydney date a scheduled delivery was sent for (YYYY-MM-DD)
+   */
+  scheduledFor?: string | null;
   durationMs?: number | null;
   rowCount?: number | null;
   truncated?: boolean | null;
@@ -3407,6 +3412,8 @@ export interface ReportRunsSelect<T extends boolean = true> {
   parameters?: T;
   outcome?: T;
   errorCode?: T;
+  trigger?: T;
+  scheduledFor?: T;
   durationMs?: T;
   rowCount?: T;
   truncated?: T;

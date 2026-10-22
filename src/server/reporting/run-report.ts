@@ -57,7 +57,7 @@ export type RunOutcome =
       }
     }
 
-interface ReportDoc {
+export interface ReportDoc {
   id: string
   slug: string
   title: string
@@ -67,6 +67,7 @@ interface ReportDoc {
   chart?: unknown
   roles?: string[] | null
   _status?: 'draft' | 'published' | null
+  schedule?: string | null
 }
 
 export function isReportAuthor(user: unknown): boolean {
@@ -137,7 +138,7 @@ export async function listReports(payload: Payload, user: unknown): Promise<Repo
   return reports
 }
 
-async function findReport(
+export async function findReport(
   payload: Payload,
   slug: string,
   draft: boolean,
@@ -156,7 +157,7 @@ async function findReport(
 }
 
 /** The id of the report's latest published version, for the run log. */
-async function publishedVersionId(payload: Payload, reportId: string): Promise<string> {
+export async function publishedVersionId(payload: Payload, reportId: string): Promise<string> {
   try {
     const versions = await payload.findVersions({
       collection: 'report-definitions',
@@ -174,7 +175,7 @@ async function publishedVersionId(payload: Payload, reportId: string): Promise<s
   }
 }
 
-interface RunLogEntry {
+export interface RunLogEntry {
   reportSlug: string
   report?: string
   version?: string
@@ -184,6 +185,8 @@ interface RunLogEntry {
   durationMs?: number
   rowCount?: number
   truncated?: boolean
+  trigger?: 'view' | 'schedule'
+  scheduledFor?: string
 }
 
 /** Logged values are short: dates, codes and numbers, never pasted text. */
@@ -196,7 +199,7 @@ function loggable(value: unknown): unknown {
 }
 
 /** The declared parameters only, in order, so the log never stores arbitrary client keys. */
-function loggedParameters(
+export function loggedParameters(
   params: readonly ReportParameter[],
   values: Record<string, unknown> | readonly unknown[],
 ): Record<string, unknown> {
@@ -214,7 +217,7 @@ function loggedParameters(
   )
 }
 
-async function logRun(payload: Payload, user: unknown, entry: RunLogEntry): Promise<void> {
+export async function logRun(payload: Payload, user: unknown, entry: RunLogEntry): Promise<void> {
   try {
     await payload.create({
       collection: 'report-runs',

@@ -22,7 +22,7 @@ Defined in `src/server/reporting/schema.ts`. Every statement is idempotent.
 
 | Object | Kind | One row per | Source |
 |---|---|---|---|
-| `application` | view | conversation (an application attempt) | `conversations`, `loan_accounts` |
+| `application` | view | conversation (an application attempt), with funnel flags `submitted`, `decided`, `approved`, `funded` | `conversations`, `loan_accounts` |
 | `decision` | view | conversation, its latest decision event | `decision_event` |
 | `loan` | view | loan account, with the source of its application | `loan_accounts`, `application` |
 | `instalment` | view | scheduled instalment | `loan_accounts_repayment_schedule_payments` |
@@ -128,8 +128,8 @@ ledger's decimal strings. A re-run for the same day replaces that day's row.
 
 It authenticates with `Authorization: Bearer $REPORTING_JOB_TOKEN`; with no
 token configured every call is refused. Calls through Cloudflare also need the
-`x-origin-secret` header like any other request. Schedule it daily at 23:50
-Australia/Sydney.
+`x-origin-secret` header like any other request. `.github/workflows/scheduled-reports.yml`
+calls it daily at 23:50 Sydney (see Scheduling below).
 
 ## Reports (BTB-506)
 
@@ -210,9 +210,63 @@ Setting up an environment (once, as the owner role):
    (`?sslmode=verify-full` for Neon): a Fly secret on the CRM app, or `.env`
    in dev.
 
+## First reports (BTB-507)
+
+Delivered as data by the `20261025_090000_first_reports` migration, which
+publishes each one whose slug is free. After that, authors own them in the
+admin. The definitions are in `src/server/reporting/definitions/first-reports.ts`
+and are checked against TEST data in `tests/int/first-reports.int.spec.ts`.
+
+| Report | Slug | Roles | For |
+|---|---|---|---|
+| Decline rate and reasons | `decline-rate` | admin, supervisor | BTB-462: by source or ruleset version, with reason categories. Emailed Monday |
+| Application funnel by source | `application-funnel` | admin, supervisor, operations | BTB-500's split in the CRM: started, submitted, decided, approved, funded |
+| Go-to-market numbers | `gtm-numbers` | admin, supervisor | BTB-460: share of starts (incl. referral share), pass rate, funded rate, median hours to money, repayment health |
+
+"Submitted" means bank statements were shared, or the application was decided
+(a block-decline is decided without statements). Mock decisions are excluded
+from all three. Applications before 6 October 2026 have no attribution and read
+as "(not recorded)". Not answerable yet, and listed in the GTM report rather
+than approximated: cash cost per funded customer (needs ad spend) and place
+turnover (needs queue data).
+
+## Monday email (BTB-507)
+
+`POST /api/reports/jobs/scheduled?schedule=weekly_monday` runs every published
+report whose schedule is "Weekly, Monday morning" on its parameter defaults
+(so each parameter needs one) and emails each supervisor a summary, a link to
+the report and the CSV attached (not attached above 5 MB). Each delivery is
+logged to `report-runs` with the Sydney date it was for; a second call that day
+sends nothing. A failed send is logged and the day stays undelivered, so a
+re-run sends it.
+
+Email goes through Payload's Resend adapter (`RESEND_API_KEY`), the provider
+platform-services already uses. The notification dispatcher could not be used:
+it emails customers by customer id and has no attachments. Without the key,
+Payload writes emails to the console (dev); in production the job refuses to
+run.
+
+## Scheduling
+
+`.github/workflows/scheduled-reports.yml` calls both jobs for demo and prod.
+GitHub cron is UTC, so each job fires at both daylight-saving offsets and passes
+`?sydneyHour`; the CRM ignores the call that lands at the wrong Sydney hour.
+"Run workflow" in GitHub runs either job now, ignoring the hour.
+
+Repository secrets (an environment is skipped while its URL is unset):
+
+| Secret | Value |
+|---|---|
+| `CRM_URL_DEMO`, `CRM_URL_PROD` | e.g. `https://crm.billie.loans` |
+| `REPORTING_JOB_TOKEN_DEMO`, `_PROD` | the app's `REPORTING_JOB_TOKEN` |
+| `CF_SECRET_DEMO`, `_PROD` | the app's `CF_SECRET` (the `x-origin-secret` header) |
+
 ## Environment
 
 | Variable | Used by | Notes |
 |---|---|---|
 | `REPORTING_JOB_TOKEN` | scheduled jobs | Long random string, Fly secret |
+| `RESEND_API_KEY` | Monday email | Resend API key; required in production for scheduled delivery |
+| `RESEND_FROM_ADDRESS` | Monday email | Defaults to `noreply@billie.loans`, the verified sender platform-services uses |
+| `NEXT_PUBLIC_APP_URL` | Monday email | Already set for Payload; used for the report link |
 | `REPORTING_DATABASE_URI` | report runner | Logged in as `reporting_reader`; the Neon read replica in deployed environments. Required everywhere |

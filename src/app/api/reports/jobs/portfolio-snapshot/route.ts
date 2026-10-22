@@ -14,10 +14,17 @@ import { isReportingJobAuthorised } from '@/server/reporting/job-auth'
 import { saveSnapshot, toSnapshotRow } from '@/server/reporting/portfolio-snapshot'
 import { getDashboardPool } from '@/lib/dashboard-aggregates'
 import { sydneyDateString } from '@/lib/disbursement-cutoff'
+import { sydneyHour } from '@/server/reporting/scheduled'
 
 export async function POST(request: NextRequest) {
   if (!isReportingJobAuthorised(request)) {
     return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
+  }
+  // ?sydneyHour=23 makes the call a no-op outside that Sydney hour, so the
+  // workflow can fire at both daylight-saving offsets (BTB-507).
+  const hourParam = request.nextUrl.searchParams.get('sydneyHour')
+  if (hourParam !== null && Number(hourParam) !== sydneyHour()) {
+    return NextResponse.json({ skipped: `Not ${hourParam}:00 in Sydney` })
   }
   const requested = request.nextUrl.searchParams.get('asOfDate') ?? sydneyDateString(new Date())
   if (!/^\d{4}-\d{2}-\d{2}$/.test(requested)) {

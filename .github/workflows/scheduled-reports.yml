@@ -1,0 +1,72 @@
+name: scheduled reports
+
+# Calls the CRM's reporting jobs (docs/reporting.md):
+#   - weekly report email, Monday 08:00 Sydney (BTB-507)
+#   - portfolio snapshot, daily 23:50 Sydney (BTB-504)
+# GitHub cron is UTC and has no time zones, so each job fires at both
+# daylight-saving offsets and passes ?sydneyHour; the CRM ignores the call
+# that lands at the wrong Sydney hour. Both jobs are safe to repeat.
+#
+# Secrets per environment (skipped when CRM_URL_<ENV> is unset):
+#   CRM_URL_DEMO / CRM_URL_PROD                    e.g. https://crm.billie.loans
+#   REPORTING_JOB_TOKEN_DEMO / _PROD               the app's REPORTING_JOB_TOKEN
+#   CF_SECRET_DEMO / _PROD                         the app's CF_SECRET (x-origin-secret)
+
+on:
+  schedule:
+    - cron: '0 21 * * 0' # Monday 08:00 AEDT (UTC+11)
+    - cron: '0 22 * * 0' # Monday 08:00 AEST (UTC+10)
+    - cron: '50 12 * * *' # 23:50 AEDT
+    - cron: '50 13 * * *' # 23:50 AEST
+  workflow_dispatch:
+    inputs:
+      job:
+        description: Job to run now (ignores the Sydney hour)
+        type: choice
+        options: [weekly-email, portfolio-snapshot]
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: scheduled-reports-${{ github.event.schedule || inputs.job }}
+  cancel-in-progress: false
+
+jobs:
+  call:
+    name: ${{ matrix.env }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [DEMO, PROD]
+    env:
+      CRM_URL: ${{ secrets[format('CRM_URL_{0}', matrix.env)] }}
+      JOB_TOKEN: ${{ secrets[format('REPORTING_JOB_TOKEN_{0}', matrix.env)] }}
+      CF_SECRET: ${{ secrets[format('CF_SECRET_{0}', matrix.env)] }}
+      SCHEDULE: ${{ github.event.schedule }}
+      MANUAL_JOB: ${{ inputs.job }}
+    steps:
+      - name: Call the job
+        run: |
+          if [ -z "$CRM_URL" ]; then
+            echo "CRM_URL_${{ matrix.env }} is not set; skipping."
+            exit 0
+          fi
+          case "$SCHEDULE" in
+            "0 21 * * 0"|"0 22 * * 0") path="/api/reports/jobs/scheduled?schedule=weekly_monday&sydneyHour=8" ;;
+            "50 12 * * *"|"50 13 * * *") path="/api/reports/jobs/portfolio-snapshot?sydneyHour=23" ;;
+            *)
+              case "$MANUAL_JOB" in
+                weekly-email) path="/api/reports/jobs/scheduled?schedule=weekly_monday" ;;
+                portfolio-snapshot) path="/api/reports/jobs/portfolio-snapshot" ;;
+                *) echo "Unknown trigger"; exit 1 ;;
+              esac
+              ;;
+          esac
+          curl --fail-with-body -sS -X POST "${CRM_URL%/}${path}" \
+            -H "Authorization: Bearer ${JOB_TOKEN}" \
+            -H "x-origin-secret: ${CF_SECRET}" \
+            --max-time 300
+          echo

@@ -171,6 +171,14 @@ export const REPORTING_SCHEMA_STATEMENTS: readonly string[] = [
      reporting.acquisition_channel(c.attribution)     AS channel,
      c.status::text                                   AS status,
      COALESCE(c.decision_status::text, 'no_decision') AS decision_status,
+     -- Funnel stages (BTB-507). Submitted: bank statements shared, or
+     -- decided (a block-decline is decided without statements).
+     COALESCE(c.statement_capture->>'consentStatus' = 'complete', false)
+       OR c.decision_status::text IN ('approved', 'declined', 'referred')
+                                                      AS submitted,
+     COALESCE(c.decision_status::text IN ('approved', 'declined', 'referred'), false)
+                                                      AS decided,
+     COALESCE(c.decision_status::text = 'approved', false) AS approved,
      CASE WHEN c.decision_status::text = 'declined'
           THEN c.decision_detail_reason END           AS decline_reason,
      CASE WHEN c.decision_status::text = 'declined'

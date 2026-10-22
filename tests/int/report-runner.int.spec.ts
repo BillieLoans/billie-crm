@@ -12,9 +12,9 @@
 import { getPayload, Payload } from 'payload'
 import config from '@/payload.config'
 import { describe, it, beforeAll, afterAll, expect } from 'vitest'
-import { Pool } from 'pg'
+import type { Pool } from 'pg'
 import { getDashboardPool } from '@/lib/dashboard-aggregates'
-import { applyReportingSchema } from '@/server/reporting/schema'
+import { reportingReaderPool } from '../utils/reportingReader'
 import { ReportRunError, runReportSql } from '@/server/reporting/runner'
 import { listReports, runReport } from '@/server/reporting/run-report'
 
@@ -23,7 +23,6 @@ let payload: Payload
 let pool: Pool
 /** One connection logged in as reporting_reader, as REPORTING_DATABASE_URI is. */
 let reader: Pool
-const READER_PASSWORD = 'reader-int-test'
 const PREFIX = 'rptrun'
 const users: Record<string, { id: string; role: string }> = {}
 
@@ -89,20 +88,7 @@ async function cleanup() {
 beforeAll(async () => {
   payload = await getPayload({ config })
   pool = getDashboardPool(payload) as unknown as Pool
-  // The runner logs in as reporting_reader; create it as the test owner,
-  // then re-apply the schema so its grants reach the role.
-  await pool.query(`DO $$ BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'reporting_reader') THEN
-      CREATE ROLE reporting_reader;
-    END IF;
-  END $$`)
-  await pool.query(`ALTER ROLE reporting_reader LOGIN PASSWORD '${READER_PASSWORD}'`)
-  await applyReportingSchema(pool)
-  const uri = new URL(process.env.DATABASE_URI as string)
-  uri.username = 'reporting_reader'
-  uri.password = READER_PASSWORD
-  // max 1: every run shares one connection, so leaked session state would show.
-  reader = new Pool({ connectionString: uri.toString(), max: 1 })
+  reader = await reportingReaderPool(pool)
   await cleanup()
   for (const role of ['admin', 'operations', 'readonly']) users[role] = await makeUser(role)
 }, 60_000)

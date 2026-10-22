@@ -1,5 +1,6 @@
 // storage-adapter-import-placeholder
 import { postgresAdapter } from '@payloadcms/db-postgres'
+import { resendAdapter } from '@payloadcms/email-resend'
 import { desc } from 'drizzle-orm'
 import { index, uniqueIndex } from 'drizzle-orm/pg-core'
 import { payloadCloudPlugin } from '@payloadcms/payload-cloud'
@@ -311,6 +312,16 @@ export default buildConfig({
     ],
   }),
   sharp,
+  // BTB-507: staff email (scheduled reports) through Resend, the provider
+  // platform-services already sends customer email with. Without a key,
+  // Payload writes emails to the console.
+  email: process.env.RESEND_API_KEY
+    ? resendAdapter({
+        apiKey: process.env.RESEND_API_KEY,
+        defaultFromAddress: process.env.RESEND_FROM_ADDRESS || 'noreply@billie.loans',
+        defaultFromName: 'Billie CRM',
+      })
+    : undefined,
   // BTB-504: dev and test sync Payload's tables with `push`, which knows
   // nothing of the `reporting` schema; apply it here, after the push.
   // Deployed environments get it from the reporting_schema migration (the

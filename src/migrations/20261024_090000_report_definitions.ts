@@ -62,6 +62,14 @@ EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 DO $$ BEGIN
+  CREATE TYPE enum_report_runs_trigger AS ENUM (
+      'view',
+      'schedule'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
   CREATE TYPE enum_report_runs_outcome AS ENUM (
       'ok',
       'timeout',
@@ -126,6 +134,8 @@ CREATE TABLE IF NOT EXISTS report_runs (
     parameters jsonb,
     outcome enum_report_runs_outcome NOT NULL,
     error_code character varying,
+    trigger enum_report_runs_trigger DEFAULT 'view'::enum_report_runs_trigger,
+    scheduled_for character varying,
     duration_ms numeric,
     row_count numeric,
     truncated boolean DEFAULT false,
@@ -206,6 +216,8 @@ CREATE INDEX IF NOT EXISTS report_runs_created_at_idx ON report_runs USING btree
 
 CREATE INDEX IF NOT EXISTS report_runs_report_idx ON report_runs USING btree (report_id);
 
+CREATE INDEX IF NOT EXISTS report_runs_scheduled_for_idx ON report_runs USING btree (scheduled_for);
+
 CREATE INDEX IF NOT EXISTS report_runs_report_slug_idx ON report_runs USING btree (report_slug);
 
 CREATE INDEX IF NOT EXISTS report_runs_updated_at_idx ON report_runs USING btree (updated_at);
@@ -266,6 +278,7 @@ DROP TABLE IF EXISTS _report_definitions_v;
 DROP TABLE IF EXISTS report_definitions_roles;
 DROP TABLE IF EXISTS report_definitions;
 DROP TYPE IF EXISTS enum_report_runs_outcome;
+DROP TYPE IF EXISTS enum_report_runs_trigger;
 DROP TYPE IF EXISTS enum__report_definitions_v_version_status;
 DROP TYPE IF EXISTS enum__report_definitions_v_version_schedule;
 DROP TYPE IF EXISTS enum__report_definitions_v_version_roles;

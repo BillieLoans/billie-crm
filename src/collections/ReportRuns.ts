@@ -48,6 +48,21 @@ export const ReportRuns: CollectionConfig = {
       ],
     },
     { name: 'errorCode', type: 'text' },
+    {
+      name: 'trigger',
+      type: 'select',
+      defaultValue: 'view',
+      options: [
+        { label: 'Reports view', value: 'view' },
+        { label: 'Schedule', value: 'schedule' },
+      ],
+    },
+    {
+      name: 'scheduledFor',
+      type: 'text',
+      index: true,
+      admin: { description: 'Sydney date a scheduled delivery was sent for (YYYY-MM-DD)' },
+    },
     { name: 'durationMs', type: 'number' },
     { name: 'rowCount', type: 'number' },
     { name: 'truncated', type: 'checkbox', defaultValue: false },
