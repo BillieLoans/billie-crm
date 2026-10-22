@@ -51,6 +51,23 @@ describe('validateStatic', () => {
         sql: 'SELECT d.decision FROM reporting.decision AS d WHERE d.decided_on >= $1::date AND NOT d.mock_origin',
       }),
     ).toEqual([])
+    // Comma joins and quoted names count too.
+    expect(
+      codes({
+        sql: 'SELECT count(*) AS n FROM decision d, "public"."users" u WHERE $1::date IS NOT NULL AND NOT d.mock_origin',
+      }),
+    ).toContain('error:SCHEMA')
+  })
+
+  test('accepts FROM followed by an alias inside expressions, and quoted reporting names', () => {
+    expect(
+      codes({
+        sql: `SELECT round(avg(extract(epoch FROM l.disbursed_at - a.started_at) / 3600), 1) AS hours
+                FROM "reporting"."loan" AS l JOIN application AS a USING (conversation_id)
+               WHERE l.disbursed_on >= $1::date AND a.decided IS DISTINCT FROM l.funded
+                 AND l.mock_origin IS NOT TRUE`,
+      }),
+    ).not.toContain('error:SCHEMA')
   })
 
   test('parameters and placeholders must line up', () => {
@@ -71,6 +88,11 @@ describe('validateStatic', () => {
     expect(
       codes({
         sql: "SELECT count(*) AS n FROM decision WHERE decided_at::date = DATE '2026-10-01' AND $1::date IS NOT NULL AND NOT mock_origin",
+      }),
+    ).toContain('warning:DATE_COLUMN')
+    expect(
+      codes({
+        sql: 'SELECT count(*) AS n FROM decision WHERE $1::date <= decided_at AND NOT mock_origin',
       }),
     ).toContain('warning:DATE_COLUMN')
     expect(

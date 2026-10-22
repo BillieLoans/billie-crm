@@ -88,7 +88,7 @@ export const REPORTING_TABLES: readonly TableDescription[] = [
         name: 'decision_status',
         type: 'text',
         meaning:
-          'Latest credit decision: approved, declined, referred, or no_decision. Includes mock decisions; exclude them by joining decision and filtering NOT mock_origin (keep attempts with no decision row).',
+          'Latest credit decision: approved, declined, referred, or no_decision. Includes mock decisions; exclude them by LEFT JOINing decision and keeping mock_origin IS NOT TRUE (which keeps attempts with no decision row).',
       },
       {
         name: 'submitted',

@@ -10,7 +10,15 @@ import type { Payload } from 'payload'
 import { bindParameters, RESERVED_REPORT_SLUGS } from '@/lib/schemas/reports'
 import type { ReportColumn } from '@/lib/schemas/reports'
 import { ReportRunError, runReportSql, type RunOptions } from '../runner'
-import { askClaude, toDraftDefinition, type AskRequest, type AskUsage } from './claude'
+import {
+  ASK_EFFORT,
+  ASK_MODEL,
+  AskUnavailableError,
+  askClaude,
+  toDraftDefinition,
+  type AskRequest,
+  type AskUsage,
+} from './claude'
 import {
   validateResult,
   validateStatic,
@@ -38,6 +46,44 @@ export interface DraftOutcome {
   usage?: AskUsage
 }
 
+/** Size limits on a definition sent by the browser: everything here can reach Claude. */
+const LIMITS = { title: 200, description: 2000, sql: 20_000, parameters: 10_000, chart: 2000 }
+
+/**
+ * A definition from a request body, or null when it is missing or too
+ * large. Sizes are bounded because a refinement sends it to Claude.
+ */
+export function parseDefinition(value: unknown): DraftDefinition | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const v = value as Record<string, unknown>
+  if (typeof v.sql !== 'string' || typeof v.title !== 'string') return null
+  const description = typeof v.description === 'string' ? v.description : ''
+  const parameters = v.parameters ?? []
+  const chart = v.chart ?? null
+  if (
+    v.title.length > LIMITS.title ||
+    description.length > LIMITS.description ||
+    v.sql.length > LIMITS.sql ||
+    JSON.stringify(parameters).length > LIMITS.parameters ||
+    JSON.stringify(chart).length > LIMITS.chart
+  ) {
+    return null
+  }
+  return { title: v.title, description, sql: v.sql, parameters, chart }
+}
+
+/** Issue codes and messages from a request body, bounded. */
+export function parseIssues(value: unknown): Array<{ code: string; message: string }> {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter(
+      (i): i is { code: string; message: string } =>
+        !!i && typeof i.code === 'string' && typeof i.message === 'string',
+    )
+    .slice(0, 20)
+    .map((i) => ({ code: i.code.slice(0, 40), message: i.message.slice(0, 300) }))
+}
+
 /** Static checks, then a run on the defaults through the runner, then result checks. */
 export async function checkAndPreview(
   definition: DraftDefinition,
@@ -49,9 +95,10 @@ export async function checkAndPreview(
   if (!bound.ok) return { valid, issues } // NO_DEFAULT already warns
   try {
     const result = await runReportSql(valid.sql, bound.values, runOptions)
+    const all = [...issues, ...validateResult(result.columns, result.rows)]
     return {
-      valid,
-      issues: [...issues, ...validateResult(result.columns, result.rows)],
+      valid: all.some((i) => i.level === 'error') ? null : valid,
+      issues: all,
       preview: result,
     }
   } catch (error) {
@@ -117,7 +164,23 @@ export async function draftFromQuestion(
   runOptions: RunOptions = {},
 ): Promise<DraftOutcome> {
   const kind = request.previous ? 'refine' : 'ask'
-  const answer = await askClaude(request)
+  let answer: Awaited<ReturnType<typeof askClaude>>
+  try {
+    answer = await askClaude(request)
+  } catch (error) {
+    // Nothing was sent without a key; anything else is a failed request.
+    if (!(error instanceof AskUnavailableError)) {
+      await logAsk(payload, user, {
+        kind,
+        question: request.question,
+        refinement: request.previous?.refinement,
+        outcome: 'error',
+        usage: { model: ASK_MODEL, effort: ASK_EFFORT } as AskUsage,
+        issues: [],
+      })
+    }
+    throw error
+  }
   if (answer.status !== 'ok') {
     await logAsk(payload, user, {
       kind,
@@ -202,13 +265,18 @@ const slugify = (title: string): string =>
   title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 50) || 'report'
+    .slice(0, 50)
+    .replace(/^-+|-+$/g, '') || 'report'
+
+const isUniqueViolation = (error: unknown): boolean =>
+  /unique|duplicate/i.test(String((error as { message?: string })?.message ?? '')) ||
+  (error as { cause?: { code?: string } })?.cause?.code === '23505'
 
 /**
  * Save a checked definition as a draft report, authored by the user. Only
- * report authors can (collection access applies). A supervisor publishes it
- * from the admin.
+ * report authors can (collection access applies). The checks run again
+ * here, including a run on the defaults, and any error blocks saving
+ * whatever the browser sent. A supervisor publishes it from the admin.
  *
  * @returns the new draft's id and slug, or the issues that block saving.
  */
@@ -216,9 +284,10 @@ export async function saveDraft(
   payload: Payload,
   user: unknown,
   definition: DraftDefinition,
+  runOptions: RunOptions = {},
 ): Promise<{ ok: true; id: string; slug: string } | { ok: false; issues: ValidationIssue[] }> {
-  const { valid, issues } = validateStatic(definition)
-  if (!valid) return { ok: false, issues }
+  const { valid, issues } = await checkAndPreview(definition, runOptions)
+  if (!valid) return { ok: false, issues: issues.filter((i) => i.level === 'error') }
   const base = slugify(valid.title)
   for (let attempt = 0; attempt < 5; attempt++) {
     const slug = attempt === 0 ? base : `${base}-${Math.random().toString(36).slice(2, 6)}`
@@ -232,22 +301,27 @@ export async function saveDraft(
       overrideAccess: true,
     })
     if (taken.docs.length) continue
-    const doc = await payload.create({
-      collection: 'report-definitions',
-      data: {
-        ...valid,
-        slug,
-        roles: ['admin', 'supervisor'],
-        schedule: 'none',
-        origin: 'ask',
-        _status: 'draft',
-      } as never,
-      draft: true,
-      // Access applies: only report authors can create drafts.
-      overrideAccess: false,
-      user: user as never,
-    })
-    return { ok: true, id: String(doc.id), slug }
+    try {
+      const doc = await payload.create({
+        collection: 'report-definitions',
+        data: {
+          ...valid,
+          slug,
+          roles: ['admin', 'supervisor'],
+          schedule: 'none',
+          _status: 'draft',
+        } as never,
+        draft: true,
+        context: { reportOrigin: 'ask' },
+        // Access applies: only report authors can create drafts.
+        overrideAccess: false,
+        user: user as never,
+      })
+      return { ok: true, id: String(doc.id), slug }
+    } catch (error) {
+      // Someone took the slug between the check and the insert: try another.
+      if (!isUniqueViolation(error)) throw error
+    }
   }
   return {
     ok: false,

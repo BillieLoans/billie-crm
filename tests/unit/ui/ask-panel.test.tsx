@@ -94,11 +94,14 @@ describe('AskPanel', () => {
     renderPanel()
     await askQuestion()
     const save = screen.getByRole('button', { name: 'Save as a draft report' })
-    expect(save).toBeEnabled()
+    expect(save).not.toHaveAttribute('aria-disabled', 'true')
     fireEvent.change(screen.getByLabelText('SQL'), {
       target: { value: `${DEFINITION.sql} LIMIT 5` },
     })
-    expect(save).toBeDisabled()
+    expect(save).toHaveAttribute('aria-disabled', 'true')
+    expect(save).toHaveAccessibleDescription('Check the edited SQL before saving.')
+    fireEvent.click(save)
+    expect(bodies()).toHaveLength(1)
     fireEvent.click(screen.getByRole('button', { name: 'Check the edited SQL' }))
     await waitFor(() => expect(bodies()).toHaveLength(2))
     expect(bodies()[1][1]).toMatchObject({
@@ -122,7 +125,10 @@ describe('AskPanel', () => {
       'href',
       `#${screen.getByLabelText('SQL').id}`,
     )
-    expect(screen.getByRole('button', { name: 'Save as a draft report' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save as a draft report' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
   })
 
   it('refines with the current draft and its problems', async () => {
@@ -137,8 +143,36 @@ describe('AskPanel', () => {
       mode: 'refine',
       refinement: 'Weekly instead',
       definition: { title: 'Decisions by outcome' },
-      issues: ['Give x a default'],
+      issues: [{ code: 'NO_DEFAULT', message: 'Give x a default' }],
     })
+  })
+
+  it('links an empty question to its field', async () => {
+    renderPanel()
+    fireEvent.click(screen.getByRole('button', { name: 'Draft the report' }))
+    const summary = await screen.findByTestId('ask-error-summary')
+    const question = screen.getByLabelText('Question')
+    expect(within(summary).getByRole('link', { name: 'Enter a question' })).toHaveAttribute(
+      'href',
+      `#${question.id}`,
+    )
+    expect(question).toHaveAttribute('aria-invalid', 'true')
+    expect(bodies()).toHaveLength(0)
+  })
+
+  it('keeps the refinement and blocks saving when a refinement is refused', async () => {
+    renderPanel()
+    await askQuestion()
+    fetchMock.mockImplementationOnce(() =>
+      respond(200, { status: 'refused', message: 'Claude declined.', assumptions: [], issues: [] }),
+    )
+    fireEvent.change(screen.getByLabelText('Change something'), { target: { value: 'Weekly' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Ask Claude to change it' }))
+    expect(await screen.findByTestId('ask-error-summary')).toHaveTextContent('Claude declined.')
+    expect(screen.getByRole('button', { name: 'Save as a draft report' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
   })
 
   it('says when the data cannot answer the question', async () => {
@@ -171,5 +205,8 @@ describe('AskPanel', () => {
       '/admin/reports/decisions-by-outcome',
     )
     expect(bodies()[1]).toEqual(['/api/reports/ask/save', { definition: DEFINITION }])
+    // A second click does not save a duplicate.
+    fireEvent.click(screen.getByRole('button', { name: 'Save as a draft report' }))
+    expect(bodies()).toHaveLength(2)
   })
 })

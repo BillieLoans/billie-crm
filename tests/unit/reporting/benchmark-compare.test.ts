@@ -32,7 +32,7 @@ describe('resultsEquivalent', () => {
     expect(resultsEquivalent(reference, [...reference, { source: 'direct', rate: 0 }])).toBe(false)
   })
 
-  test('a different value is not equivalent; numbers compare at two decimals', () => {
+  test('a different value is not equivalent; numbers compare within half a cent or 0.1%', () => {
     expect(
       resultsEquivalent(reference, [
         { s: 'paid', r: 0.5 },
@@ -45,6 +45,9 @@ describe('resultsEquivalent', () => {
         { s: 'organic', r: '0.25' },
       ]),
     ).toBe(true)
+    // A rate to four places matches the same rate to two, but not a neighbour.
+    expect(resultsEquivalent([{ r: 0.2449 }], [{ r: 0.24 }])).toBe(true)
+    expect(resultsEquivalent([{ r: 0.2449 }], [{ r: 0.2351 }])).toBe(false)
     // A percentage is not a fraction.
     expect(
       resultsEquivalent(reference, [
@@ -58,12 +61,53 @@ describe('resultsEquivalent', () => {
     expect(resultsEquivalent([{ n: 1 }, { n: 1 }], [{ n: 1 }, { n: 2 }])).toBe(false)
   })
 
+  test('values swapped between columns in some rows do not match', () => {
+    expect(
+      resultsEquivalent(
+        [
+          { source: 'paid', started: 10, submitted: 8 },
+          { source: 'organic', started: 6, submitted: 5 },
+        ],
+        [
+          { source: 'paid', started: 8, submitted: 10 },
+          { source: 'organic', started: 6, submitted: 5 },
+        ],
+      ),
+    ).toBe(false)
+  })
+
+  test('a timestamp at midnight matches the date', () => {
+    expect(
+      resultsEquivalent(
+        [{ week_start: '2026-10-05', n: 3 }],
+        [{ week: '2026-10-05T00:00:00.000Z', n: 3 }],
+      ),
+    ).toBe(true)
+  })
+
+  test('finds a matching where a greedy pass would not', () => {
+    // Reference rows (a,1) and (a,2); a greedy pass could pair (a,1) with the
+    // generated row that the other reference row needs.
+    expect(
+      resultsEquivalent(
+        [
+          { k: 'a', n: 1 },
+          { k: 'a', n: 2 },
+        ],
+        [
+          { k: 'a', n: 2, extra: 1 },
+          { k: 'a', n: 1, extra: 2 },
+        ],
+      ),
+    ).toBe(true)
+  })
+
   test('normalises cells', () => {
-    expect(normaliseCell(null)).toBe('null')
-    expect(normaliseCell(3)).toBe('3.00')
-    expect(normaliseCell('3')).toBe('3.00')
-    expect(normaliseCell(true)).toBe('true')
-    expect(normaliseCell(' a ')).toBe('a')
+    expect(normaliseCell(null)).toEqual({ kind: 'text', value: 'null' })
+    expect(normaliseCell('3')).toEqual({ kind: 'number', value: 3 })
+    expect(normaliseCell(true)).toEqual({ kind: 'text', value: 'true' })
+    expect(normaliseCell(' a ')).toEqual({ kind: 'text', value: 'a' })
+    expect(normaliseCell('2026-10-05 00:00:00+11')).toEqual({ kind: 'text', value: '2026-10-05' })
   })
 })
 

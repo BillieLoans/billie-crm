@@ -244,7 +244,7 @@ describe('Ask Claude', () => {
       { question: `${P} save me` },
       { pool: reader },
     )
-    const saved = await saveDraft(payload, users.supervisor, outcome.definition!)
+    const saved = await saveDraft(payload, users.supervisor, outcome.definition!, { pool: reader })
     expect(saved.ok).toBe(true)
     if (!saved.ok) return
     const doc = await payload.findByID({
@@ -268,24 +268,81 @@ describe('Ask Claude', () => {
 
   it('refuses to save for someone who is not a report author', async () => {
     await expect(
-      saveDraft(payload, users.operations, {
-        title: `${P} not mine`,
-        description: '',
-        sql: GOOD.sql,
-        parameters: [{ name: 'from', label: 'From', type: 'date', default: '2001-01-01' }],
-        chart: null,
-      }),
+      saveDraft(
+        payload,
+        users.operations,
+        {
+          title: `${P} not mine`,
+          description: '',
+          sql: GOOD.sql,
+          parameters: [{ name: 'from', label: 'From', type: 'date', default: '2001-01-01' }],
+          chart: null,
+        },
+        { pool: reader },
+      ),
     ).rejects.toThrow()
   })
 
-  it('does not save a definition that fails its checks', async () => {
-    const saved = await saveDraft(payload, users.supervisor, {
-      title: `${P} broken`,
-      description: '',
-      sql: 'DELETE FROM decision',
-      parameters: [],
-      chart: null,
+  it('does not save a definition that fails its checks, static or on its result', async () => {
+    const broken = await saveDraft(
+      payload,
+      users.supervisor,
+      {
+        title: `${P} broken`,
+        description: '',
+        sql: 'DELETE FROM decision',
+        parameters: [],
+        chart: null,
+      },
+      { pool: reader },
+    )
+    expect(broken.ok).toBe(false)
+    // Passes the static checks, but its rate is a percentage.
+    const badRate = await saveDraft(
+      payload,
+      users.supervisor,
+      {
+        title: `${P} bad rate`,
+        description: '',
+        sql: `SELECT 100.0 AS decline_rate FROM decision WHERE decided_on >= $1::date AND NOT mock_origin LIMIT 1`,
+        parameters: [{ name: 'from', label: 'From', type: 'date', default: '2001-01-01' }],
+        chart: null,
+      },
+      { pool: reader },
+    )
+    expect(badRate).toMatchObject({
+      ok: false,
+      issues: [expect.objectContaining({ code: 'RATE_RANGE' })],
     })
-    expect(saved.ok).toBe(false)
+  })
+
+  it('does not let an author set author or origin through the API', async () => {
+    const doc = await payload.create({
+      collection: 'report-definitions',
+      data: {
+        title: `${P} forged`,
+        slug: 'test-btb508-forged',
+        sql: GOOD.sql,
+        parameters: GOOD.parameters,
+        roles: ['admin'],
+        origin: 'ask',
+        author: users.operations.id,
+        _status: 'draft',
+      } as never,
+      draft: true,
+      overrideAccess: false,
+      user: users.supervisor as never,
+    })
+    expect(doc.origin).toBe('manual')
+    const author = doc.author as { id: string } | string | null
+    expect(typeof author === 'object' ? author?.id : author).toBe(users.supervisor.id)
+  })
+
+  it('logs a request that failed at the API', async () => {
+    askClaude.mockRejectedValueOnce(new Error('overloaded'))
+    await expect(
+      draftFromQuestion(payload, users.supervisor, { question: `${P} fails` }, { pool: reader }),
+    ).rejects.toThrow('overloaded')
+    expect(await lastAsk()).toMatchObject({ kind: 'ask', outcome: 'error', question: `${P} fails` })
   })
 })

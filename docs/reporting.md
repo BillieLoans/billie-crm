@@ -266,16 +266,21 @@ Authors (admin, supervisor) open **Reports → Ask Claude for a report**
 (`/admin/reports/ask`), describe a report in words, and get a draft
 definition: title, description, SQL, parameters and chart. Claude is sent the
 question and the schema description in
-`src/server/reporting/schema-description.ts`, never result rows. The draft is
-then checked, run on its defaults through the runner as `reporting_reader`,
-and previewed. The author can ask for a change in words, or edit the SQL and
+`src/server/reporting/schema-description.ts`, never result rows; a refinement
+also sends the draft and what the checks found, with result values and
+database errors replaced by fixed text (`issuesForClaude`). The panel asks
+staff not to type customer names or contact details. The draft is then
+checked, run on its defaults through the runner as `reporting_reader`, and
+previewed. The author can ask for a change in words, or edit the SQL and
 "Check the edited SQL" (no Claude call). "Save as a draft report" creates an
 unpublished `report-definitions` draft with `origin: ask` and the author
 recorded; a supervisor publishes it from its edit page as usual. Nothing
 Claude writes runs anywhere but the runner, and nothing is published without
 a person.
 
-Checks (`src/server/reporting/ask/validate.ts`). Errors block saving:
+Checks (`src/server/reporting/ask/validate.ts`). Errors block saving, and the
+save route runs every check again (including the run on the defaults), so the
+browser cannot skip them:
 
 | Code | Error when |
 |---|---|
@@ -294,11 +299,15 @@ sum of the other rows (`TOTAL`).
 
 Every request (ask, refine, check) is logged to **Report asks** (admin only):
 user, question, outcome, model, effort, prompt and schema-description
-versions, tokens, latency and the definition. The model call is in
+versions, tokens, latency and the definition. A request that fails at the API
+is logged too, with outcome `error`. The model call is in
 `src/server/reporting/ask/claude.ts`: structured output against the
 definition schema, the system prompt cached, server-side fallback on.
 Change `ASK_PROMPT_VERSION` or `SCHEMA_DESCRIPTION_VERSION` whenever the
-prompt or description changes, so logged results stay comparable.
+prompt or description changes, so logged results stay comparable. A call
+times out after 85 seconds with no retry (`ASK_TIMEOUT_MS`), inside
+Cloudflare's 100-second limit, so a slow draft fails visibly instead of being
+paid for and never shown.
 
 Without `ANTHROPIC_API_KEY` the panel answers that Ask is not configured; the
 rest of Reports is unaffected.

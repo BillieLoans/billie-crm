@@ -13,7 +13,7 @@ export type AskClaudeParams =
       question: string
       definition: DraftDefinition
       refinement: string
-      issues?: string[]
+      issues?: Array<{ code: string; message: string }>
     }
   | { mode: 'check'; question: string; definition: DraftDefinition }
 

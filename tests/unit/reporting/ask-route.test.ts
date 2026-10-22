@@ -25,7 +25,10 @@ vi.mock('@anthropic-ai/sdk', () => {
 })
 const draftFromQuestion = vi.fn()
 const checkEditedDefinition = vi.fn()
-vi.mock('@/server/reporting/ask/draft', () => ({
+vi.mock('@/server/reporting/ask/draft', async () => ({
+  ...(await vi.importActual<typeof import('@/server/reporting/ask/draft')>(
+    '@/server/reporting/ask/draft',
+  )),
   draftFromQuestion: (...a: unknown[]) => draftFromQuestion(...a),
   checkEditedDefinition: (...a: unknown[]) => checkEditedDefinition(...a),
 }))
@@ -65,12 +68,16 @@ describe('POST /api/reports/ask', () => {
         question: 'q',
         definition: DEF,
         refinement: 'weekly',
-        issues: ['x', 3],
+        issues: [{ code: 'MOCK', message: 'x' }, 'not an issue', { code: 3 }],
       }),
     )
     expect(draftFromQuestion.mock.calls[1][2]).toEqual({
       question: 'q',
-      previous: { definition: DEF, refinement: 'weekly', issues: ['x'] },
+      previous: {
+        definition: DEF,
+        refinement: 'weekly',
+        issues: [{ code: 'MOCK', message: 'x' }],
+      },
     })
 
     await POST(req({ mode: 'check', question: 'q', definition: DEF }))
@@ -89,9 +96,12 @@ describe('POST /api/reports/ask', () => {
         { mode: 'check', question: 'q' },
         { mode: 'refine', question: 'q', definition: DEF, refinement: '' },
         { mode: 'other', question: 'q', definition: DEF },
+        // Everything in a definition can reach Claude, so it is size-bounded.
+        { mode: 'check', question: 'q', definition: { ...DEF, sql: 'x'.repeat(20_001) } },
+        { mode: 'check', question: 'q', definition: { ...DEF, parameters: ['x'.repeat(10_001)] } },
       ].map(async (b) => ((await POST(req(b))) as unknown as Res).status),
     )
-    expect(statuses).toEqual([400, 400, 400, 400])
+    expect(statuses).toEqual([400, 400, 400, 400, 400, 400])
     await POST(req({ mode: 'ask', question: 'x'.repeat(5000) }))
     expect((draftFromQuestion.mock.calls[0][2] as { question: string }).question).toHaveLength(2000)
   })

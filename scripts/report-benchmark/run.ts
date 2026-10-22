@@ -15,6 +15,10 @@
  * - H1: the live Ask prompt (annotated description), then the validator;
  *   a draft with errors gets one revision, as the Ask panel offers.
  *
+ * Both arms are scored the same way. The checks are run on H0's drafts too,
+ * for scoring only (H0 never sees them), so "silent-wrong" means the same
+ * in both: ran, wrong, and the checks raised nothing.
+ *
  * It costs money (about 40 questions × runs × arms Claude calls), so it
  * never runs in CI. Run it on a Neon branch seeded by `seed.ts`:
  *
@@ -42,7 +46,12 @@ import {
   type AskUsage,
 } from '@/server/reporting/ask/claude'
 import { checkAndPreview } from '@/server/reporting/ask/draft'
-import type { DraftDefinition, ValidationIssue } from '@/server/reporting/ask/validate'
+import {
+  validateResult,
+  validateStatic,
+  type DraftDefinition,
+  type ValidationIssue,
+} from '@/server/reporting/ask/validate'
 import { SCHEMA_DESCRIPTION_VERSION } from '@/server/reporting/schema-description'
 import { resultsEquivalent } from './compare'
 import { QUESTIONS, type BenchmarkQuestion } from './questions'
@@ -63,8 +72,11 @@ export interface Attempt {
   status: 'ok' | 'unanswerable' | 'refused' | 'invalid_output' | 'api_error'
   /** For an answerable question: did the final SQL run on its defaults? */
   executed: boolean
+  /** Ran, and its result matches the reference. */
   equivalent: boolean
-  /** Ran, nothing flagged it (no validator error or warning), and wrong. */
+  /** The checks raised an error or warning (in H0, scored but not shown to Claude). */
+  flagged: boolean
+  /** Ran, wrong, and not flagged: the case a reviewer would have to catch. */
   silentWrong: boolean
   /** For the unanswerable question(s): did Claude say so? */
   correctlyUnanswerable: boolean | null
@@ -147,6 +159,7 @@ export async function attempt(
     run,
     executed: false,
     equivalent: false,
+    flagged: false,
     silentWrong: false,
     revised: false,
     issues: [] as ValidationIssue[],
@@ -192,7 +205,7 @@ export async function attempt(
           previous: {
             definition,
             refinement: 'Fix the problems found when checking it.',
-            issues: checked.issues.map((i) => i.message),
+            issues: checked.issues,
           },
         })
         base.usage.push(revision.usage)
@@ -209,16 +222,23 @@ export async function attempt(
     runError = issues.find((i) => i.code === 'RUN')?.message
   } else {
     ;({ result, error: runError } = await runDefinition(definition, reader))
+    // Scored only: H0 has no validator and is never revised.
+    issues = [
+      ...validateStatic(definition).issues,
+      ...(result ? validateResult(result.columns, result.rows) : []),
+    ]
   }
 
-  const executed = result !== undefined && !issues.some((i) => i.level === 'error')
+  const executed = result !== undefined
   const equivalent = executed && reference !== null && resultsEquivalent(reference, result!.rows)
+  const flagged = issues.length > 0
   return {
     ...base,
     status: 'ok',
     executed,
     equivalent,
-    silentWrong: executed && !equivalent && issues.length === 0,
+    flagged,
+    silentWrong: executed && !equivalent && !flagged,
     correctlyUnanswerable: null,
     issues,
     runError,

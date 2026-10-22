@@ -1,8 +1,9 @@
 /**
  * POST /api/reports/ask/save — save a checked Ask Claude draft (BTB-508).
  *
- * Body: `{ definition }`. Creates an unpublished report with the user as
- * author and origin "ask". Report authors only; a supervisor publishes it
+ * Body: `{ definition }`. Runs every check again (including a run on the
+ * defaults) and refuses on any error, then creates an unpublished report
+ * with the user as author and origin "ask". Report authors only; a supervisor publishes it
  * from the admin after review.
  */
 import { NextRequest, NextResponse } from 'next/server'
@@ -10,7 +11,7 @@ import { getPayload } from 'payload'
 import { headers } from 'next/headers'
 import configPromise from '@payload-config'
 import { isReportAuthor } from '@/server/reporting/run-report'
-import { saveDraft } from '@/server/reporting/ask/draft'
+import { parseDefinition, saveDraft } from '@/server/reporting/ask/draft'
 
 export async function POST(request: NextRequest) {
   const payload = await getPayload({ config: configPromise })
@@ -29,24 +30,21 @@ export async function POST(request: NextRequest) {
       { status: 403 },
     )
   }
-  const body = (await request.json().catch(() => null)) as {
-    definition?: Record<string, unknown>
-  } | null
-  const d = body?.definition
-  if (!d || typeof d.sql !== 'string' || typeof d.title !== 'string') {
+  const body = (await request.json().catch(() => null)) as { definition?: unknown } | null
+  const definition = parseDefinition(body?.definition)
+  if (!definition) {
     return NextResponse.json(
-      { error: { code: 'NO_DEFINITION', message: 'Send the draft definition.' } },
+      {
+        error: {
+          code: 'NO_DEFINITION',
+          message: 'Send the draft definition (within the size limits).',
+        },
+      },
       { status: 400 },
     )
   }
   try {
-    const saved = await saveDraft(payload, user, {
-      title: d.title,
-      description: typeof d.description === 'string' ? d.description : '',
-      sql: d.sql,
-      parameters: d.parameters ?? [],
-      chart: d.chart ?? null,
-    })
+    const saved = await saveDraft(payload, user, definition)
     if (!saved.ok) {
       return NextResponse.json(
         {

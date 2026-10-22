@@ -9,11 +9,17 @@
  * - starts minutes either side of Sydney midnight, before and after the
  *   daylight-saving change on Sunday 4 October 2026 (UTC+10 → UTC+11);
  * - revised decisions (declined, then approved later);
- * - duplicate deliveries of the same decision event (deduplicated by key);
+ * - repeated deliveries of the same decision event, which the unique
+ *   decision key absorbs as the event processor's upsert does (so the table
+ *   never holds a duplicate; this exercises the insert path, not a trap);
  * - mock approvals, some with loans;
  * - conversations before attribution capture (6 October 2026) and ad
  *   clicks with no UTM tags;
  * - repeat applications by the same customer.
+ *
+ * Clearing removes the TEST-BENCH rows and every `snap_portfolio` row for
+ * September and October 2026 (snapshots carry no TEST marker), so seed only
+ * a branch whose snapshots you do not need.
  *
  * Usage (on a Neon branch with the CRM schema migrated, never production):
  *   BENCH_DATABASE_URI=postgresql://owner@…/branch pnpm exec tsx scripts/report-benchmark/seed.ts
@@ -39,6 +45,7 @@ function rng(seed: number): () => number {
 }
 
 const HOUR = 3_600_000
+const DAY = 24 * HOUR
 const DST_START = Date.UTC(2026, 9, 3, 16) // 2026-10-04 02:00 AEST = 03:00 AEDT
 const sydneyOffsetHours = (t: number) => (t >= DST_START ? 11 : 10)
 
@@ -185,7 +192,8 @@ export async function seedBenchmark(db: Q, seed = 20261022): Promise<Record<stri
           `${id}-d1`,
           'DECLINED',
           'CREDIT_ASSESSMENT:FINAL_RULE',
-          decidedAt - 30 * 60_000,
+          // Between the start and the final decision.
+          startedAt + Math.floor((decidedAt - startedAt) / 2),
         ])
       }
       events.push([`${id}-d${events.length + 1}`, decision, reason, decidedAt])
@@ -222,17 +230,41 @@ export async function seedBenchmark(db: Q, seed = 20261022): Promise<Record<stri
       if (disbursedAt >= end) continue
       const amount = 100 + 50 * Math.floor(r() * 9)
       const fee = Math.round(amount * 0.2 * 100) / 100
+      const each = Math.round(((amount + fee) / 4) * 100) / 100
+
+      // The schedule decides the loan's state, so the two always agree.
+      // "Now" is the end of the window (1 November 2026, Sydney).
+      const dues = [1, 2, 3, 4].map((n) => disbursedAt + n * 14 * DAY)
+      const pastDue = dues.filter((due) => due < end).length
       const x = r()
-      const status =
+      let status: 'active' | 'paid_off' | 'in_arrears' | 'written_off' =
         x < 0.55 ? 'active' : x < 0.8 ? 'paid_off' : x < 0.95 ? 'in_arrears' : 'written_off'
+      // Arrears and write-off need a missed instalment that has fallen due.
+      if ((status === 'in_arrears' || status === 'written_off') && pastDue === 0) status = 'active'
+      const missedFrom = status === 'in_arrears' ? 1 + Math.floor(r() * pastDue) : 1
+      const schedule = dues.map((due, k) => {
+        const n = k + 1
+        const st =
+          status === 'paid_off'
+            ? 'paid'
+            : due >= end
+              ? 'scheduled'
+              : status === 'written_off' || (status === 'in_arrears' && n >= missedFrom)
+                ? 'missed'
+                : 'paid'
+        return { n, due, st, paid: st === 'paid' ? each : 0 }
+      })
+      const paid = Math.round(schedule.reduce((sum, p) => sum + p.paid, 0) * 100) / 100
+      const closed = status === 'paid_off' || status === 'written_off'
+      const firstMissed = schedule.find((p) => p.st === 'missed')
       const inArrears = status === 'in_arrears'
-      const dpd = inArrears ? 5 + Math.floor(r() * 40) : 0
-      const paid =
-        status === 'paid_off'
-          ? amount + fee
-          : status === 'written_off'
-            ? 0
-            : Math.round((amount + fee) * r() * 50) / 100
+      const dpd = inArrears && firstMissed ? Math.floor((end - firstMissed.due) / DAY) : 0
+      const closedAt = closed
+        ? status === 'paid_off'
+          ? Math.min(disbursedAt + Math.floor(r() * 50) * DAY, end - HOUR)
+          : Math.min((firstMissed?.due ?? disbursedAt) + 30 * DAY, end - HOUR)
+        : null
+
       const { rows } = await db.query(
         `INSERT INTO loan_accounts
            (loan_account_id, account_number, customer_id_string, account_status,
@@ -253,54 +285,35 @@ export async function seedBenchmark(db: Q, seed = 20261022): Promise<Record<stri
           new Date(disbursedAt).toISOString(),
           appNumber,
           inArrears,
-          inArrears
-            ? dpd > 30
-              ? 'late_arrears'
-              : 'early_arrears'
-            : status === 'paid_off' || status === 'written_off'
-              ? 'closed'
-              : 'current',
+          inArrears ? (dpd > 30 ? 'late_arrears' : 'early_arrears') : closed ? 'closed' : 'current',
           dpd,
-          status === 'paid_off' || status === 'written_off' ? 0 : Math.max(0, amount + fee - paid),
+          closed ? 0 : Math.round((amount + fee - paid) * 100) / 100,
           paid,
           status === 'paid_off' ? 'PAID_OFF' : status === 'written_off' ? 'WRITTEN_OFF' : null,
-          status === 'paid_off' || status === 'written_off'
-            ? new Date(disbursedAt + 30 * 24 * HOUR).toISOString()
-            : null,
+          closedAt === null ? null : new Date(closedAt).toISOString(),
         ],
       )
       counts.loans++
       const parent = rows[0].id
-      for (let n = 1; n <= 4; n++) {
-        const due = disbursedAt + n * 14 * 24 * HOUR
-        const each = Math.round(((amount + fee) / 4) * 100) / 100
-        const past = due < end
-        const st = !past
-          ? 'scheduled'
-          : status === 'paid_off'
-            ? 'paid'
-            : inArrears && n >= 2
-              ? 'missed'
-              : r() < 0.85
-                ? 'paid'
-                : 'partial'
-        const paidAmt = st === 'paid' ? each : st === 'partial' ? Math.round(each * 50) / 100 : 0
+      for (const p of schedule) {
         await db.query(
           `INSERT INTO loan_accounts_repayment_schedule_payments
              (_order, _parent_id, id, payment_number, due_date, amount, status, amount_paid,
               amount_remaining, paid_date)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
           [
-            n,
+            p.n,
             parent,
-            `${BENCH_PREFIX}-P${i}-${n}`,
-            n,
-            new Date(due).toISOString(),
+            `${BENCH_PREFIX}-P${i}-${p.n}`,
+            p.n,
+            new Date(p.due).toISOString(),
             each,
-            st,
-            paidAmt,
-            Math.round((each - paidAmt) * 100) / 100,
-            paidAmt > 0 ? new Date(due - Math.floor(r() * 24) * HOUR).toISOString() : null,
+            p.st,
+            p.paid,
+            Math.round((each - p.paid) * 100) / 100,
+            p.paid > 0
+              ? new Date(Math.min(p.due, end - HOUR) - Math.floor(r() * 24) * HOUR).toISOString()
+              : null,
           ],
         )
         counts.instalments++
@@ -340,11 +353,13 @@ async function main(): Promise<void> {
   const pool = new Pool({ connectionString: uri, max: 2 })
   try {
     const { rows } = await pool.query(
-      `SELECT count(*)::int AS n FROM conversations WHERE conversation_id NOT LIKE 'TEST-%'`,
+      `SELECT (SELECT count(*) FROM conversations WHERE conversation_id NOT LIKE 'TEST-%')
+            + (SELECT count(*) FROM loan_accounts WHERE loan_account_id NOT LIKE 'TEST-%')
+              AS n`,
     )
-    if (rows[0].n > 0) {
+    if (Number(rows[0].n) > 0) {
       throw new Error(
-        `This database holds ${rows[0].n} conversations that are not TEST data. ` +
+        `This database holds ${rows[0].n} conversations or loans that are not TEST data. ` +
           'Seed an empty Neon branch, never one with real records.',
       )
     }

@@ -49,7 +49,7 @@ export const QUESTIONS: readonly BenchmarkQuestion[] = [
   q(
     'Q02',
     'BTB-462',
-    'Decline rate by acquisition source for decisions made in October 2026, as a fraction of decided applications.',
+    'Decline rate by acquisition group for decisions made in October 2026, as a fraction of decided applications.',
     `SELECT a.acquisition,
             round(count(*) FILTER (WHERE d.decision = 'DECLINED')::numeric / count(*), 4) AS decline_rate
        FROM decision AS d JOIN application AS a USING (conversation_id)
@@ -130,13 +130,14 @@ export const QUESTIONS: readonly BenchmarkQuestion[] = [
     'Q11',
     'BTB-460',
     'How many applications were started on each Sydney day in September 2026?',
-    `SELECT started_on, count(*) AS started FROM application
-      WHERE started_on BETWEEN '2026-09-01' AND '2026-09-30' GROUP BY 1`,
+    `SELECT a.started_on, count(*) AS started
+       FROM application AS a LEFT JOIN decision AS d USING (conversation_id)
+      WHERE d.mock_origin IS NOT TRUE AND a.started_on BETWEEN '2026-09-01' AND '2026-09-30' GROUP BY 1`,
   ),
   q(
     'Q12',
     'BTB-460',
-    'Pass rate (approved as a fraction of decided) by acquisition source for applications started in October 2026, excluding mock decisions.',
+    'Pass rate (approved as a fraction of decided) by acquisition group for applications started in October 2026, excluding mock decisions.',
     `SELECT a.acquisition,
             round(count(*) FILTER (WHERE d.decision = 'APPROVED')::numeric / count(*), 4) AS pass_rate
        FROM application AS a JOIN decision AS d USING (conversation_id)
@@ -146,7 +147,7 @@ export const QUESTIONS: readonly BenchmarkQuestion[] = [
   q(
     'Q13',
     'BTB-460',
-    'Funded rate (funded as a fraction of started) by acquisition source for applications started in September and October 2026, excluding mock decisions.',
+    'Funded rate (funded as a fraction of started) by acquisition group for applications started in September and October 2026, excluding mock decisions.',
     `SELECT a.acquisition, round(count(*) FILTER (WHERE a.funded)::numeric / count(*), 4) AS funded_rate
        FROM application AS a LEFT JOIN decision AS d USING (conversation_id)
       WHERE d.mock_origin IS NOT TRUE AND a.started_on BETWEEN '2026-09-01' AND '2026-10-31'
@@ -156,8 +157,9 @@ export const QUESTIONS: readonly BenchmarkQuestion[] = [
     'Q14',
     'BTB-460',
     'What fraction of applications started in October 2026 came from a referring website?',
-    `SELECT round(count(*) FILTER (WHERE acquisition = 'referral')::numeric / count(*), 4) AS referral_share
-       FROM application WHERE started_on BETWEEN '2026-10-01' AND '2026-10-31'`,
+    `SELECT round(count(*) FILTER (WHERE a.acquisition = 'referral')::numeric / count(*), 4) AS referral_share
+       FROM application AS a LEFT JOIN decision AS d USING (conversation_id)
+      WHERE d.mock_origin IS NOT TRUE AND a.started_on BETWEEN '2026-10-01' AND '2026-10-31'`,
   ),
   q(
     'Q15',
@@ -173,8 +175,9 @@ export const QUESTIONS: readonly BenchmarkQuestion[] = [
     'Q16',
     'BTB-460',
     'Applications started in October 2026 by campaign, for applications that had a campaign.',
-    `SELECT campaign, count(*) AS started FROM application
-      WHERE campaign IS NOT NULL AND started_on BETWEEN '2026-10-01' AND '2026-10-31' GROUP BY 1`,
+    `SELECT a.campaign, count(*) AS started
+       FROM application AS a LEFT JOIN decision AS d USING (conversation_id)
+      WHERE d.mock_origin IS NOT TRUE AND a.campaign IS NOT NULL AND a.started_on BETWEEN '2026-10-01' AND '2026-10-31' GROUP BY 1`,
   ),
   q(
     'Q17',
@@ -199,15 +202,17 @@ export const QUESTIONS: readonly BenchmarkQuestion[] = [
     'Q19',
     'BTB-460',
     'Applications started per week (weeks starting Monday, Sydney dates) in September and October 2026, with the Monday of each week.',
-    `SELECT date_trunc('week', started_on)::date AS week_start, count(*) AS started
-       FROM application WHERE started_on BETWEEN '2026-09-01' AND '2026-10-31' GROUP BY 1`,
+    `SELECT date_trunc('week', a.started_on)::date AS week_start, count(*) AS started
+       FROM application AS a LEFT JOIN decision AS d USING (conversation_id)
+      WHERE d.mock_origin IS NOT TRUE AND a.started_on BETWEEN '2026-09-01' AND '2026-10-31' GROUP BY 1`,
   ),
   q(
     'Q20',
     'BTB-460',
     'Applications started in October 2026 by acquisition group, distinguishing applications before attribution was recorded.',
-    `SELECT acquisition, count(*) AS started FROM application
-      WHERE started_on BETWEEN '2026-10-01' AND '2026-10-31' GROUP BY 1`,
+    `SELECT a.acquisition, count(*) AS started
+       FROM application AS a LEFT JOIN decision AS d USING (conversation_id)
+      WHERE d.mock_origin IS NOT TRUE AND a.started_on BETWEEN '2026-10-01' AND '2026-10-31' GROUP BY 1`,
   ),
 
   // ── PRD ──────────────────────────────────────────────────────────────
@@ -223,7 +228,7 @@ export const QUESTIONS: readonly BenchmarkQuestion[] = [
   q(
     'Q22',
     'PRD',
-    'Number of loans disbursed and average loan amount (two decimals) by acquisition source, for loans disbursed in September and October 2026, excluding mock approvals.',
+    'Number of loans disbursed and average loan amount (two decimals) by acquisition group, for loans disbursed in September and October 2026, excluding mock approvals.',
     `SELECT l.acquisition, count(*) AS loans, round(avg(l.loan_amount), 2) AS average_amount
        FROM loan AS l LEFT JOIN decision AS d ON d.conversation_id = l.conversation_id
       WHERE d.mock_origin IS NOT TRUE AND l.disbursed_on BETWEEN '2026-09-01' AND '2026-10-31'
@@ -233,12 +238,14 @@ export const QUESTIONS: readonly BenchmarkQuestion[] = [
     'Q23',
     'PRD',
     'How many loans are in arrears now, by aging bucket?',
-    `SELECT aging_bucket, count(*) AS loans FROM loan WHERE in_arrears GROUP BY 1`,
+    `SELECT l.aging_bucket, count(*) AS loans
+       FROM loan AS l LEFT JOIN decision AS d ON d.conversation_id = l.conversation_id
+      WHERE d.mock_origin IS NOT TRUE AND l.in_arrears GROUP BY 1`,
   ),
   q(
     'Q24',
     'PRD',
-    'For loans disbursed in September 2026, what fraction are in arrears now, by acquisition source? Exclude mock approvals.',
+    'For loans disbursed in September 2026, what fraction are in arrears now, by acquisition group? Exclude mock approvals.',
     `SELECT l.acquisition, round(count(*) FILTER (WHERE l.in_arrears)::numeric / count(*), 4) AS arrears_rate
        FROM loan AS l LEFT JOIN decision AS d ON d.conversation_id = l.conversation_id
       WHERE d.mock_origin IS NOT TRUE AND l.disbursed_on BETWEEN '2026-09-01' AND '2026-09-30'
@@ -284,7 +291,9 @@ export const QUESTIONS: readonly BenchmarkQuestion[] = [
     'Q30',
     'PRD',
     'Average days past due of loans currently in arrears, to one decimal place.',
-    `SELECT round(avg(dpd), 1) AS average_dpd FROM loan WHERE in_arrears`,
+    `SELECT round(avg(l.dpd), 1) AS average_dpd
+       FROM loan AS l LEFT JOIN decision AS d ON d.conversation_id = l.conversation_id
+      WHERE d.mock_origin IS NOT TRUE AND l.in_arrears`,
   ),
 
   // ── Staff requests ───────────────────────────────────────────────────
@@ -292,8 +301,9 @@ export const QUESTIONS: readonly BenchmarkQuestion[] = [
     'Q31',
     'staff',
     'How many applications were started on each Sydney day from 2 to 5 October 2026?',
-    `SELECT started_on, count(*) AS started FROM application
-      WHERE started_on BETWEEN '2026-10-02' AND '2026-10-05' GROUP BY 1`,
+    `SELECT a.started_on, count(*) AS started
+       FROM application AS a LEFT JOIN decision AS d USING (conversation_id)
+      WHERE d.mock_origin IS NOT TRUE AND a.started_on BETWEEN '2026-10-02' AND '2026-10-05' GROUP BY 1`,
   ),
   q(
     'Q32',
@@ -308,8 +318,10 @@ export const QUESTIONS: readonly BenchmarkQuestion[] = [
     'staff',
     'How many distinct customers started more than one application in September and October 2026?',
     `SELECT count(*) AS repeat_customers FROM (
-       SELECT customer_id FROM application
-        WHERE customer_id IS NOT NULL AND started_on BETWEEN '2026-09-01' AND '2026-10-31'
+       SELECT a.customer_id
+         FROM application AS a LEFT JOIN decision AS d USING (conversation_id)
+        WHERE d.mock_origin IS NOT TRUE AND a.customer_id IS NOT NULL
+          AND a.started_on BETWEEN '2026-09-01' AND '2026-10-31'
         GROUP BY 1 HAVING count(*) > 1) AS r`,
   ),
   q(
@@ -322,7 +334,7 @@ export const QUESTIONS: readonly BenchmarkQuestion[] = [
   q(
     'Q35',
     'staff',
-    'Applications declined for capacity reasons in October 2026, by acquisition source.',
+    'Applications declined for capacity reasons in October 2026, by acquisition group.',
     `SELECT a.acquisition, count(*) AS capacity_declines
        FROM decision AS d JOIN application AS a USING (conversation_id)
       WHERE NOT d.mock_origin AND d.decision = 'DECLINED' AND d.decline_category = 'capacity'
@@ -392,14 +404,18 @@ export const REVIEWER_SET: readonly SeededDefinition[] = [
     sql: ref('Q04').replace('FROM decision AS d', 'FROM decision_event AS d'),
     seededError: 'Counts every revision of a decision, not each application once',
   },
-  { questionId: 'Q11', sql: ref('Q11'), seededError: null },
+  { questionId: 'Q18', sql: ref('Q18'), seededError: null },
   {
     questionId: 'Q11',
+    // Explicitly UTC, so the error does not depend on the session time zone.
     sql: ref('Q11')
-      .replace('SELECT started_on,', 'SELECT started_at::date AS started_on,')
       .replace(
-        "WHERE started_on BETWEEN '2026-09-01' AND '2026-09-30' GROUP BY 1",
-        "WHERE started_at::date BETWEEN '2026-09-01' AND '2026-09-30' GROUP BY 1",
+        'SELECT a.started_on,',
+        "SELECT (a.started_at AT TIME ZONE 'UTC')::date AS started_on,",
+      )
+      .replace(
+        "a.started_on BETWEEN '2026-09-01' AND '2026-09-30' GROUP BY 1",
+        "(a.started_at AT TIME ZONE 'UTC')::date BETWEEN '2026-09-01' AND '2026-09-30' GROUP BY 1",
       ),
     seededError: 'Groups by the UTC day, not the Sydney day',
   },
@@ -413,8 +429,8 @@ export const REVIEWER_SET: readonly SeededDefinition[] = [
   {
     questionId: 'Q14',
     sql: ref('Q14').replace(
-      "acquisition = 'referral'",
-      "channel = 'referral' OR acquisition = 'not recorded'",
+      "a.acquisition = 'referral'",
+      "a.channel = 'referral' OR a.acquisition = 'not recorded'",
     ),
     seededError: 'Counts pre-capture applications as referrals',
   },

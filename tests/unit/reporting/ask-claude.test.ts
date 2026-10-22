@@ -5,14 +5,14 @@
  */
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest'
 
-const parse = vi.fn()
+const create = vi.fn()
 vi.mock('@anthropic-ai/sdk', () => {
   class APIError extends Error {}
   class RateLimitError extends APIError {}
   class Anthropic {
     static APIError = APIError
     static RateLimitError = RateLimitError
-    beta = { messages: { parse } }
+    beta = { messages: { create } }
   }
   return { default: Anthropic }
 })
@@ -71,14 +71,14 @@ function response(overrides: Record<string, unknown> = {}) {
       cache_read_input_tokens: 3500,
       cache_creation_input_tokens: 0,
     },
-    parsed_output: OUTPUT,
+    content: [{ type: 'text', text: JSON.stringify(OUTPUT) }],
     ...overrides,
   }
 }
 
 beforeEach(() => {
   vi.stubEnv('ANTHROPIC_API_KEY', 'test-key')
-  parse.mockReset().mockResolvedValue(response())
+  create.mockReset().mockResolvedValue(response())
 })
 
 afterEach(() => {
@@ -89,7 +89,7 @@ describe('askClaude', () => {
   test('sends the schema description and the question, with fallbacks and structured output', async () => {
     const result = await askClaude({ question: 'Approvals per day this month?' })
     expect(result.status).toBe('ok')
-    const [params] = parse.mock.calls[0]
+    const [params] = create.mock.calls[0]
     expect(params.model).toBe('claude-opus-5-5')
     expect(params.betas).toEqual(['server-side-fallback-2026-07-01'])
     expect(params.fallbacks).toBe('default')
@@ -110,14 +110,21 @@ describe('askClaude', () => {
       previous: {
         definition: toDraftDefinition(OUTPUT),
         refinement: 'Only weekdays',
-        issues: ['Mock decisions are not excluded'],
+        issues: [
+          { code: 'MOCK', message: 'Mock decisions are not excluded' },
+          { code: 'RATE_RANGE', message: 'decline_rate must be between 0 and 1; got 45.2' },
+          { code: 'RUN', message: 'The query failed (column "x" does not exist)' },
+        ],
       },
     })
-    const content = parse.mock.calls[0][0].messages[0].content as string
+    const content = create.mock.calls[0][0].messages[0].content as string
     expect(content).toContain('Change requested: Only weekdays')
     expect(content).toContain('Mock decisions are not excluded')
     expect(content).toContain('"title": "Approvals by day"')
-    expect(content).not.toMatch(/rows/i)
+    // Result values and database error text stay out.
+    expect(content).toContain('fell outside 0–1')
+    expect(content).not.toContain('45.2')
+    expect(content).not.toContain('does not exist')
   })
 
   test('records tokens, cache use, latency and versions', async () => {
@@ -135,21 +142,33 @@ describe('askClaude', () => {
     expect(result.usage.latencyMs).toBeGreaterThanOrEqual(0)
   })
 
-  test('a refusal and an unusable answer are reported, not thrown', async () => {
-    parse.mockResolvedValueOnce(response({ stop_reason: 'refusal', parsed_output: null }))
+  test('a refusal, a cut-off answer and unusable text are reported with usage, not thrown', async () => {
+    create.mockResolvedValueOnce(
+      response({ stop_reason: 'refusal', content: [{ type: 'text', text: 'I can' }] }),
+    )
     expect((await askClaude({ question: 'q' })).status).toBe('refused')
-    parse.mockResolvedValueOnce(response({ stop_reason: 'max_tokens', parsed_output: null }))
+    create.mockResolvedValueOnce(
+      response({
+        stop_reason: 'max_tokens',
+        content: [{ type: 'text', text: '{"answerable": tr' }],
+      }),
+    )
     const cut = await askClaude({ question: 'q' })
     expect(cut).toMatchObject({
       status: 'invalid_output',
       message: expect.stringMatching(/cut off/),
+      usage: { outputTokens: 800 },
     })
+    create.mockResolvedValueOnce(
+      response({ content: [{ type: 'text', text: JSON.stringify({ answerable: true }) }] }),
+    )
+    expect((await askClaude({ question: 'q' })).status).toBe('invalid_output')
   })
 
   test('without an API key it says Ask Claude is not configured', async () => {
     vi.stubEnv('ANTHROPIC_API_KEY', '')
     await expect(askClaude({ question: 'q' })).rejects.toBeInstanceOf(AskUnavailableError)
-    expect(parse).not.toHaveBeenCalled()
+    expect(create).not.toHaveBeenCalled()
   })
 })
 

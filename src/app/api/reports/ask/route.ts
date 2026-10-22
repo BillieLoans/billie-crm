@@ -7,8 +7,10 @@
  *   { mode: 'check', question, definition }                        re-check hand-edited SQL; no Claude call
  *
  * Report authors (admin, supervisor) only. Claude receives the reporting
- * schema description and the question, never result rows. The definition is
- * checked and previewed through the report runner.
+ * schema description, the question and, for a refinement, the draft and
+ * what the checks found (with result values and database errors replaced by
+ * fixed text), never result rows. Every text is size-bounded. The definition
+ * is checked and previewed through the report runner.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
@@ -17,26 +19,17 @@ import Anthropic from '@anthropic-ai/sdk'
 import configPromise from '@payload-config'
 import { isReportAuthor } from '@/server/reporting/run-report'
 import { AskUnavailableError } from '@/server/reporting/ask/claude'
-import { checkEditedDefinition, draftFromQuestion } from '@/server/reporting/ask/draft'
-import type { DraftDefinition } from '@/server/reporting/ask/validate'
+import {
+  checkEditedDefinition,
+  draftFromQuestion,
+  parseDefinition,
+  parseIssues,
+} from '@/server/reporting/ask/draft'
 
 const MAX_TEXT = 2000
 
 function text(value: unknown): string {
   return typeof value === 'string' ? value.trim().slice(0, MAX_TEXT) : ''
-}
-
-function asDefinition(value: unknown): DraftDefinition | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-  const v = value as Record<string, unknown>
-  if (typeof v.sql !== 'string' || typeof v.title !== 'string') return null
-  return {
-    title: v.title,
-    description: typeof v.description === 'string' ? v.description : '',
-    sql: v.sql,
-    parameters: v.parameters ?? [],
-    chart: v.chart ?? null,
-  }
 }
 
 function error(status: number, code: string, message: string) {
@@ -66,17 +59,17 @@ export async function POST(request: NextRequest) {
     if (mode === 'ask') {
       return NextResponse.json(await draftFromQuestion(payload, user, { question }))
     }
-    const definition = asDefinition(body.definition)
-    if (!definition) return error(400, 'NO_DEFINITION', 'Send the draft definition.')
+    const definition = parseDefinition(body.definition)
+    if (!definition) {
+      return error(400, 'NO_DEFINITION', 'Send the draft definition (within the size limits).')
+    }
     if (mode === 'check') {
       return NextResponse.json(await checkEditedDefinition(payload, user, question, definition))
     }
     if (mode === 'refine') {
       const refinement = text(body.refinement)
       if (!refinement) return error(400, 'NO_REFINEMENT', 'Say what to change.')
-      const issues = Array.isArray(body.issues)
-        ? body.issues.filter((i): i is string => typeof i === 'string').slice(0, 20)
-        : undefined
+      const issues = parseIssues(body.issues)
       return NextResponse.json(
         await draftFromQuestion(payload, user, {
           question,

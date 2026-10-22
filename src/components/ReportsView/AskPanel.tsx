@@ -28,6 +28,7 @@ export function AskPanel() {
   const [definition, setDefinition] = useState<DraftDefinition | null>(null)
   const [sql, setSql] = useState('')
   const [failure, setFailure] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<{ question?: string; refine?: string }>({})
   const [focusRequest, setFocusRequest] = useState(0)
   const [saved, setSaved] = useState<{ slug: string } | null>(null)
   const summaryRef = useRef<HTMLDivElement>(null)
@@ -42,10 +43,9 @@ export function AskPanel() {
   const warnings = (outcome?.issues ?? []).filter((i) => i.level === 'warning')
   const sqlEdited = definition !== null && sql !== definition.sql
 
-  const send = (params: Parameters<typeof ask.mutate>[0]) => {
-    // Buttons stay focusable while a request runs; a second click does nothing.
-    if (ask.isPending) return
+  const send = (params: Parameters<typeof ask.mutate>[0], onDone?: () => void) => {
     setFailure(null)
+    setFieldErrors({})
     setSaved(null)
     ask.mutate(params, {
       onSuccess: (result) => {
@@ -54,6 +54,7 @@ export function AskPanel() {
           setDefinition(result.definition)
           setSql(result.definition.sql)
         }
+        onDone?.()
         if (result.status !== 'ok' || result.issues.some((i) => i.level === 'error')) {
           setFocusRequest((n) => n + 1)
         }
@@ -65,13 +66,17 @@ export function AskPanel() {
     })
   }
 
+  const showFieldError = (field: 'question' | 'refine', message: string) => {
+    setFailure(null)
+    setFieldErrors({ [field]: message })
+    setFocusRequest((n) => n + 1)
+  }
+
   const onAsk = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!question.trim()) {
-      setFailure('Enter a question')
-      setFocusRequest((n) => n + 1)
-      return
-    }
+    // Buttons stay focusable while a request runs; a second click does nothing.
+    if (ask.isPending) return
+    if (!question.trim()) return showFieldError('question', 'Enter a question')
     setOutcome(null)
     setDefinition(null)
     send({ mode: 'ask', question })
@@ -79,24 +84,41 @@ export function AskPanel() {
 
   const onRefine = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!definition || !refinement.trim()) return
-    send({
-      mode: 'refine',
-      question,
-      definition: { ...definition, sql },
-      refinement,
-      issues: (outcome?.issues ?? []).map((i) => i.message),
-    })
-    setRefinement('')
+    if (ask.isPending || !definition) return
+    if (!refinement.trim()) return showFieldError('refine', 'Say what to change')
+    send(
+      {
+        mode: 'refine',
+        question,
+        definition: { ...definition, sql },
+        refinement,
+        issues: (outcome?.issues ?? []).map((i) => ({ code: i.code, message: i.message })),
+      },
+      () => setRefinement(''),
+    )
   }
 
   const onCheck = () => {
-    if (!definition) return
+    if (ask.isPending || !definition) return
     send({ mode: 'check', question, definition: { ...definition, sql } })
   }
 
+  // Saving needs a draft that was checked as it stands, with no errors, and
+  // not already saved. The server checks again before saving.
+  const saveBlocker = !definition
+    ? null
+    : sqlEdited
+      ? 'Check the edited SQL before saving.'
+      : outcome?.status !== 'ok'
+        ? 'Ask again or check the SQL before saving.'
+        : errors.length > 0
+          ? 'Fix the problems above before saving.'
+          : saved
+            ? 'This draft is saved.'
+            : null
+
   const onSave = () => {
-    if (!definition || save.isPending) return
+    if (!definition || save.isPending || saveBlocker) return
     setFailure(null)
     save.mutate(
       { ...definition, sql },
@@ -121,7 +143,10 @@ export function AskPanel() {
           : ''
 
   const showSummary =
-    failure !== null || errors.length > 0 || (outcome !== null && outcome.status !== 'ok')
+    failure !== null ||
+    Object.keys(fieldErrors).length > 0 ||
+    errors.length > 0 ||
+    (outcome !== null && outcome.status !== 'ok')
   const chart = definition?.chart != null ? chartSpecSchema.safeParse(definition.chart) : null
 
   return (
@@ -147,6 +172,16 @@ export function AskPanel() {
           <h2 className={styles.errorSummaryTitle}>There is a problem</h2>
           <ul className={styles.errorSummaryList}>
             {failure && <li>{failure}</li>}
+            {fieldErrors.question && (
+              <li>
+                <a href={`#${id}-question`}>{fieldErrors.question}</a>
+              </li>
+            )}
+            {fieldErrors.refine && (
+              <li>
+                <a href={`#${id}-refine`}>{fieldErrors.refine}</a>
+              </li>
+            )}
             {outcome?.status === 'unanswerable' && (
               <li>
                 The reporting data cannot answer this question
@@ -176,7 +211,13 @@ export function AskPanel() {
           </label>
           <p id={`${id}-question-hint`} className={styles.hint}>
             For example: decline rate by acquisition source for each week of the last quarter.
+            Don&apos;t include customer names or contact details.
           </p>
+          {fieldErrors.question && (
+            <p id={`${id}-question-error`} className={styles.fieldError}>
+              {fieldErrors.question}
+            </p>
+          )}
           <textarea
             id={`${id}-question`}
             className={styles.textarea}
@@ -184,7 +225,12 @@ export function AskPanel() {
             maxLength={2000}
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
-            aria-describedby={`${id}-question-hint`}
+            aria-invalid={fieldErrors.question ? true : undefined}
+            aria-describedby={
+              fieldErrors.question
+                ? `${id}-question-error ${id}-question-hint`
+                : `${id}-question-hint`
+            }
           />
         </div>
         <div className={styles.actions}>
@@ -257,11 +303,16 @@ export function AskPanel() {
               type="button"
               className={styles.primaryButton}
               onClick={onSave}
-              disabled={errors.length > 0 || sqlEdited || save.isPending}
+              aria-disabled={saveBlocker !== null || save.isPending}
+              aria-describedby={saveBlocker ? `${id}-save-blocker` : undefined}
             >
               Save as a draft report
             </button>
-            {sqlEdited && <span className={styles.hint}>Check the edited SQL before saving.</span>}
+            {saveBlocker && (
+              <span id={`${id}-save-blocker`} className={styles.hint}>
+                {saveBlocker}
+              </span>
+            )}
           </div>
           {saved && (
             <p className={styles.note} data-testid="ask-saved">
@@ -278,6 +329,11 @@ export function AskPanel() {
               <label htmlFor={`${id}-refine`} className={styles.fieldLabel}>
                 Change something
               </label>
+              {fieldErrors.refine && (
+                <p id={`${id}-refine-error`} className={styles.fieldError}>
+                  {fieldErrors.refine}
+                </p>
+              )}
               <textarea
                 id={`${id}-refine`}
                 className={styles.textarea}
@@ -285,6 +341,8 @@ export function AskPanel() {
                 maxLength={2000}
                 value={refinement}
                 onChange={(e) => setRefinement(e.target.value)}
+                aria-invalid={fieldErrors.refine ? true : undefined}
+                aria-describedby={fieldErrors.refine ? `${id}-refine-error` : undefined}
               />
             </div>
             <div className={styles.actions}>

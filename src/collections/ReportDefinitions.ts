@@ -1,4 +1,10 @@
-import type { Access, CollectionConfig, FieldHook, Validate } from 'payload'
+import type {
+  Access,
+  CollectionBeforeChangeHook,
+  CollectionConfig,
+  FieldHook,
+  Validate,
+} from 'payload'
 import { hasApprovalAuthority, isAdmin } from '@/lib/access'
 import {
   REPORT_SLUG_RE,
@@ -56,6 +62,16 @@ const normaliseParameters: FieldHook = ({ value }) => {
 }
 
 /**
+ * Where a report came from, set once on create from the request context
+ * (`reportOrigin`, passed by the Ask Claude save), never from the data.
+ */
+const setOrigin: CollectionBeforeChangeHook = ({ data, operation, context }) => {
+  if (operation !== 'create') return data
+  const origin = context.reportOrigin
+  return { ...data, origin: origin === 'ask' ? origin : (data.origin ?? 'manual') }
+}
+
+/**
  * Report definitions (BTB-506).
  *
  * A report is data, not code: SQL over the `reporting` schema, its
@@ -90,6 +106,7 @@ export const ReportDefinitions: CollectionConfig = {
     drafts: true,
     maxPerDoc: 50,
   },
+  hooks: { beforeChange: [setOrigin] },
   fields: [
     { name: 'title', type: 'text', required: true, maxLength: 120 },
     {
@@ -153,6 +170,8 @@ export const ReportDefinitions: CollectionConfig = {
       type: 'relationship',
       relationTo: 'users',
       admin: { position: 'sidebar', readOnly: true },
+      // Not writable through the API: set by the hook below.
+      access: { create: () => false, update: () => false },
       hooks: {
         // Set once, from whoever creates the report.
         beforeChange: [
@@ -170,6 +189,8 @@ export const ReportDefinitions: CollectionConfig = {
         { label: 'Drafted with Claude', value: 'ask' },
       ],
       admin: { position: 'sidebar', readOnly: true },
+      // Not writable through the API: set by `setOrigin` from the caller.
+      access: { create: () => false, update: () => false },
     },
     {
       name: 'schedule',

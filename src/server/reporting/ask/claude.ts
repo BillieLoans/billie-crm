@@ -18,6 +18,7 @@ import type { DraftDefinition } from './validate'
 export const ASK_MODEL = 'claude-opus-5-5'
 export const ASK_EFFORT = 'high' as const
 export const ASK_PROMPT_VERSION = 'ask-v1'
+export const ASK_TIMEOUT_MS = 85_000
 
 const AskParameterSchema = z.object({
   name: z.string().describe('lower_snake_case; the SQL reads parameter N as $N, in list order'),
@@ -100,8 +101,29 @@ export type AskResponse =
 
 export interface AskRequest {
   question: string
-  /** A previous draft to change, and what to change. */
-  previous?: { definition: DraftDefinition; refinement: string; issues?: string[] }
+  /** A previous draft to change, what to change, and what the checks found. */
+  previous?: {
+    definition: DraftDefinition
+    refinement: string
+    issues?: ReadonlyArray<{ code: string; message: string }>
+  }
+}
+
+/**
+ * Checks whose messages carry result values or database error text. Claude
+ * gets a fixed description instead, so no result data reaches it.
+ */
+const RESULT_ISSUES: Record<string, string> = {
+  RUN: 'The query failed when run on its defaults.',
+  RATE_RANGE: 'A *_rate column fell outside 0–1 or a *_pct column outside 0–100.',
+  TOTAL: 'The All/Total row does not equal the sum of the other rows.',
+}
+
+/** What Claude is told about the checks' findings: no values, bounded. */
+export function issuesForClaude(
+  issues: ReadonlyArray<{ code: string; message: string }>,
+): string[] {
+  return issues.slice(0, 20).map((i) => RESULT_ISSUES[i.code] ?? String(i.message).slice(0, 300))
 }
 
 export class AskUnavailableError extends Error {}
@@ -112,7 +134,9 @@ function getClient(): Anthropic {
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new AskUnavailableError('Ask Claude is not configured (ANTHROPIC_API_KEY)')
   }
-  client ??= new Anthropic({ timeout: 120_000, maxRetries: 2 })
+  // The CRM sits behind Cloudflare, which gives up on the origin after 100
+  // seconds; a draft that takes longer would be paid for and never seen.
+  client ??= new Anthropic({ timeout: ASK_TIMEOUT_MS, maxRetries: 0 })
   return client
 }
 
@@ -125,7 +149,9 @@ function userMessage(request: AskRequest): string {
     'Current draft:',
     JSON.stringify(definition, null, 2),
     issues?.length
-      ? `\nProblems found when checking it:\n${issues.map((i) => `- ${i}`).join('\n')}`
+      ? `\nProblems found when checking it:\n${issuesForClaude(issues)
+          .map((i) => `- ${i}`)
+          .join('\n')}`
       : '',
     '',
     `Change requested: ${refinement}`,
@@ -142,7 +168,7 @@ function userMessage(request: AskRequest): string {
  *   replaces the prompt, and `promptVersion` / `schemaVersion` label the
  *   usage it records. Live requests leave them unset.
  * @throws AskUnavailableError when no API key is configured, and
- *   Anthropic.APIError for API failures.
+ *   Anthropic.APIError for API failures (timeouts included).
  */
 export async function askClaude(
   request: AskRequest,
@@ -150,7 +176,10 @@ export async function askClaude(
 ): Promise<AskResponse> {
   const anthropic = getClient()
   const started = performance.now()
-  const response = await anthropic.beta.messages.parse({
+  // `create`, not `parse`: `parse` throws on text that does not match the
+  // schema (a refusal, a cut-off answer) before the stop reason or usage
+  // can be read. The output is checked against the schema below instead.
+  const response = await anthropic.beta.messages.create({
     model: ASK_MODEL,
     max_tokens: 16_000,
     // A classifier decline is re-run on Anthropic's recommended fallback
@@ -186,17 +215,38 @@ export async function askClaude(
       usage,
     }
   }
-  if (!response.parsed_output) {
+  if (response.stop_reason === 'max_tokens') {
     return {
       status: 'invalid_output',
-      message:
-        response.stop_reason === 'max_tokens'
-          ? 'The draft was too long and was cut off. Ask a narrower question.'
-          : 'Claude did not return a usable definition. Try again.',
+      message: 'The draft was too long and was cut off. Ask a narrower question.',
       usage,
     }
   }
-  return { status: 'ok', output: response.parsed_output, usage }
+  const output = parseOutput(response.content)
+  if (!output) {
+    return {
+      status: 'invalid_output',
+      message: 'Claude did not return a usable definition. Try again.',
+      usage,
+    }
+  }
+  return { status: 'ok', output, usage }
+}
+
+/** The structured output, or null when the text is not a valid definition. */
+export function parseOutput(
+  content: ReadonlyArray<{ type: string; text?: string }>,
+): AskOutput | null {
+  const text = content
+    .filter((block) => block.type === 'text')
+    .map((block) => block.text ?? '')
+    .join('')
+  try {
+    const parsed = AskOutputSchema.safeParse(JSON.parse(text))
+    return parsed.success ? parsed.data : null
+  } catch {
+    return null
+  }
 }
 
 /** A Claude answer as a definition the validator and runner understand. */

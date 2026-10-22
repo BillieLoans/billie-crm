@@ -40,6 +40,9 @@ export interface ValidationIssue {
   message: string
 }
 
+/** Schemas other than `reporting` (and any `pg_*` one). */
+const OTHER_SCHEMAS = new Set(['public', 'information_schema', 'portal'])
+
 const TOTAL_LABELS = new Set(['all', 'all sources', 'total'])
 const NOT_ADDITIVE = /(rate|pct|percent|median|avg|average|mean|hours|days|share)/i
 
@@ -88,17 +91,28 @@ export function validateStatic(draft: DraftDefinition): {
     }
     const code = stripLiterals(draft.sql) ?? ''
 
-    // reporting.* only: a schema-qualified relation after FROM or JOIN must
-    // be in reporting. (The runner's role enforces this anyway.)
-    for (const m of code.matchAll(/\b(?:FROM|JOIN)\s+"?([A-Za-z_][\w$]*)"?\s*\.\s*"?[A-Za-z_]/gi)) {
-      if (m[1].toLowerCase() !== 'reporting') {
-        error('SCHEMA', `Reports read only the reporting schema, not ${m[1]}`)
-      }
+    // reporting.* only: flag a name qualified by another schema. Aliases
+    // (`d.decided_at`, `extract(epoch FROM d.x)`) are not schemas, so only
+    // the schemas a database has besides `reporting` count. Quoted names are
+    // blanked in `code` but keep their place, so read them from the SQL.
+    // (The runner's login role enforces this anyway.)
+    const schemas = new Set<string>()
+    for (const m of code.matchAll(/("[^"]*"|\b[A-Za-z_][\w$]*)\s*\.\s*(?=["A-Za-z_])/g)) {
+      const raw = m[1].startsWith('"')
+        ? draft.sql.slice(m.index + 1, m.index + m[1].length - 1)
+        : m[1].toLowerCase()
+      if (OTHER_SCHEMAS.has(raw) || raw.startsWith('pg_')) schemas.add(raw)
+    }
+    for (const schema of schemas) {
+      error('SCHEMA', `Reports read only the reporting schema, not ${schema}`)
     }
 
     // Dates: filter and group on Sydney-day columns, not on instants.
     if (
       /\b\w+_at\b\s*(?:::\s*date\b)?\s*(?:>=|<=|<|>|=|BETWEEN)\s*(?:\$\d+|DATE\b|'|CURRENT_DATE|now\s*\()/i.test(
+        code,
+      ) ||
+      /(?:\$\d+|'|CURRENT_DATE|now\s*\(\s*\))\s*(?:::\s*\w+\s*)?(?:>=|<=|<|>|=)\s*\w+_at\b/i.test(
         code,
       ) ||
       /\b\w+_at\s*::\s*date\b/i.test(code) ||

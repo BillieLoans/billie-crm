@@ -13,6 +13,7 @@ import type { Pool } from 'pg'
 import { getDashboardPool } from '@/lib/dashboard-aggregates'
 import { runReportSql } from '@/server/reporting/runner'
 import { BUSINESS_RULES } from '@/server/reporting/schema-description'
+import { validateStatic } from '@/server/reporting/ask/validate'
 import { reportingReaderPool } from '../utils/reportingReader'
 import { clearBenchmark, seedBenchmark } from '../../scripts/report-benchmark/seed'
 import { QUESTIONS, REVIEWER_SET } from '../../scripts/report-benchmark/questions'
@@ -60,10 +61,48 @@ describe('benchmark question set', () => {
   )
 })
 
+describe('benchmark data and references', () => {
+  it('every reference query passes the Ask checks with no error', () => {
+    for (const q of QUESTIONS.filter((x) => x.referenceSql !== null)) {
+      const errors = validateStatic({
+        title: q.id,
+        description: '',
+        sql: q.referenceSql as string,
+        parameters: [],
+        chart: null,
+      }).issues.filter((i) => i.level === 'error')
+      expect([q.id, errors]).toEqual([q.id, []])
+    }
+  })
+
+  it('seeded loans agree with their schedules', async () => {
+    const { rows } = await pool.query(
+      `SELECT l.loan_account_id, l.account_status, l.aging_is_in_arrears,
+              l.balances_total_paid::numeric AS paid,
+              coalesce(sum(p.amount_paid), 0)::numeric AS schedule_paid,
+              count(*) FILTER (WHERE p.status = 'missed') AS missed
+         FROM loan_accounts AS l
+         JOIN loan_accounts_repayment_schedule_payments AS p ON p._parent_id = l.id
+        WHERE l.loan_account_id LIKE 'TEST-BENCH%'
+        GROUP BY 1, 2, 3, 4`,
+    )
+    expect(rows.length).toBeGreaterThan(50)
+    for (const loan of rows) {
+      expect([loan.loan_account_id, Number(loan.paid)]).toEqual([
+        loan.loan_account_id,
+        Number(loan.schedule_paid),
+      ])
+      if (loan.aging_is_in_arrears) expect(Number(loan.missed)).toBeGreaterThan(0)
+      if (loan.account_status === 'written_off') expect(Number(loan.paid)).toBe(0)
+    }
+  })
+})
+
 describe('reviewer set', () => {
-  it('mixes ten correct definitions with ten seeded errors', () => {
+  it('mixes ten correct definitions with ten seeded errors, each question once', () => {
     expect(REVIEWER_SET).toHaveLength(20)
     expect(REVIEWER_SET.filter((d) => d.seededError === null)).toHaveLength(10)
+    expect(new Set(REVIEWER_SET.map((d) => d.questionId)).size).toBe(20)
   })
 
   it.each(

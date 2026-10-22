@@ -34,8 +34,12 @@ revisions), so it costs money. Use a Neon branch, never production:
 1. Create a branch of the CRM demo project with no data, and run the Payload
    migrations on it (or a local database with `push`).
 2. Create `reporting_reader` with a password (see `docs/reporting.md`,
-   "Roles and grants").
-3. Seed it. The seeder refuses a database holding any non-TEST conversation.
+   "Roles and grants"), then re-run the reporting migration's grant block:
+   the role must exist when the grants are applied, or every query fails
+   with PERMISSION.
+3. Seed it. The seeder refuses a database holding any non-TEST conversation
+   or loan, and replaces the branch's portfolio snapshots for September and
+   October 2026.
 
    ```bash
    BENCH_DATABASE_URI=postgresql://owner:…@…/branch pnpm exec tsx scripts/report-benchmark/seed.ts
@@ -67,11 +71,13 @@ record.
 
 Over the answerable questions, per arm:
 
-- **Executed**: the final SQL ran on its defaults with no check error. H1
-  target ≥ 98%.
-- **Equivalent**: and its result matches the reference. H1 target ≥ 90%.
-- **Silent-wrong**: ran, nothing flagged it (no check error or warning), and
-  wrong. The dangerous case. H1 target ≤ 2%. In H0 nothing flags anything.
+- **Executed**: the final SQL ran on its defaults. H1 target ≥ 98%.
+- **Equivalent**: it ran and its result matches the reference (see
+  `compare.ts`). H1 target ≥ 90%.
+- **Silent-wrong**: it ran, its result is wrong, and the checks raised no
+  error or warning. The dangerous case. H1 target ≤ 2%. The checks are run
+  on H0's drafts for scoring only (H0 never sees them), so the measure is
+  the same in both arms.
 
 Also reported: unanswerable questions correctly declined, false refusals,
 revisions and tokens.
