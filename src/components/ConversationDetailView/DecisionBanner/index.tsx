@@ -71,6 +71,7 @@ export function DecisionBanner({ conversation }: DecisionBannerProps) {
     return (
       <div className={`${styles.banner} ${styles.approved}`} data-testid="decision-banner">
         <span className={styles.headline}>✓ Approved</span>
+        <RulesetLine version={decisionDetail?.rulesetVersion} />
       </div>
     )
   }
@@ -131,6 +132,7 @@ export function DecisionBanner({ conversation }: DecisionBannerProps) {
     <div className={`${styles.banner} ${styles.declined}`} data-testid="decision-banner">
       <span className={styles.headline}>{headline}</span>
       {retryHint && <span className={styles.subhead}>{retryHint}</span>}
+      {!isBlockDecline && <RulesetLine version={decisionDetail?.rulesetVersion} />}
       {evidence.length > 0 && (
         <div className={styles.detail} data-testid="decision-evidence">
           {evidence.map((row, i) => (
@@ -150,6 +152,20 @@ export function DecisionBanner({ conversation }: DecisionBannerProps) {
         />
       )}
     </div>
+  )
+}
+
+/**
+ * RulesetLine — which credit ruleset made the decision (BTB-505). Rendered only
+ * when the decision carried one; decisions made before the field existed show
+ * nothing rather than a placeholder.
+ */
+function RulesetLine({ version }: { version?: string | null }) {
+  if (!version) return null
+  return (
+    <span className={styles.subhead} data-testid="decision-ruleset">
+      Credit ruleset {version}
+    </span>
   )
 }
 

@@ -845,6 +845,10 @@ export interface Conversation {
      * End of the re-application exclusion window (inclusive)
      */
     blockedUntil?: string | null;
+    /**
+     * Credit ruleset that made the decision (BTB-505)
+     */
+    rulesetVersion?: string | null;
   };
   /**
    * Decline evidence from final_credit_decision.decision_metadata (BTB-462)
@@ -2612,6 +2616,7 @@ export interface ConversationsSelect<T extends boolean = true> {
         retryEligible?: T;
         sourceApplicationNumber?: T;
         blockedUntil?: T;
+        rulesetVersion?: T;
       };
   decisionMetadata?: T;
   reapplicationBlock?:

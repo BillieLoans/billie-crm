@@ -31,6 +31,8 @@ import { ReleaseBatches } from './collections/ReleaseBatches'
 import { ReleaseGrants } from './collections/ReleaseGrants'
 import { ReleaseGateStatus } from './collections/ReleaseGateStatus'
 import { Issues } from './collections/Issues'
+import { applyReportingSchema, dropReportingViews } from './server/reporting/schema'
+import { getDashboardPool } from './lib/dashboard-aggregates'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -183,6 +185,18 @@ export default buildConfig({
     },
     idType: 'uuid',
     push: process.env.NODE_ENV !== 'production',
+    // BTB-504: `push` cannot alter a column a reporting view depends on, so
+    // dev and test drop the views first; onInit recreates them after the push.
+    beforeSchemaInit: [
+      async ({ schema }) => {
+        if (process.env.NODE_ENV !== 'production' && process.env.PAYLOAD_MIGRATING !== 'true') {
+          await dropReportingViews(
+            process.env.DATABASE_URI || 'postgresql://localhost:5432/billie_crm',
+          )
+        }
+        return schema
+      },
+    ],
     afterSchemaInit: [
       ({ schema, extendTable }) => {
         // Enforce the natural key for the schedule-payments child table so the
@@ -288,6 +302,15 @@ export default buildConfig({
     ],
   }),
   sharp,
+  // BTB-504: dev and test sync Payload's tables with `push`, which knows
+  // nothing of the `reporting` schema; apply it here, after the push.
+  // Deployed environments get it from the reporting_schema migration (the
+  // runtime role there cannot run DDL).
+  onInit: async (payload) => {
+    if (process.env.NODE_ENV === 'production') return
+    const pool = getDashboardPool(payload)
+    if (pool) await applyReportingSchema(pool)
+  },
   plugins: [
     payloadCloudPlugin(),
     // storage-adapter-placeholder

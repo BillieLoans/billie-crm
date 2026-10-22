@@ -100,6 +100,8 @@ export const DecisionDetailSchema = z.object({
   retryEligible: z.boolean().nullable().optional(),
   sourceApplicationNumber: z.string().nullable().optional(),
   blockedUntil: z.union([z.string(), z.date()]).nullable().optional(),
+  /** Credit ruleset that made the decision (BTB-505). */
+  rulesetVersion: z.string().nullable().optional(),
 })
 
 /** Non-PII evidence behind a decline (final_credit_decision.decision_metadata, BTB-462). */

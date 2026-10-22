@@ -487,3 +487,41 @@ describe('DecisionBanner review halt (recognition)', () => {
     expect(screen.queryByText('Potential matches')).not.toBeInTheDocument()
   })
 })
+
+describe('DecisionBanner ruleset version (BTB-505)', () => {
+  afterEach(cleanup)
+
+  test('approval names the credit ruleset that made it', () => {
+    render(
+      <DecisionBanner
+        conversation={createConversation({
+          finalDecision: 'APPROVED',
+          decisionDetail: { rulesetVersion: '0123456789abcdef' },
+        })}
+      />,
+    )
+    expect(screen.getByTestId('decision-ruleset')).toHaveTextContent(
+      'Credit ruleset 0123456789abcdef',
+    )
+  })
+
+  test('credit decline names the ruleset', () => {
+    render(
+      <DecisionBanner
+        conversation={createConversation({
+          finalDecision: 'DECLINED',
+          decisionDetail: {
+            reason: 'CREDIT_ASSESSMENT:SERVICEABILITY',
+            rulesetVersion: 'aaaaaaaaaaaaaaaa',
+          },
+        })}
+      />,
+    )
+    expect(screen.getByTestId('decision-ruleset')).toHaveTextContent('aaaaaaaaaaaaaaaa')
+  })
+
+  test('decisions made before the field existed show no ruleset line', () => {
+    render(<DecisionBanner conversation={createConversation({ finalDecision: 'APPROVED' })} />)
+    expect(screen.queryByTestId('decision-ruleset')).not.toBeInTheDocument()
+  })
+})

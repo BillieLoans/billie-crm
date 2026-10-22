@@ -73,6 +73,20 @@ export interface GetBalanceRequest {
   loanAccountId: string
 }
 
+/** GetPortfolioSummary (proto: as_of_date defaults to today on the ledger). */
+export interface GetPortfolioSummaryRequest {
+  asOfDate?: string
+}
+
+export interface PortfolioSummaryResponse {
+  asOfDate: string
+  totalActiveAccounts: number
+  principalReceivable: string
+  feesReceivable: string
+  totalReceivables: string
+  generatedAt?: { seconds: string; nanos: number } | null
+}
+
 export interface GetBalanceResponse {
   loanAccountId: string
   principalBalance: string
@@ -1047,6 +1061,14 @@ export class LedgerClient {
 
   async getBalance(request: GetBalanceRequest): Promise<GetBalanceResponse> {
     return this.promisify<GetBalanceRequest, GetBalanceResponse>(this.client.getBalance)(request)
+  }
+
+  async getPortfolioSummary(
+    request: GetPortfolioSummaryRequest,
+  ): Promise<PortfolioSummaryResponse> {
+    return this.promisify<GetPortfolioSummaryRequest, PortfolioSummaryResponse>(
+      this.client.getPortfolioSummary,
+    )(request)
   }
 
   async getLedgerRecord(request: GetLedgerRecordRequest): Promise<LedgerRecordResponse> {

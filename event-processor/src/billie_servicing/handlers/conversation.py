@@ -29,6 +29,7 @@ from .attribution import sanitise_attribution
 from .cancellation import CUSTOMER_DECLINED, terminal_rank
 from .identity_verification import mirror_lab_verification
 from .network import sanitise_network
+from .reporting import conversation_of, decision_of, record_decision_event
 from .sanitize import parse_payload, safe_str, strip_dollar_keys
 
 logger = structlog.get_logger()
@@ -781,18 +782,9 @@ async def handle_noticeboard_updated(pool: asyncpg.Pool, event: dict[str, Any]) 
 
 
 async def handle_final_decision(pool: asyncpg.Pool, event: dict[str, Any]) -> None:
-    conversation_id = safe_str(
-        event.get("cid") or event.get("conv") or event.get("conversation_id"),
-        "conversation_id",
-    )
+    conversation_id = conversation_of(event)
     payload_dict = parse_payload(event)
-    decision = (
-        event.get("decision")
-        or event.get("outcome")
-        or payload_dict.get("decision")
-        or payload_dict.get("outcome")
-        or ""
-    ).upper()
+    decision = decision_of(event, payload_dict)
 
     log = logger.bind(conversation_id=conversation_id, decision=decision)
     log.info("Processing final_decision")
@@ -836,6 +828,15 @@ async def handle_final_decision(pool: asyncpg.Pool, event: dict[str, Any]) -> No
     blocked_until = coerce_date(payload_dict.get("blocked_until"))
     if blocked_until:
         set_values["decision_detail_blocked_until"] = blocked_until
+    # BTB-505: the credit ruleset that made the decision. A payload that
+    # carries the key always sets it, so a mock approval (null ruleset) does
+    # not keep the version of an earlier real decision; a legacy payload
+    # without the key leaves the column alone.
+    if "ruleset_version" in payload_dict:
+        ruleset_version = payload_dict["ruleset_version"]
+        set_values["decision_detail_ruleset_version"] = (
+            str(ruleset_version) if ruleset_version else None
+        )
 
     await upsert_conversation(
         pool,
@@ -861,6 +862,20 @@ async def handle_final_decision(pool: asyncpg.Pool, event: dict[str, Any]) -> No
             json.dumps(stored),
             conversation_id,
         )
+
+    # BTB-504: every decision event, revisions included, for reporting. A
+    # reporting failure must not dead-letter the projection update above; the
+    # S3 back-fill can recover a missed row.
+    try:
+        await record_decision_event(
+            pool,
+            event,
+            payload_dict,
+            conversation_id=conversation_id,
+            decision=decision,
+        )
+    except Exception as exc:
+        log.error("could not record reporting.decision_event", error=str(exc))
 
     if decision == "DECLINED" and not reason:
         # Producer contract breach (every DECLINED carries a reason since
