@@ -13,7 +13,7 @@ import { describe, it, beforeAll, afterAll, expect } from 'vitest'
 import type { Pool } from 'pg'
 import { getDashboardPool } from '@/lib/dashboard-aggregates'
 import { getReportingPool } from '@/server/reporting/runner'
-import { MCP_API_KEYS_SLUG, MCP_KEY_VISIBLE_MS } from '@/server/reporting/mcp'
+import { MCP_API_KEYS_SLUG, MCP_KEY_VISIBLE_MS, MCP_RATE_LIMITS } from '@/server/reporting/mcp'
 import { reportingReaderPool, reportingReaderUri } from '../utils/reportingReader'
 
 const P = 'TEST-BTB509'
@@ -209,6 +209,97 @@ describe('MCP API keys', () => {
   })
 })
 
+describe('Dashboard keys', () => {
+  const admin = () => ({ ...users.admin, collection: 'users' }) as never
+  let dashboardKey = ''
+
+  beforeAll(async () => {
+    const report = (slug: string, title: string) =>
+      payload.create({
+        collection: 'report-definitions',
+        data: {
+          title: `${P} ${title}`,
+          slug,
+          sql: `SELECT decision, count(*) AS n FROM decision WHERE conversation_id LIKE '${P}%' GROUP BY 1 ORDER BY 1`,
+          parameters: [],
+          roles: ['admin', 'supervisor'],
+          _status: 'published',
+        } as never,
+        overrideAccess: true,
+      })
+    const shared = await report('test-btb509-dashboard', 'dashboard')
+    await report('test-btb509-not-shared', 'not shared')
+    const created = await payload.create({
+      collection: MCP_API_KEYS_SLUG,
+      data: {
+        label: `${P} dashboard`,
+        user: users.supervisor.id,
+        scope: 'dashboard',
+        reports: [shared.id],
+        // Ignored for a dashboard key.
+        reportDefinitions: { find: true, create: true },
+      } as never,
+      overrideAccess: false,
+      user: admin(),
+    })
+    dashboardKey = (created as unknown as { apiKey: string }).apiKey
+  })
+
+  it('must name the reports it may run', async () => {
+    const refused = await payload
+      .create({
+        collection: MCP_API_KEYS_SLUG,
+        data: { label: `${P} empty`, user: users.supervisor.id, scope: 'dashboard' } as never,
+        overrideAccess: false,
+        user: admin(),
+      })
+      .catch((e: { data?: unknown }) => e)
+    expect(JSON.stringify((refused as { data?: unknown }).data)).toMatch(/Choose the reports/)
+  })
+
+  it('offers only list_reports and run_report', async () => {
+    const r = await rpc('tools/list', {}, dashboardKey)
+    expect(r.body?.result?.tools?.map((t) => t.name).sort()).toEqual(['list_reports', 'run_report'])
+  })
+
+  it('lists and runs the reports ticked on it, and nothing else', async () => {
+    const listed = JSON.parse(await callText('list_reports', {}, dashboardKey))
+    expect(listed.map((r: { slug: string }) => r.slug)).toEqual(['test-btb509-dashboard'])
+    const run = JSON.parse(
+      await callText('run_report', { slug: 'test-btb509-dashboard' }, dashboardKey),
+    )
+    expect(run.rows).toEqual([
+      { decision: 'APPROVED', n: 1 },
+      { decision: 'DECLINED', n: 1 },
+    ])
+    expect(await callText('run_report', { slug: 'test-btb509-not-shared' }, dashboardKey)).toMatch(
+      /^Error: FORBIDDEN/,
+    )
+    // No ad-hoc SQL, whatever the caller asks for.
+    expect(await callText('run_report_query', { sql: 'SELECT 1 AS n' }, dashboardKey)).not.toMatch(
+      /"rows"/,
+    )
+  })
+
+  it('is rate-limited per key', async () => {
+    const created = await payload.create({
+      collection: MCP_API_KEYS_SLUG,
+      data: { label: `${P} limited`, user: users.admin.id } as never,
+      overrideAccess: false,
+      user: admin(),
+    })
+    const limited = (created as unknown as { apiKey: string }).apiKey
+    const statuses: number[] = []
+    for (let i = 0; i <= MCP_RATE_LIMITS.personal.limit; i++) {
+      statuses.push((await rpc('tools/list', {}, limited)).status)
+    }
+    expect(statuses.slice(0, -1).every((s) => s === 200)).toBe(true)
+    expect(statuses.at(-1)).toBe(429)
+    // Other keys are unaffected.
+    expect((await rpc('tools/list', {}, key)).status).toBe(200)
+  }, 60_000)
+})
+
 describe('MCP tools', () => {
   it('lists the reporting tools and report find/create, never the plugin update or delete', async () => {
     const r = await rpc('tools/list', {}, key)
@@ -216,6 +307,7 @@ describe('MCP tools', () => {
     const names = r.body?.result?.tools?.map((t) => t.name) ?? []
     expect(names).toEqual(
       expect.arrayContaining([
+        'list_reports',
         'describe_reporting_schema',
         'run_report_query',
         'run_report',

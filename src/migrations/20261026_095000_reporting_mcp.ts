@@ -18,6 +18,11 @@ ALTER TYPE enum__report_definitions_v_version_origin ADD VALUE IF NOT EXISTS 'mc
 ALTER TYPE enum_report_runs_trigger ADD VALUE IF NOT EXISTS 'mcp';
 ALTER TYPE enum_report_asks_kind ADD VALUE IF NOT EXISTS 'mcp_query';
 
+DO $$ BEGIN
+  CREATE TYPE enum_payload_mcp_api_keys_scope AS ENUM ('personal', 'dashboard');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
 CREATE TABLE IF NOT EXISTS payload_mcp_api_keys (
   id uuid DEFAULT gen_random_uuid() NOT NULL,
   user_id uuid NOT NULL,
@@ -25,10 +30,12 @@ CREATE TABLE IF NOT EXISTS payload_mcp_api_keys (
   description character varying,
   report_definitions_find boolean DEFAULT false,
   report_definitions_create boolean DEFAULT false,
+  payload_mcp_tool_list_reports boolean DEFAULT true,
   payload_mcp_tool_describe_reporting_schema boolean DEFAULT true,
   payload_mcp_tool_run_report_query boolean DEFAULT true,
   payload_mcp_tool_run_report boolean DEFAULT true,
   payload_mcp_tool_update_report_draft boolean DEFAULT true,
+  scope enum_payload_mcp_api_keys_scope DEFAULT 'personal'::enum_payload_mcp_api_keys_scope NOT NULL,
   api_key character varying,
   api_key_index character varying,
   updated_at timestamp(3) with time zone DEFAULT now() NOT NULL,
@@ -52,6 +59,37 @@ CREATE INDEX IF NOT EXISTS payload_mcp_api_keys_updated_at_idx
 CREATE INDEX IF NOT EXISTS payload_mcp_api_keys_user_idx
   ON payload_mcp_api_keys USING btree (user_id);
 
+-- A dashboard key's reports (hasMany relationship).
+CREATE TABLE IF NOT EXISTS payload_mcp_api_keys_rels (
+  id serial NOT NULL,
+  "order" integer,
+  parent_id uuid NOT NULL,
+  path character varying NOT NULL,
+  report_definitions_id uuid
+);
+DO $$ BEGIN
+  ALTER TABLE payload_mcp_api_keys_rels ADD CONSTRAINT payload_mcp_api_keys_rels_pkey PRIMARY KEY (id);
+EXCEPTION WHEN duplicate_object OR duplicate_table OR invalid_table_definition THEN NULL;
+END $$;
+DO $$ BEGIN
+  ALTER TABLE payload_mcp_api_keys_rels ADD CONSTRAINT payload_mcp_api_keys_rels_parent_fk
+    FOREIGN KEY (parent_id) REFERENCES payload_mcp_api_keys(id) ON DELETE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  ALTER TABLE payload_mcp_api_keys_rels ADD CONSTRAINT payload_mcp_api_keys_rels_report_definitions_fk
+    FOREIGN KEY (report_definitions_id) REFERENCES report_definitions(id) ON DELETE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+CREATE INDEX IF NOT EXISTS payload_mcp_api_keys_rels_order_idx
+  ON payload_mcp_api_keys_rels USING btree ("order");
+CREATE INDEX IF NOT EXISTS payload_mcp_api_keys_rels_parent_idx
+  ON payload_mcp_api_keys_rels USING btree (parent_id);
+CREATE INDEX IF NOT EXISTS payload_mcp_api_keys_rels_path_idx
+  ON payload_mcp_api_keys_rels USING btree (path);
+CREATE INDEX IF NOT EXISTS payload_mcp_api_keys_rels_report_definitions_id_idx
+  ON payload_mcp_api_keys_rels USING btree (report_definitions_id);
+
 ALTER TABLE payload_locked_documents_rels ADD COLUMN IF NOT EXISTS payload_mcp_api_keys_id uuid;
 CREATE INDEX IF NOT EXISTS payload_locked_documents_rels_payload_mcp_api_keys_id_idx
   ON payload_locked_documents_rels USING btree (payload_mcp_api_keys_id);
@@ -70,7 +108,9 @@ export async function down({ db }: MigrateDownArgs): Promise<void> {
   await db.execute(
     sql.raw(`
 ALTER TABLE payload_locked_documents_rels DROP COLUMN IF EXISTS payload_mcp_api_keys_id;
+DROP TABLE IF EXISTS payload_mcp_api_keys_rels;
 DROP TABLE IF EXISTS payload_mcp_api_keys;
+DROP TYPE IF EXISTS enum_payload_mcp_api_keys_scope;
 `),
   )
 }

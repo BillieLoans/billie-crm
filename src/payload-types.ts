@@ -2409,6 +2409,10 @@ export interface PayloadMcpApiKey {
   };
   'payload-mcp-tool'?: {
     /**
+     * List the published reports this key can run: slug, title, description and parameters (with defaults). Run one with run_report.
+     */
+    listReports?: boolean | null;
+    /**
      * Describe the reporting schema: every view and table with its grain, every column with its meaning, the helper functions, and the business rules a report must follow. Read this before writing report SQL.
      */
     describeReportingSchema?: boolean | null;
@@ -2417,7 +2421,7 @@ export interface PayloadMcpApiKey {
      */
     runReportQuery?: boolean | null;
     /**
-     * Run a published report by its slug on the given parameters (blank ones take their defaults) and return its columns and rows. Find slugs with findReportDefinitions. Dashboards should use this, so they show reviewed, aggregate reports only.
+     * Run a published report by its slug on the given parameters (blank ones take their defaults) and return its columns and rows. Find slugs and parameters with list_reports. Dashboards should use this, so they show reviewed, aggregate reports only.
      */
     runReport?: boolean | null;
     /**
@@ -2425,6 +2429,14 @@ export interface PayloadMcpApiKey {
      */
     updateReportDraft?: boolean | null;
   };
+  /**
+   * A dashboard key is shared by everyone in the Claude organisation and can only list and run the reports ticked below; the switches in the sidebar do not apply to it.
+   */
+  scope: 'personal' | 'dashboard';
+  /**
+   * Published reports the dashboard key may run. Choose aggregate reports only: anyone in the Claude organisation can see their results.
+   */
+  reports?: (string | ReportDefinition)[] | null;
   /**
    * Generated when the key is saved and shown for 15 minutes: copy it to the person, who adds it to Claude as a bearer token. If it is lost, delete the key and create another.
    */
@@ -3568,11 +3580,14 @@ export interface PayloadMcpApiKeysSelect<T extends boolean = true> {
   'payload-mcp-tool'?:
     | T
     | {
+        listReports?: T;
         describeReportingSchema?: T;
         runReportQuery?: T;
         runReport?: T;
         updateReportDraft?: T;
       };
+  scope?: T;
+  reports?: T;
   apiKey?: T;
   apiKeyIndex?: T;
   updatedAt?: T;

@@ -337,6 +337,7 @@ through the runner as `reporting_reader`.
 
 | Tool | Does |
 |---|---|
+| `list_reports` | Lists the published reports the key can run, with their parameters |
 | `describe_reporting_schema` | Returns the schema description and business rules Ask Claude uses |
 | `run_report_query` | Runs one SELECT through the runner, `$n` parameters bound, at most 1,000 rows (and 200,000 characters). The whole statement is logged in Report asks as `mcp_query` |
 | `run_report` | Runs a published report by slug on its parameters, with the same caps. Logged in Report runs with trigger `mcp`. Dashboards use this, so they show reviewed, aggregate reports |
@@ -378,11 +379,44 @@ claude mcp add --transport http billie-reporting https://crm.billie.loans/api/mc
   --header "Authorization: Bearer $BILLIE_REPORTING_KEY"
 ```
 
-Claude chat and artifacts use claude.ai connectors. claude.ai authenticates a
-custom connector with OAuth, or with a static request header (a beta for
-selected organisations, and one key shared by every member). This server has
-no OAuth yet, so it is not yet added to the claude.ai organisation; see
-BTB-509.
+Every key is rate-limited per server process: 120 requests a minute for a
+personal key, 300 for a dashboard key.
+
+### claude.ai and artifact dashboards (dashboard key)
+
+claude.ai authenticates a custom connector with OAuth, or with a static
+request header (a beta for selected organisations). A request header is one
+key shared by every member, so the CRM gives claude.ai a **dashboard key**:
+read-only, `list_reports` and `run_report` only, for the published reports an
+admin ticks on the key. No ad-hoc SQL, no schema, no drafts; the sidebar
+switches do not apply to it. Artifact access then follows sharing in the
+Claude organisation, not CRM roles, which is why only reviewed, aggregate
+reports go on the key. Drafting stays in Claude Code with personal keys.
+
+Setting it up (once):
+
+1. In **Reporting → MCP API keys**, create a key with scope **Dashboard**,
+   owner an admin or supervisor (accountable for it; the key goes when they
+   stop being an author), and tick the reports it may run, for example
+   `application-funnel`. Copy the key within 15 minutes.
+2. A claude.ai organisation owner adds a custom connector (Organization
+   settings → Connectors → Add → Custom): name **Billie CRM reporting**, URL
+   `https://crm.billie.loans/api/mcp`, no sign-in, request header
+   `authorization` with value `Bearer <key>`. The name matters: dashboards
+   call the connector by it.
+3. Turn on **Enable artifact connectors** (Organization settings →
+   Capabilities) if it is off.
+
+The first dashboard is `docs/dashboards/application-funnel.html`: the
+application funnel by acquisition group and by source/medium, read live from
+`run_report` on `application-funnel` with the viewer's own connector. It holds
+no data. To publish it, ask Claude (Claude Code or claude.ai) to publish that
+file as an artifact with the `mcp` capability for the **Billie CRM reporting**
+connector and its `run_report` tool, then share it with its viewers in the
+Claude organisation. Publishing needs the connector added first.
+
+To rotate the key, create a new dashboard key, update the connector's header
+(remove and re-add the connector; members reconnect), then delete the old key.
 
 ## Scheduling
 

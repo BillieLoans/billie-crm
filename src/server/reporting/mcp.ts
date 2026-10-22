@@ -22,6 +22,17 @@
  *   aggregate reports), on a connection pool of their own so a busy agent
  *   cannot hold up the Reports view or the scheduled jobs.
  *
+ * Two kinds of key:
+ *
+ * - personal: one per report author, for Claude Code. All the tools above.
+ * - dashboard: shared by the Claude organisation (a claude.ai connector
+ *   with a static request header, used by chat and artifact dashboards).
+ *   Read-only: `list_reports` and `run_report`, for the published reports an
+ *   admin ticks on the key, and nothing else. It still has an accountable
+ *   owner, a report author, and is revoked with them.
+ *
+ * Every key is rate-limited per server process (`MCP_RATE_LIMITS`).
+ *
  * Over MCP, Claude sees query results. That is why only the `reporting`
  * schema is reachable (the runner's login role) and rows are capped.
  * Every query is logged: `run_report` in Report runs, `run_report_query` in
@@ -30,11 +41,12 @@
 import { randomBytes } from 'node:crypto'
 import { mcpPlugin } from '@payloadcms/plugin-mcp'
 import type { CollectionConfig, Payload, PayloadRequest } from 'payload'
-import { Forbidden, UnauthorizedError, ValidationError } from 'payload'
+import { APIError, Forbidden, UnauthorizedError, ValidationError } from 'payload'
 import { z } from 'zod/v3'
 import { hideFromNonAdmins, isAdmin } from '@/lib/access'
 import { REPORT_VIEWER_ROLES } from '@/lib/schemas/reports'
-import { isReportAuthor, runReport } from './run-report'
+import { checkRateLimit, type RateLimitOptions } from '@/lib/utils/rateLimit'
+import { isReportAuthor, listReports, runReport } from './run-report'
 import { ReportRunError, getReportingPool, runReportSql } from './runner'
 import { MCP_API_KEYS_SLUG, apiKeyIndex } from './mcp-keys'
 import { renderSchemaDescription, SCHEMA_DESCRIPTION_VERSION } from './schema-description'
@@ -43,6 +55,24 @@ import { renderSchemaDescription, SCHEMA_DESCRIPTION_VERSION } from './schema-de
 export const MCP_ROW_CAP = 1_000
 /** Characters of JSON a tool returns; rows past it are dropped. */
 export const MCP_MAX_RESULT_CHARS = 200_000
+
+/** Requests per key per server process. A dashboard key serves every viewer. */
+export const MCP_RATE_LIMITS: Record<McpKeyScope, RateLimitOptions> = {
+  personal: { limit: 120, windowMs: 60_000 },
+  dashboard: { limit: 300, windowMs: 60_000 },
+}
+
+export type McpKeyScope = 'personal' | 'dashboard'
+
+/** What `authenticateMcp` learned about the key, for the tools (on `req.context`). */
+interface McpKeyContext {
+  scope: McpKeyScope
+  /** Dashboard keys: the slugs of the reports the key may run. */
+  reports: string[]
+}
+
+const keyContext = (req: PayloadRequest): McpKeyContext =>
+  (req.context.mcpKey as McpKeyContext | undefined) ?? { scope: 'personal', reports: [] }
 
 /** How long after creation an admin can read a key, to hand it over. */
 export const MCP_KEY_VISIBLE_MS = 15 * 60_000
@@ -115,6 +145,27 @@ const cellValue = z.union([z.string().max(1000), z.number(), z.boolean(), z.null
 /** The custom tools, exported for tests. */
 export const reportingTools: ReportingTool[] = [
   {
+    name: 'list_reports',
+    description:
+      'List the published reports this key can run: slug, title, description and parameters (with defaults). Run one with run_report.',
+    parameters: {},
+    handler: async (_args: Record<string, unknown>, req: PayloadRequest) => {
+      assertAuthor(req)
+      const key = keyContext(req)
+      const reports = (await listReports(req.payload, req.user)).filter(
+        (r) => r.published && (key.scope !== 'dashboard' || key.reports.includes(r.slug)),
+      )
+      return json(
+        reports.map((r) => ({
+          slug: r.slug,
+          title: r.title,
+          description: r.description,
+          parameters: r.parameters,
+        })),
+      )
+    },
+  },
+  {
     name: 'describe_reporting_schema',
     description:
       'Describe the reporting schema: every view and table with its grain, every column with its meaning, the helper functions, and the business rules a report must follow. Read this before writing report SQL.',
@@ -175,7 +226,7 @@ export const reportingTools: ReportingTool[] = [
   {
     name: 'run_report',
     description:
-      'Run a published report by its slug on the given parameters (blank ones take their defaults) and return its columns and rows. Find slugs with findReportDefinitions. Dashboards should use this, so they show reviewed, aggregate reports only.',
+      'Run a published report by its slug on the given parameters (blank ones take their defaults) and return its columns and rows. Find slugs and parameters with list_reports. Dashboards should use this, so they show reviewed, aggregate reports only.',
     parameters: {
       slug: z.string().min(1).max(100),
       parameters: z
@@ -185,10 +236,15 @@ export const reportingTools: ReportingTool[] = [
     },
     handler: async (args: Record<string, unknown>, req: PayloadRequest) => {
       assertAuthor(req)
+      const slug = String(args.slug ?? '')
+      const key = keyContext(req)
+      if (key.scope === 'dashboard' && !key.reports.includes(slug)) {
+        return text(`Error: FORBIDDEN: this key cannot run "${slug}". Call list_reports.`)
+      }
       const outcome = await runReport(
         req.payload,
         req.user,
-        String(args.slug ?? ''),
+        slug,
         {
           parameters: (args.parameters as Record<string, unknown> | undefined) ?? {},
           trigger: 'mcp',
@@ -280,6 +336,31 @@ export function restrictApiKeys(collection: CollectionConfig): CollectionConfig 
     fields: [
       ...collection.fields,
       {
+        name: 'scope',
+        type: 'select',
+        required: true,
+        defaultValue: 'personal',
+        options: [
+          { label: 'Personal (Claude Code, one report author)', value: 'personal' },
+          { label: 'Dashboard (claude.ai connector, shared, read-only)', value: 'dashboard' },
+        ],
+        admin: {
+          description:
+            'A dashboard key is shared by everyone in the Claude organisation and can only list and run the reports ticked below; the switches in the sidebar do not apply to it.',
+        },
+      },
+      {
+        name: 'reports',
+        type: 'relationship',
+        relationTo: 'report-definitions',
+        hasMany: true,
+        admin: {
+          condition: (data) => data?.scope === 'dashboard',
+          description:
+            'Published reports the dashboard key may run. Choose aggregate reports only: anyone in the Claude organisation can see their results.',
+        },
+      },
+      {
         name: 'apiKey',
         type: 'text',
         label: 'API key',
@@ -330,9 +411,19 @@ export function restrictApiKeys(collection: CollectionConfig): CollectionConfig 
               ],
             })
           }
-          if (operation !== 'create') return data
+          const reports = Array.isArray(data.reports) ? data.reports : []
+          if (data.scope === 'dashboard' && reports.length === 0) {
+            throw new ValidationError({
+              collection: collection.slug,
+              errors: [
+                { path: 'reports', message: 'Choose the reports this dashboard key may run' },
+              ],
+            })
+          }
+          const scoped = data.scope === 'dashboard' ? data : { ...data, reports: [] }
+          if (operation !== 'create') return scoped
           const key = `bcrm_${randomBytes(32).toString('base64url')}`
-          return { ...data, apiKey: key, apiKeyIndex: apiKeyIndex(req.payload.secret, key) }
+          return { ...scoped, apiKey: key, apiKeyIndex: apiKeyIndex(req.payload.secret, key) }
         },
       ],
     },
@@ -356,12 +447,37 @@ export const authenticateMcp: NonNullable<McpPluginOptions['overrideAuth']> = as
     pagination: false,
     overrideAccess: true,
   })
-  const key = docs[0] as unknown as (Record<string, unknown> & { user?: unknown }) | undefined
+  const key = docs[0] as unknown as
+    | (Record<string, unknown> & { id: string; user?: unknown; scope?: McpKeyScope })
+    | undefined
   if (!key || typeof key.user !== 'object' || key.user === null) throw new UnauthorizedError()
   if (!isReportAuthor(key.user)) throw new Forbidden()
+  const scope: McpKeyScope = key.scope === 'dashboard' ? 'dashboard' : 'personal'
+  if (!checkRateLimit(`mcp:${key.id}`, MCP_RATE_LIMITS[scope])) {
+    throw new APIError('Too many requests for this key. Try again in a minute.', 429)
+  }
   const user = { ...(key.user as object), collection: 'users', _strategy: 'mcp-api-key' }
   req.user = user as unknown as PayloadRequest['user']
-  return { ...key, user } as unknown as Awaited<ReturnType<typeof authenticateMcp>>
+  if (scope === 'personal') {
+    req.context.mcpKey = { scope, reports: [] } satisfies McpKeyContext
+    return { ...key, user } as unknown as Awaited<ReturnType<typeof authenticateMcp>>
+  }
+  // Dashboard: list and run the ticked reports, whatever the switches say.
+  const reports = (Array.isArray(key.reports) ? key.reports : [])
+    .map((r) => (typeof r === 'object' && r !== null ? (r as { slug?: string }).slug : undefined))
+    .filter((slug): slug is string => typeof slug === 'string')
+  req.context.mcpKey = { scope, reports } satisfies McpKeyContext
+  return {
+    user,
+    reportDefinitions: { find: false, create: false },
+    'payload-mcp-tool': {
+      listReports: true,
+      runReport: true,
+      describeReportingSchema: false,
+      runReportQuery: false,
+      updateReportDraft: false,
+    },
+  } as unknown as Awaited<ReturnType<typeof authenticateMcp>>
 }
 
 export const reportingMcp = mcpPlugin({
