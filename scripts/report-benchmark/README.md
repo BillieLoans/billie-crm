@@ -31,12 +31,22 @@ unreviewed.
 It calls Claude about 240 times for 3 runs of both arms (more with H1
 revisions), so it costs money. Use a Neon branch, never production:
 
-1. Create a branch of the CRM demo project with no data, and run the Payload
-   migrations on it (or a local database with `push`).
-2. Create `reporting_reader` with a password (see `docs/reporting.md`,
-   "Roles and grants"), then re-run the reporting migration's grant block:
-   the role must exist when the grants are applied, or every query fails
-   with PERMISSION.
+1. In Neon, create a branch of the CRM demo project (Branches → Create
+   branch, from the demo branch). Roles come with it, `reporting_reader`
+   included. On the branch, create an empty database as the owner role
+   (`CREATE DATABASE crm_bench OWNER billie_crm;`) and run the migrations into
+   it from your laptop:
+
+   ```bash
+   NODE_ENV=production PAYLOAD_SECRET=bench \
+   DATABASE_URI=postgresql://billie_crm:…@ep-<branch>.ap-southeast-2.aws.neon.tech/crm_bench?sslmode=verify-full \
+   pnpm payload migrate
+   ```
+
+2. The migrations grant the reporting schema to `reporting_reader`. If the
+   demo project has no `reporting_reader` yet, create it first (see
+   `docs/reporting.md`, "Connection"). No read replica is needed: point both
+   URIs at the branch's own compute. Delete the branch when the run is done.
 3. Seed it. The seeder refuses a database holding any non-TEST conversation
    or loan, and replaces the branch's portfolio snapshots for September and
    October 2026.

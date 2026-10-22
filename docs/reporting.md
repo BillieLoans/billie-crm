@@ -203,16 +203,60 @@ answers "Reporting is not configured" without it.
 | dev | the local database, logged in as `reporting_reader` |
 | test | the integration tests create the role and log in as it |
 
-Setting up an environment (once, as the owner role):
+Setting up an environment (once per environment: demo, then prod). Use the
+environment's **owner** connection for steps 1 and 5: `MIGRATE_DATABASE_URI`
+in `infra/fly/env/.env.<env>` where it is set (prod: `neondb_owner`), else
+`DATABASE_URI` (dev and demo, where `billie_crm` owns the database).
 
-1. Deployed environments: in Neon, add a read replica (read-only compute) to
-   the CRM project.
-2. Create `reporting_reader` with a generated password (see "Roles and
-   grants" above), then re-run the reporting migration's grant block. In dev,
-   restarting the app re-applies the grants.
-3. Set `REPORTING_DATABASE_URI=postgresql://reporting_reader:…@<host>/<db>`
-   (`?sslmode=verify-full` for Neon): a Fly secret on the CRM app, or `.env`
-   in dev.
+1. **Create the role on the primary, in SQL.** Do not create it in the Neon
+   console: console-made roles join `neon_superuser`, which can read every
+   table. Generate a URL-safe password (`openssl rand -hex 24`), then:
+
+   ```sql
+   CREATE ROLE reporting_reader LOGIN PASSWORD '<generated>';
+   ALTER ROLE reporting_reader SET default_transaction_read_only = on;
+   ALTER ROLE reporting_reader SET statement_timeout = '15s';
+   ALTER ROLE reporting_reader SET search_path = reporting;
+   ```
+
+2. **Add a read replica** in the Neon console: the CRM project → Branches →
+   the branch the environment's `DATABASE_URI` points at → Add read replica
+   (a read-only compute on the same storage, so it sees the same roles and
+   data seconds behind the primary). 0.25–1 CU with scale to zero is enough;
+   the first query after a suspend takes a moment longer.
+3. **Build the connection string** from the replica's **direct** host (Connect
+   → choose the read replica compute; the host has no `-pooler`):
+   `postgresql://reporting_reader:<pwd>@ep-<replica>.ap-southeast-2.aws.neon.tech/billie_crm?sslmode=verify-full`.
+   Put it in `.env.<env>` as `REPORTING_DATABASE_URI` and run
+   `make -C infra/fly secrets ENV=<env>`.
+4. **Deploy.** The reporting migration grants the schema to
+   `reporting_reader` when the role exists, so creating it first means there is
+   nothing more to do.
+5. **Only if the role was created after the reporting migration ran**, grant
+   it by hand (owner connection, on the primary):
+
+   ```sql
+   GRANT USAGE ON SCHEMA reporting TO reporting_reader;
+   GRANT SELECT ON ALL TABLES IN SCHEMA reporting TO reporting_reader;
+   ```
+
+6. **Check it**, connected with `REPORTING_DATABASE_URI`:
+
+   ```sql
+   SELECT session_user, current_setting('default_transaction_read_only');  -- reporting_reader | on
+   SELECT count(*) FROM reporting.decision;   -- a number
+   SELECT count(*) FROM public.users;         -- ERROR: permission denied
+   SELECT r.rolname FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.roleid
+    WHERE m.member = 'reporting_reader'::regrole;  -- no rows
+   ```
+
+   Then open any report under Reports in the CRM.
+
+To change the password: `ALTER ROLE reporting_reader PASSWORD '<new>'` on the
+primary, update `REPORTING_DATABASE_URI`, and run `make secrets` again.
+
+Dev without Neon: create the role in the local database the same way and point
+`REPORTING_DATABASE_URI` at it; restarting the app re-applies the grants.
 
 ## First reports (BTB-507)
 
