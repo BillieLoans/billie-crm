@@ -32,11 +32,14 @@ const REASON_OPTIONS: { value: ReasonCategory; label: string }[] = [
  * linguist's own reason is carried in the kill note. `otp_max_attempts`: the
  * customer exhausted their verification-code attempts. `injection_attempts`:
  * the sanitiser stopped repeated high-severity prompt-injection attempts.
+ * `purpose_refused` (BTB-497): the stated loan purpose was clearly business
+ * or a disallowed purpose; the kill note carries `bucket=…; entry=…`.
  */
 const SYSTEM_REASON_LABELS: Record<string, string> = {
   conversation_policy: 'Conversation policy',
   otp_max_attempts: 'OTP attempts exhausted',
   injection_attempts: 'Repeated injection attempts',
+  purpose_refused: 'Purpose refused',
 }
 
 /**
