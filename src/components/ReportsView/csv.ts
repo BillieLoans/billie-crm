@@ -7,9 +7,12 @@ import { sydneyDateString } from '@/lib/disbursement-cutoff'
  * opening the CSV in Excel or Sheets never runs it (CSV injection).
  */
 const FORMULA_START = /^[=+\-@\t\r]/
+const PLAIN_NUMBER = /^-?\d+(\.\d+)?$/
 
 function safeCell(value: unknown): unknown {
-  if (typeof value === 'string' && FORMULA_START.test(value)) return `'${value}`
+  if (typeof value === 'string' && FORMULA_START.test(value) && !PLAIN_NUMBER.test(value)) {
+    return `'${value}`
+  }
   if (value !== null && typeof value === 'object') return JSON.stringify(value)
   return value
 }
@@ -22,7 +25,8 @@ export function toCsv(
   const fields = columns.map((c) => c.name)
   return Papa.unparse(
     {
-      fields,
+      // Column names come from report SQL, so they are neutralised too.
+      fields: fields.map((f) => String(safeCell(f))),
       data: rows.map((row) => fields.map((f) => safeCell(row[f]))),
     },
     { newline: '\r\n' },
@@ -49,5 +53,6 @@ export function downloadText(
   document.body.appendChild(link)
   link.click()
   link.remove()
-  URL.revokeObjectURL(url)
+  // Revoke after the browser has started the download.
+  setTimeout(() => URL.revokeObjectURL(url), 1_000)
 }

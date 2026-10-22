@@ -1,11 +1,14 @@
 /**
- * Unit tests for the Reports view (BTB-506): role gate, report list,
- * generated parameter form with its error summary, results table, status
- * announcements and the CSV export. Data hooks and the chart are mocked.
+ * Unit tests for the Reports view (BTB-506): role gate, report list, the
+ * generated parameter form with its error summary, results, status
+ * announcements, draft handling and the CSV export. The report list hook
+ * and the chart are mocked; runs go through the real query hook with
+ * `fetch` mocked.
  */
 import React from 'react'
-import { render, screen, fireEvent, within } from '@testing-library/react'
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 
 let currentUser: { id: string; role: string } | null = { id: 'u1', role: 'operations' }
 vi.mock('@payloadcms/ui', () => ({ useAuth: () => ({ user: currentUser }) }))
@@ -17,20 +20,13 @@ const reportsState: {
 } = { isLoading: false, error: null }
 vi.mock('@/hooks/queries/useReports', () => ({ useReports: () => reportsState }))
 
-const mutate = vi.fn()
-vi.mock('@/hooks/mutations/useRunReport', async () => {
-  const actual = await vi.importActual<typeof import('@/hooks/mutations/useRunReport')>(
-    '@/hooks/mutations/useRunReport',
-  )
-  return { ...actual, useRunReport: () => ({ mutate, isPending: false }) }
-})
-
 vi.mock('@/components/ReportsView/ReportChart', () => ({
-  ReportChart: () => <div data-testid="report-chart" />,
+  ReportChart: ({ spec }: { spec: { x: string } }) => (
+    <div data-testid="report-chart" data-x={spec.x} />
+  ),
 }))
 
 import { ReportsView } from '@/components/ReportsView/ReportsView'
-import { ReportRunFailure } from '@/hooks/mutations/useRunReport'
 import { toCsv } from '@/components/ReportsView/csv'
 
 const WEEKLY = {
@@ -38,6 +34,7 @@ const WEEKLY = {
   slug: 'weekly',
   title: 'Weekly approvals',
   description: 'Approvals by day',
+  published: true,
   parameters: [{ name: 'from', label: 'From', type: 'date', required: true, default: 'today-7' }],
   chart: { type: 'line', x: 'day', series: [{ column: 'approved' }] },
 }
@@ -46,6 +43,7 @@ const BY_CODE = {
   slug: 'by-code',
   title: 'Declines by code',
   description: null,
+  published: true,
   parameters: [
     { name: 'code', label: 'Reason code', type: 'text', required: true },
     { name: 'limit', label: 'Limit', type: 'integer', required: false },
@@ -68,26 +66,53 @@ const RESULT = {
   durationMs: 420,
 }
 
+const fetchMock = vi.fn()
+
+function respond(status: number, body: unknown) {
+  return Promise.resolve({ ok: status < 400, status, json: async () => body })
+}
+
+/** The JSON bodies sent to the run endpoint. */
+function sentBodies(): Array<{ parameters: Record<string, unknown>; draft: boolean }> {
+  return fetchMock.mock.calls.map(([, init]) => JSON.parse((init as RequestInit).body as string))
+}
+
+function renderView(slug: string) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(
+    <QueryClientProvider client={client}>
+      <ReportsView slug={slug} />
+    </QueryClientProvider>,
+  )
+}
+
 beforeEach(() => {
   currentUser = { id: 'u1', role: 'operations' }
   reportsState.data = { reports: [WEEKLY, BY_CODE], canAuthor: false }
   reportsState.isLoading = false
   reportsState.error = null
-  mutate.mockReset()
+  fetchMock.mockReset().mockImplementation(() => respond(200, RESULT))
+  vi.stubGlobal('fetch', fetchMock)
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
 })
 
 describe('ReportsView', () => {
   it('explains, rather than shows, reports to roles outside the lending wall', () => {
     currentUser = { id: 'm1', role: 'marketing' }
-    render(<ReportsView slug="" />)
+    renderView('')
     expect(screen.getByTestId('access-denied')).toHaveTextContent('You cannot open reports')
   })
 
   it('lists the reports the user can run, marking the current one', () => {
-    render(<ReportsView slug="weekly" />)
+    renderView('weekly')
     const nav = screen.getByRole('navigation', { name: 'Reports' })
-    const current = within(nav).getByRole('link', { name: 'Weekly approvals' })
-    expect(current).toHaveAttribute('aria-current', 'page')
+    expect(within(nav).getByRole('link', { name: 'Weekly approvals' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
     expect(within(nav).getByRole('link', { name: 'Declines by code' })).toHaveAttribute(
       'href',
       '/admin/reports/by-code',
@@ -96,12 +121,13 @@ describe('ReportsView', () => {
     expect(screen.queryByLabelText('Run the latest draft')).toBeNull()
   })
 
-  it('runs straight away when every parameter has a default, then shows the results', () => {
-    mutate.mockImplementation((_vars, opts) => opts.onSuccess(RESULT))
-    render(<ReportsView slug="weekly" />)
-    expect(mutate).toHaveBeenCalledTimes(1)
-    expect(mutate.mock.calls[0][0]).toMatchObject({ slug: 'weekly', draft: false })
-    expect(mutate.mock.calls[0][0].parameters.from).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  it('runs once straight away when every parameter has a default, then shows the results', async () => {
+    renderView('weekly')
+    expect(await screen.findByTestId('report-table')).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/reports/weekly')
+    expect(sentBodies()[0]).toMatchObject({ draft: false })
+    expect(sentBodies()[0].parameters.from).toMatch(/^\d{4}-\d{2}-\d{2}$/)
 
     expect(screen.getByTestId('report-status')).toHaveTextContent('2 rows in 0.4 seconds.')
     expect(screen.getByTestId('report-chart')).toBeInTheDocument()
@@ -111,14 +137,13 @@ describe('ReportsView', () => {
     expect(screen.getByRole('button', { name: 'Download CSV' })).toBeEnabled()
   })
 
-  it('does not run until required parameters are filled, and summarises what is missing', () => {
-    render(<ReportsView slug="by-code" />)
-    expect(mutate).not.toHaveBeenCalled()
+  it('does not run until required parameters are filled, and summarises what is missing', async () => {
+    renderView('by-code')
     fireEvent.click(screen.getByRole('button', { name: 'Run report' }))
-    expect(mutate).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
 
-    const summary = screen.getByTestId('report-error-summary')
-    expect(summary).toHaveFocus()
+    const summary = await screen.findByTestId('report-error-summary')
+    await waitFor(() => expect(summary).toHaveFocus())
     const link = within(summary).getByRole('link', { name: 'Enter reason code' })
     const input = screen.getByLabelText('Reason code')
     expect(link).toHaveAttribute('href', `#${input.id}`)
@@ -126,76 +151,136 @@ describe('ReportsView', () => {
     expect(input.getAttribute('aria-describedby')).toContain(`${input.id}-error`)
   })
 
-  it('shows server-side field errors and run failures in the summary', () => {
-    mutate.mockImplementation((_vars, opts) =>
-      opts.onError(
-        new ReportRunFailure('Check the highlighted fields.', 'INVALID_PARAMETERS', {
-          code: 'Reason code must be 200 characters or fewer',
-        }),
-      ),
+  it('shows server-side field errors and run failures in the summary', async () => {
+    fetchMock.mockImplementation(() =>
+      respond(400, {
+        error: {
+          code: 'INVALID_PARAMETERS',
+          message: 'Check the highlighted fields.',
+          fields: { code: 'Reason code must be 200 characters or fewer' },
+        },
+      }),
     )
-    render(<ReportsView slug="by-code" />)
+    renderView('by-code')
     fireEvent.change(screen.getByLabelText('Reason code'), { target: { value: 'X' } })
     fireEvent.click(screen.getByRole('button', { name: 'Run report' }))
-    expect(screen.getByTestId('report-error-summary')).toHaveTextContent(
+    expect(await screen.findByTestId('report-error-summary')).toHaveTextContent(
       'Reason code must be 200 characters or fewer',
     )
 
-    mutate.mockImplementation((_vars, opts) =>
-      opts.onError(new ReportRunFailure('The report took too long.', 'TIMEOUT')),
+    fetchMock.mockImplementation(() =>
+      respond(504, { error: { code: 'TIMEOUT', message: 'The report took too long.' } }),
     )
     fireEvent.click(screen.getByRole('button', { name: 'Run report' }))
-    expect(screen.getByTestId('report-error-summary')).toHaveTextContent(
-      'The report took too long.',
+    await waitFor(() =>
+      expect(screen.getByTestId('report-error-summary')).toHaveTextContent(
+        'The report took too long.',
+      ),
     )
     expect(screen.getByTestId('report-status')).toHaveTextContent('The report did not run.')
   })
 
-  it('warns when results were cut at the row limit', () => {
-    mutate.mockImplementation((_vars, opts) =>
-      opts.onSuccess({ ...RESULT, truncated: true, rowCount: 50000 }),
+  it('clears the previous results when a re-run fails', async () => {
+    renderView('weekly')
+    await screen.findByTestId('report-table')
+    fetchMock.mockImplementation(() =>
+      respond(504, { error: { code: 'TIMEOUT', message: 'The report took too long.' } }),
     )
-    render(<ReportsView slug="weekly" />)
-    expect(screen.getByTestId('report-truncated')).toHaveTextContent('Reports stop at 50,000 rows')
+    fireEvent.click(screen.getByRole('button', { name: 'Run report' }))
+    await screen.findByTestId('report-error-summary')
+    expect(screen.queryByTestId('report-table')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Download CSV' })).toBeDisabled()
   })
 
-  it('gives authors an edit link and the draft switch', () => {
+  it('keeps focus on the run button while a run is in progress', async () => {
+    renderView('by-code')
+    fireEvent.change(screen.getByLabelText('Reason code'), { target: { value: 'X' } })
+    const button = screen.getByRole('button', { name: 'Run report' })
+    button.focus()
+    fireEvent.click(button)
+    expect(button).toBeEnabled()
+    expect(button).toHaveFocus()
+    await screen.findByTestId('report-table')
+  })
+
+  it('warns when results were cut at the row limit', async () => {
+    fetchMock.mockImplementation(() =>
+      respond(200, { ...RESULT, truncated: true, rowCount: 50000 }),
+    )
+    renderView('weekly')
+    expect(await screen.findByTestId('report-truncated')).toHaveTextContent(
+      'Reports stop at 50,000 rows',
+    )
+  })
+
+  it('gives authors an edit link and runs the draft with the draft form', async () => {
     currentUser = { id: 'a1', role: 'supervisor' }
-    reportsState.data = { reports: [WEEKLY, BY_CODE], canAuthor: true }
-    render(<ReportsView slug="by-code" />)
+    const withDraft = {
+      ...BY_CODE,
+      draft: {
+        title: 'Declines by code (v2)',
+        description: null,
+        parameters: [{ name: 'since', label: 'Since', type: 'date', required: true }],
+        chart: { type: 'bar', x: 'code', series: [{ column: 'n' }] },
+      },
+    }
+    reportsState.data = { reports: [WEEKLY, withDraft], canAuthor: true }
+    renderView('by-code')
     expect(screen.getByRole('link', { name: 'Edit report' })).toHaveAttribute(
       'href',
       '/admin/collections/report-definitions/r2',
     )
+    expect(screen.getByLabelText('Reason code')).toBeInTheDocument()
+
     fireEvent.click(screen.getByLabelText('Run the latest draft'))
-    fireEvent.change(screen.getByLabelText('Reason code'), { target: { value: 'X' } })
+    expect(screen.queryByLabelText('Reason code')).toBeNull()
+    fireEvent.change(screen.getByLabelText('Since'), { target: { value: '2026-10-01' } })
     fireEvent.click(screen.getByRole('button', { name: 'Run report' }))
-    expect(mutate.mock.calls[0][0]).toMatchObject({ draft: true, parameters: { code: 'X' } })
+    await screen.findByTestId('report-table')
+    expect(sentBodies().at(-1)).toEqual({ parameters: { since: '2026-10-01' }, draft: true })
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Declines by code (v2)')
+  })
+
+  it('runs a draft-only report as a draft and says it is unpublished', async () => {
+    currentUser = { id: 'a1', role: 'admin' }
+    const draftOnly = { ...WEEKLY, slug: 'new-one', published: false, draft: WEEKLY }
+    reportsState.data = { reports: [draftOnly], canAuthor: true }
+    renderView('new-one')
+    expect(screen.getByText(/Not published\./)).toBeInTheDocument()
+    const toggle = screen.getByLabelText('Run the latest draft')
+    expect(toggle).toBeChecked()
+    expect(toggle).toBeDisabled()
+    await screen.findByTestId('report-table')
+    expect(sentBodies()[0]).toMatchObject({ draft: true })
+    expect(
+      within(screen.getByRole('navigation', { name: 'Reports' })).getByText('(draft)'),
+    ).toBeInTheDocument()
   })
 
   it('says when a link names no report the user can run', () => {
-    render(<ReportsView slug="secret" />)
+    renderView('secret')
     expect(screen.getByTestId('report-not-found')).toHaveTextContent('Report not found')
   })
 })
 
 describe('toCsv', () => {
-  it('writes raw values and neutralises spreadsheet formulas', () => {
+  it('writes raw values and neutralises spreadsheet formulas, headers included', () => {
     const csv = toCsv(
       [
         { name: 'name', kind: 'text' },
         { name: 'n', kind: 'number' },
         { name: 'meta', kind: 'text' },
+        { name: '=cmd()', kind: 'text' },
       ],
       [
-        { name: '=HYPERLINK("http://x")', n: -5, meta: { a: 1 } },
-        { name: 'plain, with comma', n: 1.5, meta: null },
+        { name: '=HYPERLINK("http://x")', n: -5, meta: { a: 1 }, '=cmd()': '-12' },
+        { name: 'plain, with comma', n: 1.5, meta: null, '=cmd()': '-x' },
       ],
     )
     expect(csv.split('\r\n')).toEqual([
-      'name,n,meta',
-      `"'=HYPERLINK(""http://x"")",-5,"{""a"":1}"`,
-      '"plain, with comma",1.5,',
+      `name,n,meta,'=cmd()`,
+      `"'=HYPERLINK(""http://x"")",-5,"{""a"":1}",-12`,
+      `"plain, with comma",1.5,,'-x`,
     ])
   })
 })

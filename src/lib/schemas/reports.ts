@@ -114,7 +114,14 @@ export function parameterDefault(param: ReportParameter, now: Date = new Date())
 }
 
 function isBlank(value: unknown): boolean {
-  return value === undefined || value === null || value === ''
+  return value === undefined || value === null || (typeof value === 'string' && !value.trim())
+}
+
+/** A real calendar date as `YYYY-MM-DD` (rejects 2026-02-30, which Date rolls over). */
+function isRealDate(text: string): boolean {
+  if (!DATE_RE.test(text)) return false
+  const parsed = new Date(`${text}T00:00:00Z`)
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === text
 }
 
 /**
@@ -131,7 +138,9 @@ export function bindParameters(
   const values: unknown[] = []
   const errors: Record<string, string> = {}
   for (const param of params) {
-    let raw = submitted[param.name]
+    // Own properties only: a parameter named `constructor` must not read
+    // Object.prototype.
+    let raw = Object.hasOwn(submitted, param.name) ? submitted[param.name] : undefined
     if (isBlank(raw)) raw = parameterDefault(param, now)
     if (isBlank(raw)) {
       if (param.required) errors[param.name] = `Enter ${param.label.toLowerCase()}`
@@ -155,8 +164,8 @@ function parseValue(
   const label = param.label
   switch (param.type) {
     case 'date': {
-      const text = String(raw)
-      if (!DATE_RE.test(text) || Number.isNaN(Date.parse(`${text}T00:00:00Z`))) {
+      const text = String(raw).trim()
+      if (!isRealDate(text)) {
         return { ok: false, error: `${label} must be a real date` }
       }
       return { ok: true, value: text }

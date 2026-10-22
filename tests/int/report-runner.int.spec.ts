@@ -1,25 +1,46 @@
 /**
  * Integration coverage for the report runner and report definitions (BTB-506).
  *
- * Runs against the real Postgres from tests/utils/globalSetup.ts. Proves the
- * ticket's guarantees end to end: non-SELECT SQL is refused, the timeout
- * fires, the row cap holds, a role without access is refused, the runner
- * cannot read outside `reporting`, every run is logged, and a new report is
- * only data (created here through the Local API, with no code).
+ * Runs against the real Postgres from tests/utils/globalSetup.ts, with the
+ * runner logged in as `reporting_reader` exactly as in production. Proves the
+ * ticket's guarantees end to end: non-SELECT SQL is refused, several
+ * statements cannot run, the timeout fires, the row cap holds, a role
+ * without access is refused, the runner cannot read outside `reporting` (by
+ * any route found in review), every run is logged, and a new report is only
+ * data (created here through the Local API, with no code).
  */
 import { getPayload, Payload } from 'payload'
 import config from '@/payload.config'
 import { describe, it, beforeAll, afterAll, expect } from 'vitest'
-import type { Pool } from 'pg'
+import { Pool } from 'pg'
 import { getDashboardPool } from '@/lib/dashboard-aggregates'
 import { applyReportingSchema } from '@/server/reporting/schema'
 import { ReportRunError, runReportSql } from '@/server/reporting/runner'
 import { listReports, runReport } from '@/server/reporting/run-report'
 
 let payload: Payload
+/** Payload's owner pool, for set-up and assertions. */
 let pool: Pool
+/** One connection logged in as reporting_reader, as REPORTING_DATABASE_URI is. */
+let reader: Pool
+const READER_PASSWORD = 'reader-int-test'
 const PREFIX = 'rptrun'
 const users: Record<string, { id: string; role: string }> = {}
+
+/** Run SQL through the reader connection, as REPORTING_DATABASE_URI would. */
+function runSql(sql: string, values: unknown[], options: RunOptions = {}) {
+  return runReportSql(sql, values, { pool: reader, ...options })
+}
+
+/** Run SQL logged in as the database owner, which the runner must refuse. */
+function ownerRun(sql: string) {
+  return runReportSql(sql, [], { pool })
+}
+
+/** Run a report through the reader connection. */
+function run(user: unknown, slug: string, input: Parameters<typeof runReport>[3]) {
+  return runReport(payload, user, slug, input, { pool: reader })
+}
 
 async function expectRunError(promise: Promise<unknown>, code: string) {
   await expect(promise).rejects.toBeInstanceOf(ReportRunError)
@@ -68,28 +89,34 @@ async function cleanup() {
 beforeAll(async () => {
   payload = await getPayload({ config })
   pool = getDashboardPool(payload) as unknown as Pool
-  // The runner switches to reporting_reader; create it as the test owner,
+  // The runner logs in as reporting_reader; create it as the test owner,
   // then re-apply the schema so its grants reach the role.
   await pool.query(`DO $$ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'reporting_reader') THEN
-      CREATE ROLE reporting_reader NOLOGIN;
+      CREATE ROLE reporting_reader;
     END IF;
   END $$`)
+  await pool.query(`ALTER ROLE reporting_reader LOGIN PASSWORD '${READER_PASSWORD}'`)
   await applyReportingSchema(pool)
+  const uri = new URL(process.env.DATABASE_URI as string)
+  uri.username = 'reporting_reader'
+  uri.password = READER_PASSWORD
+  // max 1: every run shares one connection, so leaked session state would show.
+  reader = new Pool({ connectionString: uri.toString(), max: 1 })
   await cleanup()
   for (const role of ['admin', 'operations', 'readonly']) users[role] = await makeUser(role)
 }, 60_000)
 
 afterAll(async () => {
   await cleanup()
+  await reader?.end()
 })
 
 describe('runReportSql', () => {
   it('reads the reporting schema with bound parameters', async () => {
-    const result = await runReportSql(
+    const result = await runSql(
       'SELECT $1::int + 1 AS n, $2::date AS d, $3::text AS t, count(*) AS apps FROM application',
       [41, '2026-10-22', "x'; DROP TABLE users; --"],
-      { pool },
     )
     expect(result.rows).toHaveLength(1)
     expect(result.rows[0]).toMatchObject({ n: 42, d: '2026-10-22', t: "x'; DROP TABLE users; --" })
@@ -104,60 +131,82 @@ describe('runReportSql', () => {
   })
 
   it('resolves unqualified names in the reporting schema', async () => {
-    const result = await runReportSql('SELECT current_setting($1) AS p', ['search_path'], { pool })
+    const result = await runSql('SELECT current_setting($1) AS p', ['search_path'])
     expect(result.rows[0].p).toBe('reporting')
   })
 
   it('refuses statements other than SELECT and WITH', async () => {
-    await expectRunError(runReportSql('DELETE FROM decision_event', [], { pool }), 'INVALID_SQL')
-    await expectRunError(runReportSql('SELECT 1; DROP TABLE users', [], { pool }), 'INVALID_SQL')
+    await expectRunError(runSql('DELETE FROM decision_event', []), 'INVALID_SQL')
+    await expectRunError(runSql('SELECT 1; DROP TABLE users', []), 'INVALID_SQL')
   })
 
   it('refuses a data-modifying CTE at the database', async () => {
     await expectRunError(
-      runReportSql(
-        `WITH gone AS (DELETE FROM decision_event RETURNING 1) SELECT count(*) FROM gone`,
-        [],
-        { pool },
-      ),
+      runSql(`WITH gone AS (DELETE FROM decision_event RETURNING 1) SELECT count(*) FROM gone`, []),
       'INVALID_SQL',
     )
   })
 
   it('cannot read outside the reporting schema', async () => {
-    await expectRunError(runReportSql('SELECT * FROM public.users', [], { pool }), 'PERMISSION')
+    await expectRunError(runSql('SELECT * FROM public.users', []), 'PERMISSION')
     await expectRunError(
-      runReportSql('SELECT conversation_id FROM public.conversations', [], { pool }),
+      runSql('SELECT conversation_id FROM public.conversations', []),
       'PERMISSION',
     )
   })
 
   it('stops a query at the timeout', async () => {
     const started = Date.now()
-    await expectRunError(
-      runReportSql('SELECT pg_sleep(5) AS slept', [], { pool, timeoutMs: 250 }),
-      'TIMEOUT',
-    )
+    await expectRunError(runSql('SELECT pg_sleep(5) AS slept', [], { timeoutMs: 250 }), 'TIMEOUT')
     expect(Date.now() - started).toBeLessThan(4000)
   })
 
   it('caps the rows at 50,000 and says so', async () => {
-    const result = await runReportSql('SELECT g AS n FROM generate_series(1, 50010) AS g', [], {
-      pool,
-    })
+    const result = await runSql('SELECT g AS n FROM generate_series(1, 50010) AS g', [])
     expect(result.rowCount).toBe(50_000)
     expect(result.rows).toHaveLength(50_000)
     expect(result.truncated).toBe(true)
   })
 
-  it('leaves the connection clean for the next user of the pool', async () => {
-    await runReportSql('SELECT 1 AS one', [], { pool })
-    const { rows } = await pool.query(
-      "SELECT current_user AS u, current_setting('search_path') AS p, current_setting('transaction_read_only') AS ro",
+  it('leaves the connection clean for the next run', async () => {
+    await expectRunError(runSql('SELECT pg_sleep(5) AS slept', [], { timeoutMs: 250 }), 'TIMEOUT')
+    // The reader pool has one connection, so this query reuses it.
+    const { rows } = await reader.query(
+      "SELECT current_setting('search_path') AS p, current_setting('statement_timeout') AS t, current_setting('transaction_read_only') AS ro",
     )
-    expect(rows[0].u).not.toBe('reporting_reader')
     expect(rows[0].p).not.toBe('reporting')
+    expect(rows[0].t).not.toBe('250ms')
     expect(rows[0].ro).toBe('off')
+  })
+
+  it('refuses to run unless logged in as reporting_reader', async () => {
+    await expectRunError(ownerRun('SELECT 1 AS one'), 'UNAVAILABLE')
+  })
+
+  it('cannot run several statements, even when the guard is fooled', async () => {
+    // Review finding: `x$$` once hid these semicolons from the guard, and
+    // the simple protocol ran each statement. Both layers now refuse.
+    for (const sql of [
+      'SELECT 1 AS x$$ ) AS r; SET statement_timeout = 0; SELECT pg_sleep(2); SELECT * FROM (SELECT 1 AS y$$',
+      'SELECT 1 AS x$$ ) AS r; ROLLBACK; DELETE FROM public.users; SELECT * FROM (SELECT 1 AS y$$',
+    ]) {
+      await expectRunError(runSql(sql, [], { timeoutMs: 500 }), 'INVALID_SQL')
+    }
+    const { rows } = await pool.query('SELECT count(*)::int AS n FROM users')
+    expect(rows[0].n).toBeGreaterThan(0)
+  })
+
+  it('cannot reach outside reporting through dynamic SQL', async () => {
+    // Review finding: set_config and query_to_xml undid a SET ROLE. With the
+    // reader as the login role there is nothing stronger to return to.
+    await expectRunError(
+      runSql(
+        `SELECT query_to_xml('select set_con' || 'fig(''role'', ''none'', true)', false, false, '') AS a,
+                query_to_xml('select email from public.users', false, false, '') AS b`,
+        [],
+      ),
+      'PERMISSION',
+    )
   })
 })
 
@@ -226,7 +275,7 @@ describe('report definitions and runs', () => {
   })
 
   it('runs a published report and logs the run', async () => {
-    const outcome = await runReport(payload, users.operations, `${PREFIX}-scaled`, {
+    const outcome = await run(users.operations, `${PREFIX}-scaled`, {
       parameters: { factor: '5' },
     })
     expect(outcome.status).toBe(200)
@@ -258,7 +307,7 @@ describe('report definitions and runs', () => {
   })
 
   it('refuses a role the report is not shared with, and logs the refusal', async () => {
-    const outcome = await runReport(payload, users.readonly, `${PREFIX}-scaled`, {})
+    const outcome = await run(users.readonly, `${PREFIX}-scaled`, {})
     expect(outcome.status).toBe(403)
     const runs = await payload.find({
       collection: 'report-runs',
@@ -270,7 +319,7 @@ describe('report definitions and runs', () => {
   })
 
   it('rejects bad parameter values with a message per field', async () => {
-    const outcome = await runReport(payload, users.operations, `${PREFIX}-scaled`, {
+    const outcome = await run(users.operations, `${PREFIX}-scaled`, {
       parameters: { factor: 'lots' },
     })
     expect(outcome.status).toBe(400)
@@ -289,18 +338,18 @@ describe('report definitions and runs', () => {
       draft: true,
       overrideAccess: true,
     })
-    const viewer = await runReport(payload, users.operations, `${PREFIX}-scaled`, {
+    const viewer = await run(users.operations, `${PREFIX}-scaled`, {
       parameters: { factor: 1 },
     })
     expect(viewer.status === 200 && viewer.body.rows[0].scaled).toBe(1)
 
-    const viewerDraft = await runReport(payload, users.operations, `${PREFIX}-scaled`, {
+    const viewerDraft = await run(users.operations, `${PREFIX}-scaled`, {
       parameters: { factor: 1 },
       draft: true,
     })
     expect(viewerDraft.status).toBe(403)
 
-    const author = await runReport(payload, users.admin, `${PREFIX}-scaled`, {
+    const author = await run(users.admin, `${PREFIX}-scaled`, {
       parameters: { factor: 1 },
       draft: true,
     })
@@ -323,18 +372,89 @@ describe('report definitions and runs', () => {
       },
       overrideAccess: true,
     })
-    const viewer = await runReport(payload, users.operations, `${PREFIX}-sneaky`, {})
+    const viewer = await run(users.operations, `${PREFIX}-sneaky`, {})
     expect(viewer.status).toBe(422)
     if (viewer.status === 422) {
       expect(viewer.body.error.code).toBe('PERMISSION')
       expect(viewer.body.error.detail).toBeUndefined()
     }
-    const author = await runReport(payload, users.admin, `${PREFIX}-sneaky`, {})
+    const author = await run(users.admin, `${PREFIX}-sneaky`, {})
     expect(author.status === 422 && author.body.error.detail).toMatch(/permission denied/)
   })
 
-  it('an unpublished or unknown report is not found', async () => {
-    const outcome = await runReport(payload, users.admin, `${PREFIX}-missing`, {})
+  it('an unknown report is not found, and the attempt is logged', async () => {
+    const outcome = await run(users.admin, `${PREFIX}-missing`, {})
     expect(outcome.status).toBe(404)
+    const runs = await payload.find({
+      collection: 'report-runs',
+      where: { reportSlug: { equals: `${PREFIX}-missing` } },
+      overrideAccess: true,
+    })
+    expect(runs.docs[0]).toMatchObject({ outcome: 'refused', errorCode: 'NOT_FOUND' })
+  })
+
+  it('a draft-only report is hidden from viewers and runnable by authors as a draft', async () => {
+    await payload.create({
+      collection: 'report-definitions',
+      data: {
+        title: 'Draft only',
+        slug: `${PREFIX}-draftonly`,
+        sql: 'SELECT $1::int AS n',
+        parameters: [{ name: 'n', label: 'N', type: 'integer', default: 7 }],
+        roles: ['operations'],
+      },
+      draft: true,
+      overrideAccess: true,
+    })
+    const viewerList = await listReports(payload, users.operations)
+    expect(viewerList.find((r) => r.slug === `${PREFIX}-draftonly`)).toBeUndefined()
+    const viewer = await run(users.operations, `${PREFIX}-draftonly`, {})
+    expect(viewer.status).toBe(404)
+
+    const authorList = await listReports(payload, users.admin)
+    const entry = authorList.find((r) => r.slug === `${PREFIX}-draftonly`)
+    expect(entry).toMatchObject({ published: false, draft: { parameters: [{ name: 'n' }] } })
+    const author = await run(users.admin, `${PREFIX}-draftonly`, { draft: true })
+    expect(author).toMatchObject({ status: 200, body: { rows: [{ n: 7 }] } })
+  })
+
+  it('authors see the newer draft form of a published report', async () => {
+    const list = await listReports(payload, users.admin)
+    const scaled = list.find((r) => r.slug === `${PREFIX}-scaled`)
+    // The draft saved earlier in this suite changed the SQL, not the form.
+    expect(scaled).toMatchObject({ published: true, draft: { parameters: [{ name: 'factor' }] } })
+    const forViewer = (await listReports(payload, users.operations)).find(
+      (r) => r.slug === `${PREFIX}-scaled`,
+    )
+    expect(forViewer).not.toHaveProperty('draft')
+  })
+
+  it('logs only the declared parameters, cut short', async () => {
+    await run(users.operations, `${PREFIX}-scaled`, {
+      parameters: { factor: 'x'.repeat(500), extra: { nested: true } },
+    })
+    const runs = await payload.find({
+      collection: 'report-runs',
+      where: {
+        and: [
+          { reportSlug: { equals: `${PREFIX}-scaled` } },
+          { errorCode: { equals: 'INVALID_PARAMETERS' } },
+        ],
+      },
+      sort: '-createdAt',
+      limit: 1,
+      overrideAccess: true,
+    })
+    expect(runs.docs[0].parameters).toEqual({ factor: 'x'.repeat(100) })
+  })
+
+  it('a viewer cannot read report versions through the API', async () => {
+    await expect(
+      payload.findVersions({
+        collection: 'report-definitions',
+        overrideAccess: false,
+        user: { ...users.operations, collection: 'users' } as never,
+      }),
+    ).rejects.toThrow()
   })
 })

@@ -94,6 +94,21 @@ describe('bindParameters', () => {
     if (!bound.ok) expect(bound.errors).toEqual({ outcome: 'Enter outcome' })
   })
 
+  test('impossible dates, blank numbers and prototype names are handled', () => {
+    const dates = params([{ name: 'd', label: 'Day', type: 'date' }])
+    expect(bindParameters(dates, { d: '2026-02-30' })).toEqual({
+      ok: false,
+      errors: { d: 'Day must be a real date' },
+    })
+    expect(bindParameters(dates, { d: '2028-02-29' })).toEqual({ ok: true, values: ['2028-02-29'] })
+
+    const n = params([{ name: 'n', label: 'Count', type: 'integer', required: false }])
+    expect(bindParameters(n, { n: '   ' })).toEqual({ ok: true, values: [null] })
+
+    const proto = params([{ name: 'constructor', label: 'Code', type: 'text', required: false }])
+    expect(bindParameters(proto, {})).toEqual({ ok: true, values: [null] })
+  })
+
   test('text is passed as a value, never spliced into SQL', () => {
     const text = params([{ name: 'code', label: 'Code', type: 'text' }])
     expect(bindParameters(text, { code: "x'; DROP TABLE y; --" })).toEqual({

@@ -151,47 +151,68 @@ edit them at `/admin/collections/report-definitions`.
   runs. A report whose parameters all have defaults runs as soon as it opens.
 - Chart (optional): `{type: line | bar | area, x, series: [{column, label}],
   stacked}`. One y-axis; up to eight series; series must be numeric columns.
-- Save as a draft, tick "Run the latest draft" in the Reports view to try it,
-  then publish. Viewers only ever run the published version.
+- Save as a draft and try it in the Reports view (see Drafts below), then
+  publish. Viewers only ever run the published version.
 
 ### The runner
 
 `src/server/reporting/runner.ts` is the only path a report query takes. Each
 run:
 
-1. passes `sql-guard.ts` (single statement, SELECT or WITH, no `set_config`);
-2. opens a `READ ONLY` transaction and `SET LOCAL ROLE reporting_reader`;
-3. sets `statement_timeout` to 15 s and `search_path` to `reporting`;
-4. binds parameters, never interpolates;
+1. passes `sql-guard.ts`, a single SELECT or WITH statement. This check gives
+   authors a clear message; it is not the control;
+2. checks it is logged in as `reporting_reader` and refuses any other login.
+   That role is the control: it can read the `reporting` schema and nothing
+   else, so no SQL trick (dynamic SQL, `set_config`, `RESET ROLE`) has a
+   stronger role to return to;
+3. opens a `READ ONLY` transaction with `statement_timeout` 15 s and
+   `search_path` `reporting`;
+4. sends the query with the extended protocol, so Postgres refuses a second
+   statement, and binds parameters, never interpolating them;
 5. wraps the SQL as `SELECT * FROM (…) LIMIT 50001`, which caps the rows at
-   50,000 (the view says when it cut) and makes a second statement or a
-   data-modifying CTE a Postgres error;
+   50,000 (the view says when it cut) and makes a data-modifying CTE an
+   error;
 6. rolls back.
 
-Every run, refused ones included, is logged to `report-runs`: report,
-published version id (or `draft`), user, bound parameters, outcome, duration,
-rows. Only admins can read the log; nobody can change it through the API.
-Database error text is shown to authors only.
+Every run, refused and not-found ones included, is logged to `report-runs`:
+report, published version id (or `draft`), user, outcome, duration, rows and
+the report's declared parameters as bound (text cut to 100 characters). Only
+admins can read the log; nobody can change it through the API. Database
+error text is shown to authors only. Report SQL and drafts are readable by
+authors only, versions included.
 
-### Connection and isolation
+### Drafts
 
-| Environment | Connection | Isolation |
-|---|---|---|
-| prod, demo | `REPORTING_DATABASE_URI`: Neon read replica, logged in as `reporting_reader` | the login role; the runner refuses any other login when `NODE_ENV=production` |
-| dev, test | falls back to `DATABASE_URI` | `SET LOCAL ROLE reporting_reader`, backed by the guard refusing `set_config` |
+Authors (admin, supervisor) see draft-only reports in the list, marked
+"(draft)", and can run them. For a published report with a newer draft,
+"Run the latest draft" switches the form and chart to the draft's, so a
+changed parameter list can be tried before it is published.
+
+### Connection
+
+The runner connects with `REPORTING_DATABASE_URI` in every environment and
+answers "Reporting is not configured" without it.
+
+| Environment | `REPORTING_DATABASE_URI` |
+|---|---|
+| prod, demo | the Neon read replica, logged in as `reporting_reader` |
+| dev | the local database, logged in as `reporting_reader` |
+| test | the integration tests create the role and log in as it |
 
 Setting up an environment (once, as the owner role):
 
-1. In Neon, add a read replica (read-only compute) to the CRM project.
+1. Deployed environments: in Neon, add a read replica (read-only compute) to
+   the CRM project.
 2. Create `reporting_reader` with a generated password (see "Roles and
-   grants" above), then re-run the reporting migration's grant block.
-3. `fly secrets set REPORTING_DATABASE_URI=postgresql://reporting_reader:…@<replica-host>/<db>?sslmode=verify-full`
-   on the CRM app. Without it, reports answer "Reporting is not configured".
-
+   grants" above), then re-run the reporting migration's grant block. In dev,
+   restarting the app re-applies the grants.
+3. Set `REPORTING_DATABASE_URI=postgresql://reporting_reader:…@<host>/<db>`
+   (`?sslmode=verify-full` for Neon): a Fly secret on the CRM app, or `.env`
+   in dev.
 
 ## Environment
 
 | Variable | Used by | Notes |
 |---|---|---|
 | `REPORTING_JOB_TOKEN` | scheduled jobs | Long random string, Fly secret |
-| `REPORTING_DATABASE_URI` | report runner | Neon read replica as `reporting_reader`; required in deployed environments |
+| `REPORTING_DATABASE_URI` | report runner | Logged in as `reporting_reader`; the Neon read replica in deployed environments. Required everywhere |

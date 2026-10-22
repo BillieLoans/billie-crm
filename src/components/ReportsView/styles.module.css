@@ -85,6 +85,11 @@
   min-width: 0;
 }
 
+.listTag {
+  font-weight: 400;
+  color: var(--theme-elevation-650, #555);
+}
+
 .header {
   margin-bottom: 1rem;
 }

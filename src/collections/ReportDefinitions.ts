@@ -82,6 +82,9 @@ export const ReportDefinitions: CollectionConfig = {
     create: canAuthor,
     update: canAuthor,
     delete: ({ req }) => isAdmin(req.user),
+    // Without this, Payload lets any signed-in user read every version
+    // (SQL and unpublished drafts) through /api/report-definitions/versions.
+    readVersions: canAuthor,
   },
   versions: {
     drafts: true,

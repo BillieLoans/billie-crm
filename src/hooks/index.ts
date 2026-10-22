@@ -152,9 +152,9 @@ export type { ResolveIssueParams, ResolveIssueResult } from './mutations/useReso
 
 // Reports (BTB-506)
 export { useReports, reportsKeys } from './queries/useReports'
-export type { ReportsResponse, ReportSummary } from './queries/useReports'
-export { useRunReport, ReportRunFailure } from './mutations/useRunReport'
-export type { RunReportParams, ReportRunResponse } from './mutations/useRunReport'
+export type { ReportsResponse, ReportSummary, ReportSpec } from './queries/useReports'
+export { useReportRun, ReportRunFailure } from './queries/useReportRun'
+export type { ReportRunRequest, ReportRunResponse } from './queries/useReportRun'
 
 // Conversation-kill mutation (End conversation)
 export { useKillConversation } from './mutations/useKillConversation'

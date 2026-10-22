@@ -98,6 +98,9 @@ export function ReportChart({ title, spec, columns, rows }: ReportChartProps) {
       <div className={styles.chart} aria-hidden="true">
         <ComposedChart
           responsive
+          // The table is the accessible equivalent; Recharts' own keyboard
+          // layer would put a focus stop inside this aria-hidden block.
+          accessibilityLayer={false}
           data={data}
           style={{ width: '100%', height: 320 }}
           margin={{ top: 8, right: 16, bottom: 8, left: 8 }}

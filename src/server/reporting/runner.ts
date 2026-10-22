@@ -3,22 +3,23 @@
  * published reports, drafts and ad-hoc test queries alike.
  *
  * Each run:
- *  - passes the static check in `sql-guard.ts`;
- *  - opens a READ ONLY transaction and switches to `reporting_reader`, which
- *    can read the `reporting` schema and nothing else (granted by the schema
- *    script in `schema.ts`);
- *  - sets a statement timeout and `search_path = reporting`;
- *  - binds parameters as `$1..$n`;
- *  - wraps the SQL as a subquery with a row cap, which also makes a second
- *    statement or a data-modifying CTE a Postgres error;
+ *  - passes the static check in `sql-guard.ts` (for a clear message only);
+ *  - checks it is logged in as `reporting_reader`, which can read the
+ *    `reporting` schema and nothing else (granted by `schema.ts`). The login
+ *    role is the control: a session that could `SET ROLE` back to a stronger
+ *    role would let one SELECT undo the isolation;
+ *  - opens a READ ONLY transaction with a statement timeout and
+ *    `search_path = reporting`;
+ *  - sends the query with the extended protocol, so Postgres refuses a
+ *    second statement, and binds parameters as `$1..$n`;
+ *  - wraps the SQL as a subquery with a row cap, which also makes a
+ *    data-modifying CTE an error;
  *  - always rolls back.
  *
- * It connects with `REPORTING_DATABASE_URI`: in deployed environments the
- * Neon read replica, logged in as `reporting_reader` (enforced). Dev and
- * test fall back to `DATABASE_URI` and rely on `SET LOCAL ROLE`, which the
- * guard backs by refusing `set_config`.
+ * It connects with `REPORTING_DATABASE_URI`, in every environment: in
+ * deployed ones the Neon read replica. See docs/reporting.md for the role.
  */
-import type { Pool, PoolClient, QueryResult } from 'pg'
+import type { Pool, PoolClient, QueryConfig, QueryResult } from 'pg'
 import type { ReportColumn } from '@/lib/schemas/reports'
 import { checkReportSql } from './sql-guard'
 
@@ -135,19 +136,23 @@ const typeParsers = {
   },
 }
 
-let sharedPool: Pool | undefined
+let sharedPool: Promise<Pool> | undefined
 
-/** The pool for the reporting connection, created on first use. */
-export async function getReportingPool(): Promise<Pool> {
-  if (sharedPool) return sharedPool
-  const connectionString =
-    process.env.REPORTING_DATABASE_URI ||
-    (process.env.NODE_ENV !== 'production' ? process.env.DATABASE_URI : undefined)
+/** The pool for the reporting connection, created once on first use. */
+export function getReportingPool(): Promise<Pool> {
+  const connectionString = process.env.REPORTING_DATABASE_URI
   if (!connectionString) {
-    throw new ReportRunError('UNAVAILABLE', 'Reporting is not configured in this environment')
+    return Promise.reject(
+      new ReportRunError('UNAVAILABLE', 'Reporting is not configured in this environment'),
+    )
   }
-  const { Pool: PgPool } = await import('pg')
-  sharedPool = new PgPool({ connectionString, max: 4, idleTimeoutMillis: 30_000 })
+  sharedPool ??= import('pg').then(({ Pool: PgPool }) => {
+    const pool = new PgPool({ connectionString, max: 4, idleTimeoutMillis: 30_000 })
+    // An idle client dropped by the server (a replica restart, a network
+    // blip) emits 'error' on the pool; unhandled, it would crash the process.
+    pool.on('error', (error) => console.error('[reports] idle reporting connection failed:', error))
+    return pool
+  })
   return sharedPool
 }
 
@@ -202,21 +207,16 @@ export async function runReportSql(
   try {
     client = (await pool.connect()) as PoolClient
     try {
-      await client.query('BEGIN READ ONLY')
-      if (process.env.NODE_ENV === 'production') {
-        // In deployed environments isolation rests on the login role, not
-        // on SET ROLE, which a member of a stronger role could undo.
-        const login = await client.query<{ u: string }>('SELECT session_user AS u')
-        if (login.rows[0]?.u !== READER_ROLE) {
-          throw new Error(`connected as ${login.rows[0]?.u ?? 'unknown'}, not ${READER_ROLE}`)
-        }
+      const login = await client.query<{ u: string }>('SELECT session_user AS u')
+      if (login.rows[0]?.u !== READER_ROLE) {
+        throw new Error(`connected as ${login.rows[0]?.u ?? 'unknown'}, not ${READER_ROLE}`)
       }
-      await client.query(`SET LOCAL ROLE ${READER_ROLE}`)
+      await client.query('BEGIN READ ONLY')
       await client.query(`SET LOCAL statement_timeout = ${timeoutMs}`)
       await client.query('SET LOCAL search_path = reporting')
     } catch (error) {
-      // Usually: the role does not exist, or the connecting role is not a
-      // member of it. See docs/reporting.md, "Roles and grants".
+      // Usually: REPORTING_DATABASE_URI logs in as another role. See
+      // docs/reporting.md, "Roles and grants".
       throw new ReportRunError(
         'UNAVAILABLE',
         'Reporting access is not set up in this environment.',
@@ -224,11 +224,16 @@ export async function runReportSql(
       )
     }
     // The newlines keep a trailing `--` comment from swallowing the wrapper.
-    const result: QueryResult<Record<string, unknown>> = await client.query({
+    const query: QueryConfig & { queryMode: 'extended' } = {
       text: `SELECT * FROM (\n${check.sql}\n) AS report LIMIT ${rowCap + 1}`,
       values: [...values],
       types: typeParsers,
-    })
+      // Always the extended protocol, even with no parameters: the simple
+      // protocol would run `...; SET statement_timeout = 0; ...` as several
+      // statements. (pg reads queryMode; @types/pg does not declare it.)
+      queryMode: 'extended',
+    }
+    const result: QueryResult<Record<string, unknown>> = await client.query(query)
     await client.query('ROLLBACK')
     const truncated = result.rows.length > rowCap
     const rows = truncated ? result.rows.slice(0, rowCap) : result.rows

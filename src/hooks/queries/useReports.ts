@@ -1,9 +1,9 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import type { ReportSummary } from '@/server/reporting/run-report'
+import type { ReportSpec, ReportSummary } from '@/server/reporting/run-report'
 
-export type { ReportSummary }
+export type { ReportSpec, ReportSummary }
 
 export interface ReportsResponse {
   reports: ReportSummary[]
@@ -25,7 +25,7 @@ async function fetchReports(): Promise<ReportsResponse> {
   return res.json()
 }
 
-/** The published reports the signed-in user may run (BTB-506). */
+/** The reports the signed-in user may run (BTB-506); authors also get drafts. */
 export function useReports() {
   return useQuery({
     queryKey: reportsKeys.list,

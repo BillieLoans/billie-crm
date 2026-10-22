@@ -19,13 +19,24 @@ import {
 } from '@/lib/schemas/reports'
 import { ReportRunError, runReportSql, type RunOptions } from './runner'
 
-export interface ReportSummary {
-  id: string
-  slug: string
+/** What the form and chart of one version of a report need. Never the SQL. */
+export interface ReportSpec {
   title: string
   description: string | null
   parameters: ReportParameter[]
   chart: ChartSpec | null
+}
+
+export interface ReportSummary extends ReportSpec {
+  id: string
+  slug: string
+  /** False for a report that has only ever been saved as a draft. */
+  published: boolean
+  /**
+   * Authors only: the latest draft, when it is newer than the published
+   * version. Its parameters can differ, so a draft run uses this form.
+   */
+  draft?: ReportSpec
 }
 
 export interface ReportRunResponse {
@@ -70,12 +81,10 @@ export function canRunReport(user: unknown, roles: readonly string[] | null | un
   return isReportAuthor(user) || (roles ?? []).includes(role)
 }
 
-function summarise(doc: ReportDoc): ReportSummary {
+function specOf(doc: ReportDoc): ReportSpec {
   const params = reportParametersSchema.safeParse(doc.parameters ?? [])
   const chart = chartSpecSchema.safeParse(doc.chart)
   return {
-    id: String(doc.id),
-    slug: doc.slug,
     title: doc.title,
     description: doc.description ?? null,
     parameters: params.success ? params.data : [],
@@ -83,9 +92,13 @@ function summarise(doc: ReportDoc): ReportSummary {
   }
 }
 
-/** Published reports the user may run, by title. */
+/**
+ * The reports the user may run, by title. Viewers see published reports.
+ * Authors also see draft-only reports and, for published ones, the newer
+ * draft's form, so they can try a change before publishing it.
+ */
 export async function listReports(payload: Payload, user: unknown): Promise<ReportSummary[]> {
-  const found = await payload.find({
+  const published = await payload.find({
     collection: 'report-definitions',
     where: { _status: { equals: 'published' } },
     sort: 'title',
@@ -93,9 +106,35 @@ export async function listReports(payload: Payload, user: unknown): Promise<Repo
     depth: 0,
     overrideAccess: true,
   })
-  return (found.docs as unknown as ReportDoc[])
+  const reports: ReportSummary[] = (published.docs as unknown as ReportDoc[])
     .filter((doc) => canRunReport(user, doc.roles))
-    .map(summarise)
+    .map((doc) => ({ id: String(doc.id), slug: doc.slug, published: true, ...specOf(doc) }))
+
+  if (isReportAuthor(user)) {
+    // With `draft: true`, each document comes back as its latest version.
+    const latest = await payload.find({
+      collection: 'report-definitions',
+      draft: true,
+      limit: 500,
+      depth: 0,
+      overrideAccess: true,
+    })
+    for (const doc of latest.docs as unknown as ReportDoc[]) {
+      if (doc._status !== 'draft') continue
+      const existing = reports.find((r) => r.id === String(doc.id))
+      if (existing) existing.draft = specOf(doc)
+      else
+        reports.push({
+          id: String(doc.id),
+          slug: doc.slug,
+          published: false,
+          ...specOf(doc),
+          draft: specOf(doc),
+        })
+    }
+    reports.sort((a, b) => a.title.localeCompare(b.title, 'en-AU'))
+  }
+  return reports
 }
 
 async function findReport(
@@ -147,6 +186,34 @@ interface RunLogEntry {
   truncated?: boolean
 }
 
+/** Logged values are short: dates, codes and numbers, never pasted text. */
+const MAX_LOGGED_TEXT = 100
+
+function loggable(value: unknown): unknown {
+  if (typeof value === 'string') return value.slice(0, MAX_LOGGED_TEXT)
+  if (typeof value === 'number' || typeof value === 'boolean' || value === null) return value
+  return value === undefined ? null : '[not a value]'
+}
+
+/** The declared parameters only, in order, so the log never stores arbitrary client keys. */
+function loggedParameters(
+  params: readonly ReportParameter[],
+  values: Record<string, unknown> | readonly unknown[],
+): Record<string, unknown> {
+  return Object.fromEntries(
+    params.map((p, i) => [
+      p.name,
+      loggable(
+        Array.isArray(values)
+          ? values[i]
+          : Object.hasOwn(values, p.name)
+            ? (values as Record<string, unknown>)[p.name]
+            : undefined,
+      ),
+    ]),
+  )
+}
+
 async function logRun(payload: Payload, user: unknown, entry: RunLogEntry): Promise<void> {
   try {
     await payload.create({
@@ -194,6 +261,11 @@ export async function runReport(
 
   const doc = await findReport(payload, slug, draft)
   if (!doc) {
+    await logRun(payload, user, {
+      reportSlug: slug.slice(0, MAX_LOGGED_TEXT),
+      outcome: 'refused',
+      errorCode: 'NOT_FOUND',
+    })
     return {
       status: 404,
       body: { error: { code: 'NOT_FOUND', message: 'There is no published report at this link.' } },
@@ -219,7 +291,7 @@ export async function runReport(
   if (!bound.ok) {
     await logRun(payload, user, {
       ...base,
-      parameters: submitted,
+      parameters: loggedParameters(params.data, submitted),
       outcome: 'refused',
       errorCode: 'INVALID_PARAMETERS',
     })
@@ -235,7 +307,7 @@ export async function runReport(
     }
   }
   // Log the values as bound, defaults included, keyed by name.
-  const parameters = Object.fromEntries(params.data.map((p, i) => [p.name, bound.values[i]]))
+  const parameters = loggedParameters(params.data, bound.values)
   const version = draft ? 'draft' : await publishedVersionId(payload, String(doc.id))
 
   try {

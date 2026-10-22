@@ -1,18 +1,14 @@
 'use client'
 
-import React, { useCallback, useEffect, useId, useRef, useState } from 'react'
+import React, { useEffect, useId, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@payloadcms/ui'
 import { Breadcrumb } from '@/components/Breadcrumb'
 import { hasAnyRole } from '@/lib/access'
 import { formatNumber } from '@/lib/formatters'
 import { bindParameters, parameterDefault, type ReportParameter } from '@/lib/schemas/reports'
-import { useReports, type ReportSummary } from '@/hooks/queries/useReports'
-import {
-  ReportRunFailure,
-  useRunReport,
-  type ReportRunResponse,
-} from '@/hooks/mutations/useRunReport'
+import { useReports, type ReportSpec, type ReportSummary } from '@/hooks/queries/useReports'
+import { ReportRunFailure, useReportRun, type ReportRunRequest } from '@/hooks/queries/useReportRun'
 import { ParameterForm, parameterInputId, type ParameterValues } from './ParameterForm'
 import { ReportChart } from './ReportChart'
 import { ReportTable } from './ReportTable'
@@ -25,8 +21,8 @@ export interface ReportsViewProps {
 }
 
 /**
- * Reports (BTB-506): run a published report with its parameters and see
- * the chart, the table and a CSV. Reports are definitions in the
+ * Reports (BTB-506): run a report with its parameters and see the chart,
+ * the table and a CSV. Authors also see drafts and can run them. Reports are definitions in the
  * `report-definitions` collection, so a new report needs no deploy.
  */
 export function ReportsView({ slug }: ReportsViewProps) {
@@ -90,6 +86,7 @@ export function ReportsView({ slug }: ReportsViewProps) {
                   aria-current={r.slug === slug ? 'page' : undefined}
                 >
                   {r.title}
+                  {!r.published && <span className={styles.listTag}> (draft)</span>}
                 </Link>
               </li>
             ))}
@@ -98,7 +95,7 @@ export function ReportsView({ slug }: ReportsViewProps) {
 
         <div className={styles.main}>
           {selected ? (
-            <ReportPanel key={selected.slug} report={selected} canAuthor={canAuthor} />
+            <ReportEntry key={selected.slug} report={selected} canAuthor={canAuthor} />
           ) : slug && !isLoading && !error ? (
             <div data-testid="report-not-found">
               <h1 className={styles.title}>Report not found</h1>
@@ -128,93 +125,110 @@ function initialValues(parameters: ReportParameter[]): ParameterValues {
   return values
 }
 
-interface PanelProps {
+interface EntryProps {
   report: ReportSummary
   canAuthor: boolean
 }
 
-function ReportPanel({ report, canAuthor }: PanelProps) {
-  const idPrefix = useId().replace(/:/g, '')
-  const [values, setValues] = useState<ParameterValues>(() => initialValues(report.parameters))
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
-  const [runError, setRunError] = useState<ReportRunFailure | null>(null)
-  const [draft, setDraft] = useState(false)
-  const [result, setResult] = useState<ReportRunResponse | null>(null)
-  const [status, setStatus] = useState('')
-  const summaryRef = useRef<HTMLDivElement>(null)
-  // Bumped to move focus to the error summary once it has rendered.
-  const [focusRequest, setFocusRequest] = useState(0)
-  const { mutate, isPending } = useRunReport()
-
-  useEffect(() => {
-    if (focusRequest > 0) summaryRef.current?.focus()
-  }, [focusRequest])
-
-  const execute = useCallback(
-    (submitted: ParameterValues, asDraft: boolean, focusErrors: boolean) => {
-      const check = bindParameters(report.parameters, submitted)
-      if (!check.ok) {
-        setFieldErrors(check.errors)
-        setRunError(null)
-        if (focusErrors) setFocusRequest((n) => n + 1)
-        return
-      }
-      setFieldErrors({})
-      setRunError(null)
-      setStatus('Running the report…')
-      mutate(
-        { slug: report.slug, parameters: submitted, draft: asDraft },
-        {
-          onSuccess: (data) => {
-            setResult(data)
-            const took =
-              data.durationMs < 100
-                ? 'under a tenth of a second'
-                : `${(data.durationMs / 1000).toFixed(1)} seconds`
-            setStatus(
-              `${formatNumber(data.rowCount)} row${data.rowCount === 1 ? '' : 's'} in ${took}${data.truncated ? ', cut at the row limit' : ''}.`,
-            )
-          },
-          onError: (error) => {
-            const failure =
-              error instanceof ReportRunFailure
-                ? error
-                : new ReportRunFailure('The report could not be run. Try again.', 'QUERY_FAILED')
-            setFieldErrors(failure.fields ?? {})
-            setRunError(failure.fields ? null : failure)
-            setStatus('The report did not run.')
-            setFocusRequest((n) => n + 1)
-          },
-        },
-      )
-    },
-    [mutate, report.parameters, report.slug],
+/**
+ * Holds the draft switch. Switching remounts the panel, because a draft can
+ * have different parameters and a different chart from the published
+ * version.
+ */
+function ReportEntry({ report, canAuthor }: EntryProps) {
+  const draftOnly = !report.published
+  const [draftMode, setDraftMode] = useState(draftOnly)
+  const spec: ReportSpec = draftMode && report.draft ? report.draft : report
+  return (
+    <ReportPanel
+      key={draftMode ? 'draft' : 'published'}
+      report={report}
+      spec={spec}
+      draft={draftMode}
+      draftOnly={draftOnly}
+      canAuthor={canAuthor}
+      onDraftChange={setDraftMode}
+    />
   )
+}
 
-  // Run straight away when every parameter has a usable default. `execute`
-  // is stable, so this runs once per mount. No run-once ref: under React
-  // Strict Mode the first mount's mutation loses its observer, and the
-  // remount must start a fresh one.
+interface PanelProps {
+  report: ReportSummary
+  spec: ReportSpec
+  draft: boolean
+  draftOnly: boolean
+  canAuthor: boolean
+  onDraftChange: (draft: boolean) => void
+}
+
+function ReportPanel({ report, spec, draft, draftOnly, canAuthor, onDraftChange }: PanelProps) {
+  const idPrefix = useId().replace(/:/g, '')
+  const [values, setValues] = useState<ParameterValues>(() => initialValues(spec.parameters))
+  const [clientErrors, setClientErrors] = useState<Record<string, string> | null>(null)
+  // Run straight away when every parameter has a usable default. Decided
+  // once, when the panel mounts; a refetch of the report list cannot re-run it.
+  const [request, setRequest] = useState<ReportRunRequest | null>(() => {
+    const defaults = initialValues(spec.parameters)
+    return bindParameters(spec.parameters, defaults).ok
+      ? { slug: report.slug, parameters: defaults, draft, attempt: 0 }
+      : null
+  })
+  const run = useReportRun(request)
+  const summaryRef = useRef<HTMLDivElement>(null)
+
+  const runError =
+    run.error instanceof ReportRunFailure
+      ? run.error
+      : run.error
+        ? new ReportRunFailure('The report could not be run. Try again.', 'QUERY_FAILED')
+        : null
+  const fieldErrors = clientErrors ?? runError?.fields ?? {}
+  const errorEntries = Object.entries(fieldErrors)
+  const generalError = !clientErrors && runError && !runError.fields ? runError : null
+  const hasErrors = errorEntries.length > 0 || generalError !== null
+  const result = run.data
+
+  // Move focus to the error summary when new errors appear (DOM only).
   useEffect(() => {
-    const defaults = initialValues(report.parameters)
-    if (bindParameters(report.parameters, defaults).ok) execute(defaults, false, false)
-  }, [execute, report.parameters])
+    if (hasErrors) summaryRef.current?.focus()
+  }, [hasErrors, clientErrors, run.error])
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    execute(values, draft, true)
+    const check = bindParameters(spec.parameters, values)
+    if (!check.ok) {
+      setClientErrors(check.errors)
+      // Clear the previous results so the page never shows rows for other inputs.
+      setRequest(null)
+      return
+    }
+    setClientErrors(null)
+    setRequest((prev) => ({
+      slug: report.slug,
+      parameters: values,
+      draft,
+      attempt: (prev?.attempt ?? 0) + 1,
+    }))
   }
 
-  const errorEntries = Object.entries(fieldErrors)
-  const hasErrors = errorEntries.length > 0 || runError !== null
+  let status = ''
+  if (run.isFetching) status = 'Running the report…'
+  else if (run.isError) status = 'The report did not run.'
+  else if (result) {
+    const took =
+      result.durationMs < 100
+        ? 'under a tenth of a second'
+        : `${(result.durationMs / 1000).toFixed(1)} seconds`
+    status = `${formatNumber(result.rowCount)} row${result.rowCount === 1 ? '' : 's'} in ${took}${result.truncated ? ', cut at the row limit' : ''}.`
+  }
 
   return (
     <section aria-labelledby={`${idPrefix}-title`}>
       <header className={styles.header}>
         <h1 id={`${idPrefix}-title`} className={styles.title}>
-          {report.title}
+          {spec.title}
         </h1>
-        {report.description && <p className={styles.subtitle}>{report.description}</p>}
+        {spec.description && <p className={styles.subtitle}>{spec.description}</p>}
         {canAuthor && (
           <Link
             className={styles.textLink}
@@ -224,6 +238,12 @@ function ReportPanel({ report, canAuthor }: PanelProps) {
           </Link>
         )}
       </header>
+
+      {draftOnly && (
+        <p className={styles.draftBadge}>
+          <strong>Not published.</strong> Only report authors can see and run this draft.
+        </p>
+      )}
 
       {hasErrors && (
         <div
@@ -240,12 +260,12 @@ function ReportPanel({ report, canAuthor }: PanelProps) {
                 <a href={`#${parameterInputId(idPrefix, name)}`}>{message}</a>
               </li>
             ))}
-            {runError && <li>{runError.message}</li>}
+            {generalError && <li>{generalError.message}</li>}
           </ul>
-          {runError?.detail && (
+          {generalError?.detail && (
             <details className={styles.errorDetail}>
               <summary>Database message (shown to report authors)</summary>
-              <code>{runError.detail}</code>
+              <code>{generalError.detail}</code>
             </details>
           )}
         </div>
@@ -254,14 +274,15 @@ function ReportPanel({ report, canAuthor }: PanelProps) {
       <form className={styles.form} onSubmit={onSubmit} noValidate>
         <ParameterForm
           idPrefix={idPrefix}
-          parameters={report.parameters}
+          parameters={spec.parameters}
           values={values}
           errors={fieldErrors}
           onChange={(name, value) => setValues((prev) => ({ ...prev, [name]: value }))}
         />
         <div className={styles.actions}>
-          <button type="submit" className={styles.primaryButton} disabled={isPending}>
-            {isPending ? 'Running…' : 'Run report'}
+          {/* Never disabled while running, so keyboard focus stays on it. */}
+          <button type="submit" className={styles.primaryButton}>
+            Run report
           </button>
           {canAuthor && (
             <div className={styles.checkboxRow}>
@@ -270,7 +291,8 @@ function ReportPanel({ report, canAuthor }: PanelProps) {
                 type="checkbox"
                 className={styles.checkbox}
                 checked={draft}
-                onChange={(e) => setDraft(e.target.checked)}
+                disabled={draftOnly}
+                onChange={(e) => onDraftChange(e.target.checked)}
               />
               <label htmlFor={`${idPrefix}-draft`} className={styles.fieldLabel}>
                 Run the latest draft
@@ -312,15 +334,15 @@ function ReportPanel({ report, canAuthor }: PanelProps) {
             <p className={styles.note}>No rows match these parameters.</p>
           ) : (
             <>
-              {report.chart && (
+              {spec.chart && (
                 <ReportChart
-                  title={report.title}
-                  spec={report.chart}
+                  title={spec.title}
+                  spec={spec.chart}
                   columns={result.columns}
                   rows={result.rows}
                 />
               )}
-              <ReportTable caption={report.title} columns={result.columns} rows={result.rows} />
+              <ReportTable caption={spec.title} columns={result.columns} rows={result.rows} />
             </>
           )}
         </div>

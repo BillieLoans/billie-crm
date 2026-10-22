@@ -1,11 +1,12 @@
 /**
  * Static checks on report SQL (BTB-506).
  *
- * This is the first of three layers, and the one that gives an author a
- * useful message. The runner also wraps the SQL in a subquery (so a second
- * statement or a data-modifying CTE is a Postgres error) and runs it in a
- * read-only transaction as `reporting_reader`, which can read the
- * `reporting` schema and nothing else. Do not rely on this check alone.
+ * This check exists to give an author a useful message; it is not the
+ * control. The controls are in the runner: the query is sent with the
+ * extended protocol (Postgres refuses more than one statement), wrapped in a
+ * subquery (a data-modifying CTE is an error), and run in a read-only
+ * transaction by the `reporting_reader` login, which can read the
+ * `reporting` schema and nothing else.
  *
  * Pure and dependency-free: Payload runs field validation in the browser too.
  */
@@ -91,8 +92,9 @@ export function stripLiterals(sql: string): string | null {
       i = end + 1
       continue
     }
-    if (c === '$') {
-      // $tag$ ... $tag$ — but $1 is a parameter, not a quote.
+    if (c === '$' && !/[A-Za-z0-9_$\u0080-\uffff]/.test(sql[i - 1] ?? '')) {
+      // $tag$ ... $tag$ — but $1 is a parameter, not a quote, and a `$`
+      // inside an identifier (x$$, a$b) is part of the name.
       const tag = /^\$([A-Za-z_][A-Za-z0-9_]*)?\$/.exec(sql.slice(i))
       if (tag) {
         const end = sql.indexOf(tag[0], i + tag[0].length)
@@ -133,12 +135,6 @@ export function checkReportSql(sql: unknown): SqlCheck {
   if (first !== 'SELECT' && first !== 'WITH') {
     return { ok: false, error: 'Start the query with SELECT or WITH' }
   }
-
-  // set_config could change the role or the timeout mid-run. Checked on the
-  // raw text so a quoted name ("set_config") cannot hide it.
-  if (/set_config/i.test(sql)) return { ok: false, error: 'Reports cannot call set_config' }
-  // Unicode-escaped names (U&"...") could spell it another way.
-  if (/u&["']/i.test(sql)) return { ok: false, error: 'Write names and text without U& escapes' }
 
   const placeholders = [...new Set([...body.matchAll(/\$(\d+)/g)].map((m) => Number(m[1])))].sort(
     (a, b) => a - b,

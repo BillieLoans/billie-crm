@@ -48,7 +48,8 @@ export function ReportTable({ caption, columns, rows }: ReportTableProps) {
     () =>
       helper.columns(
         columns.map((col) =>
-          helper.accessor((row: Row): unknown => row[col.name], {
+          // SQL NULL arrives as null; undefined lets `sortUndefined` place it last.
+          helper.accessor((row: Row): unknown => row[col.name] ?? undefined, {
             id: col.name,
             header: columnLabel(col.name),
             sortFn: col.kind === 'number' ? 'basic' : 'alphanumeric',

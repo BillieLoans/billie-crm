@@ -79,11 +79,17 @@ describe('checkReportSql', () => {
     expect(check.ok && check.placeholders).toEqual([1])
   })
 
-  test('refuses set_config, however it is spelt', () => {
-    rejects("SELECT set_config('role', 'postgres', false)", /set_config/)
-    rejects(`SELECT "set_config"('role', 'postgres', false)`, /set_config/)
-    rejects(`SELECT pg_catalog.SET_CONFIG('statement_timeout', '0', true)`, /set_config/)
-    rejects(`SELECT U&"\\0073et_config"('role', 'x', false)`, /U& escapes/)
+  test('a $ inside an identifier does not open a dollar quote', () => {
+    // Review finding: x$$ is a column name; treating $$ as a quote hid the
+    // semicolons and let several statements through.
+    rejects(
+      'SELECT 1 AS x$$ ) AS r; SET LOCAL statement_timeout = 0; SELECT pg_sleep(2); SELECT * FROM (SELECT 1 AS y$$',
+      /single statement/,
+    )
+    rejects('SELECT 1 AS a$b$ ; DELETE FROM users; SELECT 1 AS c$b$', /single statement/)
+    expect(checkReportSql('SELECT 1 AS x$$').ok).toBe(true)
+    // A real dollar quote after whitespace or punctuation still works.
+    expect(checkReportSql('SELECT ($$;$$) AS x').ok).toBe(true)
   })
 
   test('stripping keeps offsets aligned with the original', () => {

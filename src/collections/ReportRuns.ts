@@ -7,8 +7,9 @@ import { hideFromNonAdmins, isAdmin } from '@/lib/access'
  * Written only by the report route with `overrideAccess`; nobody can create,
  * change or delete a run through the API. Records which report and version
  * ran, for whom, with which parameters, how long it took and how many rows
- * it returned. Parameter values are dates, codes and numbers, never customer
- * data, because reports take no free-text customer identifiers.
+ * it returned. Only the report's declared parameters are logged, and text
+ * values are cut to 100 characters. Authors should not define text
+ * parameters that take customer details.
  */
 export const ReportRuns: CollectionConfig = {
   slug: 'report-runs',
