@@ -36,6 +36,7 @@ import { ReportRuns } from './collections/ReportRuns'
 import { ReportAsks } from './collections/ReportAsks'
 import { applyReportingSchema, dropReportingViews } from './server/reporting/schema'
 import { getDashboardPool } from './lib/dashboard-aggregates'
+import { reportingMcp } from './server/reporting/mcp'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -342,6 +343,8 @@ export default buildConfig({
   },
   plugins: [
     payloadCloudPlugin(),
+    // The reporting MCP connector (BTB-509): /api/mcp, per-person keys.
+    reportingMcp,
     // storage-adapter-placeholder
   ],
 })

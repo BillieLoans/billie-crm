@@ -42,6 +42,7 @@ import * as migration_20261023_090000_reporting_schema from './20261023_090000_r
 import * as migration_20261024_090000_report_definitions from './20261024_090000_report_definitions';
 import * as migration_20261025_090000_report_delivery from './20261025_090000_report_delivery';
 import * as migration_20261026_090000_report_asks from './20261026_090000_report_asks';
+import * as migration_20261026_095000_reporting_mcp from './20261026_095000_reporting_mcp'
 import * as migration_20261026_100000_first_reports from './20261026_100000_first_reports';
 
 export const migrations = [
@@ -264,6 +265,11 @@ export const migrations = [
     up: migration_20261026_090000_report_asks.up,
     down: migration_20261026_090000_report_asks.down,
     name: '20261026_090000_report_asks',
+  },
+  {
+    up: migration_20261026_095000_reporting_mcp.up,
+    down: migration_20261026_095000_reporting_mcp.down,
+    name: '20261026_095000_reporting_mcp',
   },
   {
     up: migration_20261026_100000_first_reports.up,

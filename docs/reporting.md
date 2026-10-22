@@ -327,6 +327,53 @@ annotated description plus checks (H1), and a reviewer packet. It costs
 money to run and never runs in CI; see its README. The reference queries are
 drafts until a second engineer reviews each.
 
+## MCP connector (BTB-509)
+
+`POST /api/mcp` is a Model Context Protocol server (Streamable HTTP) for
+Claude Code, Claude chat and Claude artifacts, built on
+`@payloadcms/plugin-mcp` and configured in `src/server/reporting/mcp.ts`. It
+reaches the same governed path as the Reports view: report SQL only ever runs
+through the runner as `reporting_reader`.
+
+| Tool | Does |
+|---|---|
+| `describe_reporting_schema` | Returns the schema description and business rules Ask Claude uses |
+| `run_report_query` | Runs one SELECT through the runner, `$n` parameters bound, at most 1,000 rows (and 200,000 characters). Logged in Report asks as `mcp_query` |
+| `run_report` | Runs a published report by slug on its parameters. Logged in Report runs with trigger `mcp`. Dashboards use this, so they show reviewed, aggregate reports |
+| `findReportDefinitions`, `createReportDefinitions`, `updateReportDefinitions` | The plugin's tools for `report-definitions`. Every write is a draft (`mcpDraftsOnly`): an update writes a new draft version and leaves the published report alone; bulk updates and deletes are refused. New reports get `origin: mcp` and the key's person as author |
+
+Keys:
+
+- An admin creates one per person in **Reporting → MCP API keys**, for report
+  authors (admin, supervisor) only. The key is generated on save; copy it
+  from the key's page to the person. Delete the key to revoke it.
+- The report tools (find, create, update) are off on a new key; tick the
+  ones the person needs. The custom tools are on; untick any a key should
+  not have (for example, a dashboard key needs only `run_report`).
+- Every request re-checks that the key's person is still a report author,
+  so changing their role revokes the key.
+- Keys are not Payload logins. The plugin makes its key collection an auth
+  collection; `restrictApiKeys` removes that, so a key works at `/api/mcp`
+  and nowhere else. It is stored encrypted with `PAYLOAD_SECRET`, and found
+  by an HMAC of it.
+
+Over MCP, Claude sees query results. That is why only the `reporting` schema
+is reachable and rows are capped. Ask for aggregates; never pull
+customer-level rows you do not need.
+
+Claude Code (one person, their own key):
+
+```bash
+claude mcp add --transport http billie-reporting https://crm.billie.loans/api/mcp \
+  --header "Authorization: Bearer $BILLIE_REPORTING_KEY"
+```
+
+Claude chat and artifacts use claude.ai connectors. claude.ai authenticates a
+custom connector with OAuth, or with a static request header (a beta for
+selected organisations, and one key shared by every member). This server has
+no OAuth yet, so it is not yet added to the claude.ai organisation; see
+BTB-509.
+
 ## Scheduling
 
 `.github/workflows/scheduled-reports.yml` calls both jobs. GitHub cron is UTC

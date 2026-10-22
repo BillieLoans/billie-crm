@@ -185,7 +185,7 @@ export interface RunLogEntry {
   durationMs?: number
   rowCount?: number
   truncated?: boolean
-  trigger?: 'view' | 'schedule'
+  trigger?: 'view' | 'schedule' | 'mcp'
   scheduledFor?: string
 }
 
@@ -252,19 +252,21 @@ export async function runReport(
   payload: Payload,
   user: unknown,
   slug: string,
-  input: { parameters?: Record<string, unknown>; draft?: boolean },
+  input: { parameters?: Record<string, unknown>; draft?: boolean; trigger?: 'view' | 'mcp' },
   options: RunOptions = {},
 ): Promise<RunOutcome> {
+  const log = (entry: RunLogEntry) =>
+    logRun(payload, user, { ...entry, trigger: input.trigger ?? 'view' })
   const author = isReportAuthor(user)
   const draft = input.draft === true
   if (draft && !author) {
-    await logRun(payload, user, { reportSlug: slug, outcome: 'refused', errorCode: 'FORBIDDEN' })
+    await log({ reportSlug: slug, outcome: 'refused', errorCode: 'FORBIDDEN' })
     return forbidden()
   }
 
   const doc = await findReport(payload, slug, draft)
   if (!doc) {
-    await logRun(payload, user, {
+    await log({
       reportSlug: slug.slice(0, MAX_LOGGED_TEXT),
       outcome: 'refused',
       errorCode: 'NOT_FOUND',
@@ -277,13 +279,13 @@ export async function runReport(
   const base = { reportSlug: doc.slug, report: String(doc.id) }
 
   if (!canRunReport(user, doc.roles)) {
-    await logRun(payload, user, { ...base, outcome: 'refused', errorCode: 'FORBIDDEN' })
+    await log({ ...base, outcome: 'refused', errorCode: 'FORBIDDEN' })
     return forbidden()
   }
 
   const params = reportParametersSchema.safeParse(doc.parameters ?? [])
   if (!params.success) {
-    await logRun(payload, user, { ...base, outcome: 'error', errorCode: 'BAD_DEFINITION' })
+    await log({ ...base, outcome: 'error', errorCode: 'BAD_DEFINITION' })
     return {
       status: 500,
       body: { error: { code: 'BAD_DEFINITION', message: 'This report is set up incorrectly.' } },
@@ -292,7 +294,7 @@ export async function runReport(
   const submitted = input.parameters ?? {}
   const bound = bindParameters(params.data, submitted)
   if (!bound.ok) {
-    await logRun(payload, user, {
+    await log({
       ...base,
       parameters: loggedParameters(params.data, submitted),
       outcome: 'refused',
@@ -315,7 +317,7 @@ export async function runReport(
 
   try {
     const result = await runReportSql(doc.sql, bound.values, options)
-    await logRun(payload, user, {
+    await log({
       ...base,
       version,
       parameters,
@@ -336,7 +338,7 @@ export async function runReport(
       error instanceof ReportRunError
         ? error
         : new ReportRunError('QUERY_FAILED', 'The report could not be run.')
-    await logRun(payload, user, {
+    await log({
       ...base,
       version,
       parameters,

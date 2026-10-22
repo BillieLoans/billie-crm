@@ -7,8 +7,12 @@ import { hideFromNonAdmins, isAdmin } from '@/lib/access'
  * versions, and the outcome of the deterministic checks. The R&D record for
  * the AI-authored reports experiment, and the cost record for the feature.
  *
- * Written only by the Ask route with `overrideAccess`. Questions are staff
- * text about reports; no report rows are stored here or sent to Claude.
+ * Also logs each `run_report_query` over the MCP connector (BTB-509, kind
+ * `mcp_query`): the SQL and its row count, never the rows.
+ *
+ * Written only by the Ask route and the connector with `overrideAccess`.
+ * Questions are staff text about reports; no report rows are stored here or
+ * sent to Claude by the Ask panel.
  */
 export const ReportAsks: CollectionConfig = {
   slug: 'report-asks',
@@ -43,6 +47,7 @@ export const ReportAsks: CollectionConfig = {
         { label: 'Question', value: 'ask' },
         { label: 'Refinement', value: 'refine' },
         { label: 'Edited SQL check', value: 'check' },
+        { label: 'MCP query', value: 'mcp_query' },
       ],
     },
     { name: 'question', type: 'textarea' },

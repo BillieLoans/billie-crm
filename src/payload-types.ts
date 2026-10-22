@@ -92,6 +92,7 @@ export interface Config {
     'report-definitions': ReportDefinition;
     'report-runs': ReportRun;
     'report-asks': ReportAsk;
+    'payload-mcp-api-keys': PayloadMcpApiKey;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -124,6 +125,7 @@ export interface Config {
     'report-definitions': ReportDefinitionsSelect<false> | ReportDefinitionsSelect<true>;
     'report-runs': ReportRunsSelect<false> | ReportRunsSelect<true>;
     'report-asks': ReportAsksSelect<false> | ReportAsksSelect<true>;
+    'payload-mcp-api-keys': PayloadMcpApiKeysSelect<false> | PayloadMcpApiKeysSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -2300,7 +2302,7 @@ export interface ReportDefinition {
    */
   roles: ('admin' | 'supervisor' | 'operations' | 'readonly')[];
   author?: (string | null) | User;
-  origin?: ('manual' | 'ask') | null;
+  origin?: ('manual' | 'ask' | 'mcp') | null;
   schedule?: ('none' | 'weekly_monday') | null;
   updatedAt: string;
   createdAt: string;
@@ -2330,7 +2332,7 @@ export interface ReportRun {
     | null;
   outcome: 'ok' | 'sending' | 'timeout' | 'refused' | 'error';
   errorCode?: string | null;
-  trigger?: ('view' | 'schedule') | null;
+  trigger?: ('view' | 'schedule' | 'mcp') | null;
   /**
    * Sydney date a scheduled delivery claimed (YYYY-MM-DD). Delete a stuck "sending" run to let the day send again.
    */
@@ -2348,7 +2350,7 @@ export interface ReportRun {
 export interface ReportAsk {
   id: string;
   user?: (string | null) | User;
-  kind: 'ask' | 'refine' | 'check';
+  kind: 'ask' | 'refine' | 'check' | 'mcp_query';
   question?: string | null;
   refinement?: string | null;
   outcome: 'ok' | 'invalid' | 'unanswerable' | 'refused' | 'invalid_output' | 'error';
@@ -2372,6 +2374,62 @@ export interface ReportAsk {
     | number
     | boolean
     | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Keys for the reporting connector (BTB-509): one per person, for report authors only. Delete a key to revoke it.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "payload-mcp-api-keys".
+ */
+export interface PayloadMcpApiKey {
+  id: string;
+  /**
+   * The user that the API key is associated with.
+   */
+  user: string | User;
+  /**
+   * A useful label for the API key.
+   */
+  label?: string | null;
+  /**
+   * The purpose of the API key.
+   */
+  description?: string | null;
+  reportDefinitions?: {
+    /**
+     * Allow clients to find report-definitions.
+     */
+    find?: boolean | null;
+    /**
+     * Allow clients to create report-definitions.
+     */
+    create?: boolean | null;
+    /**
+     * Allow clients to update report-definitions.
+     */
+    update?: boolean | null;
+  };
+  'payload-mcp-tool'?: {
+    /**
+     * Describe the reporting schema: every view and table with its grain, every column with its meaning, the helper functions, and the business rules a report must follow. Read this before writing report SQL.
+     */
+    describeReportingSchema?: boolean | null;
+    /**
+     * Run one SELECT (or WITH) over the reporting schema, read-only, as the reporting role, and return its columns and up to 1000 rows. Bind values as $1, $2… with parameters, in order. Use it to test report SQL before saving a draft. Prefer aggregates: never pull customer-level rows you do not need.
+     */
+    runReportQuery?: boolean | null;
+    /**
+     * Run a published report by its slug on the given parameters (blank ones take their defaults) and return its columns and rows. Find slugs with findReportDefinitions. Dashboards should use this, so they show reviewed, aggregate reports only.
+     */
+    runReport?: boolean | null;
+  };
+  /**
+   * Generated when the key is saved. The person adds it to Claude as a bearer token.
+   */
+  apiKey?: string | null;
+  apiKeyIndex?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -2498,6 +2556,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'report-asks';
         value: string | ReportAsk;
+      } | null)
+    | ({
+        relationTo: 'payload-mcp-api-keys';
+        value: string | PayloadMcpApiKey;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -3486,6 +3548,33 @@ export interface ReportAsksSelect<T extends boolean = true> {
   errorCount?: T;
   warningCount?: T;
   definition?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "payload-mcp-api-keys_select".
+ */
+export interface PayloadMcpApiKeysSelect<T extends boolean = true> {
+  user?: T;
+  label?: T;
+  description?: T;
+  reportDefinitions?:
+    | T
+    | {
+        find?: T;
+        create?: T;
+        update?: T;
+      };
+  'payload-mcp-tool'?:
+    | T
+    | {
+        describeReportingSchema?: T;
+        runReportQuery?: T;
+        runReport?: T;
+      };
+  apiKey?: T;
+  apiKeyIndex?: T;
   updatedAt?: T;
   createdAt?: T;
 }

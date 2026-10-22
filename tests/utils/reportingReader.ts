@@ -18,9 +18,14 @@ export async function reportingReaderPool(owner: {
   END $$`)
   await owner.query(`ALTER ROLE reporting_reader LOGIN PASSWORD '${READER_PASSWORD}'`)
   await applyReportingSchema(owner)
+  // max 1: every run shares one connection, so leaked session state would show.
+  return new Pool({ connectionString: reportingReaderUri(), max: 1 })
+}
+
+/** The test database's URI, logged in as reporting_reader (after `reportingReaderPool`). */
+export function reportingReaderUri(): string {
   const uri = new URL(process.env.DATABASE_URI as string)
   uri.username = 'reporting_reader'
   uri.password = READER_PASSWORD
-  // max 1: every run shares one connection, so leaked session state would show.
-  return new Pool({ connectionString: uri.toString(), max: 1 })
+  return uri.toString()
 }

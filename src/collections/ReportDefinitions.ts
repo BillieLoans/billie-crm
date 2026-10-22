@@ -1,10 +1,12 @@
 import type {
   Access,
   CollectionBeforeChangeHook,
+  CollectionBeforeOperationHook,
   CollectionConfig,
   FieldHook,
   Validate,
 } from 'payload'
+import { Forbidden } from 'payload'
 import { hasApprovalAuthority, isAdmin } from '@/lib/access'
 import {
   REPORT_SLUG_RE,
@@ -63,12 +65,35 @@ const normaliseParameters: FieldHook = ({ value }) => {
 
 /**
  * Where a report came from, set once on create from the request context
- * (`reportOrigin`, passed by the Ask Claude save), never from the data.
+ * (`reportOrigin`: `ask` from the Ask Claude save, `mcp` from the MCP
+ * connector), never from the data.
  */
 const setOrigin: CollectionBeforeChangeHook = ({ data, operation, context }) => {
   if (operation !== 'create') return data
   const origin = context.reportOrigin
-  return { ...data, origin: origin === 'ask' ? origin : (data.origin ?? 'manual') }
+  return {
+    ...data,
+    origin: origin === 'ask' || origin === 'mcp' ? origin : (data.origin ?? 'manual'),
+  }
+}
+
+/**
+ * Over the MCP connector (BTB-509) every write is a draft, so nothing Claude
+ * saves is published without a person: creates and single updates are forced
+ * to drafts (an update writes a new draft version and leaves the published
+ * one alone), and bulk updates and deletes are refused.
+ */
+export const mcpDraftsOnly: CollectionBeforeOperationHook = ({ args, context, operation, req }) => {
+  if ((req.payloadAPI as string) !== 'MCP') return args
+  // Payload names both a single and a bulk update 'update' here; only a
+  // single one carries an id.
+  const single = operation === 'create' || (operation === 'update' && 'id' in args && !!args.id)
+  if (single) {
+    if (operation === 'create') context.reportOrigin = 'mcp'
+    return { ...args, data: { ...(args.data ?? {}), _status: 'draft' }, draft: true }
+  }
+  if (operation === 'update' || operation === 'delete') throw new Forbidden(req.t)
+  return args
 }
 
 /**
@@ -106,7 +131,7 @@ export const ReportDefinitions: CollectionConfig = {
     drafts: true,
     maxPerDoc: 50,
   },
-  hooks: { beforeChange: [setOrigin] },
+  hooks: { beforeOperation: [mcpDraftsOnly], beforeChange: [setOrigin] },
   fields: [
     { name: 'title', type: 'text', required: true, maxLength: 120 },
     {
@@ -187,6 +212,7 @@ export const ReportDefinitions: CollectionConfig = {
       options: [
         { label: 'Written by hand', value: 'manual' },
         { label: 'Drafted with Claude', value: 'ask' },
+        { label: 'Saved over MCP', value: 'mcp' },
       ],
       admin: { position: 'sidebar', readOnly: true },
       // Not writable through the API: set by `setOrigin` from the caller.
