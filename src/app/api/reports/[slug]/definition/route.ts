@@ -1,9 +1,10 @@
 /**
  * GET /api/reports/:slug/definition — a report's whole definition (SQL
- * included), latest version, for authors changing it with Ask Claude or
- * the report editor.
+ * included), for authors changing it with Ask Claude or the report editor.
+ * The latest version, draft or published; `?version=published` for the
+ * published one (the report editor diffs against it before publishing).
  */
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
 import { errorResponse } from '@/server/reporting/route-auth'
 import { findReport, isReportAuthor } from '@/server/reporting/run-report'
@@ -12,14 +13,15 @@ interface RouteParams {
   params: Promise<{ slug: string }>
 }
 
-export async function GET(_request: Request, { params }: RouteParams) {
+export async function GET(request: NextRequest, { params }: RouteParams) {
   const { slug } = await params
   const auth = await requireAuth()
   if ('error' in auth) return auth.error
   if (!isReportAuthor(auth.user)) {
     return errorResponse(403, 'FORBIDDEN', 'Only report authors can see report definitions.')
   }
-  const doc = await findReport(auth.payload, slug, true)
+  const published = request.nextUrl?.searchParams.get('version') === 'published'
+  const doc = await findReport(auth.payload, slug, !published)
   if (!doc) return errorResponse(404, 'NOT_FOUND', 'There is no report at this link.')
   return NextResponse.json({
     id: String(doc.id),

@@ -72,7 +72,7 @@ export function ReportsNav({ reports, canAuthor, currentSlug, isLoading, error }
             Reports home
           </Link>
           {canAuthor && (
-            <Link className={styles.textLink} href="/admin/collections/report-definitions/create">
+            <Link className={styles.textLink} href="/admin/reports/new">
               New report
             </Link>
           )}

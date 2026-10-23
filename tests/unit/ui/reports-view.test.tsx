@@ -6,7 +6,7 @@
  * `fetch` mocked.
  */
 import React from 'react'
-import { render, screen, fireEvent, within, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, within, waitFor, cleanup } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 
@@ -48,6 +48,12 @@ vi.mock('@/hooks/queries/useReportsHome', () => ({ useReportsHome: () => homeSta
 vi.mock('@/components/ReportsView/ReportChart', () => ({
   ReportChart: ({ spec }: { spec: { x: string } }) => (
     <div data-testid="report-chart" data-x={spec.x} />
+  ),
+}))
+
+vi.mock('@/components/ReportsView/ReportEditor', () => ({
+  ReportEditor: ({ slug }: { slug?: string }) => (
+    <div data-testid="report-editor" data-slug={slug ?? ''} />
   ),
 }))
 
@@ -162,11 +168,11 @@ function sentBodies(): Array<{
   return fetchMock.mock.calls.map(([, init]) => JSON.parse((init as RequestInit).body as string))
 }
 
-function renderView(slug: string) {
+function renderView(slug: string, mode?: 'edit') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <ReportsView slug={slug} />
+      <ReportsView slug={slug} mode={mode} />
     </QueryClientProvider>,
   )
 }
@@ -325,7 +331,7 @@ describe('ReportsView', () => {
     renderView('by-code')
     expect(screen.getByRole('link', { name: 'Edit report' })).toHaveAttribute(
       'href',
-      '/admin/collections/report-definitions/r2',
+      '/admin/reports/by-code/edit',
     )
     expect(screen.getByLabelText('Reason code')).toBeInTheDocument()
 
@@ -423,6 +429,26 @@ describe('ReportsView', () => {
   it('says when a link names no report the user can run', () => {
     renderView('secret')
     expect(screen.getByTestId('report-not-found')).toHaveTextContent('Report not found')
+  })
+
+  it('opens the editor for authors at /new and /<slug>/edit, and explains it to others', () => {
+    renderView('new')
+    expect(screen.getByTestId('editor-denied')).toHaveTextContent('You cannot edit reports')
+    expect(screen.queryByTestId('report-editor')).toBeNull()
+    cleanup()
+
+    currentUser = { id: 'a1', role: 'supervisor' }
+    reportsState.data = { reports: [WEEKLY], canAuthor: true }
+    const { unmount } = renderView('new')
+    expect(screen.getByTestId('report-editor')).toHaveAttribute('data-slug', '')
+    unmount()
+    renderView('weekly', 'edit')
+    expect(screen.getByTestId('report-editor')).toHaveAttribute('data-slug', 'weekly')
+    const crumbs = screen.getByRole('navigation', { name: /breadcrumb/i })
+    expect(within(crumbs).getByRole('link', { name: 'Weekly approvals' })).toHaveAttribute(
+      'href',
+      '/admin/reports/weekly',
+    )
   })
 })
 

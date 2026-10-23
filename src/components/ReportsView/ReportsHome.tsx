@@ -156,6 +156,11 @@ export function ReportsHome({ reports, canAuthor, canAsk, isLoading, error }: Re
       <header className={styles.header}>
         <h1 className={styles.title}>Reports</h1>
         <p className={styles.subtitle}>The business at a glance, and every report you can run.</p>
+        {canAuthor && (
+          <Link className={styles.textLink} href="/admin/reports/new">
+            New report
+          </Link>
+        )}
       </header>
 
       <div className={styles.homeSearchRow}>

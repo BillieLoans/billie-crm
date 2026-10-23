@@ -9,9 +9,9 @@ import { ReportsView } from './ReportsView'
  * Reports view for Payload admin (BTB-506), at `/admin/reports/<slug>`.
  *
  * A catch-all route, like `IssueReportsViewWithTemplate`: Payload passes
- * `['reports', '<slug>']` as `segments`. `/admin/reports` does not collide
- * with Payload's reserved `/admin/collections/*`; the definitions themselves
- * are edited at `/admin/collections/report-definitions`.
+ * `['reports', '<slug>']` as `segments`, or `['reports', '<slug>', 'edit']`
+ * for the editor (`/admin/reports/new` for a new report). `/admin/reports`
+ * does not collide with Payload's reserved `/admin/collections/*`.
  *
  * Only the login guard lives here; the role gate is an explanatory panel in
  * the client view.
@@ -28,6 +28,7 @@ export async function ReportsViewWithTemplate({
   const resolvedParams = await params
   const segments = resolvedParams?.segments as string[] | undefined
   const slug = segments?.[1] ?? ''
+  const mode = segments?.[2] === 'edit' ? 'edit' : undefined
 
   return (
     <DefaultTemplate
@@ -40,7 +41,7 @@ export async function ReportsViewWithTemplate({
       user={initPageResult.req.user}
       visibleEntities={initPageResult.visibleEntities}
     >
-      <ReportsView slug={slug} />
+      <ReportsView slug={slug} mode={mode} />
     </DefaultTemplate>
   )
 }

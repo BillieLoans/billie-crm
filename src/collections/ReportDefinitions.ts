@@ -6,7 +6,7 @@ import type {
   FieldHook,
   Validate,
 } from 'payload'
-import { Forbidden } from 'payload'
+import { Forbidden, ValidationError } from 'payload'
 import { hasApprovalAuthority, isAdmin } from '@/lib/access'
 import {
   REPORT_SLUG_RE,
@@ -36,6 +36,23 @@ const validateSlug: Validate = (value) => {
   }
   if (RESERVED_REPORT_SLUGS.includes(value)) return `"${value}" is reserved`
   return true
+}
+
+/**
+ * The slug rule, for drafts too: Payload skips field validation on a draft
+ * save, and a draft at a reserved link (`new`, `ask`, ...) could never be
+ * opened from Reports. The unique index still applies to drafts.
+ */
+const slugEvenForDrafts: CollectionBeforeChangeHook = ({ data, collection }) => {
+  if (data.slug === undefined) return data
+  const result = validateSlug(data.slug, {} as never)
+  if (result !== true) {
+    throw new ValidationError({
+      collection: collection.slug,
+      errors: [{ path: 'slug', message: String(result) }],
+    })
+  }
+  return data
 }
 
 /** JSON edited as text: Payload's JSON editor loads from a CDN the admin's CSP blocks. */
@@ -156,7 +173,7 @@ export const ReportDefinitions: CollectionConfig = {
     // high enough that drafting (by hand or over MCP) does not lose history.
     maxPerDoc: 500,
   },
-  hooks: { beforeOperation: [mcpDraftsOnly], beforeChange: [setOrigin] },
+  hooks: { beforeOperation: [mcpDraftsOnly], beforeChange: [slugEvenForDrafts, setOrigin] },
   fields: [
     { name: 'title', type: 'text', required: true, maxLength: 120 },
     {

@@ -8,6 +8,7 @@
  * again. The integration test runs each one against TEST data.
  */
 import type { Payload, PayloadRequest } from 'payload'
+import { sameJson } from '@/lib/reports/diff'
 import type {
   ColumnSpec,
   HeadlineSpec,
@@ -514,23 +515,6 @@ const ORIGINAL_CHARTS: Record<string, unknown> = {
   },
   'application-funnel': funnel.chart,
   'gtm-numbers': null,
-}
-
-/** Structural equality for JSON values (Postgres jsonb does not keep key order). */
-function sameJson(a: unknown, b: unknown): boolean {
-  if (a === b) return true
-  if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') {
-    return (a ?? null) === (b ?? null)
-  }
-  if (Array.isArray(a) !== Array.isArray(b)) return false
-  const keysA = Object.keys(a as object)
-  const keysB = Object.keys(b as object)
-  return (
-    keysA.length === keysB.length &&
-    keysA.every((k) =>
-      sameJson((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]),
-    )
-  )
 }
 
 const isEmptyList = (value: unknown) =>

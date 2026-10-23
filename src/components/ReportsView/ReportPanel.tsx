@@ -311,10 +311,7 @@ export function ReportPanel({
               </label>
             </div>
           ) : null}
-          <Link
-            className={styles.textLink}
-            href={`/admin/collections/report-definitions/${report.id}`}
-          >
+          <Link className={styles.textLink} href={`/admin/reports/${report.slug}/edit`}>
             Edit report
           </Link>
           <Link className={styles.textLink} href={`/admin/reports/ask?from=${report.slug}`}>

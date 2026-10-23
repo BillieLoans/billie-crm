@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
+import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { useAuth } from '@payloadcms/ui'
 import { Breadcrumb } from '@/components/Breadcrumb'
@@ -10,11 +11,14 @@ import { DRAFT_KEY, ReportPanel, replaceQuery } from './ReportPanel'
 import { AskPanel } from './AskPanel'
 import { ReportsHome } from './ReportsHome'
 import { ReportsNav } from './ReportsNav'
+import { ReportEditor } from './ReportEditor'
 import styles from './styles.module.css'
 
 export interface ReportsViewProps {
   /** The report in the URL (`/admin/reports/<slug>`), or '' for the list. */
   slug: string
+  /** `edit` at `/admin/reports/<slug>/edit`. */
+  mode?: 'edit'
 }
 
 /**
@@ -22,7 +26,7 @@ export interface ReportsViewProps {
  * the table and a CSV. Authors also see drafts and can run them. Reports are definitions in the
  * `report-definitions` collection, so a new report needs no deploy.
  */
-export function ReportsView({ slug }: ReportsViewProps) {
+export function ReportsView({ slug, mode }: ReportsViewProps) {
   const { user } = useAuth()
   const allowed = hasAnyRole(user)
   const { data, isLoading, error } = useReports()
@@ -42,6 +46,36 @@ export function ReportsView({ slug }: ReportsViewProps) {
   const reports = data?.reports ?? []
   const canAuthor = data?.canAuthor ?? false
   const selected = slug ? reports.find((r) => r.slug === slug) : undefined
+  const editing = slug === 'new' || mode === 'edit'
+
+  if (editing) {
+    return (
+      <div className={styles.container}>
+        <Breadcrumb
+          items={[
+            { label: 'Reports', href: '/admin/reports' },
+            ...(slug === 'new'
+              ? [{ label: 'New report' }]
+              : [
+                  { label: selected?.title ?? slug, href: `/admin/reports/${slug}` },
+                  { label: 'Edit' },
+                ]),
+          ]}
+        />
+        {isLoading ? null : canAuthor ? (
+          <ReportEditor key={slug} slug={slug === 'new' ? undefined : slug} reports={reports} />
+        ) : (
+          <div data-testid="editor-denied">
+            <h1 className={styles.title}>You cannot edit reports</h1>
+            <p className={styles.subtitle}>
+              Admins and supervisors write reports. You can ask Claude for one from{' '}
+              <Link href="/admin/reports/ask">Ask Claude</Link>.
+            </p>
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className={styles.container}>
