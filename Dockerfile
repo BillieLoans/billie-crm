@@ -1,9 +1,9 @@
 # To use this Dockerfile, you have to set `output: 'standalone'` in your next.config.mjs file.
 # From https://github.com/vercel/next.js/blob/canary/examples/with-docker/Dockerfile
 
-# Alpine minor pinned (…-alpine3.21): the bare `-alpine` tag floats to an Alpine
+# Alpine minor pinned (…-alpine3.23): the bare `-alpine` tag floats to an Alpine
 # shipping Python 3.14, which lacks musllinux wheels for our pinned Python deps.
-FROM node:22.12.0-alpine3.21 AS base
+FROM node:22.23.4-alpine3.23 AS base
 
 # Note: corepack is updated in deps/builder stages to fix signature verification
 
