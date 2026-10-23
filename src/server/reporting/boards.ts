@@ -10,6 +10,7 @@
  */
 import { randomUUID } from 'node:crypto'
 import type { Payload } from 'payload'
+import { NotFound, ValidationError } from 'payload'
 import {
   MAX_BOARD_TILES,
   boardSlug,
@@ -19,7 +20,7 @@ import {
   type BoardUpdate,
 } from '@/lib/reports/boards'
 import { dateRangeParameters } from '@/lib/reports/periods'
-import { getDashboardPool } from '@/lib/dashboard-aggregates'
+import { requirePgPool } from '@/lib/dashboard-aggregates'
 import { errorResponse } from './route-auth'
 import { isReportAuthor, listPublishedReports, type ReportSummary } from './run-report'
 
@@ -37,6 +38,11 @@ export class BoardError extends Error {
 /** The API response for a failed board request. */
 export function boardFailure(error: unknown) {
   if (error instanceof BoardError) return errorResponse(error.status, error.code, error.message)
+  // The collection's own validation refused the change.
+  if (error instanceof ValidationError) {
+    const field = (error.data as { errors?: Array<{ message?: string }> } | undefined)?.errors?.[0]
+    return errorResponse(400, 'INVALID', field?.message ?? 'The board was not saved.')
+  }
   console.error('[reports] board request failed:', error)
   return errorResponse(500, 'BOARD_FAILED', 'That did not work. Try again.')
 }
@@ -136,11 +142,19 @@ function viewOf(doc: BoardDoc, reports: Map<string, ReportSummary>, user: unknow
   }
 }
 
+/** Tries at a board's write lock before answering that the board is busy. */
+const LOCK_ATTEMPTS = 20
+const LOCK_WAIT_MS = 50
+
 /**
- * Write a change only if the board is still at the version read, in one
- * statement, so two changes at the same moment cannot both win. Plain SQL
- * rather than Payload's update (which finds, then writes): the values were
- * checked against the board schemas before they get here.
+ * Write a change only if the board is still at the version read. Writers of
+ * a board take a per-board advisory lock, check the version and write
+ * through Payload (so the collection's validation and hooks apply): two
+ * changes at the same moment cannot both win.
+ *
+ * The lock is tried, not waited for: a writer waiting would hold a pooled
+ * connection while the lock holder needs others for its own reads and
+ * write, and enough of them could exhaust the pool.
  *
  * @returns the board as written, or null when it changed in between.
  */
@@ -149,37 +163,52 @@ async function writeIfUnchanged(
   doc: BoardDoc,
   data: { title?: string; description?: string | null; tiles?: BoardTile[] },
 ): Promise<BoardDoc | null> {
-  const pool = getDashboardPool(payload)
-  if (!pool) throw new Error('The database pool is not available')
-  const result = await pool.query(
-    `UPDATE report_boards
-        SET title = COALESCE($3, title),
-            description = CASE WHEN $4::boolean THEN $5 ELSE description END,
-            tiles = COALESCE($6::jsonb, tiles),
-            updated_at = now()
-      WHERE id = $1 AND updated_at = $2::timestamptz
-      RETURNING id, slug, title, description, tiles, updated_at`,
-    [
-      doc.id,
-      doc.updatedAt,
-      data.title ?? null,
-      data.description !== undefined,
-      data.description ?? null,
-      data.tiles === undefined ? null : JSON.stringify(data.tiles),
-    ],
-  )
-  const row = result.rows[0] as
-    | {
-        id: string
-        slug: string
-        title: string
-        description: string | null
-        tiles: unknown
-        updated_at: Date
+  const pool = requirePgPool(payload)
+  const key = `report-board:${doc.id}`
+  for (let attempt = 0; attempt < LOCK_ATTEMPTS; attempt++) {
+    const lock = await pool.connect()
+    let held = false
+    try {
+      const { rows } = await lock.query('SELECT pg_try_advisory_lock(hashtext($1)) AS ok', [key])
+      held = rows[0]?.ok === true
+      if (held) {
+        let current: BoardDoc | null
+        try {
+          current = (await payload.findByID({
+            collection: 'report-boards',
+            id: doc.id,
+            depth: 0,
+            overrideAccess: true,
+          })) as unknown as BoardDoc
+        } catch (error) {
+          if (error instanceof NotFound) return null
+          throw error
+        }
+        if (current.updatedAt !== doc.updatedAt) return null
+        return (await payload.update({
+          collection: 'report-boards',
+          id: doc.id,
+          data: data as never,
+          depth: 0,
+          overrideAccess: true,
+        })) as unknown as BoardDoc
       }
-    | undefined
-  if (!row) return null
-  return { ...row, id: String(row.id), updatedAt: new Date(row.updated_at).toISOString() }
+    } finally {
+      if (held) {
+        // A session lock left on a pooled connection would block the board
+        // for good: if the unlock fails, close the connection instead.
+        const unlocked = await lock
+          .query('SELECT pg_advisory_unlock(hashtext($1))', [key])
+          .then(() => true)
+          .catch(() => false)
+        lock.release(unlocked ? undefined : true)
+      } else {
+        lock.release()
+      }
+    }
+    await new Promise((r) => setTimeout(r, LOCK_WAIT_MS * (attempt + 1)))
+  }
+  throw new BoardError(409, 'BOARD_BUSY', 'The board is being changed. Try again in a moment.')
 }
 
 /**

@@ -25,6 +25,11 @@ vi.mock('@anthropic-ai/sdk', () => {
   class APIUserAbortError extends APIError {}
   return { default: { APIError, RateLimitError, APIUserAbortError } }
 })
+const holdAskSlot = vi.fn()
+const release = vi.fn()
+vi.mock('@/server/reporting/ask/quota', () => ({
+  holdAskSlot: (...a: unknown[]) => holdAskSlot(...a),
+}))
 const draftFromQuestion = vi.fn()
 const checkEditedDefinition = vi.fn()
 vi.mock('@/server/reporting/ask/draft', async () => ({
@@ -53,6 +58,8 @@ function signedIn(role: string) {
 beforeEach(() => {
   signedIn('supervisor')
   count.mockReset().mockResolvedValue({ totalDocs: 0 })
+  release.mockReset().mockResolvedValue(undefined)
+  holdAskSlot.mockReset().mockResolvedValue({ ok: true, release })
   loadOwnAsk.mockReset().mockResolvedValue(null)
   draftFromQuestion
     .mockReset()
@@ -71,18 +78,23 @@ describe('POST /api/reports/ask', () => {
   })
 
   test(`limits staff who are not authors to ${ASK_DAILY_LIMIT} asks a day, and authors not at all`, async () => {
-    count.mockResolvedValue({ totalDocs: ASK_DAILY_LIMIT })
+    holdAskSlot.mockResolvedValue({ ok: false, code: 'DAILY_LIMIT' })
     signedIn('readonly')
     const res = (await POST(req({ mode: 'ask', question: 'q' }))) as unknown as Res
     expect(res.status).toBe(429)
     expect((res.body.error as { code: string }).code).toBe('DAILY_LIMIT')
+    expect(holdAskSlot).toHaveBeenCalledWith(expect.anything(), 'u', ASK_DAILY_LIMIT)
+    expect(draftFromQuestion).not.toHaveBeenCalled()
     // A check makes no Claude call, so it is never limited.
+    holdAskSlot.mockClear()
     loadOwnAsk.mockResolvedValue({ question: 'q', definition: DEF_PARSED })
     expect(
       ((await POST(req({ mode: 'check', question: 'q', askId: 'a1' }))) as unknown as Res).status,
     ).toBe(200)
+    expect(holdAskSlot).not.toHaveBeenCalled()
     signedIn('supervisor')
     expect(((await POST(req({ mode: 'ask', question: 'q' }))) as unknown as Res).status).toBe(200)
+    expect(holdAskSlot).not.toHaveBeenCalled()
   })
 
   test('staff who are not authors can only check or refine a definition Claude gave them', async () => {
@@ -109,19 +121,18 @@ describe('POST /api/reports/ask', () => {
     expect(draftFromQuestion.mock.calls[0][2].previous.definition).toEqual(own)
   })
 
-  test('lets a non-author have one draft in progress at a time', async () => {
+  test('lets a non-author have one draft in progress at a time, and releases it after', async () => {
     signedIn('readonly')
-    let finish: (v: unknown) => void = () => undefined
-    draftFromQuestion.mockReturnValueOnce(new Promise((r) => (finish = r)))
-    const first = POST(req({ mode: 'ask', question: 'q' }))
-    await new Promise((r) => setTimeout(r, 0))
-    const second = (await POST(req({ mode: 'ask', question: 'q' }))) as unknown as Res
-    expect(second.status).toBe(429)
-    expect((second.body.error as { code: string }).code).toBe('IN_PROGRESS')
-    finish({ status: 'ok', issues: [], plan: [], assumptions: [] })
-    expect(((await first) as unknown as Res).status).toBe(200)
-    // Released once it finished.
+    holdAskSlot.mockResolvedValueOnce({ ok: false, code: 'IN_PROGRESS' })
+    const busy = (await POST(req({ mode: 'ask', question: 'q' }))) as unknown as Res
+    expect(busy.status).toBe(429)
+    expect((busy.body.error as { code: string }).code).toBe('IN_PROGRESS')
     expect(((await POST(req({ mode: 'ask', question: 'q' }))) as unknown as Res).status).toBe(200)
+    expect(release).toHaveBeenCalledTimes(1)
+    // Released when a draft fails too.
+    draftFromQuestion.mockRejectedValueOnce(new Error('boom'))
+    await POST(req({ mode: 'ask', question: 'q' }))
+    expect(release).toHaveBeenCalledTimes(2)
   })
 
   test('asks, refines and checks', async () => {

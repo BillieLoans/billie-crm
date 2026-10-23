@@ -23,6 +23,7 @@ import { AccountsTable } from './AccountsTable'
 import { AccountPeekDrawer } from './AccountPeekDrawer'
 import { ShortcutsCheatsheet } from './ShortcutsCheatsheet'
 import styles from './styles.module.css'
+import { characterShortcutAllowed, isEditableTarget } from '@/lib/keyboard'
 
 const PAGE_PATH = '/admin/accounts'
 
@@ -254,12 +255,7 @@ export const AccountsBrowserView: React.FC = () => {
   // === Global hotkeys for `?` (cheatsheet) and `⌘E` (export) ===
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null
-      const inInput =
-        !!target &&
-        (target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA' ||
-          target.isContentEditable)
+      const inInput = isEditableTarget(e.target)
 
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'e') {
         e.preventDefault()
@@ -267,7 +263,7 @@ export const AccountsBrowserView: React.FC = () => {
         return
       }
 
-      if (inInput) return
+      if (inInput || !characterShortcutAllowed(e)) return
       if (e.key === '?' && !e.metaKey && !e.ctrlKey) {
         e.preventDefault()
         setCheatsheetOpen(true)
@@ -289,9 +285,7 @@ export const AccountsBrowserView: React.FC = () => {
         <div className={styles.mainHeader}>
           <div>
             <h1 className={styles.mainTitle}>{headerTitle}</h1>
-            {headerDescription && (
-              <div className={styles.mainDescription}>{headerDescription}</div>
-            )}
+            {headerDescription && <div className={styles.mainDescription}>{headerDescription}</div>}
           </div>
         </div>
 
@@ -357,10 +351,7 @@ export const AccountsBrowserView: React.FC = () => {
         }}
       />
 
-      <ShortcutsCheatsheet
-        isOpen={cheatsheetOpen}
-        onClose={() => setCheatsheetOpen(false)}
-      />
+      <ShortcutsCheatsheet isOpen={cheatsheetOpen} onClose={() => setCheatsheetOpen(false)} />
 
       {disburseAccount && (
         <DisburseLoanDrawer

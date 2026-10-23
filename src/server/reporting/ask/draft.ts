@@ -8,15 +8,13 @@
  */
 import type { Payload } from 'payload'
 import {
-  bindParameters,
   RESERVED_REPORT_SLUGS,
   REPORT_CATEGORY_VALUES,
   REPORT_VIEWER_ROLES,
   type ReportCategory,
   type ReportViewerRole,
 } from '@/lib/schemas/reports'
-import type { ReportColumn } from '@/lib/schemas/reports'
-import { ReportRunError, runReportSql, type RunOptions } from '../runner'
+import type { RunOptions } from '../runner'
 import {
   ASK_EFFORT,
   ASK_MODEL,
@@ -28,21 +26,8 @@ import {
   type AskUsage,
 } from './claude'
 import { readPartialDraft, type PartialDraft } from './partial'
-import {
-  validateResult,
-  validateStatic,
-  type DraftDefinition,
-  type ValidationIssue,
-  type ValidDraft,
-} from './validate'
-
-export interface DraftPreview {
-  columns: ReportColumn[]
-  rows: Array<Record<string, unknown>>
-  rowCount: number
-  truncated: boolean
-  durationMs: number
-}
+import { checkAndPreview, type DraftPreview } from './preview'
+import type { DraftDefinition, ValidationIssue } from './validate'
 
 export interface DraftOutcome {
   status: 'ok' | 'unanswerable' | 'refused' | 'invalid_output'
@@ -127,32 +112,6 @@ export function parseIssues(value: unknown): Array<{ code: string; message: stri
     )
     .slice(0, 20)
     .map((i) => ({ code: i.code.slice(0, 40), message: i.message.slice(0, 300) }))
-}
-
-/** Static checks, then a run on the defaults through the runner, then result checks. */
-export async function checkAndPreview(
-  definition: DraftDefinition,
-  runOptions: RunOptions = {},
-): Promise<{ valid: ValidDraft | null; issues: ValidationIssue[]; preview?: DraftPreview }> {
-  const { valid, issues } = validateStatic(definition)
-  if (!valid) return { valid, issues }
-  const bound = bindParameters(valid.parameters, {})
-  if (!bound.ok) return { valid, issues } // NO_DEFAULT already warns
-  try {
-    const result = await runReportSql(valid.sql, bound.values, runOptions)
-    const all = [...issues, ...validateResult(result.columns, result.rows, valid)]
-    return {
-      valid: all.some((i) => i.level === 'error') ? null : valid,
-      issues: all,
-      preview: result,
-    }
-  } catch (error) {
-    const message =
-      error instanceof ReportRunError
-        ? `${error.message}${error.detail ? ` (${error.detail})` : ''}`
-        : 'The query could not be run.'
-    return { valid: null, issues: [...issues, { level: 'error', code: 'RUN', message }] }
-  }
 }
 
 async function logAsk(
@@ -555,3 +514,5 @@ export async function saveDraft(
     ],
   }
 }
+
+export { checkAndPreview, type DraftPreview }

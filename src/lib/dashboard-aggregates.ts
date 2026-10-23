@@ -10,6 +10,7 @@
  * server-local one — the app runs in UTC on Fly.io.
  */
 
+import type { Pool } from 'pg'
 import { currencyFormatter } from '@/lib/formatters'
 import { sydneyDayUtcRange, type DisbursementBucketTotals } from '@/lib/disbursement-cutoff'
 import type { MoneyFlowMetric, MoneyFlowsToday, UpcomingPayment } from '@/lib/schemas/dashboard'
@@ -26,6 +27,16 @@ const UPCOMING_LIMIT = 10
 /** Minimal shape of the pg pool the Postgres adapter exposes. */
 export interface QueryablePool {
   query: (text: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>> }>
+}
+
+/**
+ * The Postgres adapter's `pg.Pool`, for work that needs one connection of
+ * its own (a transaction or a lock). Throws when the adapter has none.
+ */
+export function requirePgPool(payload: unknown): Pool {
+  const pool = (payload as { db?: { pool?: unknown } } | null | undefined)?.db?.pool
+  if (!pool) throw new Error('The database pool is not available')
+  return pool as Pool
 }
 
 /** The Postgres adapter's underlying `pg.Pool`, when the adapter is Postgres. */

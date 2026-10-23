@@ -9,6 +9,7 @@ export { matchReports }
 import type { ReportSummary } from '@/hooks/queries/useReports'
 import { useReportPins } from '@/hooks/queries/useReportPreferences'
 import styles from './styles.module.css'
+import { characterShortcutAllowed, isEditableTarget } from '@/lib/keyboard'
 
 export interface ReportsNavProps {
   reports: ReportSummary[]
@@ -79,15 +80,7 @@ export function ReportsNav({ reports, canAuthor, currentSlug, isLoading, error }
     // AltGr (reported as Ctrl+Alt on Windows) types "/" on some layouts.
     const altGr = e.getModifierState?.('AltGraph') ?? false
     if (e.key !== '/' || e.metaKey || (!altGr && (e.ctrlKey || e.altKey))) return
-    const target = e.target as HTMLElement
-    if (
-      target.tagName === 'INPUT' ||
-      target.tagName === 'TEXTAREA' ||
-      target.tagName === 'SELECT' ||
-      target.isContentEditable
-    ) {
-      return
-    }
+    if (isEditableTarget(e.target) || !characterShortcutAllowed(e)) return
     e.preventDefault()
     if (open) {
       focusFilter()

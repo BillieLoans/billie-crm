@@ -2403,7 +2403,7 @@ export interface ReportAsk {
   kind: 'ask' | 'refine' | 'check' | 'mcp_query';
   question?: string | null;
   refinement?: string | null;
-  outcome: 'ok' | 'invalid' | 'unanswerable' | 'refused' | 'invalid_output' | 'error' | 'cancelled';
+  outcome: 'ok' | 'invalid' | 'unanswerable' | 'refused' | 'invalid_output' | 'error' | 'cancelled' | 'pending';
   model?: string | null;
   effort?: string | null;
   promptVersion?: string | null;

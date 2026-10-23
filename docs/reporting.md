@@ -229,7 +229,9 @@ column settings. "Publish…" first runs the same checks as a Claude draft
 (below) and refuses on any error, then shows what changed against the
 published version: the settings by name and a line diff of the SQL. A
 change is written through Payload's REST API, so access and validation are
-the collection's. In the Payload admin the same fields are plain text boxes
+the collection's, and the collection runs the checks again on any publish
+over the API (`checksBeforePublish`, the Payload admin included): a report
+that fails them is not published, whatever the browser did. In the Payload admin the same fields are plain text boxes
 (its code editor loads from a CDN the admin's Content-Security-Policy
 blocks).
 
@@ -454,7 +456,9 @@ effort and a change medium.
 Staff who are not authors see the preview marked "Not reviewed", without the
 SQL; they cannot save, have 20 questions a day and one draft in progress at a
 time, and can check or change only a draft Claude gave them (by its logged
-`askId`). Authors can also "Save and publish" in one step, after confirming
+`askId`). The allowance is held in the database (a `pending` report-asks
+row taken under a per-person advisory lock, `src/server/reporting/ask/quota.ts`),
+so it holds across servers. Authors can also "Save and publish" in one step, after confirming
 the area and who can run it. Claude is sent the
 question and the schema description in
 `src/server/reporting/schema-description.ts`, never result rows; a refinement
@@ -703,10 +707,12 @@ and the raw collection is readable by authors only. Authors make boards at
 `/admin/reports/boards`, put a report on one from its page ("Add to board",
 keeping its settings but not its period), and reorder, change or remove
 tiles. A tile for a report that is not published now is kept, hidden, and
-comes back when the report is published again. A change is written only if the board is still the version it was
-read at, in one conditional `UPDATE`, so an editor open on an old copy is
-asked to reload rather than undoing someone else's change. Tile runs are
-logged with trigger `board`.
+comes back when the report is published again. A change is written only
+if the board is still the version it was read at: writers take a per-board
+advisory lock, check the version and write through Payload (so the
+collection's validation applies). An editor open on an old copy is asked to
+reload rather than undoing someone else's change. Tile runs are logged with
+trigger `board`.
 
 ## Usage
 

@@ -64,6 +64,9 @@ export const ReportAsks: CollectionConfig = {
         { label: 'Unusable output', value: 'invalid_output' },
         { label: 'Failed', value: 'error' },
         { label: 'Cancelled', value: 'cancelled' },
+        // Held while a draft for staff who are not authors is in progress,
+        // then removed: see src/server/reporting/ask/quota.ts.
+        { label: 'In progress', value: 'pending' },
       ],
     },
     { name: 'model', type: 'text' },

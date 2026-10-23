@@ -59,6 +59,7 @@ import * as migration_20261030_120000_report_ask_streaming from './20261030_1200
 import * as migration_20261030_130000_report_subscriptions from './20261030_130000_report_subscriptions'
 import * as migration_20261030_140000_report_boards from './20261030_140000_report_boards'
 import * as migration_20261030_150000_report_runs_comparison from './20261030_150000_report_runs_comparison'
+import * as migration_20261030_160000_report_ask_pending from './20261030_160000_report_ask_pending'
 
 export const migrations = [
   {
@@ -365,5 +366,10 @@ export const migrations = [
     up: migration_20261030_150000_report_runs_comparison.up,
     down: migration_20261030_150000_report_runs_comparison.down,
     name: '20261030_150000_report_runs_comparison',
+  },
+  {
+    up: migration_20261030_160000_report_ask_pending.up,
+    down: migration_20261030_160000_report_ask_pending.down,
+    name: '20261030_160000_report_ask_pending',
   },
 ];

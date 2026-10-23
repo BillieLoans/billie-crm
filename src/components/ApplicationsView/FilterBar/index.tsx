@@ -3,6 +3,7 @@
 import React, { useMemo, useRef, useEffect } from 'react'
 import { useConversationFiltersStore } from '@/stores/conversationFilters'
 import styles from './styles.module.css'
+import { characterShortcutAllowed, isEditableTarget } from '@/lib/keyboard'
 
 function debounce<T extends (...args: Parameters<T>) => void>(fn: T, delay: number): T {
   let timer: ReturnType<typeof setTimeout>
@@ -32,11 +33,7 @@ export function FilterBar() {
   // "/" shortcut focuses search input
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (
-        e.key === '/' &&
-        document.activeElement?.tagName !== 'INPUT' &&
-        document.activeElement?.tagName !== 'TEXTAREA'
-      ) {
+      if (e.key === '/' && !isEditableTarget(e.target) && characterShortcutAllowed(e)) {
         e.preventDefault()
         searchRef.current?.focus()
       }

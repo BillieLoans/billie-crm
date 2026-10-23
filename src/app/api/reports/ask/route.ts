@@ -21,12 +21,11 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
-import type { Payload } from 'payload'
 import { requireAuth } from '@/lib/auth'
 import { hasAnyRole } from '@/lib/access'
-import { sydneyDateString, sydneyDayStartUtc } from '@/lib/disbursement-cutoff'
 import { isReportAuthor } from '@/server/reporting/run-report'
 import { AskUnavailableError } from '@/server/reporting/ask/claude'
+import { holdAskSlot } from '@/server/reporting/ask/quota'
 import {
   checkEditedDefinition,
   draftFromQuestion,
@@ -69,30 +68,6 @@ function failure(e: unknown): { status: number; code: string; message: string } 
   console.error('[reports] Ask failed:', e)
   return { status: 500, code: 'ASK_FAILED', message: 'The draft could not be made. Try again.' }
 }
-
-/** Questions and refinements the user has asked today (Sydney). */
-async function asksToday(payload: Payload, userId: string): Promise<number> {
-  const start = sydneyDayStartUtc(sydneyDateString(new Date()))
-  const { totalDocs } = await payload.count({
-    collection: 'report-asks',
-    where: {
-      and: [
-        { user: { equals: userId } },
-        { kind: { in: ['ask', 'refine'] } },
-        { createdAt: { greater_than_equal: start.toISOString() } },
-      ],
-    },
-    overrideAccess: true,
-  })
-  return totalDocs
-}
-
-/**
- * Drafts in progress for staff who are not authors, by user, on this
- * server: one at a time, so parallel requests cannot run past the daily
- * limit before their first one is logged.
- */
-const inFlight = new Set<string>()
 
 /** Run a draft and stream its progress as server-sent events. */
 function streamDraft(
@@ -193,25 +168,25 @@ export async function POST(request: NextRequest) {
   const refinement = mode === 'refine' ? text(body.refinement) : ''
   if (mode === 'refine' && !refinement) return error(400, 'NO_REFINEMENT', 'Say what to change.')
 
-  let release = () => {}
+  // Staff who are not authors: one draft at a time and a daily limit,
+  // held in the database so they hold across servers.
+  let release: () => Promise<void> = async () => {}
   if (mode !== 'check' && !author) {
-    const key = String(user.id)
-    if (inFlight.has(key)) {
-      return error(
-        429,
-        'IN_PROGRESS',
-        'Claude is already drafting a report for you. Wait for it, or cancel it.',
-      )
+    const slot = await holdAskSlot(payload, String(user.id), ASK_DAILY_LIMIT)
+    if (!slot.ok) {
+      return slot.code === 'IN_PROGRESS'
+        ? error(
+            429,
+            'IN_PROGRESS',
+            'Claude is already drafting a report for you. Wait for it, or cancel it.',
+          )
+        : error(
+            429,
+            'DAILY_LIMIT',
+            `You have asked ${ASK_DAILY_LIMIT} questions today, the daily limit. Ask a report author, or try again tomorrow.`,
+          )
     }
-    if ((await asksToday(payload, key)) >= ASK_DAILY_LIMIT) {
-      return error(
-        429,
-        'DAILY_LIMIT',
-        `You have asked ${ASK_DAILY_LIMIT} questions today, the daily limit. Ask a report author, or try again tomorrow.`,
-      )
-    }
-    inFlight.add(key)
-    release = () => inFlight.delete(key)
+    release = slot.release
   }
 
   const draft = (options: DraftStreamOptions = {}) =>
@@ -245,6 +220,6 @@ export async function POST(request: NextRequest) {
     const { status, code, message } = failure(e)
     return error(status, code, message)
   } finally {
-    release()
+    await release()
   }
 }

@@ -19,6 +19,7 @@ import {
   reportParametersSchema,
 } from '@/lib/schemas/reports'
 import { checkPlaceholders, checkReportSql } from '@/server/reporting/sql-guard'
+import { checkAndPreview } from '@/server/reporting/ask/preview'
 
 /** Admins and supervisors author reports. */
 const canAuthor: Access = ({ req }) => hasApprovalAuthority(req.user)
@@ -50,6 +51,47 @@ const slugEvenForDrafts: CollectionBeforeChangeHook = ({ data, collection }) => 
     throw new ValidationError({
       collection: collection.slug,
       errors: [{ path: 'slug', message: String(result) }],
+    })
+  }
+  return data
+}
+
+/**
+ * A publish over the API (the report editor, the Payload admin) runs the
+ * same checks as an Ask Claude draft, the run on its defaults included,
+ * and is refused on any error: nothing that fails them goes live, whatever
+ * the browser did. The Local API (seed migrations, server code that has
+ * checked already) is not re-run here; MCP writes are always drafts.
+ */
+export const checksBeforePublish: CollectionBeforeChangeHook = async ({
+  data,
+  originalDoc,
+  req,
+  collection,
+}) => {
+  const api = req.payloadAPI as string
+  if (api !== 'REST' && api !== 'GraphQL') return data
+  // A change to a published report that names no status (and is not saved
+  // as a draft) is published too.
+  const draftSave = String((req.query as { draft?: unknown } | undefined)?.draft) === 'true'
+  const status = data._status ?? (draftSave ? 'draft' : originalDoc?._status)
+  if (status !== 'published') return data
+  const doc = { ...(originalDoc ?? {}), ...data } as Record<string, unknown>
+  const { issues } = await checkAndPreview({
+    title: String(doc.title ?? ''),
+    description: typeof doc.description === 'string' ? doc.description : '',
+    sql: String(doc.sql ?? ''),
+    parameters: doc.parameters ?? [],
+    chart: doc.chart ?? null,
+    headline: doc.headline ?? [],
+    columnSettings: doc.columnSettings ?? [],
+    category: typeof doc.category === 'string' ? doc.category : 'other',
+  })
+  const errors = issues.filter((i) => i.level === 'error')
+  if (errors.length > 0) {
+    throw new ValidationError({
+      collection: collection.slug,
+      errors: errors.map((i) => ({ path: 'sql', message: `Not published: ${i.message}` })),
     })
   }
   return data
@@ -173,7 +215,10 @@ export const ReportDefinitions: CollectionConfig = {
     // high enough that drafting (by hand or over MCP) does not lose history.
     maxPerDoc: 500,
   },
-  hooks: { beforeOperation: [mcpDraftsOnly], beforeChange: [slugEvenForDrafts, setOrigin] },
+  hooks: {
+    beforeOperation: [mcpDraftsOnly],
+    beforeChange: [slugEvenForDrafts, checksBeforePublish, setOrigin],
+  },
   fields: [
     { name: 'title', type: 'text', required: true, maxLength: 120 },
     {

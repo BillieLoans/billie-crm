@@ -15,6 +15,7 @@ import { FreshnessIndicator } from './FreshnessIndicator'
 import { ViewToggle } from './ViewToggle'
 import { useViewModePreference } from './useViewModePreference'
 import styles from './styles.module.css'
+import { isEditableTarget } from '@/lib/keyboard'
 
 /**
  * ApplicationsView renders the conversation monitoring grid with:
@@ -71,15 +72,7 @@ export function ApplicationsView() {
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
     // The container wraps the FilterBar too — leave arrow keys alone inside
     // form controls (caret movement in inputs, option choice in selects).
-    const target = e.target as HTMLElement
-    if (
-      target.tagName === 'INPUT' ||
-      target.tagName === 'TEXTAREA' ||
-      target.tagName === 'SELECT' ||
-      target.isContentEditable
-    ) {
-      return
-    }
+    if (isEditableTarget(e.target)) return
     const cards = Array.from(document.querySelectorAll<HTMLElement>('[data-conversation-card]'))
     const current = document.activeElement as HTMLElement
     const idx = cards.indexOf(current)

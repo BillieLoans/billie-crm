@@ -140,7 +140,7 @@ export async function reportUsage(
               percentile_cont(0.95) WITHIN GROUP (ORDER BY coalesce(total_ms, latency_ms))
                 FILTER (WHERE outcome IN ('ok', 'invalid')) AS total_p95
          FROM report_asks
-        WHERE created_at >= $1 AND kind IN ('ask', 'refine')`,
+        WHERE created_at >= $1 AND kind IN ('ask', 'refine') AND outcome <> 'pending'`,
       [since],
     ),
     // Recorded by the save route; a draft saved again is one report.

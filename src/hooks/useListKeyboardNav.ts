@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { characterShortcutAllowed, isEditableTarget } from '@/lib/keyboard'
 
 export interface UseListKeyboardNavOptions {
   /** Number of items in the list. The hook keeps the cursor in `[-1, count)`. */
@@ -54,11 +55,7 @@ export function useListKeyboardNav(options: UseListKeyboardNavOptions): {
     if (!enabled) return
 
     const handler = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null
-      const inInput =
-        !!target &&
-        (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
-      if (inInput) return
+      if (isEditableTarget(e.target) || !characterShortcutAllowed(e)) return
 
       // Skip modifier-laden combos so we don't conflict with browser/system
       // shortcuts (Cmd+E for export is handled elsewhere).
