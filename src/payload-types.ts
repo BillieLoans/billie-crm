@@ -92,6 +92,8 @@ export interface Config {
     'report-definitions': ReportDefinition;
     'report-runs': ReportRun;
     'report-asks': ReportAsk;
+    'mcp-oauth-clients': McpOauthClient;
+    'mcp-oauth-grants': McpOauthGrant;
     'payload-mcp-api-keys': PayloadMcpApiKey;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
@@ -125,6 +127,8 @@ export interface Config {
     'report-definitions': ReportDefinitionsSelect<false> | ReportDefinitionsSelect<true>;
     'report-runs': ReportRunsSelect<false> | ReportRunsSelect<true>;
     'report-asks': ReportAsksSelect<false> | ReportAsksSelect<true>;
+    'mcp-oauth-clients': McpOauthClientsSelect<false> | McpOauthClientsSelect<true>;
+    'mcp-oauth-grants': McpOauthGrantsSelect<false> | McpOauthGrantsSelect<true>;
     'payload-mcp-api-keys': PayloadMcpApiKeysSelect<false> | PayloadMcpApiKeysSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
@@ -2378,6 +2382,65 @@ export interface ReportAsk {
   createdAt: string;
 }
 /**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "mcp-oauth-clients".
+ */
+export interface McpOauthClient {
+  id: string;
+  clientId: string;
+  /**
+   * Chosen by the client when it registered; not verified
+   */
+  clientName?: string | null;
+  redirectUris:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  tokenEndpointAuthMethod: 'none' | 'client_secret_post' | 'client_secret_basic';
+  /**
+   * HMAC of the client secret, for confidential clients
+   */
+  secretIndex?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Claude apps people have connected to the reporting connector by signing in. Delete one to revoke it.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "mcp-oauth-grants".
+ */
+export interface McpOauthGrant {
+  id: string;
+  user: string | User;
+  clientId: string;
+  clientName?: string | null;
+  redirectUri: string;
+  /**
+   * Where the person was sent back to after approving
+   */
+  redirectHost?: string | null;
+  scope?: string | null;
+  resource: string;
+  codeIndex?: string | null;
+  codeChallenge?: string | null;
+  codeExpiresAt?: string | null;
+  codeUsed?: boolean | null;
+  accessIndex?: string | null;
+  accessExpiresAt?: string | null;
+  refreshIndex?: string | null;
+  previousRefreshIndex?: string | null;
+  refreshExpiresAt?: string | null;
+  lastUsedAt?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * Keys for the reporting connector (BTB-509): one per person, for report authors only. Delete a key to revoke it.
  *
  * This interface was referenced by `Config`'s JSON-Schema
@@ -2568,6 +2631,14 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'report-asks';
         value: string | ReportAsk;
+      } | null)
+    | ({
+        relationTo: 'mcp-oauth-clients';
+        value: string | McpOauthClient;
+      } | null)
+    | ({
+        relationTo: 'mcp-oauth-grants';
+        value: string | McpOauthGrant;
       } | null)
     | ({
         relationTo: 'payload-mcp-api-keys';
@@ -3560,6 +3631,44 @@ export interface ReportAsksSelect<T extends boolean = true> {
   errorCount?: T;
   warningCount?: T;
   definition?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "mcp-oauth-clients_select".
+ */
+export interface McpOauthClientsSelect<T extends boolean = true> {
+  clientId?: T;
+  clientName?: T;
+  redirectUris?: T;
+  tokenEndpointAuthMethod?: T;
+  secretIndex?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "mcp-oauth-grants_select".
+ */
+export interface McpOauthGrantsSelect<T extends boolean = true> {
+  user?: T;
+  clientId?: T;
+  clientName?: T;
+  redirectUri?: T;
+  redirectHost?: T;
+  scope?: T;
+  resource?: T;
+  codeIndex?: T;
+  codeChallenge?: T;
+  codeExpiresAt?: T;
+  codeUsed?: T;
+  accessIndex?: T;
+  accessExpiresAt?: T;
+  refreshIndex?: T;
+  previousRefreshIndex?: T;
+  refreshExpiresAt?: T;
+  lastUsedAt?: T;
   updatedAt?: T;
   createdAt?: T;
 }

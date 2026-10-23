@@ -22,16 +22,23 @@
  *   aggregate reports), on a connection pool of their own so a busy agent
  *   cannot hold up the Reports view or the scheduled jobs.
  *
- * Two kinds of key:
+ * Three ways in:
  *
- * - personal: one per report author, for Claude Code. All the tools above.
- * - dashboard: shared by the Claude organisation (a claude.ai connector
+ * - personal key: one per report author, for Claude Code. All the tools above.
+ * - dashboard key: shared by the Claude organisation (a claude.ai connector
  *   with a static request header, used by chat and artifact dashboards).
  *   Read-only: `list_reports` and `run_report`, for the published reports an
  *   admin ticks on the key, and nothing else. It still has an accountable
  *   owner, a report author, and is revoked with them.
+ * - OAuth (`mcp-oauth.ts`): a person signs in to the CRM from claude.ai or
+ *   Claude Code and approves the connection. Their current role decides the
+ *   tools on every request: report authors get all of them, other staff
+ *   `list_reports` and `run_report` for the reports their role may run.
+ *   A request without a valid token gets a 401 that names the OAuth
+ *   metadata (`withOAuthChallenge`), which is how clients find the sign-in.
  *
- * Every key is rate-limited per server process (`MCP_RATE_LIMITS`).
+ * Every key, and every person over OAuth, is rate-limited per server process
+ * (`MCP_RATE_LIMITS`).
  *
  * Over MCP, Claude sees query results. That is why only the `reporting`
  * schema is reachable (the runner's login role) and rows are capped.
@@ -40,15 +47,16 @@
  */
 import { randomBytes } from 'node:crypto'
 import { mcpPlugin } from '@payloadcms/plugin-mcp'
-import type { CollectionConfig, Payload, PayloadRequest } from 'payload'
+import type { CollectionConfig, Config, Payload, PayloadRequest, Plugin } from 'payload'
 import { APIError, Forbidden, UnauthorizedError, ValidationError } from 'payload'
 import { z } from 'zod/v3'
-import { hideFromNonAdmins, isAdmin } from '@/lib/access'
+import { hasAnyRole, hideFromNonAdmins, isAdmin } from '@/lib/access'
 import { REPORT_VIEWER_ROLES } from '@/lib/schemas/reports'
 import { checkRateLimit, type RateLimitOptions } from '@/lib/utils/rateLimit'
 import { isReportAuthor, listReports, runReport } from './run-report'
 import { ReportRunError, getReportingPool, runReportSql } from './runner'
 import { MCP_API_KEYS_SLUG, apiKeyIndex } from './mcp-keys'
+import { ACCESS_TOKEN_PREFIX, verifyAccessToken, wwwAuthenticate } from './mcp-oauth'
 import { renderSchemaDescription, SCHEMA_DESCRIPTION_VERSION } from './schema-description'
 
 /** Rows a tool returns. Lower than the Reports view's cap: Claude reads them. */
@@ -56,13 +64,17 @@ export const MCP_ROW_CAP = 1_000
 /** Characters of JSON a tool returns; rows past it are dropped. */
 export const MCP_MAX_RESULT_CHARS = 200_000
 
-/** Requests per key per server process. A dashboard key serves every viewer. */
+/**
+ * Requests per key (per person over OAuth) per server process. A dashboard
+ * key serves every viewer.
+ */
 export const MCP_RATE_LIMITS: Record<McpKeyScope, RateLimitOptions> = {
   personal: { limit: 120, windowMs: 60_000 },
   dashboard: { limit: 300, windowMs: 60_000 },
+  oauth: { limit: 120, windowMs: 60_000 },
 }
 
-export type McpKeyScope = 'personal' | 'dashboard'
+export type McpKeyScope = 'personal' | 'dashboard' | 'oauth'
 
 /** What `authenticateMcp` learned about the key, for the tools (on `req.context`). */
 interface McpKeyContext {
@@ -84,9 +96,16 @@ type ToolResult = { content: Array<{ type: 'text'; text: string }> }
 const text = (value: string): ToolResult => ({ content: [{ type: 'text', text: value }] })
 const json = (value: unknown): ToolResult => text(JSON.stringify(value))
 
-/** The tools only serve report authors; `overrideAuth` already refuses others. */
+/** The authoring tools only serve report authors; `overrideAuth` already refuses others. */
 function assertAuthor(req: PayloadRequest): void {
   if (!isReportAuthor(req.user)) throw new Forbidden()
+}
+
+/** Listing and running reports: authors, and any staff member signed in over OAuth. */
+function assertCanRunReports(req: PayloadRequest): void {
+  if (isReportAuthor(req.user)) return
+  if (keyContext(req).scope === 'oauth' && hasAnyRole(req.user)) return
+  throw new Forbidden()
 }
 
 /** Rows that fit `MCP_MAX_RESULT_CHARS` once serialised. */
@@ -150,7 +169,7 @@ export const reportingTools: ReportingTool[] = [
       'List the published reports this key can run: slug, title, description and parameters (with defaults). Run one with run_report.',
     parameters: {},
     handler: async (_args: Record<string, unknown>, req: PayloadRequest) => {
-      assertAuthor(req)
+      assertCanRunReports(req)
       const key = keyContext(req)
       const reports = (await listReports(req.payload, req.user)).filter(
         (r) => r.published && (key.scope !== 'dashboard' || key.reports.includes(r.slug)),
@@ -235,7 +254,7 @@ export const reportingTools: ReportingTool[] = [
         .describe('Parameter values by name, e.g. {"from": "2026-10-01"}'),
     },
     handler: async (args: Record<string, unknown>, req: PayloadRequest) => {
-      assertAuthor(req)
+      assertCanRunReports(req)
       const slug = String(args.slug ?? '')
       const key = keyContext(req)
       if (key.scope === 'dashboard' && !key.reports.includes(slug)) {
@@ -430,15 +449,61 @@ export function restrictApiKeys(collection: CollectionConfig): CollectionConfig 
   }
 }
 
+type McpAccess = Awaited<ReturnType<NonNullable<McpPluginOptions['overrideAuth']>>>
+
+/** Every reporting tool, for a report author signed in over OAuth. */
+const AUTHOR_TOOLS = {
+  reportDefinitions: { find: true, create: true },
+  'payload-mcp-tool': {
+    listReports: true,
+    runReport: true,
+    describeReportingSchema: true,
+    runReportQuery: true,
+    updateReportDraft: true,
+  },
+}
+
+/** Listing and running reports only: dashboard keys, and other staff over OAuth. */
+const RUN_ONLY_TOOLS = {
+  reportDefinitions: { find: false, create: false },
+  'payload-mcp-tool': {
+    listReports: true,
+    runReport: true,
+    describeReportingSchema: false,
+    runReportQuery: false,
+    updateReportDraft: false,
+  },
+}
+
+/**
+ * An OAuth access token: the person it was issued to, read fresh, with the
+ * tools their role allows now.
+ */
+async function authenticateOAuth(req: PayloadRequest, token: string): Promise<McpAccess> {
+  const found = await verifyAccessToken(req.payload, token)
+  if (!found) throw new UnauthorizedError()
+  if (!hasAnyRole(found.user)) throw new Forbidden()
+  if (!checkRateLimit(`mcp:oauth:${String(found.user.id)}`, MCP_RATE_LIMITS.oauth)) {
+    throw new APIError('Too many requests. Try again in a minute.', 429)
+  }
+  const user = { ...found.user, collection: 'users', _strategy: 'mcp-oauth' }
+  req.user = user as unknown as PayloadRequest['user']
+  req.context.mcpKey = { scope: 'oauth', reports: [] } satisfies McpKeyContext
+  const tools = isReportAuthor(user) ? AUTHOR_TOOLS : RUN_ONLY_TOOLS
+  return { user, ...tools } as unknown as McpAccess
+}
+
 /**
  * Find the key from `Authorization: Bearer <key>`, and require that its
  * person is still a report author, so changing their role revokes the key.
  * Sets `req.user`, which the custom tools and the draft-only hook read, and
- * returns the key's switches as the plugin's access settings.
+ * returns the key's switches as the plugin's access settings. OAuth access
+ * tokens go to `authenticateOAuth`.
  */
 export const authenticateMcp: NonNullable<McpPluginOptions['overrideAuth']> = async (req) => {
   const match = /^Bearer\s+(\S+)$/i.exec(req.headers.get('authorization') ?? '')
   if (!match) throw new UnauthorizedError()
+  if (match[1].startsWith(ACCESS_TOKEN_PREFIX)) return authenticateOAuth(req, match[1])
   const { docs } = await req.payload.find({
     collection: MCP_API_KEYS_SLUG,
     where: { apiKeyIndex: { equals: apiKeyIndex(req.payload.secret, match[1]) } },
@@ -460,27 +525,57 @@ export const authenticateMcp: NonNullable<McpPluginOptions['overrideAuth']> = as
   req.user = user as unknown as PayloadRequest['user']
   if (scope === 'personal') {
     req.context.mcpKey = { scope, reports: [] } satisfies McpKeyContext
-    return { ...key, user } as unknown as Awaited<ReturnType<typeof authenticateMcp>>
+    return { ...key, user } as unknown as McpAccess
   }
   // Dashboard: list and run the ticked reports, whatever the switches say.
   const reports = (Array.isArray(key.reports) ? key.reports : [])
     .map((r) => (typeof r === 'object' && r !== null ? (r as { slug?: string }).slug : undefined))
     .filter((slug): slug is string => typeof slug === 'string')
   req.context.mcpKey = { scope, reports } satisfies McpKeyContext
-  return {
-    user,
-    reportDefinitions: { find: false, create: false },
-    'payload-mcp-tool': {
-      listReports: true,
-      runReport: true,
-      describeReportingSchema: false,
-      runReportQuery: false,
-      updateReportDraft: false,
-    },
-  } as unknown as Awaited<ReturnType<typeof authenticateMcp>>
+  return { user, ...RUN_ONLY_TOOLS } as unknown as McpAccess
 }
 
-export const reportingMcp = mcpPlugin({
+type Endpoint = NonNullable<Config['endpoints']>[number]
+
+/**
+ * A 401 from `/api/mcp` carries the `WWW-Authenticate` challenge naming the
+ * protected resource metadata (RFC 9728), so an MCP client can find the
+ * CRM's sign-in. The plugin's own 401 has no such header.
+ */
+function challengeOnUnauthorized(handler: Endpoint['handler']): Endpoint['handler'] {
+  return async (req) => {
+    try {
+      return await handler(req)
+    } catch (error) {
+      if (!(error instanceof UnauthorizedError)) throw error
+      const sentToken = /^Bearer\s+\S+$/i.test(req.headers.get('authorization') ?? '')
+      return Response.json(
+        { errors: [{ message: 'Unauthorized' }] },
+        {
+          status: 401,
+          headers: { 'WWW-Authenticate': wwwAuthenticate(sentToken ? 'invalid_token' : undefined) },
+        },
+      )
+    }
+  }
+}
+
+/** Wrap the plugin's `/mcp` endpoints in `challengeOnUnauthorized`. */
+export function withOAuthChallenge(plugin: Plugin): Plugin {
+  return async (incoming) => {
+    const config = await plugin(incoming)
+    return {
+      ...config,
+      endpoints: (config.endpoints ?? []).map((endpoint) =>
+        endpoint.path === '/mcp'
+          ? { ...endpoint, handler: challengeOnUnauthorized(endpoint.handler) }
+          : endpoint,
+      ),
+    }
+  }
+}
+
+const mcp = mcpPlugin({
   userCollection: 'users',
   collections: {
     'report-definitions': {
@@ -501,3 +596,5 @@ export const reportingMcp = mcpPlugin({
   overrideApiKeyCollection: restrictApiKeys,
   overrideAuth: authenticateMcp,
 })
+
+export const reportingMcp = withOAuthChallenge(mcp)

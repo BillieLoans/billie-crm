@@ -471,48 +471,94 @@ Over MCP, Claude sees query results. That is why only the `reporting` schema
 is reachable and rows are capped. Ask for aggregates; never pull
 customer-level rows you do not need.
 
-Claude Code (one person, their own key):
+Every key is rate-limited per server process: 120 requests a minute for a
+personal key, 300 for a dashboard key, 120 per person over OAuth.
+
+### Signing in with OAuth (claude.ai and Claude Code)
+
+The usual way in. `/api/mcp` is also an OAuth 2.1 resource server and the
+CRM its own authorization server (`src/server/reporting/mcp-oauth.ts`,
+following the MCP authorization spec): a person adds the connector, signs in
+to the CRM in the window Claude opens, and approves the connection. No key
+changes hands.
+
+- **What a connection can do** follows the person's CRM role on every
+  request, not at sign-in: report authors (admin, supervisor) get every
+  reporting tool; operations and read-only staff get `list_reports` and
+  `run_report`, for the published reports their role may run. Marketing and
+  service accounts cannot connect.
+- **Discovery.** A request without a valid token gets a 401 whose
+  `WWW-Authenticate` names `/.well-known/oauth-protected-resource/api/mcp`;
+  that names the CRM as authorization server
+  (`/.well-known/oauth-authorization-server`). Both are rewrites in
+  `next.config.mjs` to `/api/oauth/*`.
+- **Clients register themselves** at `/api/oauth/register`, but only for the
+  claude.ai and claude.com callbacks, loopback addresses (Claude Code) and
+  any exact URI in `MCP_OAUTH_REDIRECT_URIS` (comma-separated). Registering
+  grants nothing.
+- **Sign-in.** `/api/oauth/authorize` checks the request and hands it, signed,
+  to the sign-in page `/oauth/authorize`, which goes through the CRM login
+  (password or Google; both return to the page) and shows the app's name,
+  where the person will be sent back to, the environment and what Claude will
+  be able to do. PKCE (S256) is required; tokens are only issued for this
+  CRM's `/api/mcp`.
+- **Tokens** are opaque and stored as HMACs. Access tokens last an hour;
+  refresh tokens rotate on every use and lapse after 30 days unused. A code or
+  refresh token used twice revokes the connection.
+- **Revoking.** Each approval is an MCP connection (Reporting → MCP
+  connections, admins only). Delete one to cut it off at once. A person's
+  connections are deleted when they are, or when they lose every staff role.
+
+claude.ai, per person or for the organisation: Settings → Connectors → Add
+custom connector, with the URL `https://<crm host>/api/mcp` and no OAuth
+client id or secret (claude.ai registers itself). Name it after the
+environment, since dashboards call the connector by name:
+**Billie CRM reporting** for prod, **Billie CRM reporting Demo** for demo.
+Turn on artifact connectors (Capabilities) to use it from dashboards.
+
+Claude Code:
+
+```bash
+claude mcp add --transport http billie-reporting https://crm.billie.loans/api/mcp
+# then /mcp in Claude Code to sign in
+```
+
+A personal key still works there, for scripts:
 
 ```bash
 claude mcp add --transport http billie-reporting https://crm.billie.loans/api/mcp \
   --header "Authorization: Bearer $BILLIE_REPORTING_KEY"
 ```
 
-Every key is rate-limited per server process: 120 requests a minute for a
-personal key, 300 for a dashboard key.
-
-### claude.ai and artifact dashboards (dashboard key)
-
-claude.ai authenticates a custom connector with OAuth, or with a static
-request header (a beta for selected organisations). A request header is one
-key shared by every member, so the CRM gives claude.ai a **dashboard key**:
-read-only, `list_reports` and `run_report` only, for the published reports an
-admin ticks on the key. No ad-hoc SQL, no schema, no drafts; the sidebar
-switches do not apply to it. Artifact access then follows sharing in the
-Claude organisation, not CRM roles, which is why only reviewed, aggregate
-reports go on the key. Drafting stays in Claude Code with personal keys.
-
-Setting it up (once):
-
-1. In **Reporting → MCP API keys**, create a key with scope **Dashboard**,
-   owner an admin or supervisor (accountable for it; the key goes when they
-   stop being an author), and tick the reports it may run, for example
-   `application-funnel`. Copy the key within 15 minutes.
-2. A claude.ai organisation owner adds a custom connector (Organization
-   settings → Connectors → Add → Custom): name **Billie CRM reporting**, URL
-   `https://crm.billie.loans/api/mcp`, no sign-in, request header
-   `authorization` with value `Bearer <key>`. The name matters: dashboards
-   call the connector by it.
-3. Turn on **Enable artifact connectors** (Organization settings →
-   Capabilities) if it is off.
+### Dashboards
 
 The first dashboard is `docs/dashboards/application-funnel.html`: the
 application funnel by acquisition group and by source/medium, read live from
-`run_report` on `application-funnel` with the viewer's own connector. It holds
-no data. To publish it, ask Claude (Claude Code or claude.ai) to publish that
-file as an artifact with the `mcp` capability for the **Billie CRM reporting**
-connector and its `run_report` tool, then share it with its viewers in the
-Claude organisation. Publishing needs the connector added first.
+`run_report` on `application-funnel`. It holds no data: each viewer reads
+through their own connector, so they need a CRM role that can run the report.
+Two meta tags set the environment: `billie:connector` (the connector's name
+in claude.ai) and `billie:environment` (a label such as `DEMO`, shown on the
+page and in its title; empty for prod). Publish one copy per environment as
+an artifact with the `mcp` capability for that connector and its
+`run_report` tool, then share it with its viewers in the Claude
+organisation. Publishing needs the connector added first.
+
+### Dashboard keys (static header, without OAuth)
+
+For a claude.ai organisation that has the static request header beta and
+wants one shared connector instead of personal sign-ins. A request header is
+one key shared by every member, so it is a **dashboard key**: read-only,
+`list_reports` and `run_report` only, for the published reports an admin
+ticks on the key. No ad-hoc SQL, no schema, no drafts; the sidebar switches
+do not apply to it. Access then follows sharing in the Claude organisation,
+not CRM roles, which is why only reviewed, aggregate reports go on the key.
+
+1. In **Reporting → MCP API keys**, create a key with scope **Dashboard**,
+   owner an admin or supervisor (accountable for it; the key goes when they
+   stop being an author), and tick the reports it may run. Copy the key
+   within 15 minutes.
+2. A claude.ai organisation owner adds a custom connector with the request
+   header `authorization` set to `Bearer <key>` and no sign-in.
 
 To rotate the key, create a new dashboard key, update the connector's header
 (remove and re-add the connector; members reconnect), then delete the old key.

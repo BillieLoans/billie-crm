@@ -3,16 +3,19 @@
  *
  * Initiates the Google OAuth flow: generates a CSRF state token,
  * stores it in an httpOnly cookie, and redirects to Google's
- * authorization endpoint.
+ * authorization endpoint. A same-origin `?redirect=` path (the login page
+ * passes its own, e.g. the reporting connector's OAuth sign-in page) is kept
+ * in a cookie for the callback to return to.
  */
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'node:crypto'
+import { safeReturnPath } from '@/lib/safeReturnPath'
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || ''
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const state = crypto.randomBytes(32).toString('hex')
 
   const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth')
@@ -33,6 +36,17 @@ export async function GET() {
     sameSite: 'lax',
     maxAge: 600, // 10 minutes
   })
+
+  const returnTo = safeReturnPath(request.nextUrl.searchParams.get('redirect'), APP_URL)
+  if (returnTo) {
+    response.cookies.set('google_oauth_redirect', returnTo, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      sameSite: 'lax',
+      maxAge: 600,
+    })
+  }
 
   return response
 }

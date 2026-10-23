@@ -132,7 +132,9 @@ afterAll(async () => {
   await cleanup()
   await reader?.end()
   await (await getReportingPool('mcp')).end()
-  process.env.REPORTING_DATABASE_URI = previousReportingUri
+  // Assigning undefined would store the string "undefined".
+  if (previousReportingUri === undefined) delete process.env.REPORTING_DATABASE_URI
+  else process.env.REPORTING_DATABASE_URI = previousReportingUri
 })
 
 describe('MCP API keys', () => {

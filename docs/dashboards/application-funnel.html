@@ -1,4 +1,7 @@
 <title>Billie Application Funnel</title>
+<!-- Per environment: the claude.ai connector to read from, and a label shown when it is not prod. -->
+<meta name="billie:connector" content="Billie CRM reporting">
+<meta name="billie:environment" content="">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -6,8 +9,9 @@
 <!--
   Billie application funnel (BTB-509). An aggregate-only Claude artifact
   dashboard: it reads the published "application-funnel" report through the
-  "Billie CRM reporting" claude.ai connector (run_report, a dashboard key)
-  and never holds data of its own. See docs/reporting.md, "MCP connector".
+  claude.ai connector named in the billie:connector meta tag (run_report,
+  with the viewer's own CRM sign-in) and never holds data of its own. One
+  copy is published per environment. See docs/reporting.md, "MCP connector".
 -->
 <style>
   /* Layout: one column; filters, then the funnel summary, then the groups, then the detail table. */
@@ -109,6 +113,8 @@
     .track { grid-column: 1 / -1; grid-row: 2; }
   }
 
+  .env { display: inline-block; margin-left: 8px; padding: 1px 8px; border: 1px solid #b38600; border-radius: 4px; background: #fff7d6; color: #14202b; font-size: 0.75rem; letter-spacing: 0.04em; }
+
   section { display: grid; gap: 12px; min-width: 0; }
   .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
   table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
@@ -129,7 +135,7 @@
 
 <main class="page">
   <header>
-    <span class="eyebrow">Billie · Applications</span>
+    <span class="eyebrow">Billie · Applications<span class="env" id="env" hidden></span></span>
     <h1>Application funnel</h1>
     <p class="muted">Applications started in the period (Sydney dates) and how far they got. Mock decisions are excluded. Figures come live from the CRM's published report, so they match the Reports view.</p>
   </header>
@@ -176,12 +182,20 @@
     </div>
   </section>
 
-  <footer>Aggregate counts only. Access follows sharing in the Claude organisation, not CRM roles, so this page shows only the report the dashboard key allows. Definitions: submitted means bank statements shared or decided; funded means disbursed.</footer>
+  <footer>Aggregate counts only. Each viewer reads through their own CRM sign-in, so the figures need a CRM role that can run the report. Definitions: submitted means bank statements shared or decided; funded means disbursed.</footer>
 </main>
 
 <script>
 (() => {
-  const SERVER = 'Billie CRM reporting'
+  const setting = (name) => document.querySelector(`meta[name="billie:${name}"]`)?.content?.trim() ?? ''
+  const SERVER = setting('connector') || 'Billie CRM reporting'
+  const ENVIRONMENT = setting('environment')
+  if (ENVIRONMENT) {
+    const badge = document.getElementById('env')
+    badge.textContent = ENVIRONMENT
+    badge.hidden = false
+    document.title = `${document.title} (${ENVIRONMENT})`
+  }
   const REPORT = 'application-funnel'
   const STAGES = [
     ['started', 'Started'],
