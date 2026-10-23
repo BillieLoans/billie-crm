@@ -1,6 +1,6 @@
 // storage-adapter-import-placeholder
 import { postgresAdapter } from '@payloadcms/db-postgres'
-import { desc } from 'drizzle-orm'
+import { desc, sql } from 'drizzle-orm'
 import { index, uniqueIndex } from 'drizzle-orm/pg-core'
 import { payloadCloudPlugin } from '@payloadcms/payload-cloud'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
@@ -250,6 +250,12 @@ export default buildConfig({
               conversationsByCustomerIdx: index('conversations_by_customer_idx').on(
                 t.customerIdString,
                 desc(t.updatedAt),
+              ),
+              // Reports filter on reporting.application.started_on, which is
+              // reporting.sydney_date(started_at). The expression must match
+              // that function's body for the planner to use the index.
+              conversationsStartedOnIdx: index('conversations_started_on_idx').on(
+                sql`((${t.startedAt} AT TIME ZONE 'Australia/Sydney')::date)`,
               ),
             }),
           })

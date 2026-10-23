@@ -298,6 +298,18 @@ describe('reporting schema', () => {
     expect(plan).not.toMatch(/Seq Scan on conversations/)
   })
 
+  it('filters applications by Sydney start date through conversations_started_on_idx', async () => {
+    const results = (await pool.query(
+      `BEGIN;
+       SET LOCAL enable_seqscan = off;
+       EXPLAIN SELECT count(*) FROM reporting.application
+                WHERE started_on BETWEEN DATE '2026-10-01' AND DATE '2026-10-07';
+       COMMIT;`,
+    )) as unknown as Array<{ rows: Array<{ 'QUERY PLAN': string }> }>
+    const plan = results[2].rows.map((r) => r['QUERY PLAN']).join('\n')
+    expect(plan).toContain('conversations_started_on_idx')
+  })
+
   it('stores ledger figures exactly', async () => {
     await pool.query(
       `INSERT INTO reporting.snap_portfolio
