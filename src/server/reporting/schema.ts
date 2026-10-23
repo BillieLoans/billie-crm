@@ -115,6 +115,23 @@ export const REPORTING_SCHEMA_STATEMENTS: readonly string[] = [
    RETURNS text LANGUAGE sql IMMUTABLE PARALLEL SAFE
    AS $$ SELECT ${ACQUISITION_CHANNEL_SQL('attribution')} $$`,
 
+  // Lenient readers for values inside JSON: NULL instead of an error, so one
+  // malformed event cannot break every report on a view.
+  `CREATE OR REPLACE FUNCTION reporting.as_numeric(value text)
+   RETURNS numeric LANGUAGE sql IMMUTABLE PARALLEL SAFE
+   AS $$ SELECT CASE WHEN value ~ '^\\s*-?[0-9]+(\\.[0-9]+)?\\s*$' THEN value::numeric END $$`,
+  `CREATE OR REPLACE FUNCTION reporting.as_boolean(value text)
+   RETURNS boolean LANGUAGE sql IMMUTABLE PARALLEL SAFE
+   AS $$ SELECT CASE lower(trim(value)) WHEN 'true' THEN true WHEN 'false' THEN false END $$`,
+  `CREATE OR REPLACE FUNCTION reporting.as_timestamptz(value text)
+   RETURNS timestamptz LANGUAGE plpgsql STABLE PARALLEL SAFE
+   AS $$ BEGIN
+     -- ISO only: Postgres would also read words such as 'yesterday' or 'now'.
+     IF value !~ '^\\s*[0-9]{4}-[0-9]{2}-[0-9]{2}' THEN RETURN NULL; END IF;
+     RETURN value::timestamptz;
+   EXCEPTION WHEN others THEN RETURN NULL;
+   END $$`,
+
   // ── Decline reason categories (BTB-462 comment 11579) ────────────────────
   `CREATE TABLE IF NOT EXISTS reporting.decline_reason_category (
      prefix   text PRIMARY KEY,
@@ -213,13 +230,109 @@ export const REPORTING_SCHEMA_STATEMENTS: readonly string[] = [
      c.decision_detail_ruleset_version                AS ruleset_version,
      f.funded_at,
      reporting.sydney_date(f.funded_at)               AS funded_on,
-     (f.funded_at IS NOT NULL)                        AS funded
+     (f.funded_at IS NOT NULL)                        AS funded,
+     -- What was applied for. The applications row when there is one, else
+     -- the scalar keys of application_data (the rest of it is personal data).
+     COALESCE(app.loan_purpose, c.application_data->>'loanPurpose') AS loan_purpose,
+     COALESCE(app.loan_amount, reporting.as_numeric(c.application_data->>'loanAmount'))
+                                                      AS requested_amount,
+     COALESCE(app.loan_fee, reporting.as_numeric(c.application_data->>'loanFee'))
+                                                      AS requested_fee,
+     COALESCE(app.loan_total_payable, reporting.as_numeric(c.application_data->>'loanTotalPayable'))
+                                                      AS requested_total_payable,
+     COALESCE(app.loan_term, reporting.as_numeric(c.application_data->>'loanTerm'))::integer
+                                                      AS loan_term,
+     app.customer_attestation_acceptance              AS attestation_accepted,
+     app.statement_capture_consent_provided           AS statement_consent_provided,
+     app.product_offer_acceptance                     AS offer_accepted,
+     app.application_outcome::text                    AS application_outcome,
+     app.application_process_current_process_stage    AS process_stage,
+     app.application_process_current_process_step     AS process_step,
+     date_part('year', age(reporting.sydney_date(c.started_at),
+                           reporting.sydney_date(cu.date_of_birth)))::integer
+                                                      AS age_at_application,
+     c.attribution->>'utm_content'                    AS content,
+     c.attribution->>'matchtype'                      AS match_type,
+     NULLIF(c.network->>'country', '')                AS country,
+     c.last_utterance_time                            AS last_activity_at,
+     -- Statement capture: progress and counts only (names and account
+     -- numbers in the affordability report are not read).
+     c.statement_capture->>'consentStatus'            AS statement_consent_status,
+     COALESCE(reporting.as_boolean(c.statement_capture->>'retrievalComplete'), false)
+                                                      AS statements_retrieved,
+     COALESCE(reporting.as_boolean(c.statement_capture->>'checksComplete'), false)
+                                                      AS statement_checks_complete,
+     reporting.as_numeric(c.statement_capture #>> '{affordabilityReport,summary,total_accounts}')::integer
+                                                      AS bank_accounts,
+     reporting.as_numeric(c.statement_capture #>> '{affordabilityReport,summary,salary_summary,number_of_salary_sources}')::integer
+                                                      AS salary_sources,
+     -- Assessment outcomes (their figures are not in the CRM).
+     c.assessments_identity_risk->>'decision'         AS identity_risk_decision,
+     reporting.as_boolean(c.assessments_identity_risk->>'pep_hit') AS pep_hit,
+     reporting.as_boolean(c.assessments_identity_risk->>'identity_verification_failed')
+                                                      AS identity_verification_failed,
+     reporting.as_boolean(c.assessments_identity_risk->>'manual_verification')
+                                                      AS manual_verification,
+     (c.assessments_identity_risk->>'idv_reused_from' IS NOT NULL) AS identity_check_reused,
+     (SELECT count(*)::integer FROM jsonb_object_keys(
+        CASE WHEN jsonb_typeof(c.identity_verification_attempts) = 'object'
+             THEN c.identity_verification_attempts ELSE '{}'::jsonb END))
+                                                      AS identity_attempts,
+     c.assessments_post_identity_risk->>'decision'    AS post_identity_risk_decision,
+     c.assessments_account_conduct->>'decision'       AS account_conduct_decision,
+     c.assessments_serviceability->>'decision'        AS serviceability_decision,
+     reporting.as_numeric(c.assessments_fraud_check #>> '{latest,final_score}') AS fraud_score,
+     c.assessments_fraud_check #>> '{latest,severity}' AS fraud_severity,
+     CASE WHEN jsonb_typeof(c.assessments_fraud_check #> '{latest,categories}') = 'array'
+          THEN ARRAY(SELECT jsonb_array_elements_text(c.assessments_fraud_check #> '{latest,categories}'))
+     END                                              AS fraud_categories,
+     reporting.as_numeric(c.assessments_fraud_check->>'peak_score') AS fraud_peak_score,
+     c.assessments_fraud_check->>'peak_severity'      AS fraud_peak_severity,
+     reporting.as_numeric(c.assessments_fraud_check->>'turns_assessed')::integer AS fraud_turns_assessed,
+     reporting.as_numeric(c.assessments_fraud_check->>'flagged_count')::integer AS fraud_flagged_turns,
+     reporting.as_boolean(c.assessments_fraud_check #>> '{latest,would_halt}') AS fraud_would_halt,
+     c.decision_metadata->>'component'                AS decision_component,
+     c.decision_detail_retry_eligible                 AS retry_eligible,
+     -- Re-application block (the stop message and justification are free text).
+     c.reapplication_block_reason                     AS block_reason,
+     c.reapplication_block_message_variant            AS block_message_variant,
+     c.reapplication_block_disposition_kind           AS block_disposition,
+     c.reapplication_block_manual_review_candidate    AS block_manual_review,
+     c.reapplication_block_blocked_at                 AS blocked_at,
+     COALESCE(c.reapplication_block_blocked_until, c.decision_detail_blocked_until)
+                                                      AS blocked_until,
+     c.reapplication_block_clear_status               AS block_clear_status,
+     c.reapplication_block_cleared_at                 AS block_cleared_at,
+     NULLIF(c.reapplication_block_cleared_by, '')     AS block_cleared_by,
+     NULLIF(c.reapplication_block_clear_request_id, '') AS block_clear_request_id,
+     c.identity_resolution #>> '{link,reason}'        AS identity_link_reason,
+     c.identity_resolution #>> '{review_case,band}'   AS identity_review_band,
+     c.identity_resolution #>> '{review_case,disposition}' AS identity_review_disposition,
+     -- Ended early: staff or system kills (not their notes) and cancellations.
+     (c.kill_record IS NOT NULL)                      AS killed,
+     c.kill_record->>'reason_category'                AS kill_reason,
+     CASE WHEN c.kill_record->>'actor' LIKE 'user:%' THEN 'staff'
+          ELSE NULLIF(c.kill_record->>'actor', '') END AS killed_by,
+     reporting.as_timestamptz(c.kill_record->>'killed_at')       AS killed_at,
+     (c.cancellation_record IS NOT NULL)              AS cancelled,
+     c.cancellation_record->>'reason'                 AS cancel_reason,
+     c.cancellation_record->>'category'               AS cancel_category,
+     reporting.as_timestamptz(c.cancellation_record->>'cancelled_at') AS cancelled_at,
+     c.data_quality_alert->>'gate'                    AS data_quality_gate,
+     reporting.as_numeric(c.data_quality_alert->>'earned_source_count')::integer AS earned_income_sources,
+     reporting.as_numeric(c.data_quality_alert->>'benefit_source_count')::integer AS benefit_income_sources,
+     c.llm_cost_total_usd                             AS llm_cost_usd,
+     c.llm_call_count::integer                        AS llm_calls,
+     c.llm_unpriced_count::integer                    AS llm_unpriced_calls
    FROM public.conversations c
    LEFT JOIN LATERAL (
      SELECT MIN(la.loan_terms_disbursed_date) AS funded_at
        FROM public.loan_accounts la
       WHERE la.application_number = NULLIF(c.application_number, '')
-   ) f ON true`,
+   ) f ON true
+   LEFT JOIN public.applications app
+     ON app.application_number = NULLIF(c.application_number, '')
+   LEFT JOIN public.customers cu ON cu.customer_id = c.customer_id_string`,
 
   // Latest decision per conversation, from the event history.
   `CREATE VIEW reporting.decision AS

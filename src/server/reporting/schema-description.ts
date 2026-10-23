@@ -10,7 +10,7 @@
  * and logged requests say which description they used.
  */
 
-export const SCHEMA_DESCRIPTION_VERSION = 'reporting-desc-v1'
+export const SCHEMA_DESCRIPTION_VERSION = 'reporting-desc-v2'
 
 export interface ColumnDescription {
   name: string
@@ -145,6 +145,197 @@ export const REPORTING_TABLES: readonly TableDescription[] = [
         meaning:
           'A loan from this application was disbursed. Funded means disbursed, not approved.',
       },
+      col(
+        'loan_purpose',
+        'text',
+        'What the loan is for, as captured in the chat (a short category such as "car repairs"). Group by it; it is not a fixed list.',
+      ),
+      col(
+        'requested_amount',
+        'numeric',
+        'Loan amount applied for, AUD. The disbursed amount is loan.loan_amount.',
+      ),
+      col('requested_fee', 'numeric', 'Fee quoted for the requested amount, AUD.'),
+      col('requested_total_payable', 'numeric', 'Requested amount plus fee, AUD.'),
+      col('loan_term', 'integer', 'Loan term as captured in the application.'),
+      col(
+        'attestation_accepted',
+        'boolean',
+        'The customer accepted the attestation, or NULL before that step.',
+      ),
+      col(
+        'statement_consent_provided',
+        'boolean',
+        'The customer consented to share bank statements, or NULL.',
+      ),
+      col('offer_accepted', 'boolean', 'The customer accepted the product offer, or NULL.'),
+      col(
+        'application_outcome',
+        'text',
+        'Outcome on the application record: pending, approved, declined or withdrawn. Prefer decision for credit outcomes.',
+      ),
+      col(
+        'process_stage',
+        'text',
+        'Stage of the application process the attempt reached (or is at).',
+      ),
+      col(
+        'process_step',
+        'text',
+        'Step within process_stage the attempt reached (or is at). Use with process_stage for drop-off analysis.',
+      ),
+      col(
+        'age_at_application',
+        'integer',
+        'Customer age in whole years on started_on, or NULL without a customer or date of birth.',
+      ),
+      col('content', 'text', 'utm_content of the visit, or NULL.'),
+      col('match_type', 'text', 'Search match type of a paid click (e.g. exact, phrase), or NULL.'),
+      col(
+        'country',
+        'text',
+        'Country of the network the attempt started from (ISO code), or NULL.',
+      ),
+      col(
+        'last_activity_at',
+        'timestamptz',
+        'When the customer last sent a message in the attempt.',
+      ),
+      col(
+        'statement_consent_status',
+        'text',
+        'Bank statement sharing: initiated, complete or cancelled, or NULL if never started.',
+      ),
+      col('statements_retrieved', 'boolean', 'Bank statements were retrieved. Never NULL.'),
+      col('statement_checks_complete', 'boolean', 'Checks on the statements finished. Never NULL.'),
+      col(
+        'bank_accounts',
+        'integer',
+        'Number of bank accounts shared, or NULL before the affordability report.',
+      ),
+      col(
+        'salary_sources',
+        'integer',
+        'Number of salary sources found in the statements, or NULL.',
+      ),
+      col(
+        'identity_risk_decision',
+        'text',
+        'Identity risk assessment decision, or NULL if not assessed.',
+      ),
+      col(
+        'pep_hit',
+        'boolean',
+        'Identity screening found a politically exposed person match, or NULL.',
+      ),
+      col('identity_verification_failed', 'boolean', 'Identity verification failed, or NULL.'),
+      col('manual_verification', 'boolean', 'Identity was verified manually by staff, or NULL.'),
+      col(
+        'identity_check_reused',
+        'boolean',
+        'An earlier identity verification was reused instead of a new check.',
+      ),
+      col('identity_attempts', 'integer', 'Identity verification attempts made (0 if none).'),
+      col('post_identity_risk_decision', 'text', 'Post-identity risk check decision, or NULL.'),
+      col(
+        'account_conduct_decision',
+        'text',
+        'Account conduct assessment decision (APPROVED or DECLINED), or NULL.',
+      ),
+      col(
+        'serviceability_decision',
+        'text',
+        'Serviceability assessment decision (APPROVED or DECLINED), or NULL. The figures behind it are not in this schema.',
+      ),
+      col('fraud_score', 'numeric', 'Latest fraud risk score (0 to 100), or NULL if not assessed.'),
+      col(
+        'fraud_severity',
+        'text',
+        'Latest fraud risk severity: LOW, MEDIUM, HIGH or CRITICAL, or NULL.',
+      ),
+      col(
+        'fraud_categories',
+        'text[]',
+        'Latest fraud risk categories; use unnest() to count by category.',
+      ),
+      col('fraud_peak_score', 'numeric', 'Highest fraud score over the conversation.'),
+      col('fraud_peak_severity', 'text', 'Highest fraud severity over the conversation.'),
+      col('fraud_turns_assessed', 'integer', 'Messages assessed for fraud risk.'),
+      col('fraud_flagged_turns', 'integer', 'Messages flagged for fraud risk.'),
+      col(
+        'fraud_would_halt',
+        'boolean',
+        'The latest fraud assessment would halt the conversation.',
+      ),
+      col(
+        'decision_component',
+        'text',
+        'Credit component the latest decision came from (e.g. final_decision_rule, reapplication_block, g5_timeout_guard), or NULL.',
+      ),
+      col('retry_eligible', 'boolean', 'The customer may reapply after this decision, if stated.'),
+      col('block_reason', 'text', 'Why the attempt hit a re-application block, or NULL.'),
+      col('block_message_variant', 'text', 'Which block message the customer was shown.'),
+      col('block_disposition', 'text', 'How the block was resolved or classified, or NULL.'),
+      col('block_manual_review', 'boolean', 'The block was flagged for manual review, or NULL.'),
+      col('blocked_at', 'timestamptz', 'When the block was applied, or NULL.'),
+      col('blocked_until', 'timestamptz', 'When the block ends, or NULL.'),
+      col('block_clear_status', 'text', 'Status of clearing the block, or NULL.'),
+      col('block_cleared_at', 'timestamptz', 'When the block was cleared, or NULL.'),
+      col('block_cleared_by', 'text', 'Staff user id (not a name) who cleared the block, or NULL.'),
+      col(
+        'block_clear_request_id',
+        'text',
+        'Clear request for the block, or NULL. Join to block_clear_request.request_id.',
+      ),
+      col(
+        'identity_link_reason',
+        'text',
+        'Why the attempt was linked to an existing customer (e.g. DOCUMENT_AGREE), or NULL.',
+      ),
+      col(
+        'identity_review_band',
+        'text',
+        'Band of an identity review case opened for the attempt, or NULL.',
+      ),
+      col('identity_review_disposition', 'text', 'Outcome of that identity review case, or NULL.'),
+      col('killed', 'boolean', 'Staff or the system ended the conversation. Never NULL.'),
+      col(
+        'kill_reason',
+        'text',
+        'Reason category of the kill (e.g. customer_request, fraud_abuse), or NULL.',
+      ),
+      col(
+        'killed_by',
+        'text',
+        "'staff', or the system agent that ended it (e.g. system:fraudRiskAgent), or NULL.",
+      ),
+      col('killed_at', 'timestamptz', 'When it was ended, or NULL.'),
+      col('cancelled', 'boolean', 'The application was cancelled. Never NULL.'),
+      col('cancel_reason', 'text', 'Cancellation reason code, or NULL.'),
+      col('cancel_category', 'text', 'customer_declined, abandoned or system_expired, or NULL.'),
+      col('cancelled_at', 'timestamptz', 'When it was cancelled, or NULL.'),
+      col(
+        'data_quality_gate',
+        'text',
+        'Data quality gate that raised an alert on the statements, or NULL.',
+      ),
+      col(
+        'earned_income_sources',
+        'integer',
+        'Earned income sources the data quality gate counted, or NULL.',
+      ),
+      col(
+        'benefit_income_sources',
+        'integer',
+        'Benefit income sources the data quality gate counted, or NULL.',
+      ),
+      col(
+        'llm_cost_usd',
+        'numeric',
+        'Total LLM cost of the conversation, USD. Per-call detail is in llm_cost.',
+      ),
+      col('llm_calls', 'integer', 'LLM calls made in the conversation.'),
+      col('llm_unpriced_calls', 'integer', 'LLM calls with no price, so not in llm_cost_usd.'),
     ],
   },
   {
@@ -677,6 +868,7 @@ export const REPORTING_FUNCTIONS: readonly string[] = [
   'reporting.sydney_date(timestamptz) -> date: the Sydney calendar day of an instant.',
   'reporting.acquisition_channel(jsonb) -> text: the channel of an attribution object (already applied in the views).',
   'reporting.decline_category(text) -> text: the category of a reason code (already applied in the views).',
+  'reporting.as_numeric(text), as_boolean(text), as_timestamptz(text): read a JSON value, NULL when it is malformed (already applied in the views).',
 ]
 
 export const BUSINESS_RULES: readonly string[] = [
@@ -686,7 +878,7 @@ export const BUSINESS_RULES: readonly string[] = [
   'Funded means disbursed (application.funded / loan.disbursed_on), not approved.',
   'A rate is a fraction of a stated denominator. Name rate columns *_rate (0 to 1) or *_pct (0 to 100), and guard division with NULLIF(denominator, 0).',
   'Money of record comes from snap_portfolio. Sums of loan.total_outstanding are operational estimates; say so in the description if you use them.',
-  'Never select names, contact details, customer_id, application_number or storage locations into a result; count them instead.',
+  'Never select names, contact details, customer_id, application_number, staff user ids or storage locations into a result; count or group them instead. Sensitive flags (vulnerable_flag, pep_hit, fraud) are reported as counts, never per customer.',
   'Acquisition: group by the acquisition column. referral means another website referred the visitor; the referral programme is not in this schema.',
   'When grouping, add a total row only if every listed column can be summed or recomputed for the total; label it All.',
 ]

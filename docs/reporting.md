@@ -51,9 +51,19 @@ to run the queries on.
 
 ## Rules
 
-- The schema holds ids, categories, amounts and dates. It never holds names,
-  contact details, addresses, free text or conversation content. Review any new
-  column against this rule.
+- The schema holds the CRM's data except the personal parts: ids, categories,
+  amounts, scores, flags and dates. It never holds names, contact details, a
+  date of birth (age in whole years instead), a street address or suburb
+  (state and postcode instead), identity documents, bank account numbers or
+  BSBs, IP addresses, free text (notes, comments, justifications, error
+  messages) or conversation content. Staff appear as user ids, never names.
+  JSON columns are read key by key, never copied whole, because most of them
+  mix both kinds. Review any new column against this rule;
+  `tests/int/reporting-schema-privacy.int.spec.ts` seeds personal details
+  everywhere the CRM keeps them and fails if any view shows one.
+- Sensitive flags (`vulnerable_flag`, PEP and sanctions results, fraud risk)
+  are in the schema for risk and compliance reporting. Reports show them as
+  counts, never per customer.
 - Money figures of record come from the ledger. `snap_portfolio` copies them;
   no report sums balances to produce a figure of record.
 - Business dates are Australia/Sydney. Every view has `*_on` date columns
@@ -65,10 +75,17 @@ Defined in `src/server/reporting/schema.ts`. Every statement is idempotent.
 
 | Object | Kind | One row per | Source |
 |---|---|---|---|
-| `application` | view | conversation (an application attempt), with funnel flags `submitted`, `decided`, `approved`, `funded` and `acquisition` | `conversations`, `loan_accounts` |
+| `application` | view | conversation (an application attempt): funnel flags `submitted`, `decided`, `approved`, `funded`, `acquisition`; what was applied for (loan purpose, amount, term); age at application; statement capture progress; identity, conduct, serviceability and fraud assessment outcomes; re-application block, kill and cancellation; LLM cost | `conversations`, `applications`, `customers`, `loan_accounts` |
 | `decision` | view | conversation, its latest decision event | `decision_event` |
-| `loan` | view | loan account, with the source of its application | `loan_accounts`, `application` |
+| `loan` | view | loan account, with the source of its application, repayment frequency, last payment and closure | `loan_accounts`, `application` |
 | `instalment` | view | scheduled instalment | `loan_accounts_repayment_schedule_payments` |
+| `customer` | view | customer: identity verification and screening, risk flags, fraud risk, re-application block, contact verification levels, age, state and postcode | `customers` |
+| `collection_case` | view | collections case | `collection_cases` |
+| `write_off` | view | write-off request, staff as user ids | `write_off_requests` |
+| `block_clear_request` | view | request to clear a re-application block | `reapplication_block_clear_requests` |
+| `notification` | view | notification event (no recipient or content) | `notifications` |
+| `llm_cost` | view | LLM call | `llm_costs` |
+| `contact_note` | view | staff contact note, its kind only (no subject or text) | `contact_notes` |
 | `decision_event` | table | `final_credit_decision` event, revisions included | event processor, S3 back-fill |
 | `snap_portfolio` | table | Sydney business day | ledger `GetPortfolioSummary` |
 | `decline_reason_category` | table | reason-code prefix | seeded from BTB-462 comment 11579 |
@@ -83,6 +100,9 @@ Functions:
   before attribution capture (6 October 2026) reads `not recorded` rather than
   `direct`. Reports group by `acquisition`. `referral` means the visitor came
   from another website, not the referral programme.
+- `as_numeric(text)`, `as_boolean(text)`, `as_timestamptz(text)`: read a value
+  from JSON, NULL when it is malformed (timestamps must be ISO), so one bad
+  event cannot break a view. The views use them for every JSON value.
 - `decline_category(reason text)`: `capacity`, `character`, `identity`,
   `eligibility` or `other`, by longest matching prefix in
   `decline_reason_category`. Unmapped reasons are `other`. Change the mapping by
@@ -101,10 +121,20 @@ report SQL does not.
 `decision_event` is the exception because the conversation row keeps only the
 latest decision and has no decision time.
 
+Not in the schema at all: the conversation transcript and extracted facts,
+identity documents, the marketing CRM (contacts, interactions), staff users,
+and the CRM's own configuration. Affordability figures (income, expenses,
+surplus) are not in the CRM either: the credit agents write them to S3, and
+their events carry only the decision.
+
 ### How the schema is applied
 
-- Deployed environments: the `20261023_090000_reporting_schema` migration,
-  run by `make -C infra/fly deploy` as the owner role.
+- Deployed environments: migrations, run by `make -C infra/fly deploy` as the
+  owner role. `20261023_090000_reporting_schema` created the schema;
+  `20261028_090000_reporting_all_data` re-applies it with the expanded views.
+  A schema change ships the same way: change `schema.ts` and the description,
+  then add a migration that re-runs `REPORTING_SCHEMA_STATEMENTS` (copy the
+  latest one). The statements are idempotent and recreate every view.
 - Dev and test: Payload uses `push`, which ignores this schema and cannot
   alter a column a view depends on. A `beforeSchemaInit` hook in
   `payload.config.ts` drops the views before the push, and the `onInit` hook
