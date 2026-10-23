@@ -11,8 +11,13 @@ import {
  * balance), and give the first three reports their charts, headline and
  * column settings where authors have not changed them.
  *
- * Uses the Local API, which writes every report-definitions column of the
- * current config: keep this after every migration that adds one.
+ * Uses the Local API, which works against the *current* config: it writes
+ * every report-definitions column, and an update also clears document locks,
+ * which queries a payload_locked_documents_rels column for every collection.
+ * So this must run after every migration that adds a report-definitions
+ * column or a collection. It once sat before the migrations adding the
+ * report-preferences, -events, -subscriptions, -deliveries and -boards
+ * collections, and failed on any database whose first reports it upgraded.
  */
 export async function up({ payload, req }: MigrateUpArgs): Promise<void> {
   const created = await createReports(payload, CORE_REPORTS, req)

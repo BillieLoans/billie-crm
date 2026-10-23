@@ -2,10 +2,10 @@
  * The first three reports (BTB-507) and the core reports behind the
  * Reports home's headline numbers, as data.
  *
- * The `20261026_100000_first_reports` and `20261030_100000_core_reports`
- * migrations create them in each environment if their slug is free. After that they are ordinary report
- * definitions: authors change them in the admin, and this file is not read
- * again. The integration test runs each one against TEST data.
+ * The `20261026_100000_first_reports` and `20261030_170000_core_reports`
+ * migrations create them in each environment if their slug is free. After
+ * that they are ordinary report definitions: authors change them in the
+ * admin, and this file is not read again. The integration test runs each one against TEST data.
  */
 import type { Payload, PayloadRequest } from 'payload'
 import { sameJson } from '@/lib/reports/diff'
