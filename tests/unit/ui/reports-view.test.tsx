@@ -518,6 +518,41 @@ describe('Ask Claude from the home', () => {
 })
 
 describe('Reports sidebar', () => {
+  it('jumps to the filter on "/" only while focus is in the sidebar', () => {
+    renderView('weekly')
+    const nav = screen.getByRole('navigation', { name: 'Reports' })
+    const filter = within(nav).getByRole('searchbox', { name: 'Find a report' })
+    // Elsewhere on the page, "/" is just a key.
+    fireEvent.keyDown(document.body, { key: '/' })
+    expect(filter).not.toHaveFocus()
+    const link = within(nav).getByRole('link', { name: 'Reports home' })
+    link.focus()
+    fireEvent.keyDown(link, { key: '/' })
+    expect(filter).toHaveFocus()
+    // Typing "/" in the filter itself types it, and focus stays there.
+    expect(fireEvent.keyDown(filter, { key: '/' })).toBe(true)
+    expect(filter).toHaveFocus()
+    // With Ctrl or Cmd it is someone else's shortcut.
+    link.focus()
+    fireEvent.keyDown(link, { key: '/', ctrlKey: true })
+    fireEvent.keyDown(link, { key: '/', metaKey: true })
+    expect(link).toHaveFocus()
+  })
+
+  it('opens the folded list on a phone before jumping to the filter, selecting the old query', () => {
+    renderView('weekly')
+    const nav = screen.getByRole('navigation', { name: 'Reports' })
+    const toggle = screen.getByTestId('reports-nav-toggle')
+    const filter = within(nav).getByRole('searchbox', { name: 'Find a report' })
+    fireEvent.change(filter, { target: { value: 'declines' } })
+    toggle.focus()
+    fireEvent.keyDown(toggle, { key: '/' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(filter).toHaveFocus()
+    const input = filter as HTMLInputElement
+    expect([input.selectionStart, input.selectionEnd]).toEqual([0, 'declines'.length])
+  })
+
   it('groups reports by area, filters them, and pins the chosen ones first', () => {
     pinned = ['by-code']
     renderView('weekly')

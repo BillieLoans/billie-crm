@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useId, useState } from 'react'
+import React, { useEffect, useId, useRef, useState } from 'react'
 import Link from 'next/link'
 import { REPORT_CATEGORIES } from '@/lib/schemas/reports'
 import { matchReports } from '@/lib/reports/catalogue'
@@ -52,9 +52,55 @@ export function ReportsNav({ reports, canAuthor, currentSlug, isLoading, error }
     .map((slug) => published.find((r) => r.slug === slug))
     .filter((r): r is ReportSummary => Boolean(r))
   const current = reports.find((r) => r.slug === currentSlug)
+  const filterRef = useRef<HTMLInputElement>(null)
+  // Set when "/" opens the folded list: the filter is focused once it shows.
+  const focusOnOpen = useRef(false)
+
+  const focusFilter = () => {
+    // Select the old query, so typing replaces it.
+    filterRef.current?.focus()
+    filterRef.current?.select()
+  }
+
+  useEffect(() => {
+    if (open && focusOnOpen.current) {
+      focusOnOpen.current = false
+      focusFilter()
+    }
+  }, [open])
+
+  /**
+   * "/" jumps to the filter, but only while focus is in the sidebar: a
+   * shortcut active on the whole page would fire while typing elsewhere
+   * (WCAG 2.1.4, Character Key Shortcuts). On a phone the list is folded
+   * away, so it opens first.
+   */
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    // AltGr (reported as Ctrl+Alt on Windows) types "/" on some layouts.
+    const altGr = e.getModifierState?.('AltGraph') ?? false
+    if (e.key !== '/' || e.metaKey || (!altGr && (e.ctrlKey || e.altKey))) return
+    const target = e.target as HTMLElement
+    if (
+      target.tagName === 'INPUT' ||
+      target.tagName === 'TEXTAREA' ||
+      target.tagName === 'SELECT' ||
+      target.isContentEditable
+    ) {
+      return
+    }
+    e.preventDefault()
+    if (open) {
+      focusFilter()
+    } else {
+      focusOnOpen.current = true
+      setOpen(true)
+    }
+  }
 
   return (
-    <nav className={styles.sidebar} aria-label="Reports">
+    // The handler only catches keys from the links and buttons inside.
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
+    <nav className={styles.sidebar} aria-label="Reports" onKeyDown={onKeyDown}>
       <button
         type="button"
         className={styles.navToggle}
@@ -111,10 +157,11 @@ export function ReportsNav({ reports, canAuthor, currentSlug, isLoading, error }
           Find a report
         </label>
         <input
+          ref={filterRef}
           id={`${id}-filter`}
           type="search"
           className={styles.navFilter}
-          placeholder="Find a report"
+          placeholder="Find a report (press / in this list)"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           autoComplete="off"
