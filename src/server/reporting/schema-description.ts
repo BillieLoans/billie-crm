@@ -10,7 +10,7 @@
  * and logged requests say which description they used.
  */
 
-export const SCHEMA_DESCRIPTION_VERSION = 'reporting-desc-v2'
+export const SCHEMA_DESCRIPTION_VERSION = 'reporting-desc-v3'
 
 export interface ColumnDescription {
   name: string
@@ -191,6 +191,17 @@ export const REPORTING_TABLES: readonly TableDescription[] = [
       ),
       col('content', 'text', 'utm_content of the visit, or NULL.'),
       col('match_type', 'text', 'Search match type of a paid click (e.g. exact, phrase), or NULL.'),
+      col('keyword', 'text', 'utm_term: the search keyword of a paid click, or NULL.'),
+      col(
+        'click_id_type',
+        'text',
+        "Ad click id the visit carried: 'gclid', 'gbraid' or 'wbraid' (Google Ads), or NULL. The id itself is not in the schema.",
+      ),
+      col(
+        'attribution_captured_at',
+        'timestamptz',
+        'When the chat captured the source of the visit, or NULL.',
+      ),
       col(
         'country',
         'text',

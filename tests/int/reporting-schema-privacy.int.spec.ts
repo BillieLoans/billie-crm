@@ -36,6 +36,7 @@ const PERSONAL = {
   note: 'Customer said she is moving to Perth',
   holder: 'Z QUIXOTIC',
   payer: 'name:z quixotic senior',
+  clickId: 'Cj0KCQjwRPTPIIclick',
 }
 
 async function cleanup() {
@@ -119,7 +120,14 @@ beforeAll(async () => {
       `${P}-CONV`,
       `${P}-APP`,
       customer,
-      JSON.stringify({ utm_source: 'google', utm_medium: 'cpc', utm_content: 'ad-1' }),
+      JSON.stringify({
+        utm_source: 'google',
+        utm_medium: 'cpc',
+        utm_content: 'ad-1',
+        utm_term: 'pay advance',
+        gclid: PERSONAL.clickId,
+        captured_at: '2026-10-20T01:00:05Z',
+      }),
       JSON.stringify({ ip: PERSONAL.ip, country: 'AU', asn: '1221' }),
       JSON.stringify({ loanPurpose: 'car repairs', loanAmount: 'lots', customer: customerBlock }),
       JSON.stringify({
@@ -254,6 +262,8 @@ describe('reporting schema privacy', () => {
       requested_amount: '400',
       loan_term: 4,
       content: 'ad-1',
+      keyword: 'pay advance',
+      click_id_type: 'gclid',
       country: 'AU',
       statement_consent_status: 'complete',
       statements_retrieved: true,
@@ -274,6 +284,7 @@ describe('reporting schema privacy', () => {
       data_quality_gate: 'me001_implausibility',
       earned_income_sources: 0,
     })
+    expect(new Date(app[0].attribution_captured_at).toISOString()).toBe('2026-10-20T01:00:05.000Z')
     // 36 on 20 Oct 2026, from a 14 Feb 1990 date of birth.
     expect(app[0].age_at_application).toBe(36)
 

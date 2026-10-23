@@ -55,8 +55,9 @@ to run the queries on.
   amounts, scores, flags and dates. It never holds names, contact details, a
   date of birth (age in whole years instead), a street address or suburb
   (state and postcode instead), identity documents, bank account numbers or
-  BSBs, IP addresses, free text (notes, comments, justifications, error
-  messages) or conversation content. Staff appear as user ids, never names.
+  BSBs, IP addresses, ad click ids (`click_id_type` says which kind a visit
+  carried), free text (notes, comments, justifications, error messages) or
+  conversation content. Staff appear as user ids, never names.
   JSON columns are read key by key, never copied whole, because most of them
   mix both kinds. Review any new column against this rule;
   `tests/int/reporting-schema-privacy.int.spec.ts` seeds personal details

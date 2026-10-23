@@ -49,6 +49,7 @@ import * as migration_20261027_100000_mcp_oauth_refresh_grace from './20261027_1
 import * as migration_20261028_090000_reporting_all_data from './20261028_090000_reporting_all_data'
 import * as migration_20261028_100000_reporting_loan_lookup from './20261028_100000_reporting_loan_lookup'
 import * as migration_20261028_110000_conversations_started_on_idx from './20261028_110000_conversations_started_on_idx'
+import * as migration_20261028_120000_reporting_acquisition_detail from './20261028_120000_reporting_acquisition_detail'
 
 export const migrations = [
   {
@@ -305,5 +306,10 @@ export const migrations = [
     up: migration_20261028_110000_conversations_started_on_idx.up,
     down: migration_20261028_110000_conversations_started_on_idx.down,
     name: '20261028_110000_conversations_started_on_idx',
+  },
+  {
+    up: migration_20261028_120000_reporting_acquisition_detail.up,
+    down: migration_20261028_120000_reporting_acquisition_detail.down,
+    name: '20261028_120000_reporting_acquisition_detail',
   },
 ];

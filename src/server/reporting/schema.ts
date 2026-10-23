@@ -253,6 +253,14 @@ export const REPORTING_SCHEMA_STATEMENTS: readonly string[] = [
                                                       AS age_at_application,
      c.attribution->>'utm_content'                    AS content,
      c.attribution->>'matchtype'                      AS match_type,
+     c.attribution->>'utm_term'                       AS keyword,
+     -- Which ad click id the visit carried. The id itself is left out: it
+     -- links the application to one person's click in the ad platform.
+     CASE WHEN c.attribution->>'gclid' IS NOT NULL THEN 'gclid'
+          WHEN c.attribution->>'gbraid' IS NOT NULL THEN 'gbraid'
+          WHEN c.attribution->>'wbraid' IS NOT NULL THEN 'wbraid' END
+                                                      AS click_id_type,
+     reporting.as_timestamptz(c.attribution->>'captured_at') AS attribution_captured_at,
      NULLIF(c.network->>'country', '')                AS country,
      c.last_utterance_time                            AS last_activity_at,
      -- Statement capture: progress and counts only (names and account
