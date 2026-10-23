@@ -13,6 +13,15 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 let currentUser: { id: string; role: string } | null = { id: 'u1', role: 'operations' }
 vi.mock('@payloadcms/ui', () => ({ useAuth: () => ({ user: currentUser }) }))
 
+let searchParams = new URLSearchParams()
+const routerReplace = vi.fn()
+const routerPush = vi.fn()
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ replace: routerReplace, push: routerPush }),
+  usePathname: () => '/admin/reports/weekly',
+  useSearchParams: () => searchParams,
+}))
+
 const reportsState: {
   data?: { reports: unknown[]; canAuthor: boolean }
   isLoading: boolean
@@ -76,6 +85,52 @@ const RESULT = {
   durationMs: 420,
 }
 
+const RANGED = {
+  id: 'r3',
+  slug: 'declines',
+  title: 'Declines',
+  description: 'Decline rate by source. Mock decisions are excluded.',
+  published: true,
+  category: 'credit',
+  featured: false,
+  excludesMock: true,
+  parameters: [
+    { name: 'from', label: 'From', type: 'date', required: true, default: 'today-30' },
+    { name: 'to', label: 'To', type: 'date', required: true, default: 'today-1' },
+    {
+      name: 'group_by',
+      label: 'Split by',
+      type: 'select',
+      required: true,
+      default: 'source',
+      options: [
+        { value: 'source', label: 'Source' },
+        { value: 'ruleset', label: 'Ruleset' },
+      ],
+    },
+  ],
+  charts: [],
+  headline: [{ column: 'decline_rate_pct', label: 'Decline rate', better: 'lower' }],
+  columns: [],
+}
+const RANGED_RESULT = {
+  report: { slug: 'declines', title: 'Declines', version: 'v1', draft: false },
+  columns: [
+    { name: 'segment', kind: 'text' },
+    { name: 'decided', kind: 'number' },
+    { name: 'decline_rate_pct', kind: 'number' },
+  ],
+  rows: [
+    { segment: 'paid', decided: 60, decline_rate_pct: 30 },
+    { segment: 'organic', decided: 40, decline_rate_pct: 45 },
+    { segment: 'All', decided: 100, decline_rate_pct: 36 },
+  ],
+  rowCount: 3,
+  truncated: false,
+  durationMs: 12,
+}
+const PREVIOUS_ROWS = [{ segment: 'All', decided: 90, decline_rate_pct: 30 }]
+
 const fetchMock = vi.fn()
 
 function respond(status: number, body: unknown) {
@@ -83,7 +138,11 @@ function respond(status: number, body: unknown) {
 }
 
 /** The JSON bodies sent to the run endpoint. */
-function sentBodies(): Array<{ parameters: Record<string, unknown>; draft: boolean }> {
+function sentBodies(): Array<{
+  parameters: Record<string, unknown>
+  draft: boolean
+  compare: boolean
+}> {
   return fetchMock.mock.calls.map(([, init]) => JSON.parse((init as RequestInit).body as string))
 }
 
@@ -97,6 +156,10 @@ function renderView(slug: string) {
 }
 
 beforeEach(() => {
+  searchParams = new URLSearchParams()
+  window.history.replaceState(null, '', '/')
+  routerReplace.mockReset()
+  routerPush.mockReset()
   currentUser = { id: 'u1', role: 'operations' }
   reportsState.data = { reports: [WEEKLY, BY_CODE], canAuthor: false }
   reportsState.isLoading = false
@@ -128,7 +191,7 @@ describe('ReportsView', () => {
       '/admin/reports/by-code',
     )
     expect(screen.queryByText('Edit report')).toBeNull()
-    expect(screen.queryByLabelText('Run the latest draft')).toBeNull()
+    expect(screen.queryByTestId('author-toolbar')).toBeNull()
   })
 
   it('runs once straight away when every parameter has a default, then shows the results', async () => {
@@ -139,7 +202,8 @@ describe('ReportsView', () => {
     expect(sentBodies()[0]).toMatchObject({ draft: false })
     expect(sentBodies()[0].parameters.from).toMatch(/^\d{4}-\d{2}-\d{2}$/)
 
-    expect(screen.getByTestId('report-status')).toHaveTextContent('2 rows in 0.4 seconds.')
+    expect(screen.getByTestId('report-status')).toHaveTextContent('Showing 2 rows.')
+    expect(screen.getByTestId('report-freshness')).toHaveTextContent('Sydney dates')
     expect(screen.getByTestId('report-chart')).toBeInTheDocument()
     const table = screen.getByTestId('report-table')
     expect(within(table).getByText('1,234')).toBeInTheDocument()
@@ -232,6 +296,8 @@ describe('ReportsView', () => {
         description: null,
         parameters: [{ name: 'since', label: 'Since', type: 'date', required: true }],
         charts: [{ type: 'bar', x: 'code', series: [{ column: 'n' }] }],
+        columns: [],
+        headline: [],
       },
     }
     reportsState.data = { reports: [WEEKLY, withDraft], canAuthor: true }
@@ -242,12 +308,13 @@ describe('ReportsView', () => {
     )
     expect(screen.getByLabelText('Reason code')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByLabelText('Run the latest draft'))
+    fireEvent.click(screen.getByLabelText('Latest draft'))
     expect(screen.queryByLabelText('Reason code')).toBeNull()
+    expect(window.location.search).toBe('?_draft=1')
     fireEvent.change(screen.getByLabelText('Since'), { target: { value: '2026-10-01' } })
     fireEvent.click(screen.getByRole('button', { name: 'Run report' }))
     await screen.findByTestId('report-table')
-    expect(sentBodies().at(-1)).toEqual({ parameters: { since: '2026-10-01' }, draft: true })
+    expect(sentBodies().at(-1)).toMatchObject({ parameters: { since: '2026-10-01' }, draft: true })
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Declines by code (v2)')
   })
 
@@ -257,14 +324,79 @@ describe('ReportsView', () => {
     reportsState.data = { reports: [draftOnly], canAuthor: true }
     renderView('new-one')
     expect(screen.getByText(/Not published\./)).toBeInTheDocument()
-    const toggle = screen.getByLabelText('Run the latest draft')
-    expect(toggle).toBeChecked()
-    expect(toggle).toBeDisabled()
+    expect(screen.queryByLabelText('Latest draft')).toBeNull()
     await screen.findByTestId('report-table')
     expect(sentBodies()[0]).toMatchObject({ draft: true })
     expect(
       within(screen.getByRole('navigation', { name: 'Reports' })).getByText('(draft)'),
     ).toBeInTheDocument()
+  })
+
+  it('reads its settings from the link and writes changes back to it', async () => {
+    searchParams = new URLSearchParams('code=AB12&limit=5')
+    renderView('by-code')
+    expect(screen.getByLabelText('Reason code')).toHaveValue('AB12')
+    await screen.findByTestId('report-table')
+    expect(sentBodies()[0].parameters).toEqual({ code: 'AB12', limit: '5' })
+
+    fireEvent.change(screen.getByLabelText('Reason code'), { target: { value: 'CD34' } })
+    expect(window.location.pathname).toBe('/admin/reports/weekly')
+    expect(window.location.search).toBe('?code=CD34&limit=5')
+    // Re-runs on its own shortly after the change.
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    expect(sentBodies()[1].parameters).toEqual({ code: 'CD34', limit: '5' })
+  })
+
+  it('offers preset periods, compares with the previous period and leads with the headline', async () => {
+    fetchMock.mockImplementation(() =>
+      respond(200, {
+        ...RANGED_RESULT,
+        previous: { from: '2026-09-01', to: '2026-09-30', rows: PREVIOUS_ROWS, rowCount: 1 },
+        dataAsAt: new Date().toISOString(),
+      }),
+    )
+    reportsState.data = { reports: [RANGED], canAuthor: false }
+    renderView('declines')
+    const period = screen.getByRole('group', { name: 'Period' })
+    expect(within(period).getByLabelText('Last 30 days')).toBeChecked()
+    await screen.findByTestId('report-headline')
+
+    fireEvent.click(screen.getByLabelText('Compare with the previous period'))
+    await waitFor(() => expect(sentBodies().at(-1)).toMatchObject({ compare: true }))
+    expect(await screen.findAllByText(/up 6 pts on the previous 30 days/)).toHaveLength(2)
+    expect(screen.getByTestId('report-narrative')).toHaveTextContent(
+      'Decline rate was 36%, up 6 pts on the previous 30 days.',
+    )
+    expect(screen.getByTestId('report-freshness')).toHaveTextContent(/Data to .* today/)
+    expect(screen.getByTestId('report-freshness')).toHaveTextContent('mock applications excluded')
+
+    fireEvent.click(within(period).getByLabelText('Last 7 days'))
+    await waitFor(() =>
+      expect(sentBodies().at(-1)?.parameters.from).not.toBe(sentBodies()[0].parameters.from),
+    )
+    fireEvent.click(within(period).getByLabelText('Custom'))
+    expect(screen.getByLabelText('From')).toBeInTheDocument()
+  })
+
+  it('clears the results while an edit is invalid, and marks the field without moving focus', async () => {
+    renderView('by-code')
+    fireEvent.change(screen.getByLabelText('Reason code'), { target: { value: 'AB' } })
+    await screen.findByTestId('report-table')
+    const field = screen.getByLabelText(/Limit/)
+    field.focus()
+    fireEvent.change(field, { target: { value: 'many' } })
+    await waitFor(() => expect(screen.queryByTestId('report-table')).toBeNull())
+    expect(field).toHaveAttribute('aria-invalid', 'true')
+    expect(field).toHaveFocus()
+    expect(screen.queryByTestId('report-error-summary')).toBeNull()
+  })
+
+  it('shows choices of four or fewer as a row of options', () => {
+    reportsState.data = { reports: [RANGED], canAuthor: false }
+    renderView('declines')
+    const split = screen.getByRole('group', { name: 'Split by' })
+    expect(within(split).getByLabelText('Source')).toBeChecked()
+    expect(within(split).getByLabelText('Ruleset')).not.toBeChecked()
   })
 
   it('says when a link names no report the user can run', () => {

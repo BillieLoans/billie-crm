@@ -91,8 +91,26 @@ describe('POST /api/reports/:slug', () => {
     expect(runReport).toHaveBeenCalledWith(expect.anything(), user, 'weekly', {
       parameters: { from: '2026-10-01' },
       draft: true,
+      compare: false,
     })
     expect(res.status).toBe(504)
+  })
+
+  test('passes a comparison request through only when it is exactly true', async () => {
+    auth.mockResolvedValue({ user: { id: 'x', role: 'operations' } })
+    runReport.mockResolvedValue({ status: 200, body: {} })
+    await POST(post({ parameters: {}, compare: true }), params('weekly'))
+    expect(runReport).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), 'weekly', {
+      parameters: {},
+      draft: false,
+      compare: true,
+    })
+    await POST(post({ parameters: {}, compare: 'yes' }), params('weekly'))
+    expect(runReport).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), 'weekly', {
+      parameters: {},
+      draft: false,
+      compare: false,
+    })
   })
 
   test('ignores a malformed body rather than failing', async () => {
@@ -104,11 +122,13 @@ describe('POST /api/reports/:slug', () => {
     expect(runReport).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'weekly', {
       parameters: {},
       draft: false,
+      compare: false,
     })
     await POST(post({ parameters: ['not', 'an', 'object'], draft: 'yes' }), params('weekly'))
     expect(runReport).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), 'weekly', {
       parameters: {},
       draft: false,
+      compare: false,
     })
   })
 })

@@ -3,6 +3,7 @@
 import React, { useId, useMemo, useState } from 'react'
 import type { ChartSpec, ColumnSpec, ReportColumn } from '@/lib/schemas/reports'
 import { formatNumber } from '@/lib/formatters'
+import { drillHref } from '@/lib/reports/chart-data'
 import { comparisonKey, resolveColumns, splitRows, toTsv } from '@/lib/reports/columns'
 import { ReportChart } from './ReportChart'
 import { ReportTable } from './ReportTable'
@@ -20,6 +21,10 @@ export interface ReportResultsProps {
   previousRows?: Row[] | null
   /** Show the table straight away even when there is a chart. */
   tableOpen?: boolean
+  /** Parameter values a drill-down carries into the next report. */
+  carryParameters?: Record<string, string>
+  /** The first day of this period and of the previous one, to line days up. */
+  periodStarts?: { current: string; previous: string }
 }
 
 const NO_SPECS: ColumnSpec[] = []
@@ -37,6 +42,8 @@ export function ReportResults({
   rows,
   previousRows,
   tableOpen,
+  carryParameters,
+  periodStarts,
 }: ReportResultsProps) {
   const tableId = useId().replace(/:/g, '')
   const [showTable, setShowTable] = useState(tableOpen ?? charts.length === 0)
@@ -44,17 +51,25 @@ export function ReportResults({
   const views = useMemo(() => resolveColumns(columns, columnSpecs), [columns, columnSpecs])
   const { body, totals } = useMemo(() => splitRows(columns, rows), [columns, rows])
 
+  const currentStart = periodStarts?.current
+  const previousStart = periodStarts?.previous
   const previousFor = useMemo(() => {
     if (!previousRows) return undefined
     const keyOf = comparisonKey(columns)
-    const current = keyOf(rows)
+    const current = keyOf(rows, currentStart)
     const byKey = new Map<string, Row>()
-    keyOf(previousRows).forEach((key, row) => byKey.set(key, row))
+    keyOf(previousRows, previousStart).forEach((key, row) => byKey.set(key, row))
     return (row: Row) => {
       const key = current.get(row)
       return key === undefined ? undefined : byKey.get(key)
     }
-  }, [previousRows, rows, columns])
+  }, [previousRows, rows, columns, currentStart, previousStart])
+
+  // The table carries the chart's drill-down too, so it works by keyboard.
+  const drill = charts.find((c) => c.drill)
+  const drillLink = drill
+    ? { column: drill.x, href: (row: Row) => drillHref(drill, row, carryParameters) }
+    : undefined
 
   const copyTable = async () => {
     try {
@@ -76,6 +91,7 @@ export function ReportResults({
           columnViews={views}
           rows={rows}
           previousRows={previousRows ?? undefined}
+          carryParameters={carryParameters}
         />
       ))}
 
@@ -106,6 +122,7 @@ export function ReportResults({
           rows={body}
           totals={totals}
           previousFor={previousFor}
+          link={drillLink}
         />
       </div>
     </div>

@@ -12,8 +12,14 @@ import config from '@/payload.config'
 import { describe, it, beforeAll, afterAll, beforeEach, expect, vi } from 'vitest'
 import type { Pool } from 'pg'
 import { getDashboardPool } from '@/lib/dashboard-aggregates'
-import { createFirstReports, FIRST_REPORTS } from '@/server/reporting/definitions/first-reports'
-import { runReport } from '@/server/reporting/run-report'
+import {
+  CORE_REPORTS,
+  createFirstReports,
+  createReports,
+  FIRST_REPORTS,
+  upgradeFirstReports,
+} from '@/server/reporting/definitions/first-reports'
+import { resetDataAsAtCache, runReport } from '@/server/reporting/run-report'
 import { deliverScheduledReports } from '@/server/reporting/scheduled'
 import { reportingReaderPool } from '../utils/reportingReader'
 
@@ -30,6 +36,7 @@ const P = 'TEST-BTB507'
 const RANGE = { from: '2001-03-01', to: '2001-03-31' }
 const MARCH_5 = '2001-03-05T01:00:00Z' // 12:00 Sydney
 let admin: { id: string; role: string }
+const SEEDED = [...FIRST_REPORTS, ...CORE_REPORTS]
 let supervisorEmail: string
 
 async function cleanup() {
@@ -37,11 +44,11 @@ async function cleanup() {
   await pool.query(`DELETE FROM loan_accounts WHERE loan_account_id LIKE '${P}%'`)
   await pool.query(`DELETE FROM conversations WHERE conversation_id LIKE '${P}%'`)
   await pool.query(
-    `DELETE FROM report_runs WHERE report_slug IN (${FIRST_REPORTS.map((r) => `'${r.slug}'`).join(',')})`,
+    `DELETE FROM report_runs WHERE report_slug IN (${SEEDED.map((r) => `'${r.slug}'`).join(',')})`,
   )
   await payload.delete({
     collection: 'report-definitions',
-    where: { slug: { in: FIRST_REPORTS.map((r) => r.slug) } },
+    where: { slug: { in: SEEDED.map((r) => r.slug) } },
     overrideAccess: true,
   })
   await pool.query(`DELETE FROM users WHERE email LIKE 'test-btb507-%'`)
@@ -160,6 +167,7 @@ beforeAll(async () => {
   await loan('L9', `${P}-APP9`, '2001-03-02T03:00:00Z')
 
   await createFirstReports(payload)
+  await createReports(payload, CORE_REPORTS)
   const a = await payload.create({
     collection: 'users',
     data: {
@@ -330,6 +338,162 @@ describe('first reports', () => {
       // L1 and L9; the mock approval's loan L5 is excluded.
       loans_disbursed: 2,
     })
+  })
+})
+
+describe('core reports', () => {
+  it('daily applications: started, approved and funded per Sydney day, mock excluded', async () => {
+    expect(await rows('daily-applications', RANGE)).toEqual([
+      { day: '2001-03-05', applications: 7, approved: 1, funded: 1 },
+    ])
+  })
+
+  it('approval rate by week: approved of decided, mock excluded', async () => {
+    expect(await rows('approval-rate', RANGE)).toEqual([
+      { week: '2001-03-05', decided: 4, approved: 1, approval_rate: 0.25 },
+    ])
+  })
+
+  it('loans funded: count and amount per day, mock loans excluded', async () => {
+    expect(await rows('loans-funded', RANGE)).toEqual([
+      { day: '2001-03-02', loans: 1, amount_funded: 300 },
+      { day: '2001-03-06', loans: 1, amount_funded: 300 },
+    ])
+  })
+
+  it('arrears balance: runs with no period and always has its total row', async () => {
+    const result = await rows('arrears-balance', {})
+    expect(result.at(-1)?.bucket).toBe('All')
+  })
+
+  it('are featured with headline numbers, and created once', async () => {
+    expect(await createReports(payload, CORE_REPORTS)).toEqual([])
+    const docs = await payload.find({
+      collection: 'report-definitions',
+      where: { slug: { in: CORE_REPORTS.map((r) => r.slug) } },
+      overrideAccess: true,
+    })
+    for (const doc of docs.docs) {
+      expect(doc.featured).toBe(true)
+      expect((doc.headline as unknown[]).length).toBeGreaterThan(0)
+    }
+  })
+})
+
+describe('comparing with the previous period', () => {
+  it('runs the period of the same length just before, and says how fresh the data is', async () => {
+    resetDataAsAtCache()
+    const outcome = await runReport(
+      payload,
+      admin,
+      'daily-applications',
+      { parameters: RANGE, compare: true },
+      { pool: reader },
+    )
+    if (outcome.status !== 200) throw new Error(JSON.stringify(outcome.body))
+    expect(outcome.body.previous).toMatchObject({
+      from: '2001-01-29',
+      to: '2001-02-28',
+      rows: [{ day: '2001-02-20', applications: 1 }],
+    })
+    expect(outcome.body.dataAsAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+    const logged = await payload.find({
+      collection: 'report-runs',
+      where: { reportSlug: { equals: 'daily-applications' } },
+      sort: '-createdAt',
+      limit: 2,
+      overrideAccess: true,
+    })
+    expect(logged.docs.map((d) => (d.parameters as { from: string }).from).sort()).toEqual([
+      '2001-01-29',
+      '2001-03-01',
+    ])
+  })
+
+  it('has nothing to compare for a report without a period', async () => {
+    const outcome = await runReport(
+      payload,
+      admin,
+      'arrears-balance',
+      { parameters: {}, compare: true },
+      { pool: reader },
+    )
+    expect(outcome.status).toBe(200)
+    expect((outcome.body as { previous?: unknown }).previous).toBeNull()
+  })
+})
+
+describe('upgrading the first reports', () => {
+  it('gives an untouched first report its presentation, and leaves a changed one alone', async () => {
+    const find = async (slug: string) =>
+      (
+        await payload.find({
+          collection: 'report-definitions',
+          where: { slug: { equals: slug } },
+          limit: 1,
+          overrideAccess: true,
+        })
+      ).docs[0]
+    // As the reports were before this change: uncategorised, one chart.
+    const decline = await find('decline-rate')
+    await payload.update({
+      collection: 'report-definitions',
+      id: decline.id,
+      data: {
+        category: 'other',
+        chart: {
+          type: 'bar',
+          x: 'segment',
+          stacked: true,
+          series: ['capacity', 'character', 'identity', 'eligibility', 'other'].map((c) => ({
+            column: c,
+            label: c.charAt(0).toUpperCase() + c.slice(1),
+          })),
+        },
+        headline: [],
+        columnSettings: [],
+        _status: 'published',
+      },
+      overrideAccess: true,
+    })
+    const funnel = await find('application-funnel')
+    await payload.update({
+      collection: 'report-definitions',
+      id: funnel.id,
+      data: { category: 'other', sql: `${FIRST_REPORTS[1].sql}\n`, _status: 'published' },
+      overrideAccess: true,
+    })
+
+    // A report with an unpublished draft, or any presentation of its own, is left alone.
+    const gtm = await find('gtm-numbers')
+    await payload.update({
+      collection: 'report-definitions',
+      id: gtm.id,
+      data: {
+        category: 'other',
+        chart: null,
+        headline: [],
+        columnSettings: [],
+        _status: 'published',
+      },
+      overrideAccess: true,
+    })
+    await payload.update({
+      collection: 'report-definitions',
+      id: gtm.id,
+      data: { title: 'GTM (draft)' },
+      draft: true,
+      overrideAccess: true,
+    })
+
+    expect(await upgradeFirstReports(payload)).toEqual(['decline-rate'])
+    const upgraded = await find('decline-rate')
+    expect(upgraded.category).toBe('credit')
+    expect((upgraded.chart as unknown[]).length).toBe(2)
+    expect((await find('application-funnel')).category).toBe('other')
+    const gtmAfter = await find('gtm-numbers')
+    expect(gtmAfter.category).toBe('other')
+    expect(gtmAfter.title).toBe('Go-to-market numbers')
   })
 })
 

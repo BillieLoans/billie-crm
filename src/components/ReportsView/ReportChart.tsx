@@ -29,6 +29,7 @@ import {
 import {
   CHART_POINT_LIMIT,
   DOT_LIMIT,
+  drillHref,
   prepareChart,
   rateFraction,
   shareOfRow,
@@ -156,12 +157,8 @@ export function ReportChart({
   const negative = data.some((row) => series.some((s) => (toNumber(row[s.key]) ?? 0) < 0))
 
   const onBarClick = (row: Row | undefined) => {
-    if (!spec.drill || !row) return
-    const value = row[spec.x]
-    if (value === null || value === undefined) return
-    const query = new URLSearchParams(carryParameters ?? {})
-    query.set(spec.drill.parameter, String(value))
-    router.push(`/admin/reports/${spec.drill.report}?${query.toString()}`)
+    const href = row ? drillHref(spec, row, carryParameters) : undefined
+    if (href) router.push(href)
   }
 
   const colourOf = (s: PreparedSeries) => `var(--series-${s.colour})`

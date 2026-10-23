@@ -318,21 +318,22 @@ const DAY_MS = 86_400_000
 /**
  * How a row finds its counterpart in the previous period. Rows match on
  * every text column (segment, channel, …) and, when there is a calendar
- * date column, on the day's position in the period: day 1 against day 1.
- * Without either they match by position. Returns, for a set of rows, each
- * row's key.
+ * date column, on the day's place in the period: day 1 against day 1,
+ * counted from the period's start (or, without one, the earliest date in
+ * the rows). Without either they match by position. Returns, for a set of
+ * rows, each row's key.
  */
 export function comparisonKey(
   columns: readonly ReportColumn[],
-): (rows: readonly Row[]) => Map<Row, string> {
+): (rows: readonly Row[], periodStart?: string) => Map<Row, string> {
   const textColumns = columns.filter((c) => c.kind === 'text').map((c) => c.name)
   const dateColumn = columns.find((c) => c.kind === 'date')?.name
-  return (rows) => {
+  const dayOf = (value: unknown) => Date.parse(`${String(value).slice(0, 10)}T00:00:00Z`)
+  return (rows, periodStart) => {
     const keys = new Map<Row, string>()
-    const days = dateColumn
-      ? rows.map((r) => Date.parse(`${String(r[dateColumn]).slice(0, 10)}T00:00:00Z`))
-      : []
-    const start = days.length ? Math.min(...days.filter((d) => !Number.isNaN(d))) : 0
+    const days = dateColumn ? rows.map((r) => dayOf(r[dateColumn])) : []
+    const known = days.filter((d) => !Number.isNaN(d))
+    const start = periodStart ? dayOf(periodStart) : known.length ? Math.min(...known) : 0
     rows.forEach((row, i) => {
       const parts = textColumns.map((c) => String(row[c] ?? ''))
       if (dateColumn) parts.unshift(String(Math.round((days[i] - start) / DAY_MS)))

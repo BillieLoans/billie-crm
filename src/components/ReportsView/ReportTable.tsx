@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useMemo } from 'react'
+import Link from 'next/link'
 import {
   createColumnHelper,
   createPaginatedRowModel,
@@ -45,6 +46,8 @@ export interface ReportTableProps {
   totals?: Row[]
   /** The same row in the previous period, when comparing. */
   previousFor?: (row: Row) => Row | undefined
+  /** Links one column's values to another report (a chart's drill-down). */
+  link?: { column: string; href: (row: Row) => string | undefined }
 }
 
 const SMALL_MARK = '†'
@@ -105,6 +108,7 @@ export function ReportTable({
   rows,
   totals = [],
   previousFor,
+  link,
 }: ReportTableProps) {
   const columnDefs = useMemo(
     () =>
@@ -212,7 +216,13 @@ export function ReportTable({
                           : undefined,
                       )}
                     >
-                      <Cell row={row.original} column={col} previous={previous} />
+                      {link?.column === col.name && link.href(row.original) ? (
+                        <Link href={link.href(row.original) as string} className={styles.textLink}>
+                          <Cell row={row.original} column={col} previous={previous} />
+                        </Link>
+                      ) : (
+                        <Cell row={row.original} column={col} previous={previous} />
+                      )}
                     </td>
                   ))}
                 </tr>

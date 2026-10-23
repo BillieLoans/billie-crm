@@ -3,7 +3,13 @@
  * result checks (lib/reports/quality.ts).
  */
 import { describe, expect, it } from 'vitest'
-import { fillDates, prepareChart, rollingAverage, shareOfRow } from '@/lib/reports/chart-data'
+import {
+  drillHref,
+  fillDates,
+  prepareChart,
+  rollingAverage,
+  shareOfRow,
+} from '@/lib/reports/chart-data'
 import { resolveColumns } from '@/lib/reports/columns'
 import { resultHints } from '@/lib/reports/quality'
 import { chartsSchema, normaliseCharts } from '@/lib/schemas/reports'
@@ -279,5 +285,25 @@ describe('review fixes', () => {
     const spec: ChartSpec = { type: 'bar', x: 'purpose', series: [{ column: 'n' }] }
     const prepared = prepareChart(spec, columns, views(columns), rows)
     expect(prepared.data.map((r) => r.purpose)).toEqual(['d', 'b', 'a', 'c'])
+  })
+})
+
+describe('drillHref', () => {
+  const spec: ChartSpec = {
+    type: 'bar',
+    x: 'source',
+    series: [{ column: 'n' }],
+    drill: { report: 'daily-applications', parameter: 'source' },
+  }
+
+  it('opens the target report on the category, carrying the period', () => {
+    expect(drillHref(spec, { source: 'paid & co' }, { from: '2026-10-01' })).toBe(
+      '/admin/reports/daily-applications?from=2026-10-01&source=paid+%26+co',
+    )
+  })
+
+  it('has no link for an empty category or a chart without a drill-down', () => {
+    expect(drillHref(spec, { source: '' })).toBeUndefined()
+    expect(drillHref({ ...spec, drill: undefined }, { source: 'paid' })).toBeUndefined()
   })
 })

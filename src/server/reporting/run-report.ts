@@ -23,6 +23,7 @@ import {
   type ReportColumn,
   type ReportParameter,
 } from '@/lib/schemas/reports'
+import { dateRangeParameters, previousPeriod } from '@/lib/reports/periods'
 import { ReportRunError, runReportSql, type RunOptions } from './runner'
 
 /** What the form, charts and headline of one version of a report need. Never the SQL. */
@@ -60,6 +61,16 @@ export interface ReportRunResponse {
   rowCount: number
   truncated: boolean
   durationMs: number
+  /** The same report on the period before, when asked for and the report has a period. */
+  previous?: {
+    from: string
+    to: string
+    rows: Array<Record<string, unknown>>
+    rowCount: number
+    truncated: boolean
+  } | null
+  /** The latest change the reporting data has seen (ISO 8601), or null if unknown. */
+  dataAsAt?: string | null
 }
 
 export type RunOutcome =
@@ -283,7 +294,13 @@ export async function runReport(
   payload: Payload,
   user: unknown,
   slug: string,
-  input: { parameters?: Record<string, unknown>; draft?: boolean; trigger?: 'view' | 'mcp' },
+  input: {
+    parameters?: Record<string, unknown>
+    draft?: boolean
+    trigger?: 'view' | 'mcp'
+    /** Also run the period before (reports with a date range only). */
+    compare?: boolean
+  },
   options: RunOptions = {},
 ): Promise<RunOutcome> {
   const log = (entry: RunLogEntry) =>
@@ -346,6 +363,15 @@ export async function runReport(
   const parameters = loggedParameters(params.data, bound.values)
   const version = draft ? 'draft' : await publishedVersionId(payload, String(doc.id))
 
+  // The comparison and the freshness reading run alongside the report, not
+  // after it; neither can fail the run.
+  const previousRun = input.compare
+    ? runPrevious(doc, params.data, bound.values, options, (entry) =>
+        log({ ...base, version, ...entry }),
+      )
+    : undefined
+  const freshnessRead = dataAsAt(options)
+
   try {
     const result = await runReportSql(doc.sql, bound.values, options)
     await log({
@@ -357,14 +383,19 @@ export async function runReport(
       rowCount: result.rowCount,
       truncated: result.truncated,
     })
+    const previous = await previousRun
     return {
       status: 200,
       body: {
         report: { slug: doc.slug, title: doc.title, version, draft },
         ...result,
+        ...(previous !== undefined ? { previous } : {}),
+        dataAsAt: await freshnessRead,
       },
     }
   } catch (error) {
+    // Let the side runs finish (and log) before answering.
+    await Promise.allSettled([previousRun, freshnessRead])
     const runError =
       error instanceof ReportRunError
         ? error
@@ -387,6 +418,80 @@ export async function runReport(
       },
     }
   }
+}
+
+/**
+ * Run a report again on the period before its own, for comparison. Null
+ * when the report has no date range or the run fails: the comparison is
+ * extra, so its failure never costs the user their report.
+ */
+async function runPrevious(
+  doc: ReportDoc,
+  params: readonly ReportParameter[],
+  values: readonly unknown[],
+  options: RunOptions,
+  log: (entry: Omit<RunLogEntry, 'reportSlug'>) => Promise<void>,
+): Promise<ReportRunResponse['previous']> {
+  const range = dateRangeParameters(params)
+  if (!range) return null
+  const fromIndex = params.indexOf(range.from)
+  const toIndex = params.indexOf(range.to)
+  const from = values[fromIndex]
+  const to = values[toIndex]
+  if (typeof from !== 'string' || typeof to !== 'string' || from > to) return null
+  const period = previousPeriod(from, to)
+  const shifted = [...values]
+  shifted[fromIndex] = period.from
+  shifted[toIndex] = period.to
+  try {
+    const result = await runReportSql(doc.sql, shifted, options)
+    await log({
+      parameters: loggedParameters(params, shifted),
+      outcome: 'ok',
+      durationMs: result.durationMs,
+      rowCount: result.rowCount,
+      truncated: result.truncated,
+    })
+    return {
+      ...period,
+      rows: result.rows,
+      rowCount: result.rowCount,
+      truncated: result.truncated,
+    }
+  } catch (error) {
+    await log({
+      parameters: loggedParameters(params, shifted),
+      outcome: 'error',
+      errorCode: error instanceof ReportRunError ? error.code : 'QUERY_FAILED',
+    })
+    return null
+  }
+}
+
+/** How long the freshness reading is reused before it is read again. */
+const FRESHNESS_TTL_MS = 60_000
+let freshness: { at: string | null; readAt: number } | undefined
+
+/** The latest change in the reporting data (reporting.data_freshness), cached for a minute. */
+export async function dataAsAt(options: RunOptions = {}): Promise<string | null> {
+  if (freshness && Date.now() - freshness.readAt < FRESHNESS_TTL_MS) return freshness.at
+  try {
+    const result = await runReportSql(
+      'SELECT latest_change_at FROM reporting.data_freshness',
+      [],
+      options,
+    )
+    const at = result.rows[0]?.latest_change_at
+    freshness = { at: typeof at === 'string' ? at : null, readAt: Date.now() }
+  } catch {
+    freshness = { at: null, readAt: Date.now() }
+  }
+  return freshness.at
+}
+
+/** Tests only: forget the cached freshness reading. */
+export function resetDataAsAtCache(): void {
+  freshness = undefined
 }
 
 function forbidden(): RunOutcome {

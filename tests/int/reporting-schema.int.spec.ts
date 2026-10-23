@@ -134,6 +134,7 @@ describe('reporting schema', () => {
       'collection_case',
       'contact_note',
       'customer',
+      'data_freshness',
       'decision',
       'instalment',
       'llm_cost',

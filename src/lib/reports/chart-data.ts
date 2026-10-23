@@ -62,7 +62,8 @@ function isoDay(n: number): string {
 }
 
 /** Names of measures that are levels or averages, never flows. */
-const NOT_A_FLOW = /(avg|average|mean|median|score|balance|outstanding|rate|pct|percent|share|ratio)/i
+const NOT_A_FLOW =
+  /(avg|average|mean|median|score|balance|outstanding|rate|pct|percent|share|ratio)/i
 
 /**
  * What a missing day holds: 0 for a count or a sum (no applications that
@@ -106,8 +107,7 @@ export function fillDates(
   // daily when some rows are a day or two apart; otherwise (months,
   // quarters) the dates stay as they are.
   const shortest = Math.min(...diffs)
-  const step =
-    shortest === 7 && diffs.every((d) => d % 7 === 0) ? 7 : shortest <= 2 ? 1 : 0
+  const step = shortest === 7 && diffs.every((d) => d % 7 === 0) ? 7 : shortest <= 2 ? 1 : 0
   if (step === 0) return { rows: sorted }
   const first = dated[0].day
   const last = dated[dated.length - 1].day
@@ -130,9 +130,14 @@ export function fillDates(
 }
 
 /** A trailing mean over `days` points, once at least half the window has values. */
-export function rollingAverage(values: readonly (number | null)[], days: number): (number | null)[] {
+export function rollingAverage(
+  values: readonly (number | null)[],
+  days: number,
+): (number | null)[] {
   return values.map((_, i) => {
-    const window = values.slice(Math.max(0, i - days + 1), i + 1).filter((v): v is number => v !== null)
+    const window = values
+      .slice(Math.max(0, i - days + 1), i + 1)
+      .filter((v): v is number => v !== null)
     if (window.length < Math.ceil(days / 2)) return null
     return window.reduce((a, b) => a + b, 0) / window.length
   })
@@ -231,7 +236,13 @@ export function prepareChart(
       data.forEach((row, r) => {
         row[`${s.column}__avg`] = averaged[r]
       })
-      series.push({ key: s.column, column: s.column, label: `${seriesLabel} (daily)`, colour: i + 1, role: 'raw' })
+      series.push({
+        key: s.column,
+        column: s.column,
+        label: `${seriesLabel} (daily)`,
+        colour: i + 1,
+        role: 'raw',
+      })
       series.push({
         key: `${s.column}__avg`,
         column: s.column,
@@ -240,7 +251,13 @@ export function prepareChart(
         role: 'average',
       })
     } else {
-      series.push({ key: s.column, column: s.column, label: seriesLabel, colour: i + 1, role: 'value' })
+      series.push({
+        key: s.column,
+        column: s.column,
+        label: seriesLabel,
+        colour: i + 1,
+        role: 'value',
+      })
     }
   })
 
@@ -249,7 +266,8 @@ export function prepareChart(
   if (previousRows && previousRows.length > 0 && spec.type !== 'stacked-100') {
     let previous = previousRows.filter((row) => !isTotal(row))
     if (xKind === 'date') previous = fillDates(previous, spec.x, seriesViews, seriesColumns).rows
-    else if (xFormat === 'date') previous = [...previous].sort((a, b) => String(a[spec.x]).localeCompare(String(b[spec.x])))
+    else if (xFormat === 'date')
+      previous = [...previous].sort((a, b) => String(a[spec.x]).localeCompare(String(b[spec.x])))
     const byLabel = new Map(previous.map((row) => [String(row[spec.x]), row]))
     data.forEach((row, r) => {
       const match = xFormat === 'date' ? previous[r] : byLabel.get(String(row[spec.x]))
@@ -284,7 +302,15 @@ export function prepareChart(
     })
   }
 
-  return { data, series, xFormat, reference, grain, truncated, averageDays: averageDays || undefined }
+  return {
+    data,
+    series,
+    xFormat,
+    reference,
+    grain,
+    truncated,
+    averageDays: averageDays || undefined,
+  }
 }
 
 /** A share of a row's total, for 100% stacked charts' tooltips. */
@@ -300,4 +326,22 @@ export function rateFraction(value: unknown, view: ColumnView | undefined): numb
   if (n === null || !view) return null
   if (view.format !== 'percent' && view.format !== 'percent100') return null
   return asFraction(n, view.format)
+}
+
+/**
+ * Where a chart's drill-down goes for one row: the target report with the
+ * row's category as the named parameter, plus the carried values (the
+ * period). Undefined when the row has no category.
+ */
+export function drillHref(
+  spec: ChartSpec,
+  row: Row,
+  carryParameters?: Record<string, string>,
+): string | undefined {
+  if (!spec.drill) return undefined
+  const value = row[spec.x]
+  if (value === null || value === undefined || value === '') return undefined
+  const query = new URLSearchParams(carryParameters ?? {})
+  query.set(spec.drill.parameter, String(value))
+  return `/admin/reports/${spec.drill.report}?${query.toString()}`
 }

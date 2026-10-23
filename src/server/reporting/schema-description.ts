@@ -10,7 +10,7 @@
  * and logged requests say which description they used.
  */
 
-export const SCHEMA_DESCRIPTION_VERSION = 'reporting-desc-v4'
+export const SCHEMA_DESCRIPTION_VERSION = 'reporting-desc-v5'
 
 export interface ColumnDescription {
   name: string
@@ -857,6 +857,19 @@ export const REPORTING_TABLES: readonly TableDescription[] = [
         meaning: 'When the ledger produced the figures.',
       },
       { name: 'captured_at', type: 'timestamptz', meaning: 'When the CRM copied them.' },
+    ],
+  },
+  {
+    name: 'data_freshness',
+    kind: 'view',
+    grain:
+      'One row: how recent the reporting data is. Not for reports; the Reports view shows it beside each result.',
+    columns: [
+      {
+        name: 'latest_change_at',
+        type: 'timestamptz',
+        meaning: 'The latest application started or loan changed that the CRM has recorded.',
+      },
     ],
   },
   {

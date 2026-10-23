@@ -10,6 +10,8 @@ export interface ReportRunRequest {
   slug: string
   parameters: Record<string, unknown>
   draft: boolean
+  /** Also run the previous period, for comparison. */
+  compare?: boolean
   attempt: number
 }
 
@@ -31,7 +33,11 @@ async function fetchReportRun(request: ReportRunRequest): Promise<ReportRunRespo
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
-    body: JSON.stringify({ parameters: request.parameters, draft: request.draft }),
+    body: JSON.stringify({
+      parameters: request.parameters,
+      draft: request.draft,
+      compare: request.compare === true,
+    }),
   })
   const body = await res.json().catch(() => null)
   if (!res.ok) {

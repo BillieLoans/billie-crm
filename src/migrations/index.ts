@@ -43,6 +43,7 @@ import * as migration_20261024_090000_report_definitions from './20261024_090000
 import * as migration_20261025_090000_report_delivery from './20261025_090000_report_delivery';
 import * as migration_20261026_090000_report_asks from './20261026_090000_report_asks';
 import * as migration_20261026_095000_reporting_mcp from './20261026_095000_reporting_mcp'
+import * as migration_20261026_095500_report_presentation from './20261026_095500_report_presentation'
 import * as migration_20261026_100000_first_reports from './20261026_100000_first_reports';
 import * as migration_20261027_090000_mcp_oauth from './20261027_090000_mcp_oauth'
 import * as migration_20261027_100000_mcp_oauth_refresh_grace from './20261027_100000_mcp_oauth_refresh_grace'
@@ -51,7 +52,8 @@ import * as migration_20261028_100000_reporting_loan_lookup from './20261028_100
 import * as migration_20261028_110000_conversations_started_on_idx from './20261028_110000_conversations_started_on_idx'
 import * as migration_20261028_120000_reporting_acquisition_detail from './20261028_120000_reporting_acquisition_detail'
 import * as migration_20261029_090000_reporting_loan_purpose_category from './20261029_090000_reporting_loan_purpose_category'
-import * as migration_20261030_090000_report_presentation from './20261030_090000_report_presentation'
+import * as migration_20261030_090000_reporting_data_freshness from './20261030_090000_reporting_data_freshness'
+import * as migration_20261030_100000_core_reports from './20261030_100000_core_reports'
 
 export const migrations = [
   {
@@ -280,6 +282,11 @@ export const migrations = [
     name: '20261026_095000_reporting_mcp',
   },
   {
+    up: migration_20261026_095500_report_presentation.up,
+    down: migration_20261026_095500_report_presentation.down,
+    name: '20261026_095500_report_presentation',
+  },
+  {
     up: migration_20261026_100000_first_reports.up,
     down: migration_20261026_100000_first_reports.down,
     name: '20261026_100000_first_reports',
@@ -320,8 +327,13 @@ export const migrations = [
     name: '20261029_090000_reporting_loan_purpose_category',
   },
   {
-    up: migration_20261030_090000_report_presentation.up,
-    down: migration_20261030_090000_report_presentation.down,
-    name: '20261030_090000_report_presentation',
+    up: migration_20261030_090000_reporting_data_freshness.up,
+    down: migration_20261030_090000_reporting_data_freshness.down,
+    name: '20261030_090000_reporting_data_freshness',
+  },
+  {
+    up: migration_20261030_100000_core_reports.up,
+    down: migration_20261030_100000_core_reports.down,
+    name: '20261030_100000_core_reports',
   },
 ];

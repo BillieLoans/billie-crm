@@ -1,7 +1,9 @@
 import { MigrateUpArgs, MigrateDownArgs, sql } from '@payloadcms/db-postgres'
 
 /**
- * Reports UX: how a report presents its results. A catalogue `category`,
+ * Reports UX: how a report presents its results. Timestamped before
+ * 20261026_100000_first_reports, which writes every column through the
+ * Local API and so must run after it on a fresh database. A catalogue `category`,
  * `featured` (headline numbers on the Reports home), `headline` (the
  * numbers above the chart) and `column_settings` (labels, formats, rate
  * bases), on report definitions and their versions. The `chart` column

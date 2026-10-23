@@ -213,4 +213,20 @@ describe('review fixes', () => {
     const before = new Map([...keyOf(previous)].map(([row, key]) => [key, row]))
     expect(current.map((row) => before.get(now.get(row) as string)?.n)).toEqual([10, 20, 30])
   })
+
+  it('counts days from the period start, so an empty first day does not shift the rest', () => {
+    const columns = [
+      { name: 'day', kind: 'date' as const },
+      { name: 'n', kind: 'number' as const },
+    ]
+    const keyOf = comparisonKey(columns)
+    const current = [{ day: '2026-10-09', n: 2 }] // the 8th had no rows
+    const previous = [
+      { day: '2026-10-01', n: 10 },
+      { day: '2026-10-02', n: 20 },
+    ]
+    const now = keyOf(current, '2026-10-08')
+    const before = new Map([...keyOf(previous, '2026-10-01')].map(([row, key]) => [key, row]))
+    expect(before.get(now.get(current[0]) as string)?.n).toBe(20)
+  })
 })

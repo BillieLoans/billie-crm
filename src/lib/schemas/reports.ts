@@ -166,18 +166,35 @@ export type ColumnSpec = z.infer<typeof columnSpecSchema>
 export const columnSpecsSchema = z.array(columnSpecSchema).max(50)
 
 /** How a headline tile reduces a column to one number. */
-export const HEADLINE_VALUES = ['total', 'sum', 'last', 'first', 'average', 'max', 'min'] as const
+export const HEADLINE_VALUES = [
+  'total',
+  'sum',
+  'last',
+  'first',
+  'average',
+  'max',
+  'min',
+  'ratio',
+] as const
 
-export const headlineSpecSchema = z.object({
-  column: z.string().min(1).max(63),
-  label: z.string().trim().min(1).max(60).optional(),
-  /**
-   * `total` (the default) reads the All/Total row, or sums a count column
-   * when there is none. Other values reduce the rows that are not totals.
-   */
-  value: z.enum(HEADLINE_VALUES).optional(),
-  better: z.enum(['higher', 'lower']).optional(),
-})
+export const headlineSpecSchema = z
+  .object({
+    column: z.string().min(1).max(63),
+    label: z.string().trim().min(1).max(60).optional(),
+    /**
+     * `total` (the default) reads the All/Total row, or sums a count column
+     * when there is none. `ratio` is the sum of `numerator` over the sum of
+     * `denominator`: the right way to total a rate across weeks. Other
+     * values reduce the rows that are not totals.
+     */
+    value: z.enum(HEADLINE_VALUES).optional(),
+    numerator: z.string().min(1).max(63).optional(),
+    denominator: z.string().min(1).max(63).optional(),
+    better: z.enum(['higher', 'lower']).optional(),
+  })
+  .refine((h) => h.value !== 'ratio' || (h.numerator && h.denominator), {
+    message: 'A ratio headline needs a numerator and a denominator column',
+  })
 export type HeadlineSpec = z.infer<typeof headlineSpecSchema>
 export const headlineSpecsSchema = z.array(headlineSpecSchema).max(4)
 

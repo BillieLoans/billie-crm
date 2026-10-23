@@ -1,8 +1,9 @@
 /**
  * POST /api/reports/:slug — run a report (BTB-506).
  *
- * Body: `{ "parameters": { name: value }, "draft": false }`. `draft: true`
- * runs the latest draft and is for authors only. Every run, refused ones
+ * Body: `{ "parameters": { name: value }, "draft": false, "compare": false }`.
+ * `draft: true` runs the latest draft and is for authors only. `compare:
+ * true` also runs the period before, for reports with a date range. Every run, refused ones
  * included, is logged to `report-runs`.
  */
 import { NextRequest, NextResponse } from 'next/server'
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     )
   }
 
-  let body: { parameters?: unknown; draft?: unknown }
+  let body: { parameters?: unknown; draft?: unknown; compare?: unknown }
   try {
     body = (await request.json()) as typeof body
   } catch {
@@ -47,7 +48,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       : {}
 
   try {
-    const outcome = await runReport(payload, user, slug, { parameters, draft: body.draft === true })
+    const outcome = await runReport(payload, user, slug, {
+      parameters,
+      draft: body.draft === true,
+      compare: body.compare === true,
+    })
     return NextResponse.json(outcome.body, { status: outcome.status })
   } catch (error) {
     console.error('[reports] report run failed:', error)
