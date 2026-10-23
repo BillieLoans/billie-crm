@@ -6,6 +6,49 @@ Epic: [BTB-503](https://billie-team.atlassian.net/browse/BTB-503). R&D trail:
 Reports read one schema, `reporting`, and nothing else. This page is the
 contract for that schema and the runbook for the jobs around it.
 
+## Architecture
+
+`reporting` is a **schema inside the CRM database** (`billie_crm` on Neon),
+not a separate database. There is one CRM database; reporting adds a schema to
+it, a login role that can see only that schema, and (in prod) a second compute
+to run the queries on.
+
+```
+                 Neon project: billie-crm, database billie_crm (one copy of the data)
+ ┌──────────────────────────────────────────────────────────────────────────────┐
+ │  public.*  CRM tables (Payload, written by the event processor)              │
+ │  reporting.*  views over public.*, plus decision_event and snap_portfolio    │
+ └──────────────────────────────────────────────────────────────────────────────┘
+        ▲ read/write                                     ▲ read only
+  primary compute                                 read replica compute (prod)
+  CRM app, event processor,                       reports, Ask Claude, MCP,
+  snapshot job                                    Monday email
+  (DATABASE_URI)                                  (REPORTING_DATABASE_URI, as reporting_reader)
+```
+
+- **Mostly views, computed at query time.** `application`, `decision`, `loan`
+  and `instalment` are views over the live CRM tables, so they are never stale
+  and need no pipeline. The only stored data is `decision_event` (written by
+  the event processor, back-filled from S3), `snap_portfolio` (one row a day
+  from the ledger) and the `decline_reason_category` lookup. There are no
+  pre-aggregated fact or dimension tables.
+- **Security comes from the role.** Reports log in as `reporting_reader`,
+  which can read the `reporting` schema and nothing else, read-only, with a
+  statement timeout. The runner refuses to run as any other role.
+- **Performance isolation comes from the read replica.** A Neon read replica
+  is a second compute on the same storage: it sees the same data a few seconds
+  behind and has its own CPU and memory, so a heavy report cannot slow the CRM
+  for staff. The replica is not a copy of the data and costs only compute time
+  while it is awake. Prod uses one; demo can point `REPORTING_DATABASE_URI` at
+  the primary while load is light, since the role still gives the security
+  boundary.
+- **Writes go to the primary.** `decision_event` and `snap_portfolio` are
+  written over the app's own connection (`getDashboardPool`), never the
+  replica.
+- **If it outgrows this:** materialized views for slow reports first; a
+  separate warehouse only when reports need data from other services (ledger
+  history, chat), which this schema does not try to hold.
+
 ## Rules
 
 - The schema holds ids, categories, amounts and dates. It never holds names,
@@ -199,7 +242,8 @@ answers "Reporting is not configured" without it.
 
 | Environment | `REPORTING_DATABASE_URI` |
 |---|---|
-| prod, demo | the Neon read replica, logged in as `reporting_reader` |
+| prod | the Neon read replica, logged in as `reporting_reader` |
+| demo | the read replica, or the primary while load is light, logged in as `reporting_reader` |
 | dev | the local database, logged in as `reporting_reader` |
 | test | the integration tests create the role and log in as it |
 
@@ -219,13 +263,16 @@ in `infra/fly/env/.env.<env>` where it is set (prod: `neondb_owner`), else
    ALTER ROLE reporting_reader SET search_path = reporting;
    ```
 
-2. **Add a read replica** in the Neon console: the CRM project → Branches →
-   the branch the environment's `DATABASE_URI` points at → Add read replica
-   (a read-only compute on the same storage, so it sees the same roles and
-   data seconds behind the primary). 0.25–1 CU with scale to zero is enough;
-   the first query after a suspend takes a moment longer.
+2. **Add a read replica** (prod; optional on demo, skip it to use the
+   primary) in the Neon console: the CRM project → Branches → the branch the
+   environment's `DATABASE_URI` points at → Add read replica (a read-only
+   compute on the same storage, so it sees the same roles and data seconds
+   behind the primary). 0.25–1 CU with scale to zero is enough; it is billed
+   as compute hours only while awake, and the first query after a suspend
+   takes a moment longer.
 3. **Build the connection string** from the replica's **direct** host (Connect
-   → choose the read replica compute; the host has no `-pooler`):
+   → choose the read replica compute, or the primary if you skipped step 2;
+   the host has no `-pooler`):
    `postgresql://reporting_reader:<pwd>@ep-<replica>.ap-southeast-2.aws.neon.tech/billie_crm?sslmode=verify-full`.
    Put it in `.env.<env>` as `REPORTING_DATABASE_URI` and run
    `make -C infra/fly secrets ENV=<env>`.
