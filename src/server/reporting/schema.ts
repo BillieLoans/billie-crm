@@ -81,6 +81,38 @@ export const ACQUISITION_CHANNEL_SQL = (column: string): string => `CASE
 END`
 
 /**
+ * Loan purpose categories, in the order they are tried: the first whose
+ * pattern matches the lowercased purpose wins, and anything else is 'other'.
+ * The chat records the purpose in the customer's words, which can carry
+ * health and family details, so reporting exposes only this category.
+ * Patterns are Postgres regular expressions (\m and \M mark word edges).
+ */
+export const LOAN_PURPOSE_CATEGORIES: ReadonlyArray<readonly [string, string]> = [
+  [
+    'health',
+    String.raw`medic|dental|dentist|doctor|hospital|pharmac|prescription|tablets|\msick|\mvet\M|optom|glasses`,
+  ],
+  ['family_and_gifts', String.raw`birthday|present|gift|christmas|wedding|funeral|baby`],
+  ['rent_and_housing', String.raw`\mrent\M|\mrental|housing|\mbond\M|mortgage|moving house`],
+  ['fuel', String.raw`fuel|petrol|diesel`],
+  [
+    'transport',
+    String.raw`\mcars?\M|\mrego\M|registration|vehicle|tyre|mechanic|bicycle|\mbike|\muber\M|transport|\mtrain\M|\mbus\M`,
+  ],
+  ['education', String.raw`school|tuition|\mcourse|education|textbook|\muni\M|university`],
+  ['work_and_tools', String.raw`\mtools?\M|\mwork\M|monitor|laptop|computer|equipment|uniform`],
+  ['bills_and_utilities', String.raw`bill|utilit|electric|\mpower\M|\mwater\M|internet|\mphone`],
+  [
+    'groceries_and_living',
+    String.raw`grocer|\mfood|shopping|living|everyday|personal|expens|expans`,
+  ],
+  [
+    'social_and_dining',
+    String.raw`dinner|lunch|restaurant|takeaway|\mwine\M|\mbeer|party|holiday|concert`,
+  ],
+]
+
+/**
  * The first Sydney day attribution was captured (BTB-404). Earlier
  * conversations have no attribution at all, which is not the same as a
  * direct visit.
@@ -131,6 +163,14 @@ export const REPORTING_SCHEMA_STATEMENTS: readonly string[] = [
      RETURN value::timestamptz;
    EXCEPTION WHEN others THEN RETURN NULL;
    END $$`,
+
+  // Category of a free-text loan purpose; see LOAN_PURPOSE_CATEGORIES.
+  `CREATE OR REPLACE FUNCTION reporting.loan_purpose_category(purpose text)
+   RETURNS text LANGUAGE sql IMMUTABLE PARALLEL SAFE
+   AS $$ SELECT CASE
+     WHEN NULLIF(trim(purpose), '') IS NULL THEN NULL
+     ${LOAN_PURPOSE_CATEGORIES.map(([c, re]) => `WHEN lower(purpose) ~ ${sqlString(re)} THEN ${sqlString(c)}`).join('\n     ')}
+     ELSE 'other' END $$`,
 
   // ── Decline reason categories (BTB-462 comment 11579) ────────────────────
   `CREATE TABLE IF NOT EXISTS reporting.decline_reason_category (
@@ -233,7 +273,10 @@ export const REPORTING_SCHEMA_STATEMENTS: readonly string[] = [
      (f.funded_at IS NOT NULL)                        AS funded,
      -- What was applied for. The applications row when there is one, else
      -- the scalar keys of application_data (the rest of it is personal data).
-     COALESCE(app.loan_purpose, c.application_data->>'loanPurpose') AS loan_purpose,
+     -- The category only: the purpose itself is the customer's own words.
+     reporting.loan_purpose_category(
+       COALESCE(app.loan_purpose, c.application_data->>'loanPurpose'))
+                                                      AS loan_purpose_category,
      COALESCE(app.loan_amount, reporting.as_numeric(c.application_data->>'loanAmount'))
                                                       AS requested_amount,
      COALESCE(app.loan_fee, reporting.as_numeric(c.application_data->>'loanFee'))

@@ -165,6 +165,33 @@ describe('reporting schema', () => {
     }
   })
 
+  it('maps a loan purpose to its category, first match wins', async () => {
+    const cases: Array<[string | null, string | null]> = [
+      ['Pay a bill', 'bills_and_utilities'],
+      ['credit card bill', 'bills_and_utilities'],
+      ['Rent payment', 'rent_and_housing'],
+      // "rent" inside another word is not rent.
+      ['help my parent with current living costs', 'groceries_and_living'],
+      ['Petrol and bills', 'fuel'],
+      ['Car parts for Uber work', 'transport'],
+      ['Vet bill', 'health'],
+      ['Tablets for sick mother', 'health'],
+      ["Mum's birthday present", 'family_and_gifts'],
+      ['dinner with my friends', 'social_and_dining'],
+      ['To buy a monitor for work from home', 'work_and_tools'],
+      ['School fees', 'education'],
+      ['Emergency funds', 'other'],
+      ['  ', null],
+      [null, null],
+    ]
+    for (const [purpose, category] of cases) {
+      const { rows } = await pool.query('SELECT reporting.loan_purpose_category($1::text) AS c', [
+        purpose,
+      ])
+      expect([purpose, rows[0].c]).toEqual([purpose, category])
+    }
+  })
+
   it('projects an application with channel, Sydney date, decline category and funding', async () => {
     // 2026-10-04T14:30Z is 01:30 on 5 Oct in Sydney (AEDT began 4 Oct 2026).
     const conv = await insertConversation({

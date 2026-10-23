@@ -56,7 +56,8 @@ to run the queries on.
   date of birth (age in whole years instead), a street address or suburb
   (state and postcode instead), identity documents, bank account numbers or
   BSBs, IP addresses, ad click ids (`click_id_type` says which kind a visit
-  carried), free text (notes, comments, justifications, error messages) or
+  carried), the loan purpose in the customer's words (`loan_purpose_category`
+  instead, from `LOAN_PURPOSE_CATEGORIES` in `schema.ts`), free text (notes, comments, justifications, error messages) or
   conversation content. Staff appear as user ids, never names.
   JSON columns are read key by key, never copied whole, because most of them
   mix both kinds. Review any new column against this rule;
@@ -76,7 +77,7 @@ Defined in `src/server/reporting/schema.ts`. Every statement is idempotent.
 
 | Object | Kind | One row per | Source |
 |---|---|---|---|
-| `application` | view | conversation (an application attempt): funnel flags `submitted`, `decided`, `approved`, `funded`, `acquisition`; what was applied for (loan purpose, amount, term); age at application; statement capture progress; identity, conduct, serviceability and fraud assessment outcomes; re-application block, kill and cancellation; LLM cost | `conversations`, `applications`, `customers`, `loan_accounts` |
+| `application` | view | conversation (an application attempt): funnel flags `submitted`, `decided`, `approved`, `funded`, `acquisition`; what was applied for (loan purpose category, amount, term); age at application; statement capture progress; identity, conduct, serviceability and fraud assessment outcomes; re-application block, kill and cancellation; LLM cost | `conversations`, `applications`, `customers`, `loan_accounts` |
 | `decision` | view | conversation, its latest decision event | `decision_event` |
 | `loan` | view | loan account, with the source of its application, repayment frequency, last payment and closure | `loan_accounts`, `application` |
 | `instalment` | view | scheduled instalment | `loan_accounts_repayment_schedule_payments` |
