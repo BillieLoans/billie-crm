@@ -14,6 +14,7 @@ import { REST_POST } from '@payloadcms/next/routes'
 import { describe, it, beforeAll, afterAll, expect } from 'vitest'
 import type { Pool } from 'pg'
 import { getDashboardPool } from '@/lib/dashboard-aggregates'
+import { getReportingPool } from '@/server/reporting/runner'
 import {
   OAUTH_CLIENTS_SLUG,
   OAUTH_GRANTS_SLUG,
@@ -540,6 +541,8 @@ describe('what a connection can do', () => {
   })
 
   it('other staff list and run the reports their role may run, and nothing else', async () => {
+    // A closed pool (another suite's teardown, or a shutdown) is replaced on next use.
+    await (await getReportingPool('mcp')).end()
     const { access_token } = await connect(publicClient, 'readonly')
     expect(await toolNames(access_token)).toEqual(['list_reports', 'run_report'])
     const listed = JSON.parse(await callText('list_reports', {}, access_token))
