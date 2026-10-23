@@ -227,7 +227,7 @@ export interface RunLogEntry {
   durationMs?: number
   rowCount?: number
   truncated?: boolean
-  trigger?: 'view' | 'schedule' | 'mcp'
+  trigger?: 'view' | 'schedule' | 'mcp' | 'home' | 'subscription' | 'alert' | 'board'
   scheduledFor?: string
 }
 
@@ -297,7 +297,7 @@ export async function runReport(
   input: {
     parameters?: Record<string, unknown>
     draft?: boolean
-    trigger?: 'view' | 'mcp'
+    trigger?: 'view' | 'mcp' | 'home' | 'board'
     /** Also run the period before (reports with a date range only). */
     compare?: boolean
   },

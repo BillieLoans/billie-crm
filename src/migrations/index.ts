@@ -54,6 +54,7 @@ import * as migration_20261028_120000_reporting_acquisition_detail from './20261
 import * as migration_20261029_090000_reporting_loan_purpose_category from './20261029_090000_reporting_loan_purpose_category'
 import * as migration_20261030_090000_reporting_data_freshness from './20261030_090000_reporting_data_freshness'
 import * as migration_20261030_100000_core_reports from './20261030_100000_core_reports'
+import * as migration_20261030_110000_report_navigation from './20261030_110000_report_navigation'
 
 export const migrations = [
   {
@@ -335,5 +336,10 @@ export const migrations = [
     up: migration_20261030_100000_core_reports.up,
     down: migration_20261030_100000_core_reports.down,
     name: '20261030_100000_core_reports',
+  },
+  {
+    up: migration_20261030_110000_report_navigation.up,
+    down: migration_20261030_110000_report_navigation.down,
+    name: '20261030_110000_report_navigation',
   },
 ];

@@ -35,6 +35,7 @@ import {
   shareOfRow,
   type PreparedSeries,
 } from '@/lib/reports/chart-data'
+import { logReportEvent } from '@/lib/reports/events'
 import { copySvgAsPng } from './chart-image'
 import styles from './styles.module.css'
 
@@ -86,6 +87,8 @@ export interface ReportChartProps {
   /** Parameter values carried into a drill-down link (dates, mostly). */
   carryParameters?: Record<string, string>
   height?: number
+  /** The report's link, for recording copies. Absent for previews. */
+  reportSlug?: string
 }
 
 const TYPE_NAMES: Record<ChartSpec['type'], string> = {
@@ -117,6 +120,7 @@ export function ReportChart({
   previousRows,
   carryParameters,
   height,
+  reportSlug,
 }: ReportChartProps) {
   const reducedMotion = usePrefersReducedMotion()
   const router = useRouter()
@@ -227,7 +231,11 @@ export function ReportChart({
   const copyChart = async () => {
     const svg = plotRef.current?.querySelector('svg.recharts-surface')
     if (!svg) return
-    setCopyStatus(await copySvgAsPng(svg as SVGSVGElement, title))
+    const { copied, message } = await copySvgAsPng(svg as SVGSVGElement, title)
+    setCopyStatus(message)
+    if (reportSlug && copied) {
+      logReportEvent({ kind: 'copy_chart', reportSlug })
+    }
   }
 
   return (

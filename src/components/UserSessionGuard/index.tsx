@@ -3,12 +3,14 @@
 import { useEffect, useRef } from 'react'
 import { useAuth } from '@payloadcms/ui'
 import { useRecentCustomersStore } from '@/stores/recentCustomers'
+import { useRecentReportsStore } from '@/stores/recentReports'
 import { useFailedActionsStore } from '@/stores/failed-actions'
 import { useVersionStore } from '@/stores/version'
 import { useAnnouncerStore } from '@/stores/announcer'
 import {
   SESSION_USER_STORAGE_KEY,
   RECENT_CUSTOMERS_STORAGE_KEY,
+  RECENT_REPORTS_STORAGE_KEY,
   FAILED_ACTIONS_STORAGE_KEY,
 } from '@/lib/constants'
 import { clearIssueDiagnostics } from '@/lib/issue-diagnostics'
@@ -20,6 +22,7 @@ import { clearIssueDiagnostics } from '@/lib/issue-diagnostics'
 function clearUserSessionData(): void {
   // Clear Zustand stores
   useRecentCustomersStore.getState().clearHistory()
+  useRecentReportsStore.getState().clearHistory()
   useFailedActionsStore.getState().clearAll()
   useVersionStore.getState().clearAllVersions()
   // In-memory only, but its text is the previous user's last announced financial
@@ -30,6 +33,7 @@ function clearUserSessionData(): void {
   // (in case store clear doesn't immediately sync)
   if (typeof window !== 'undefined') {
     localStorage.removeItem(RECENT_CUSTOMERS_STORAGE_KEY)
+    localStorage.removeItem(RECENT_REPORTS_STORAGE_KEY)
     localStorage.removeItem(FAILED_ACTIONS_STORAGE_KEY)
     // Issue-reporter diagnostics buffers (interactions/routes/api calls/errors)
     // — User A's browsing trail must never end up on User B's report

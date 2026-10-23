@@ -92,6 +92,8 @@ export interface Config {
     'report-definitions': ReportDefinition;
     'report-runs': ReportRun;
     'report-asks': ReportAsk;
+    'report-preferences': ReportPreference;
+    'report-events': ReportEvent;
     'mcp-oauth-clients': McpOauthClient;
     'mcp-oauth-grants': McpOauthGrant;
     'payload-mcp-api-keys': PayloadMcpApiKey;
@@ -127,6 +129,8 @@ export interface Config {
     'report-definitions': ReportDefinitionsSelect<false> | ReportDefinitionsSelect<true>;
     'report-runs': ReportRunsSelect<false> | ReportRunsSelect<true>;
     'report-asks': ReportAsksSelect<false> | ReportAsksSelect<true>;
+    'report-preferences': ReportPreferencesSelect<false> | ReportPreferencesSelect<true>;
+    'report-events': ReportEventsSelect<false> | ReportEventsSelect<true>;
     'mcp-oauth-clients': McpOauthClientsSelect<false> | McpOauthClientsSelect<true>;
     'mcp-oauth-grants': McpOauthGrantsSelect<false> | McpOauthGrantsSelect<true>;
     'payload-mcp-api-keys': PayloadMcpApiKeysSelect<false> | PayloadMcpApiKeysSelect<true>;
@@ -2368,7 +2372,7 @@ export interface ReportRun {
     | null;
   outcome: 'ok' | 'sending' | 'timeout' | 'refused' | 'error';
   errorCode?: string | null;
-  trigger?: ('view' | 'schedule' | 'mcp') | null;
+  trigger?: ('view' | 'schedule' | 'mcp' | 'home' | 'subscription' | 'alert' | 'board') | null;
   /**
    * Sydney date a scheduled delivery claimed (YYYY-MM-DD). Delete a stuck "sending" run to let the day send again.
    */
@@ -2410,6 +2414,41 @@ export interface ReportAsk {
     | number
     | boolean
     | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "report-preferences".
+ */
+export interface ReportPreference {
+  id: string;
+  user?: (string | null) | User;
+  /**
+   * Report slugs, in pin order.
+   */
+  pinned?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "report-events".
+ */
+export interface ReportEvent {
+  id: string;
+  kind: 'search' | 'search_open' | 'csv' | 'copy_link' | 'copy_table' | 'copy_chart' | 'ask_save';
+  reportSlug?: string | null;
+  query?: string | null;
+  user?: (string | null) | User;
   updatedAt: string;
   createdAt: string;
 }
@@ -2666,6 +2705,14 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'report-asks';
         value: string | ReportAsk;
+      } | null)
+    | ({
+        relationTo: 'report-preferences';
+        value: string | ReportPreference;
+      } | null)
+    | ({
+        relationTo: 'report-events';
+        value: string | ReportEvent;
       } | null)
     | ({
         relationTo: 'mcp-oauth-clients';
@@ -3670,6 +3717,28 @@ export interface ReportAsksSelect<T extends boolean = true> {
   errorCount?: T;
   warningCount?: T;
   definition?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "report-preferences_select".
+ */
+export interface ReportPreferencesSelect<T extends boolean = true> {
+  user?: T;
+  pinned?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "report-events_select".
+ */
+export interface ReportEventsSelect<T extends boolean = true> {
+  kind?: T;
+  reportSlug?: T;
+  query?: T;
+  user?: T;
   updatedAt?: T;
   createdAt?: T;
 }

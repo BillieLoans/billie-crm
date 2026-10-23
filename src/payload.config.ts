@@ -34,6 +34,8 @@ import { Issues } from './collections/Issues'
 import { ReportDefinitions } from './collections/ReportDefinitions'
 import { ReportRuns } from './collections/ReportRuns'
 import { ReportAsks } from './collections/ReportAsks'
+import { ReportPreferences } from './collections/ReportPreferences'
+import { ReportEvents } from './collections/ReportEvents'
 import { McpOAuthClients } from './collections/McpOAuthClients'
 import { McpOAuthGrants } from './collections/McpOAuthGrants'
 import { applyReportingSchema, dropReportingViews } from './server/reporting/schema'
@@ -182,7 +184,7 @@ export default buildConfig({
       },
     },
   },
-  collections: [Users, Media, Customers, Conversations, Applications, LoanAccounts, WriteOffRequests, ReapplicationBlockClearRequests, ContactNotes, Notifications, CollectionsCases, Contacts, Interactions, ContactAuditLog, Batches, Feedback, ReleaseBatches, ReleaseGrants, ReleaseGateStatus, Issues, LlmCosts, DisbursementAccessLog, ReportDefinitions, ReportRuns, ReportAsks, McpOAuthClients, McpOAuthGrants],
+  collections: [Users, Media, Customers, Conversations, Applications, LoanAccounts, WriteOffRequests, ReapplicationBlockClearRequests, ContactNotes, Notifications, CollectionsCases, Contacts, Interactions, ContactAuditLog, Batches, Feedback, ReleaseBatches, ReleaseGrants, ReleaseGateStatus, Issues, LlmCosts, DisbursementAccessLog, ReportDefinitions, ReportRuns, ReportAsks, ReportPreferences, ReportEvents, McpOAuthClients, McpOAuthGrants],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || 'build-placeholder-not-for-production',
   typescript: {

@@ -90,7 +90,7 @@ describe('ReportResults', () => {
 
   it('copies the table as tab-separated text', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
-    Object.assign(navigator, { clipboard: { writeText } })
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
     render(<ReportResults title="Declines" charts={[]} columns={COLUMNS} rows={ROWS} />)
     fireEvent.click(screen.getByRole('button', { name: 'Copy table' }))
     await waitFor(() => expect(screen.getByText(/Table copied/)).toBeInTheDocument())

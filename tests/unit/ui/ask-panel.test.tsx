@@ -12,6 +12,8 @@ vi.mock('@/components/ReportsView/ReportChart', () => ({
   ReportChart: () => <div data-testid="report-chart" />,
 }))
 
+vi.mock('@/lib/reports/events', () => ({ logReportEvent: vi.fn() }))
+
 import { AskPanel } from '@/components/ReportsView/AskPanel'
 
 const DEFINITION = {

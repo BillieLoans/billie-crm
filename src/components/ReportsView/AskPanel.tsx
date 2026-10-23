@@ -4,6 +4,7 @@ import React, { useEffect, useId, useRef, useState } from 'react'
 import Link from 'next/link'
 import { formatNumber } from '@/lib/formatters'
 import { normaliseCharts } from '@/lib/schemas/reports'
+import { logReportEvent } from '@/lib/reports/events'
 import {
   AskClaudeFailure,
   useAskClaude,
@@ -19,9 +20,9 @@ import styles from './styles.module.css'
  * it, refine it in plain language or by editing the SQL, and save it as an
  * unpublished draft for a supervisor to publish. Report authors only.
  */
-export function AskPanel() {
+export function AskPanel({ initialQuestion = '' }: { initialQuestion?: string }) {
   const id = useId().replace(/:/g, '')
-  const [question, setQuestion] = useState('')
+  const [question, setQuestion] = useState(initialQuestion.slice(0, 2000))
   const [refinement, setRefinement] = useState('')
   const [outcome, setOutcome] = useState<DraftOutcome | null>(null)
   const [definition, setDefinition] = useState<DraftDefinition | null>(null)
@@ -122,7 +123,10 @@ export function AskPanel() {
     save.mutate(
       { ...definition, sql },
       {
-        onSuccess: (result) => setSaved({ slug: result.slug }),
+        onSuccess: (result) => {
+          setSaved({ slug: result.slug })
+          logReportEvent({ kind: 'ask_save', reportSlug: result.slug })
+        },
         onError: (e) => {
           setFailure(e instanceof AskClaudeFailure ? e.message : 'The draft could not be saved.')
           setFocusRequest((n) => n + 1)

@@ -29,6 +29,22 @@ const reportsState: {
 } = { isLoading: false, error: null }
 vi.mock('@/hooks/queries/useReports', () => ({ useReports: () => reportsState }))
 
+let pinned: string[] = []
+const togglePin = vi.fn()
+vi.mock('@/hooks/queries/useReportPreferences', () => ({
+  useReportPins: () => ({
+    pinned,
+    isPinned: (slug: string) => pinned.includes(slug),
+    toggle: togglePin,
+    error: null,
+  }),
+}))
+const homeState: { data?: unknown[]; isLoading: boolean; error: Error | null } = {
+  isLoading: false,
+  error: null,
+}
+vi.mock('@/hooks/queries/useReportsHome', () => ({ useReportsHome: () => homeState }))
+
 vi.mock('@/components/ReportsView/ReportChart', () => ({
   ReportChart: ({ spec }: { spec: { x: string } }) => (
     <div data-testid="report-chart" data-x={spec.x} />
@@ -157,6 +173,11 @@ function renderView(slug: string) {
 
 beforeEach(() => {
   searchParams = new URLSearchParams()
+  pinned = []
+  togglePin.mockReset()
+  homeState.data = []
+  homeState.isLoading = false
+  homeState.error = null
   window.history.replaceState(null, '', '/')
   routerReplace.mockReset()
   routerPush.mockReset()
@@ -402,6 +423,91 @@ describe('ReportsView', () => {
   it('says when a link names no report the user can run', () => {
     renderView('secret')
     expect(screen.getByTestId('report-not-found')).toHaveTextContent('Report not found')
+  })
+})
+
+describe('Reports home', () => {
+  it('leads with the headline numbers, then pinned, recent and every report by area', () => {
+    pinned = ['by-code']
+    homeState.data = [
+      {
+        slug: 'weekly',
+        title: 'Weekly approvals',
+        category: 'credit',
+        label: 'Approved',
+        text: '1,241',
+        change: { delta: 12, unit: 'pct', direction: 'up', tone: 'good', text: 'up 12%' },
+        previousLabel: 'the previous 7 days',
+        spark: [1, 3, 2],
+      },
+    ]
+    renderView('')
+    const home = screen.getByTestId('reports-home')
+    const kpi = within(screen.getByTestId('home-kpis')).getByRole('link')
+    expect(kpi).toHaveAttribute('href', '/admin/reports/weekly')
+    expect(kpi).toHaveTextContent('Approved1,241▲ up 12% on the previous 7 days (better)')
+    expect(within(home).getByRole('heading', { name: 'Pinned' })).toBeInTheDocument()
+    expect(within(home).getByRole('region', { name: 'Credit decisions' })).toHaveTextContent(
+      'Weekly approvals',
+    )
+    expect(screen.queryByRole('navigation', { name: 'Reports' })).toBeNull()
+  })
+
+  it('searches reports by name and offers Claude when nothing matches', async () => {
+    currentUser = { id: 'a1', role: 'supervisor' }
+    reportsState.data = { reports: [WEEKLY, BY_CODE], canAuthor: true }
+    renderView('')
+    const search = screen.getByLabelText('Find a report')
+    fireEvent.change(search, { target: { value: 'declines' } })
+    expect(screen.getByRole('heading', { name: /1 report matches/ })).toBeInTheDocument()
+    fireEvent.change(search, { target: { value: 'churn' } })
+    expect(screen.getByRole('link', { name: 'Ask Claude to draft it' })).toHaveAttribute(
+      'href',
+      '/admin/reports/ask?q=churn',
+    )
+    fireEvent.change(screen.getByLabelText('Or ask a question'), {
+      target: { value: 'approvals by week' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Ask Claude' }))
+    expect(routerPush).toHaveBeenCalledWith('/admin/reports/ask?q=approvals%20by%20week')
+  })
+})
+
+describe('Ask Claude from the home', () => {
+  it('opens with the question asked on the home', () => {
+    currentUser = { id: 'a1', role: 'supervisor' }
+    reportsState.data = { reports: [WEEKLY], canAuthor: true }
+    searchParams = new URLSearchParams('q=approvals by week')
+    renderView('ask')
+    expect(screen.getByLabelText('Question')).toHaveValue('approvals by week')
+  })
+})
+
+describe('Reports sidebar', () => {
+  it('groups reports by area, filters them, and pins the chosen ones first', () => {
+    pinned = ['by-code']
+    renderView('weekly')
+    const nav = screen.getByRole('navigation', { name: 'Reports' })
+    expect(within(nav).getByRole('heading', { name: 'Pinned' })).toBeInTheDocument()
+    expect(within(nav).getByText('Credit decisions')).toBeInTheDocument()
+    fireEvent.change(within(nav).getByLabelText('Find a report'), { target: { value: 'zzz' } })
+    expect(within(nav).getByText(/No report matches/)).toBeInTheDocument()
+  })
+
+  it('folds behind a button that names the current report, for small screens', () => {
+    renderView('weekly')
+    // Shown only on small screens (CSS), so found by its test id here.
+    const toggle = screen.getByTestId('reports-nav-toggle')
+    expect(toggle).toHaveTextContent('Reports: Weekly approvals')
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('pins a report from its page', () => {
+    renderView('weekly')
+    fireEvent.click(screen.getByRole('button', { name: 'Pin Weekly approvals' }))
+    expect(togglePin).toHaveBeenCalledWith('weekly')
   })
 })
 

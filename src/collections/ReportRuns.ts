@@ -57,6 +57,10 @@ export const ReportRuns: CollectionConfig = {
         { label: 'Reports view', value: 'view' },
         { label: 'Schedule', value: 'schedule' },
         { label: 'MCP connector', value: 'mcp' },
+        { label: 'Reports home', value: 'home' },
+        { label: 'Subscription', value: 'subscription' },
+        { label: 'Alert', value: 'alert' },
+        { label: 'Board', value: 'board' },
       ],
     },
     {

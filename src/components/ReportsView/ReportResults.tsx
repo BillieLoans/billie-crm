@@ -4,6 +4,7 @@ import React, { useId, useMemo, useState } from 'react'
 import type { ChartSpec, ColumnSpec, ReportColumn } from '@/lib/schemas/reports'
 import { formatNumber } from '@/lib/formatters'
 import { drillHref } from '@/lib/reports/chart-data'
+import { logReportEvent } from '@/lib/reports/events'
 import { comparisonKey, resolveColumns, splitRows, toTsv } from '@/lib/reports/columns'
 import { ReportChart } from './ReportChart'
 import { ReportTable } from './ReportTable'
@@ -23,6 +24,8 @@ export interface ReportResultsProps {
   tableOpen?: boolean
   /** Parameter values a drill-down carries into the next report. */
   carryParameters?: Record<string, string>
+  /** The report's link, for recording copies. Absent for previews. */
+  reportSlug?: string
   /** The first day of this period and of the previous one, to line days up. */
   periodStarts?: { current: string; previous: string }
 }
@@ -44,6 +47,7 @@ export function ReportResults({
   tableOpen,
   carryParameters,
   periodStarts,
+  reportSlug,
 }: ReportResultsProps) {
   const tableId = useId().replace(/:/g, '')
   const [showTable, setShowTable] = useState(tableOpen ?? charts.length === 0)
@@ -75,6 +79,7 @@ export function ReportResults({
     try {
       await navigator.clipboard.writeText(toTsv(views, [...body, ...totals]))
       setCopied('Table copied. Paste it into a sheet or a message.')
+      if (reportSlug) logReportEvent({ kind: 'copy_table', reportSlug })
     } catch {
       setCopied('Copying is blocked in this browser. Download the CSV instead.')
     }
@@ -92,6 +97,7 @@ export function ReportResults({
           rows={rows}
           previousRows={previousRows ?? undefined}
           carryParameters={carryParameters}
+          reportSlug={reportSlug}
         />
       ))}
 

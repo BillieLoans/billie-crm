@@ -1,5 +1,6 @@
 export { useOptimisticStore } from './optimistic'
 export { useRecentCustomersStore } from './recentCustomers'
+export { useRecentReportsStore } from './recentReports'
 export { useUIStore } from './ui'
 export { useConversationFiltersStore } from './conversationFilters'
 export type { ConversationFilters } from './conversationFilters'

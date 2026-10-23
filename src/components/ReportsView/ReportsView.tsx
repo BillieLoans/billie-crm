@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useState } from 'react'
-import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { useAuth } from '@payloadcms/ui'
 import { Breadcrumb } from '@/components/Breadcrumb'
@@ -9,6 +8,8 @@ import { hasAnyRole } from '@/lib/access'
 import { useReports, type ReportSpec, type ReportSummary } from '@/hooks/queries/useReports'
 import { DRAFT_KEY, ReportPanel, replaceQuery } from './ReportPanel'
 import { AskPanel } from './AskPanel'
+import { ReportsHome } from './ReportsHome'
+import { ReportsNav } from './ReportsNav'
 import styles from './styles.module.css'
 
 export interface ReportsViewProps {
@@ -25,6 +26,7 @@ export function ReportsView({ slug }: ReportsViewProps) {
   const { user } = useAuth()
   const allowed = hasAnyRole(user)
   const { data, isLoading, error } = useReports()
+  const searchParams = useSearchParams()
 
   if (!allowed) {
     return (
@@ -52,75 +54,40 @@ export function ReportsView({ slug }: ReportsViewProps) {
               : [{ label: 'Reports' }]
         }
       />
-      <div className={styles.layout}>
-        <nav className={styles.sidebar} aria-label="Reports">
-          <div className={styles.sidebarHeader}>
-            <h2 className={styles.sidebarTitle}>Reports</h2>
-            {canAuthor && (
-              <Link className={styles.textLink} href="/admin/collections/report-definitions/create">
-                New report
-              </Link>
-            )}
+      {!slug ? (
+        <ReportsHome
+          reports={reports}
+          canAuthor={canAuthor}
+          canAsk={canAuthor}
+          isLoading={isLoading}
+          error={(error as Error | null) ?? null}
+        />
+      ) : (
+        <div className={styles.layout}>
+          <ReportsNav
+            reports={reports}
+            canAuthor={canAuthor}
+            currentSlug={slug}
+            isLoading={isLoading}
+            error={(error as Error | null) ?? null}
+          />
+          <div className={styles.main}>
+            {slug === 'ask' && canAuthor ? (
+              <AskPanel initialQuestion={searchParams?.get('q') ?? ''} />
+            ) : selected ? (
+              <ReportEntry key={selected.slug} report={selected} canAuthor={canAuthor} />
+            ) : !isLoading && !error ? (
+              <div data-testid="report-not-found">
+                <h1 className={styles.title}>Report not found</h1>
+                <p className={styles.subtitle}>
+                  There is no published report at this link, or it is not shared with you. Choose a
+                  report from the list.
+                </p>
+              </div>
+            ) : null}
           </div>
-          {canAuthor && (
-            <Link
-              className={styles.askLink}
-              href="/admin/reports/ask"
-              aria-current={slug === 'ask' ? 'page' : undefined}
-            >
-              Ask Claude for a report
-            </Link>
-          )}
-          {isLoading && <p className={styles.note}>Loading reports…</p>}
-          {error && (
-            <p className={styles.fieldError} role="alert">
-              {(error as Error).message}
-            </p>
-          )}
-          {!isLoading && !error && reports.length === 0 && (
-            <p className={styles.note}>
-              {canAuthor
-                ? 'No reports are published yet. Create one with New report.'
-                : 'No reports are shared with you yet.'}
-            </p>
-          )}
-          <ul className={styles.reportList}>
-            {reports.map((r) => (
-              <li key={r.slug}>
-                <Link
-                  href={`/admin/reports/${r.slug}`}
-                  className={`${styles.reportLink} ${r.slug === slug ? styles.reportLinkActive : ''}`}
-                  aria-current={r.slug === slug ? 'page' : undefined}
-                >
-                  {r.title}
-                  {!r.published && <span className={styles.listTag}> (draft)</span>}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </nav>
-
-        <div className={styles.main}>
-          {slug === 'ask' && canAuthor ? (
-            <AskPanel />
-          ) : selected ? (
-            <ReportEntry key={selected.slug} report={selected} canAuthor={canAuthor} />
-          ) : slug && !isLoading && !error ? (
-            <div data-testid="report-not-found">
-              <h1 className={styles.title}>Report not found</h1>
-              <p className={styles.subtitle}>
-                There is no published report at this link, or it is not shared with you. Choose a
-                report from the list.
-              </p>
-            </div>
-          ) : !slug ? (
-            <div>
-              <h1 className={styles.title}>Reports</h1>
-              <p className={styles.subtitle}>Choose a report from the list to run it.</p>
-            </div>
-          ) : null}
         </div>
-      </div>
+      )}
     </div>
   )
 }

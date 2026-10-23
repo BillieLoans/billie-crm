@@ -21,7 +21,10 @@ import {
   type ReportRunRequest,
   type ReportRunResponse,
 } from '@/hooks/queries/useReportRun'
+import { logReportEvent } from '@/lib/reports/events'
+import { useRecentReportsStore } from '@/stores/recentReports'
 import { HeadlineStrip } from './HeadlineStrip'
+import { PinButton } from './PinButton'
 import { ParameterForm, parameterInputId, type ParameterValues } from './ParameterForm'
 import { RangePicker } from './RangePicker'
 import { ReportResults } from './ReportResults'
@@ -81,7 +84,7 @@ export function replaceQuery(pathname: string, query: string): void {
 }
 
 /** The description's first sentence, and the rest. */
-function splitDescription(text: string | null): [string, string] {
+export function splitDescription(text: string | null): [string, string] {
   if (!text) return ['', '']
   const match = /^(.+?[.!?])\s+(.*)$/s.exec(text.trim())
   return match ? [match[1], match[2]] : [text.trim(), '']
@@ -140,6 +143,12 @@ export function ReportPanel({
   const run = useReportRun(request)
   const summaryRef = useRef<HTMLDivElement>(null)
   const firstRender = useRef(true)
+  const addRecent = useRecentReportsStore((st) => st.addReport)
+
+  // Remember the report for the Reports home's "Recently viewed".
+  useEffect(() => {
+    if (report.published) addRecent(report.slug, report.title)
+  }, [addRecent, report.published, report.slug, report.title])
 
   // Keep the link in step with the form, and re-run shortly after a change.
   useEffect(() => {
@@ -255,6 +264,7 @@ export function ReportPanel({
     try {
       await navigator.clipboard.writeText(url)
       setLinkStatus('Link copied. It opens this report with these settings.')
+      logReportEvent({ kind: 'copy_link', reportSlug: report.slug })
     } catch {
       setLinkStatus(`Copying is blocked in this browser. The link is ${url}`)
     }
@@ -263,9 +273,12 @@ export function ReportPanel({
   return (
     <section aria-labelledby={`${idPrefix}-title`}>
       <header className={styles.header}>
-        <h1 id={`${idPrefix}-title`} className={styles.title}>
-          {spec.title}
-        </h1>
+        <div className={styles.titleRow}>
+          <h1 id={`${idPrefix}-title`} className={styles.title}>
+            {spec.title}
+          </h1>
+          {report.published && <PinButton slug={report.slug} title={report.title} />}
+        </div>
         {lead && <p className={styles.subtitle}>{lead}</p>}
       </header>
 
@@ -383,6 +396,7 @@ export function ReportPanel({
             onClick={() => {
               if (!result) return
               downloadText(toCsv(result.columns, result.rows), csvFileName(report.slug))
+              logReportEvent({ kind: 'csv', reportSlug: report.slug })
             }}
           >
             Download CSV
@@ -432,6 +446,7 @@ export function ReportPanel({
                 rows={result.rows}
                 previousRows={previousRows}
                 carryParameters={carryParameters}
+                reportSlug={report.slug}
                 periodStarts={
                   result.previous && range
                     ? {

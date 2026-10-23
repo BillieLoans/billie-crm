@@ -45,8 +45,11 @@ export function inlineSvg(svg: SVGSVGElement): string {
   return new XMLSerializer().serializeToString(copy)
 }
 
-/** Draw the chart to a PNG and put it on the clipboard. Returns a status message. */
-export async function copySvgAsPng(svg: SVGSVGElement, title: string): Promise<string> {
+/** Draw the chart to a PNG and put it on the clipboard. */
+export async function copySvgAsPng(
+  svg: SVGSVGElement,
+  title: string,
+): Promise<{ copied: boolean; message: string }> {
   try {
     const markup = inlineSvg(svg)
     const rect = svg.getBoundingClientRect()
@@ -70,11 +73,14 @@ export async function copySvgAsPng(svg: SVGSVGElement, title: string): Promise<s
     URL.revokeObjectURL(url)
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
     if (!blob || typeof ClipboardItem === 'undefined' || !navigator.clipboard?.write) {
-      return 'Copying images is blocked in this browser. Take a screenshot instead.'
+      return {
+        copied: false,
+        message: 'Copying images is blocked in this browser. Take a screenshot instead.',
+      }
     }
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
-    return `Chart copied: ${title}.`
+    return { copied: true, message: `Chart copied: ${title}.` }
   } catch {
-    return 'The chart could not be copied. Take a screenshot instead.'
+    return { copied: false, message: 'The chart could not be copied. Take a screenshot instead.' }
   }
 }
