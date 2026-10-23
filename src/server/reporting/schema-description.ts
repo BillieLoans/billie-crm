@@ -10,7 +10,7 @@
  * and logged requests say which description they used.
  */
 
-export const SCHEMA_DESCRIPTION_VERSION = 'reporting-desc-v3'
+export const SCHEMA_DESCRIPTION_VERSION = 'reporting-desc-v4'
 
 export interface ColumnDescription {
   name: string
@@ -146,9 +146,9 @@ export const REPORTING_TABLES: readonly TableDescription[] = [
           'A loan from this application was disbursed. Funded means disbursed, not approved.',
       },
       col(
-        'loan_purpose',
+        'loan_purpose_category',
         'text',
-        'What the loan is for, as captured in the chat (a short category such as "car repairs"). Group by it; it is not a fixed list.',
+        "What the loan is for, by category: 'bills_and_utilities', 'rent_and_housing', 'fuel', 'transport' (cars, rego, bikes, rideshare), 'groceries_and_living', 'health' (people and pets), 'family_and_gifts', 'social_and_dining', 'work_and_tools', 'education' or 'other'; NULL when no purpose was captured. The customer's own wording is not in the schema.",
       ),
       col(
         'requested_amount',
@@ -880,6 +880,7 @@ export const REPORTING_FUNCTIONS: readonly string[] = [
   'reporting.acquisition_channel(jsonb) -> text: the channel of an attribution object (already applied in the views).',
   'reporting.decline_category(text) -> text: the category of a reason code (already applied in the views).',
   'reporting.as_numeric(text), as_boolean(text), as_timestamptz(text): read a JSON value, NULL when it is malformed (already applied in the views).',
+  'reporting.loan_purpose_category(text) -> text: the category of a loan purpose (already applied in the views).',
 ]
 
 export const BUSINESS_RULES: readonly string[] = [

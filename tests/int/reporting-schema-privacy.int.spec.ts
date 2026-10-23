@@ -37,6 +37,7 @@ const PERSONAL = {
   holder: 'Z QUIXOTIC',
   payer: 'name:z quixotic senior',
   clickId: 'Cj0KCQjwRPTPIIclick',
+  purpose: 'tablets for my sick mother',
 }
 
 async function cleanup() {
@@ -96,8 +97,8 @@ beforeAll(async () => {
   )
   await pool.query(
     `INSERT INTO applications (application_number, loan_purpose, loan_amount, loan_term)
-     VALUES ($1, 'car repairs', 400, 4)`,
-    [`${P}-APP`],
+     VALUES ($1, $2, 400, 4)`,
+    [`${P}-APP`, PERSONAL.purpose],
   )
   const customerBlock = {
     firstName: PERSONAL.first,
@@ -129,7 +130,11 @@ beforeAll(async () => {
         captured_at: '2026-10-20T01:00:05Z',
       }),
       JSON.stringify({ ip: PERSONAL.ip, country: 'AU', asn: '1221' }),
-      JSON.stringify({ loanPurpose: 'car repairs', loanAmount: 'lots', customer: customerBlock }),
+      JSON.stringify({
+        loanPurpose: PERSONAL.purpose,
+        loanAmount: 'lots',
+        customer: customerBlock,
+      }),
       JSON.stringify({
         consentStatus: 'complete',
         retrievalComplete: true,
@@ -258,7 +263,7 @@ describe('reporting schema privacy', () => {
       [`${P}-CONV`],
     )
     expect(app[0]).toMatchObject({
-      loan_purpose: 'car repairs',
+      loan_purpose_category: 'health',
       requested_amount: '400',
       loan_term: 4,
       content: 'ad-1',
