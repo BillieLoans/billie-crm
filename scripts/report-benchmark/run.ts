@@ -27,6 +27,11 @@
  *   ANTHROPIC_API_KEY=… \
  *   pnpm exec tsx scripts/report-benchmark/run.ts --runs 3 --out bench-out
  *
+ * `--settings` compares model and effort settings for H1, with latency
+ * beside accuracy, to choose the fastest setting that keeps the targets:
+ *
+ *   … run.ts --arms H1 --settings opus:high,opus:medium,opus:low,sonnet:medium
+ *
  * `--dry-run` prints the plan and both prompts' sizes without calling Claude.
  */
 import { mkdir, writeFile, appendFile } from 'node:fs/promises'
@@ -39,6 +44,7 @@ import {
   ASK_EFFORT,
   ASK_MODEL,
   ASK_PROMPT_VERSION,
+  type AskEffort,
   ASK_SYSTEM_PROMPT,
   askClaude,
   buildSystemPrompt,
@@ -59,6 +65,39 @@ import { QUESTIONS, type BenchmarkQuestion } from './questions'
 type Arm = 'H0' | 'H1'
 type Row = Record<string, unknown>
 
+/** A model and effort to run H1 with. */
+export interface Setting {
+  label: string
+  model: string
+  effort: AskEffort
+}
+
+const MODELS: Record<string, string> = {
+  opus: ASK_MODEL,
+  sonnet: 'claude-sonnet-5-5',
+  haiku: 'claude-haiku-5-5',
+}
+
+/** `opus:high,sonnet:medium` → settings. The default is the live setting. */
+export function parseSettings(text: string | undefined): Setting[] {
+  if (!text) return [{ label: `live (${ASK_EFFORT})`, model: ASK_MODEL, effort: ASK_EFFORT }]
+  return text.split(',').map((part) => {
+    const [name, effort] = part.trim().split(':')
+    const model = MODELS[name] ?? name
+    if (effort !== 'low' && effort !== 'medium' && effort !== 'high') {
+      throw new Error(`--settings: "${part}" needs an effort of low, medium or high`)
+    }
+    return { label: part.trim(), model, effort }
+  })
+}
+
+/** The value below which a share p of the sorted values fall. */
+export function percentile(values: readonly number[], p: number): number | null {
+  if (!values.length) return null
+  const sorted = [...values].sort((a, b) => a - b)
+  return sorted[Math.min(sorted.length - 1, Math.ceil(p * sorted.length) - 1)]
+}
+
 const H0_SCHEMA_VERSION = 'reporting-ddl-v1'
 
 /** The targets in BTB-508, for H1. */
@@ -66,6 +105,8 @@ export const TARGETS = { executionSuccess: 0.98, equivalent: 0.9, silentWrong: 0
 
 export interface Attempt {
   arm: Arm
+  /** The model and effort, for H1 runs that compare settings. */
+  setting: string
   questionId: string
   run: number
   /** What Claude returned. */
@@ -152,9 +193,11 @@ export async function attempt(
   reference: Row[] | null,
   reader: Pool,
   h0Prompt: string,
+  setting: Setting = parseSettings(undefined)[0],
 ): Promise<Attempt> {
   const base = {
     arm,
+    setting: arm === 'H0' ? 'live' : setting.label,
     questionId: question.id,
     run,
     executed: false,
@@ -172,7 +215,7 @@ export async function attempt(
           promptVersion: `${ASK_PROMPT_VERSION}+ddl`,
           schemaVersion: H0_SCHEMA_VERSION,
         })
-      : askClaude(request)
+      : askClaude(request, { model: setting.model, effort: setting.effort })
 
   let answer
   try {
@@ -254,26 +297,32 @@ export function summarise(attempts: Attempt[], questions: readonly BenchmarkQues
   const lines = [
     '# AI-authored reports benchmark',
     '',
-    `Model ${ASK_MODEL}, effort ${ASK_EFFORT}. Questions: ${questions.length} (${answerable.size} answerable).`,
+    `Live setting: ${ASK_MODEL}, effort ${ASK_EFFORT}. Questions: ${questions.length} (${answerable.size} answerable).`,
     `H1 targets: execution ≥ ${TARGETS.executionSuccess * 100}%, equivalent ≥ ${TARGETS.equivalent * 100}%, silent-wrong ≤ ${TARGETS.silentWrong * 100}%.`,
     '',
-    '| Arm | Attempts | Executed | Equivalent | Silent-wrong | Revised | Unanswerable caught | False refusals | Input tokens | Output tokens |',
-    '|---|---|---|---|---|---|---|---|---|---|',
+    '| Arm | Setting | Attempts | Executed | Equivalent | Silent-wrong | Revised | Unanswerable caught | False refusals | Draft p50 | Draft p95 | Input tokens | Output tokens |',
+    '|---|---|---|---|---|---|---|---|---|---|---|---|---|',
   ]
-  for (const arm of ['H0', 'H1'] as const) {
-    const mine = attempts.filter((a) => a.arm === arm)
-    if (!mine.length) continue
+  const groups = [...new Set(attempts.map((a) => `${a.arm}|${a.setting}`))].sort()
+  for (const group of groups) {
+    const [arm, setting] = group.split('|')
+    const mine = attempts.filter((a) => a.arm === arm && a.setting === setting)
     const scored = mine.filter((a) => answerable.has(a.questionId))
     const unanswerable = mine.filter((a) => !answerable.has(a.questionId))
     const tokens = (k: 'inputTokens' | 'outputTokens') =>
       mine.flatMap((a) => a.usage).reduce((s, u) => s + u[k], 0)
+    // The first draft's latency: what the person waits for before a preview.
+    const latencies = mine.map((a) => a.usage[0]?.latencyMs).filter((v): v is number => v != null)
+    const seconds = (v: number | null) => (v === null ? 'n/a' : `${(v / 1000).toFixed(1)}s`)
     lines.push(
-      `| ${arm} | ${mine.length} | ${pct(scored.filter((a) => a.executed).length, scored.length)} | ` +
+      `| ${arm} | ${setting} | ${mine.length} | ${pct(scored.filter((a) => a.executed).length, scored.length)} | ` +
         `${pct(scored.filter((a) => a.equivalent).length, scored.length)} | ` +
         `${pct(scored.filter((a) => a.silentWrong).length, scored.length)} | ` +
         `${scored.filter((a) => a.revised).length} | ` +
         `${unanswerable.filter((a) => a.correctlyUnanswerable).length}/${unanswerable.length} | ` +
-        `${scored.filter((a) => a.status === 'unanswerable').length} | ${tokens('inputTokens')} | ${tokens('outputTokens')} |`,
+        `${scored.filter((a) => a.status === 'unanswerable').length} | ` +
+        `${seconds(percentile(latencies, 0.5))} | ${seconds(percentile(latencies, 0.95))} | ` +
+        `${tokens('inputTokens')} | ${tokens('outputTokens')} |`,
     )
   }
   lines.push(
@@ -314,12 +363,14 @@ async function main(): Promise<void> {
       questions: { type: 'string' },
       out: { type: 'string', default: 'bench-out' },
       concurrency: { type: 'string', default: '4' },
+      settings: { type: 'string' },
       'dry-run': { type: 'boolean', default: false },
     },
   })
   const arms = values.arms.split(',').map((a) => a.trim()) as Arm[]
   if (arms.some((a) => a !== 'H0' && a !== 'H1')) throw new Error('--arms takes H0, H1 or both')
   const runs = Number(values.runs)
+  const settings = parseSettings(values.settings)
   const wanted = values.questions?.split(',').map((s) => s.trim())
   const questions = wanted ? QUESTIONS.filter((q) => wanted.includes(q.id)) : QUESTIONS
 
@@ -335,7 +386,8 @@ async function main(): Promise<void> {
   try {
     const ddl = await readRawDdl(owner)
     const h0Prompt = buildSystemPrompt(ddl)
-    const calls = questions.length * runs * arms.length
+    const calls =
+      questions.length * runs * arms.reduce((n, a) => n + (a === 'H1' ? settings.length : 1), 0)
     console.log(
       `${questions.length} questions × ${runs} runs × ${arms.join('+')} = ${calls} Claude calls ` +
         `(plus up to one revision each in H1). Prompts: H0 ${h0Prompt.length} chars, H1 ${ASK_SYSTEM_PROMPT.length} chars.`,
@@ -354,16 +406,26 @@ async function main(): Promise<void> {
     const log = join(values.out, 'attempts.jsonl')
     await writeFile(log, '')
     const jobs = arms.flatMap((arm) =>
-      questions.flatMap((q) =>
-        Array.from({ length: runs }, (_, run) => ({ arm, q, run: run + 1 })),
+      (arm === 'H1' ? settings : settings.slice(0, 1)).flatMap((setting) =>
+        questions.flatMap((q) =>
+          Array.from({ length: runs }, (_, run) => ({ arm, setting, q, run: run + 1 })),
+        ),
       ),
     )
     const attempts: Attempt[] = []
     let next = 0
     const worker = async () => {
       while (next < jobs.length) {
-        const { arm, q, run } = jobs[next++]
-        const a = await attempt(arm, q, run, references.get(q.id) ?? null, reader, h0Prompt)
+        const { arm, setting, q, run } = jobs[next++]
+        const a = await attempt(
+          arm,
+          q,
+          run,
+          references.get(q.id) ?? null,
+          reader,
+          h0Prompt,
+          setting,
+        )
         attempts.push(a)
         await appendFile(
           log,
@@ -372,7 +434,7 @@ async function main(): Promise<void> {
             schemaVersion: arm === 'H0' ? H0_SCHEMA_VERSION : SCHEMA_DESCRIPTION_VERSION,
           }) + '\n',
         )
-        console.log(`${arm} ${q.id} #${run}: ${a.status}${a.equivalent ? ' ✓' : ''}`)
+        console.log(`${arm} ${a.setting} ${q.id} #${run}: ${a.status}${a.equivalent ? ' ✓' : ''}`)
       }
     }
     await Promise.all(Array.from({ length: Number(values.concurrency) }, worker))

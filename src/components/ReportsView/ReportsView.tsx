@@ -58,7 +58,7 @@ export function ReportsView({ slug }: ReportsViewProps) {
         <ReportsHome
           reports={reports}
           canAuthor={canAuthor}
-          canAsk={canAuthor}
+          canAsk
           isLoading={isLoading}
           error={(error as Error | null) ?? null}
         />
@@ -72,8 +72,12 @@ export function ReportsView({ slug }: ReportsViewProps) {
             error={(error as Error | null) ?? null}
           />
           <div className={styles.main}>
-            {slug === 'ask' && canAuthor ? (
-              <AskPanel initialQuestion={searchParams?.get('q') ?? ''} />
+            {slug === 'ask' ? (
+              <AskPanel
+                initialQuestion={searchParams?.get('q') ?? ''}
+                fromSlug={canAuthor ? (searchParams?.get('from') ?? undefined) : undefined}
+                canAuthor={canAuthor}
+              />
             ) : selected ? (
               <ReportEntry key={selected.slug} report={selected} canAuthor={canAuthor} />
             ) : !isLoading && !error ? (

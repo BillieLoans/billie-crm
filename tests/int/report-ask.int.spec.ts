@@ -21,7 +21,12 @@ vi.mock('@/server/reporting/ask/claude', async () => {
   return { ...actual, askClaude: (...args: unknown[]) => askClaude(...args) }
 })
 
-import { checkEditedDefinition, draftFromQuestion, saveDraft } from '@/server/reporting/ask/draft'
+import {
+  checkEditedDefinition,
+  draftFromQuestion,
+  loadOwnAsk,
+  saveDraft,
+} from '@/server/reporting/ask/draft'
 
 let payload: Payload
 let pool: Pool
@@ -45,7 +50,10 @@ const GOOD = {
   answerable: true,
   not_answerable_reason: null,
   title: `${P} decisions by outcome`,
+  plan: ['Count decisions since the date', 'Split by outcome'],
+  assumptions: ['Counts each application once, by its latest decision'],
   description: 'TEST: decisions by outcome since a date.',
+  category: 'credit' as const,
   sql: `SELECT d.decision, count(*) AS decided
           FROM decision AS d
          WHERE d.decided_on >= $1::date AND NOT d.mock_origin
@@ -62,13 +70,25 @@ const GOOD = {
       help: null,
     },
   ],
-  chart: {
-    type: 'bar' as const,
-    x: 'decision',
-    series: [{ column: 'decided', label: 'Decided' }],
-    stacked: false,
-  },
-  assumptions: ['Counts each application once, by its latest decision'],
+  charts: [
+    {
+      type: 'bar-horizontal' as const,
+      x: 'decision',
+      series: [{ column: 'decided', label: 'Decided' }],
+      stacked: false,
+    },
+  ],
+  headline: [
+    {
+      column: 'decided',
+      label: 'Decisions',
+      value: 'sum' as const,
+      numerator: null,
+      denominator: null,
+      better: 'neutral' as const,
+    },
+  ],
+  columns: [],
 }
 
 async function cleanup() {
@@ -148,6 +168,12 @@ describe('Ask Claude', () => {
       { decision: 'DECLINED', decided: 2 },
     ])
     expect(outcome.assumptions).toEqual(GOOD.assumptions)
+    expect(outcome.plan).toEqual(GOOD.plan)
+    expect(outcome.definition).toMatchObject({
+      category: 'credit',
+      chart: [{ type: 'bar-horizontal', x: 'decision' }],
+      headline: [{ column: 'decided', value: 'sum' }],
+    })
 
     expect(await lastAsk()).toMatchObject({
       kind: 'ask',
@@ -244,7 +270,13 @@ describe('Ask Claude', () => {
       { question: `${P} save me` },
       { pool: reader },
     )
-    const saved = await saveDraft(payload, users.supervisor, outcome.definition!, { pool: reader })
+    const saved = await saveDraft(
+      payload,
+      users.supervisor,
+      outcome.definition!,
+      {},
+      { pool: reader },
+    )
     expect(saved.ok).toBe(true)
     if (!saved.ok) return
     const doc = await payload.findByID({
@@ -278,6 +310,7 @@ describe('Ask Claude', () => {
           parameters: [{ name: 'from', label: 'From', type: 'date', default: '2001-01-01' }],
           chart: null,
         },
+        {},
         { pool: reader },
       ),
     ).rejects.toThrow()
@@ -294,6 +327,7 @@ describe('Ask Claude', () => {
         parameters: [],
         chart: null,
       },
+      {},
       { pool: reader },
     )
     expect(broken.ok).toBe(false)
@@ -308,6 +342,7 @@ describe('Ask Claude', () => {
         parameters: [{ name: 'from', label: 'From', type: 'date', default: '2001-01-01' }],
         chart: null,
       },
+      {},
       { pool: reader },
     )
     expect(badRate).toMatchObject({
@@ -338,11 +373,153 @@ describe('Ask Claude', () => {
     expect(typeof author === 'object' ? author?.id : author).toBe(users.supervisor.id)
   })
 
+  it('streams the plan and the stages, and records the time to the first text', async () => {
+    askClaude.mockImplementation(
+      async (_req: unknown, options: { onText?: (t: string) => void }) => {
+        options.onText?.('{"answerable":true,"not_answerable_reason":null,"title":"Decisions"')
+        options.onText?.(
+          '{"answerable":true,"not_answerable_reason":null,"title":"Decisions","plan":["Count them"],"assumptions":[],"description":"d","category":"credit","parameters":[],"sql":"SEL',
+        )
+        return { status: 'ok', output: GOOD, usage: { ...USAGE, firstOutputMs: 321 } }
+      },
+    )
+    const events: unknown[] = []
+    const outcome = await draftFromQuestion(
+      payload,
+      users.supervisor,
+      { question: `${P} streamed` },
+      { pool: reader },
+      { onProgress: (e) => events.push(e) },
+    )
+    expect(outcome.status).toBe('ok')
+    expect(events).toEqual([
+      { type: 'stage', stage: 'planning', atMs: 0 },
+      {
+        type: 'partial',
+        draft: { title: 'Decisions', plan: [], assumptions: [], writingSql: false },
+      },
+      {
+        type: 'partial',
+        draft: { title: 'Decisions', plan: ['Count them'], assumptions: [], writingSql: true },
+      },
+      { type: 'stage', stage: 'writing_sql', atMs: expect.any(Number) },
+      { type: 'stage', stage: 'checking', atMs: expect.any(Number) },
+    ])
+    expect(await lastAsk()).toMatchObject({ firstOutputMs: 321, totalMs: expect.any(Number) })
+  })
+
+  it('logs a cancelled draft as cancelled', async () => {
+    const abort = new AbortController()
+    abort.abort()
+    askClaude.mockRejectedValueOnce(
+      Object.assign(new Error('Request was aborted.'), { name: 'APIUserAbortError' }),
+    )
+    await expect(
+      draftFromQuestion(
+        payload,
+        users.supervisor,
+        { question: `${P} cancelled` },
+        { pool: reader },
+        { signal: abort.signal },
+      ),
+    ).rejects.toThrow()
+    expect(await lastAsk()).toMatchObject({ outcome: 'cancelled' })
+  })
+
+  it('refuses a headline or chart that reads a column the result does not have', async () => {
+    const outcome = await checkEditedDefinition(
+      payload,
+      users.supervisor,
+      `${P} headline`,
+      {
+        title: `${P} headline`,
+        description: '',
+        sql: GOOD.sql,
+        parameters: [{ name: 'from', label: 'From', type: 'date', default: '2001-01-01' }],
+        chart: [{ type: 'bar', x: 'decision', series: [{ column: 'missing' }] }],
+        headline: [{ column: 'nope', label: 'Nope' }],
+        columnSettings: [],
+        category: 'credit',
+      },
+      { pool: reader },
+    )
+    expect(outcome.issues.map((i) => i.code)).toEqual(expect.arrayContaining(['CHART', 'HEADLINE']))
+    const saved = await saveDraft(
+      payload,
+      users.supervisor,
+      outcome.definition!,
+      {},
+      { pool: reader },
+    )
+    expect(saved.ok).toBe(false)
+  })
+
+  it('publishes straight away to the chosen roles and area, and changes a report in place', async () => {
+    const outcome = await draftFromQuestion(
+      payload,
+      users.supervisor,
+      { question: `${P} publish me` },
+      { pool: reader },
+    )
+    const published = await saveDraft(
+      payload,
+      users.supervisor,
+      outcome.definition!,
+      { publish: true, roles: ['admin', 'supervisor', 'operations'], category: 'operations' },
+      { pool: reader },
+    )
+    if (!published.ok) throw new Error(JSON.stringify(published.issues))
+    expect(published.published).toBe(true)
+    const viewerList = await listReports(payload, users.operations)
+    expect(viewerList.find((r) => r.slug === published.slug)).toMatchObject({
+      published: true,
+      category: 'operations',
+    })
+
+    // A change saved as a draft leaves the published version as it was.
+    const changed = await saveDraft(
+      payload,
+      users.supervisor,
+      { ...outcome.definition!, title: `${P} publish me, changed` },
+      { reportId: published.id },
+      { pool: reader },
+    )
+    expect(changed).toMatchObject({
+      ok: true,
+      id: published.id,
+      slug: published.slug,
+      published: false,
+    })
+    const live = (await listReports(payload, users.operations)).find(
+      (r) => r.slug === published.slug,
+    )
+    expect(live?.title).toBe(`${P} decisions by outcome`)
+    const authorView = (await listReports(payload, users.supervisor)).find(
+      (r) => r.slug === published.slug,
+    )
+    expect(authorView?.draft?.title).toBe(`${P} publish me, changed`)
+  })
+
   it('logs a request that failed at the API', async () => {
     askClaude.mockRejectedValueOnce(new Error('overloaded'))
     await expect(
       draftFromQuestion(payload, users.supervisor, { question: `${P} fails` }, { pool: reader }),
     ).rejects.toThrow('overloaded')
     expect(await lastAsk()).toMatchObject({ kind: 'ask', outcome: 'error', question: `${P} fails` })
+  })
+})
+
+describe('reopening a draft by reference', () => {
+  it('finds only the user’s own logged draft', async () => {
+    const outcome = await draftFromQuestion(
+      payload,
+      users.operations,
+      { question: `${P} mine` },
+      { pool: reader },
+    )
+    expect(outcome.askId).toBeTruthy()
+    const mine = await loadOwnAsk(payload, users.operations.id, outcome.askId!)
+    expect(mine?.definition.sql).toBe(GOOD.sql)
+    expect(await loadOwnAsk(payload, users.supervisor.id, outcome.askId!)).toBeNull()
   })
 })

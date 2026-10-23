@@ -55,6 +55,7 @@ import * as migration_20261029_090000_reporting_loan_purpose_category from './20
 import * as migration_20261030_090000_reporting_data_freshness from './20261030_090000_reporting_data_freshness'
 import * as migration_20261030_100000_core_reports from './20261030_100000_core_reports'
 import * as migration_20261030_110000_report_navigation from './20261030_110000_report_navigation'
+import * as migration_20261030_120000_report_ask_streaming from './20261030_120000_report_ask_streaming'
 
 export const migrations = [
   {
@@ -341,5 +342,10 @@ export const migrations = [
     up: migration_20261030_110000_report_navigation.up,
     down: migration_20261030_110000_report_navigation.down,
     name: '20261030_110000_report_navigation',
+  },
+  {
+    up: migration_20261030_120000_report_ask_streaming.up,
+    down: migration_20261030_120000_report_ask_streaming.down,
+    name: '20261030_120000_report_ask_streaming',
   },
 ];

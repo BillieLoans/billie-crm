@@ -77,15 +77,13 @@ export function ReportsNav({ reports, canAuthor, currentSlug, isLoading, error }
             </Link>
           )}
         </div>
-        {canAuthor && (
-          <Link
-            className={styles.askLink}
-            href="/admin/reports/ask"
-            aria-current={currentSlug === 'ask' ? 'page' : undefined}
-          >
-            Ask Claude for a report
-          </Link>
-        )}
+        <Link
+          className={styles.askLink}
+          href="/admin/reports/ask"
+          aria-current={currentSlug === 'ask' ? 'page' : undefined}
+        >
+          Ask Claude for a report
+        </Link>
         <label htmlFor={`${id}-filter`} className={styles.visuallyHidden}>
           Find a report
         </label>

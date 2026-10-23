@@ -317,6 +317,9 @@ export function ReportPanel({
           >
             Edit report
           </Link>
+          <Link className={styles.textLink} href={`/admin/reports/ask?from=${report.slug}`}>
+            Ask Claude to change it
+          </Link>
         </div>
       )}
 

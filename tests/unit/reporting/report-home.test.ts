@@ -202,3 +202,47 @@ describe('matchReports', () => {
     expect(matchReports(reports, '  ')).toHaveLength(2)
   })
 })
+
+describe('findExistingReports', () => {
+  const decline = {
+    title: 'Decline rate and reasons',
+    description: 'Decisions split by acquisition source or by credit ruleset version.',
+    category: 'credit',
+    parameters: [
+      {
+        name: 'group_by',
+        type: 'select',
+        options: [
+          { value: 'source', label: 'Acquisition source' },
+          { value: 'ruleset', label: 'Credit ruleset version' },
+        ],
+      },
+    ],
+  }
+  const funded = {
+    title: 'Loans funded',
+    description: 'Loans disbursed each day and the amount lent.',
+    category: 'loan_book',
+    parameters: [],
+  }
+
+  it('finds a report whose title and description cover the question, with its option', async () => {
+    const { findExistingReports } = await import('@/lib/reports/catalogue')
+    const [match] = findExistingReports('decline rate by credit ruleset version last month', [
+      decline,
+      funded,
+    ])
+    expect(match.report.title).toBe('Decline rate and reasons')
+    expect(match.parameters).toEqual({ group_by: 'ruleset' })
+  })
+
+  it('needs two meaningful words, one in the title', async () => {
+    const { findExistingReports } = await import('@/lib/reports/catalogue')
+    expect(findExistingReports('loans', [decline, funded])).toEqual([])
+    expect(findExistingReports('amount lent each day', [decline, funded])).toEqual([])
+    expect(findExistingReports('loans funded per day', [decline, funded])[0].report.title).toBe(
+      'Loans funded',
+    )
+    expect(findExistingReports('the of and', [decline, funded])).toEqual([])
+  })
+})

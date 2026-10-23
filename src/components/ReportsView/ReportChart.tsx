@@ -29,6 +29,7 @@ import {
 import {
   CHART_POINT_LIMIT,
   DOT_LIMIT,
+  chartProblem,
   drillHref,
   prepareChart,
   rateFraction,
@@ -59,21 +60,7 @@ function usePrefersReducedMotion(): boolean {
   )
 }
 
-/** Why a chart spec cannot be drawn from this result, or null if it can. */
-export function chartProblem(spec: ChartSpec, columns: readonly ReportColumn[]): string | null {
-  const names = new Set(columns.map((c) => c.name))
-  const missing = [spec.x, ...spec.series.map((s) => s.column)].filter((n) => !names.has(n))
-  if (missing.length) {
-    return `The chart needs column${missing.length === 1 ? '' : 's'} ${missing.join(', ')}, which the results do not have.`
-  }
-  const nonNumeric = spec.series.filter(
-    (s) => columns.find((c) => c.name === s.column)?.kind !== 'number',
-  )
-  if (nonNumeric.length) {
-    return `Chart series must be numbers: ${nonNumeric.map((s) => s.column).join(', ')} is not.`
-  }
-  return null
-}
+export { chartProblem }
 
 export interface ReportChartProps {
   title: string

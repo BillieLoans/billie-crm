@@ -1,50 +1,49 @@
 /**
  * POST /api/reports/ask/save — save a checked Ask Claude draft (BTB-508).
  *
- * Body: `{ definition }`. Runs every check again (including a run on the
- * defaults) and refuses on any error, then creates an unpublished report
- * with the user as author and origin "ask". Report authors only; a supervisor publishes it
- * from the admin after review.
+ * Body: `{ definition, publish?, roles?, category?, reportId? }`. Runs every
+ * check again (including a run on the defaults) and refuses on any error.
+ * Saves an unpublished draft, or with `publish: true` publishes straight
+ * away to `roles` (default admins and supervisors). With `reportId` it
+ * changes that report (a new draft version, or published) instead of
+ * creating one. Report authors only; the author and origin "ask" are
+ * recorded.
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { getPayload } from 'payload'
-import { headers } from 'next/headers'
-import configPromise from '@payload-config'
+import { requireAuth } from '@/lib/auth'
+import { errorResponse } from '@/server/reporting/route-auth'
 import { isReportAuthor } from '@/server/reporting/run-report'
-import { parseDefinition, saveDraft } from '@/server/reporting/ask/draft'
+import { parseCategory, parseDefinition, parseRoles, saveDraft } from '@/server/reporting/ask/draft'
 
 export async function POST(request: NextRequest) {
-  const payload = await getPayload({ config: configPromise })
-  const { user } = await payload.auth({
-    headers: new Headers(Array.from((await headers()).entries())),
-  })
-  if (!user) {
-    return NextResponse.json(
-      { error: { code: 'UNAUTHENTICATED', message: 'Please log in to continue.' } },
-      { status: 401 },
-    )
-  }
+  const auth = await requireAuth()
+  if ('error' in auth) return auth.error
+  const { payload, user } = auth
   if (!isReportAuthor(user)) {
-    return NextResponse.json(
-      { error: { code: 'FORBIDDEN', message: 'Only report authors can save reports.' } },
-      { status: 403 },
-    )
+    return errorResponse(403, 'FORBIDDEN', 'Only report authors can save reports.')
   }
-  const body = (await request.json().catch(() => null)) as { definition?: unknown } | null
+  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null
   const definition = parseDefinition(body?.definition)
   if (!definition) {
-    return NextResponse.json(
-      {
-        error: {
-          code: 'NO_DEFINITION',
-          message: 'Send the draft definition (within the size limits).',
-        },
-      },
-      { status: 400 },
+    return errorResponse(
+      400,
+      'NO_DEFINITION',
+      'Send the draft definition (within the size limits).',
     )
   }
+  const roles = body?.roles === undefined ? undefined : parseRoles(body.roles)
+  if (roles === null) return errorResponse(400, 'BAD_ROLES', 'Choose at least one role.')
+  const category = body?.category === undefined ? undefined : parseCategory(body.category)
+  if (category === null) return errorResponse(400, 'BAD_CATEGORY', 'Choose an area.')
+  const reportId =
+    typeof body?.reportId === 'string' && body.reportId.length <= 100 ? body.reportId : undefined
   try {
-    const saved = await saveDraft(payload, user, definition)
+    const saved = await saveDraft(payload, user, definition, {
+      publish: body?.publish === true,
+      roles,
+      category,
+      reportId,
+    })
     if (!saved.ok) {
       return NextResponse.json(
         {
@@ -60,9 +59,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(saved)
   } catch (error) {
     console.error('[reports] could not save an Ask draft:', error)
-    return NextResponse.json(
-      { error: { code: 'SAVE_FAILED', message: 'The draft could not be saved. Try again.' } },
-      { status: 500 },
-    )
+    return errorResponse(500, 'SAVE_FAILED', 'The report could not be saved. Try again.')
   }
 }

@@ -2393,7 +2393,7 @@ export interface ReportAsk {
   kind: 'ask' | 'refine' | 'check' | 'mcp_query';
   question?: string | null;
   refinement?: string | null;
-  outcome: 'ok' | 'invalid' | 'unanswerable' | 'refused' | 'invalid_output' | 'error';
+  outcome: 'ok' | 'invalid' | 'unanswerable' | 'refused' | 'invalid_output' | 'error' | 'cancelled';
   model?: string | null;
   effort?: string | null;
   promptVersion?: string | null;
@@ -2402,7 +2402,18 @@ export interface ReportAsk {
   outputTokens?: number | null;
   cacheReadTokens?: number | null;
   cacheWriteTokens?: number | null;
+  /**
+   * Claude call, end to end
+   */
   latencyMs?: number | null;
+  /**
+   * Until the first streamed text (the plan) reached the person
+   */
+  firstOutputMs?: number | null;
+  /**
+   * Whole request, checks and preview included
+   */
+  totalMs?: number | null;
   errorCount?: number | null;
   warningCount?: number | null;
   definition?:
@@ -3714,6 +3725,8 @@ export interface ReportAsksSelect<T extends boolean = true> {
   cacheReadTokens?: T;
   cacheWriteTokens?: T;
   latencyMs?: T;
+  firstOutputMs?: T;
+  totalMs?: T;
   errorCount?: T;
   warningCount?: T;
   definition?: T;

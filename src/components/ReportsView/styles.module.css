@@ -1043,3 +1043,145 @@ h3.navGroupTitle {
   margin: 0;
   padding: 0;
 }
+
+/* Ask Claude */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 1px solid var(--theme-elevation-250, #ccc);
+  border-radius: 999px;
+  background: var(--theme-elevation-0, #fff);
+  color: var(--theme-elevation-800, #222);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chip:hover {
+  border-color: var(--theme-elevation-500, #888);
+}
+
+.chip:focus-visible {
+  outline: 2px solid var(--theme-success-500, #0ea5e9);
+  outline-offset: 2px;
+}
+
+.matchCard,
+.askProgress,
+.publishBox {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 14px 16px;
+  border: 1px solid var(--theme-elevation-250, #ccc);
+  border-radius: 10px;
+  background: var(--theme-elevation-0, #fff);
+}
+
+.askProgressHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.timer {
+  font-variant-numeric: tabular-nums;
+  color: var(--theme-elevation-650, #555);
+}
+
+.stages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.stages li {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  font-size: 14px;
+}
+
+.stageDot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--theme-elevation-400, #999);
+}
+
+.stage_done .stageDot {
+  background: var(--theme-text, #111);
+  border-color: var(--theme-text, #111);
+}
+
+.stage_live .stageDot {
+  border-color: var(--theme-text, #111);
+  animation: stagePulse 1.2s ease-in-out infinite;
+}
+
+.stage_waiting {
+  color: var(--theme-elevation-650, #555);
+}
+
+.stageTime {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--theme-elevation-650, #555);
+}
+
+@keyframes stagePulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage_live .stageDot {
+    animation: none;
+  }
+}
+
+.planBox {
+  padding: 10px 14px;
+  border-left: 3px solid var(--theme-elevation-400, #999);
+  background: var(--theme-elevation-50, #f5f5f5);
+  border-radius: 0 8px 8px 0;
+  font-size: 14px;
+}
+
+.notReviewed {
+  display: inline-block;
+  margin-left: 10px;
+  padding: 2px 8px;
+  border: 1px solid var(--theme-warning-500, #b45309);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+.sqlDetails summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.saveBox {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.publishBox legend {
+  padding: 0 4px;
+}
