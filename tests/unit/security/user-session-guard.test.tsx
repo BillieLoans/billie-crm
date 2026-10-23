@@ -15,15 +15,24 @@ import React from 'react'
 const SESSION_USER_STORAGE_KEY = 'billie-session-user'
 const RECENT_CUSTOMERS_STORAGE_KEY = 'billie-recent-customers'
 const FAILED_ACTIONS_STORAGE_KEY = 'billie-failed-actions'
+const RECENT_REPORTS_STORAGE_KEY = 'billie-recent-reports'
+const ASK_DRAFT_STORAGE_KEY = 'billie-ask-draft'
 
 // Mock the stores
 const mockClearHistory = vi.fn()
+const mockClearRecentReports = vi.fn()
 const mockClearAll = vi.fn()
 const mockClearAllVersions = vi.fn()
 
 vi.mock('@/stores/recentCustomers', () => ({
   useRecentCustomersStore: {
     getState: () => ({ clearHistory: mockClearHistory }),
+  },
+}))
+
+vi.mock('@/stores/recentReports', () => ({
+  useRecentReportsStore: {
+    getState: () => ({ clearHistory: mockClearRecentReports }),
   },
 }))
 
@@ -50,6 +59,8 @@ vi.mock('@/lib/constants', () => ({
   SESSION_USER_STORAGE_KEY: 'billie-session-user',
   RECENT_CUSTOMERS_STORAGE_KEY: 'billie-recent-customers',
   FAILED_ACTIONS_STORAGE_KEY: 'billie-failed-actions',
+  RECENT_REPORTS_STORAGE_KEY: 'billie-recent-reports',
+  ASK_DRAFT_STORAGE_KEY: 'billie-ask-draft',
 }))
 
 // Import after mocks
@@ -107,6 +118,7 @@ describe('UserSessionGuard', () => {
 
       // Should clear stores
       expect(mockClearHistory).toHaveBeenCalled()
+      expect(mockClearRecentReports).toHaveBeenCalled()
       expect(mockClearAll).toHaveBeenCalled()
       expect(mockClearAllVersions).toHaveBeenCalled()
 
@@ -125,6 +137,7 @@ describe('UserSessionGuard', () => {
 
       // Should NOT clear stores
       expect(mockClearHistory).not.toHaveBeenCalled()
+      expect(mockClearRecentReports).not.toHaveBeenCalled()
       expect(mockClearAll).not.toHaveBeenCalled()
       expect(mockClearAllVersions).not.toHaveBeenCalled()
     })
@@ -141,6 +154,7 @@ describe('UserSessionGuard', () => {
 
       // Should clear stores because stored user doesn't match current (null)
       expect(mockClearHistory).toHaveBeenCalled()
+      expect(mockClearRecentReports).toHaveBeenCalled()
       expect(mockClearAll).toHaveBeenCalled()
 
       // Should remove session user key
@@ -158,6 +172,7 @@ describe('UserSessionGuard', () => {
 
       // Should NOT clear stores (fresh login)
       expect(mockClearHistory).not.toHaveBeenCalled()
+      expect(mockClearRecentReports).not.toHaveBeenCalled()
       expect(mockClearAll).not.toHaveBeenCalled()
 
       // Should store user
@@ -188,6 +203,19 @@ describe('UserSessionGuard', () => {
 
       // localStorage should be cleared directly
       expect(localStorage.getItem(FAILED_ACTIONS_STORAGE_KEY)).toBeNull()
+    })
+
+    it("should remove the previous user's recent reports and Ask Claude draft on user change", () => {
+      localStorage.setItem(SESSION_USER_STORAGE_KEY, 'user-A')
+      localStorage.setItem(RECENT_REPORTS_STORAGE_KEY, '{"reports":[{"slug":"decline-rate"}]}')
+      sessionStorage.setItem(ASK_DRAFT_STORAGE_KEY, '{"question":"arrears by state"}')
+
+      mockUseAuth.mockReturnValue({ user: { id: 'user-B' } })
+
+      render(<UserSessionGuard />)
+
+      expect(localStorage.getItem(RECENT_REPORTS_STORAGE_KEY)).toBeNull()
+      expect(sessionStorage.getItem(ASK_DRAFT_STORAGE_KEY)).toBeNull()
     })
   })
 

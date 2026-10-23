@@ -132,6 +132,7 @@ afterAll(async () => {
 })
 
 beforeEach(async () => {
+  delete process.env.REPORTS_EMAIL_LABEL
   sendStaffEmail.mockReset().mockResolvedValue('email-id')
   await pool.query(`DELETE FROM report_deliveries WHERE subscription_id IN
     (SELECT s.id FROM report_subscriptions s JOIN users u ON u.id = s.user_id WHERE u.email LIKE '${PREFIX}-%')`)

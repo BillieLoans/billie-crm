@@ -588,4 +588,10 @@ describe('Monday email', () => {
     expect(email.subject).toBe('[DEMO] Weekly report: Decline rate and reasons (2001-03-12)')
     expect(email.html).toContain('DEMO</strong> environment, not production data')
   })
+
+  // Test files share one process, so an environment variable set here would
+  // label every later file's emails.
+  afterAll(() => {
+    delete process.env.REPORTS_EMAIL_LABEL
+  })
 })
