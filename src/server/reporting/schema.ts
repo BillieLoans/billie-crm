@@ -88,7 +88,19 @@ END`
 export const ATTRIBUTION_CAPTURE_START = '2026-10-06'
 
 /** Views, in dependency order (dropped in reverse). */
-const VIEW_NAMES = ['application', 'decision', 'loan', 'instalment'] as const
+const VIEW_NAMES = [
+  'application',
+  'decision',
+  'loan',
+  'instalment',
+  'customer',
+  'collection_case',
+  'write_off',
+  'block_clear_request',
+  'notification',
+  'llm_cost',
+  'contact_note',
+] as const
 
 /** Statements, in order. Each is safe to re-run. */
 export const REPORTING_SCHEMA_STATEMENTS: readonly string[] = [
@@ -250,7 +262,21 @@ export const REPORTING_SCHEMA_STATEMENTS: readonly string[] = [
      a.source,
      a.medium,
      COALESCE(a.channel, 'direct')                          AS channel,
-     COALESCE(a.acquisition, 'not recorded')                AS acquisition
+     COALESCE(a.acquisition, 'not recorded')                AS acquisition,
+     la.loan_terms_opened_date                              AS opened_at,
+     reporting.sydney_date(la.loan_terms_opened_date)       AS opened_on,
+     reporting.sydney_date(la.commencement_date)            AS commencement_on,
+     la.repayment_schedule_payment_frequency::text          AS payment_frequency,
+     la.repayment_schedule_number_of_payments::integer      AS number_of_payments,
+     la.balances_current_balance                            AS current_balance,
+     la.last_payment_date                                   AS last_payment_at,
+     reporting.sydney_date(la.last_payment_date)            AS last_payment_on,
+     la.last_payment_amount,
+     la.aging_last_updated                                  AS aging_updated_at,
+     reporting.sydney_date(la.closure_closed_date)          AS closed_on,
+     la.closure_previous_status                             AS status_before_closure,
+     la.closure_final_balance                               AS final_balance,
+     la.closure_total_paid                                  AS total_paid_at_closure
    FROM public.loan_accounts la
    LEFT JOIN LATERAL (
      SELECT ap.conversation_id, ap.source, ap.medium, ap.channel, ap.acquisition
@@ -275,6 +301,201 @@ export const REPORTING_SCHEMA_STATEMENTS: readonly string[] = [
      reporting.sydney_date(p.paid_date)     AS paid_on
    FROM public.loan_accounts_repayment_schedule_payments p
    JOIN public.loan_accounts la ON la.id = p._parent_id`,
+
+  // One row per customer: identity, verification and risk, never contact
+  // details. Age in whole years and the residential state and postcode only.
+  `CREATE VIEW reporting.customer AS
+   SELECT
+     cu.customer_id,
+     NULLIF(cu.canonical_id, '')                              AS canonical_id,
+     cu.customer_id_status,
+     NULLIF(cu.merged_into, '')                               AS merged_into,
+     cu.created_at,
+     reporting.sydney_date(cu.created_at)                     AS created_on,
+     date_part('year', age(current_date, reporting.sydney_date(cu.date_of_birth)))::integer
+                                                              AS age,
+     NULLIF(UPPER(TRIM(cu.residential_address_state)), '')    AS state,
+     NULLIF(TRIM(cu.residential_address_postcode), '')        AS postcode,
+     NULLIF(UPPER(TRIM(cu.residential_address_country)), '')  AS country,
+     cu.identity_verified,
+     cu.ekyc_status::text                                     AS ekyc_status,
+     cu.individual_status::text                               AS individual_status,
+     cu.identity_verification_provider                        AS verification_provider,
+     cu.identity_verification_overall_result                  AS verification_result,
+     cu.identity_verification_identity_outcome                AS identity_outcome,
+     cu.identity_verification_screening_outcome               AS screening_outcome,
+     cu.identity_verification_pep_result                      AS pep_result,
+     cu.identity_verification_sanctions_result                AS sanctions_result,
+     cu.identity_verification_checked_at                      AS verification_checked_at,
+     cu.staff_flag,
+     cu.investor_flag,
+     cu.founder_flag,
+     cu.vulnerable_flag,
+     cu.fraud_risk_active,
+     cu.fraud_risk_severity,
+     cu.fraud_risk_score,
+     CASE WHEN jsonb_typeof(cu.fraud_risk_categories) = 'array'
+          THEN ARRAY(SELECT jsonb_array_elements_text(cu.fraud_risk_categories)) END
+                                                              AS fraud_risk_categories,
+     cu.fraud_risk_flagged_at,
+     cu.reapplication_block_reason                            AS block_reason,
+     cu.reapplication_block_blocked_at                        AS blocked_at,
+     cu.reapplication_block_blocked_until                     AS blocked_until,
+     cu.reapplication_block_clear_status                      AS block_clear_status,
+     cu.reapplication_block_cleared_at                        AS block_cleared_at,
+     cu.email_tier,
+     cu.email_source,
+     (cu.email_verified_at IS NOT NULL)                       AS email_verified,
+     cu.mobile_phone_tier,
+     cu.mobile_phone_source,
+     (cu.mobile_phone_verified_at IS NOT NULL)                AS mobile_verified
+   FROM public.customers cu`,
+
+  // One row per collections case on a loan.
+  `CREATE VIEW reporting.collection_case AS
+   SELECT
+     cc.account_id                              AS loan_account_id,
+     cc.customer_id,
+     cc.state::text                             AS state,
+     cc.hardship_paused,
+     cc.stopped_contact,
+     cc.overdue_amount,
+     cc.days_overdue::integer                   AS days_overdue,
+     cc.last_step::integer                      AS last_step,
+     cc.rung::integer                           AS rung,
+     cc.due_date,
+     reporting.sydney_date(cc.due_date)         AS due_on,
+     cc.opened_at,
+     reporting.sydney_date(cc.opened_at)        AS opened_on,
+     cc.cured_at,
+     reporting.sydney_date(cc.cured_at)         AS cured_on,
+     cc.exhausted_at,
+     cc.paused_at,
+     cc.resumed_at,
+     cc.stop_contact_at,
+     cc.updated_at
+   FROM public.collection_cases cc`,
+
+  // One row per write-off request. Staff appear as user ids, never names.
+  `CREATE VIEW reporting.write_off AS
+   SELECT
+     w.request_id,
+     w.request_number,
+     w.loan_account_id,
+     w.customer_id,
+     w.amount,
+     w.original_balance,
+     w.reason::text                                      AS reason,
+     w.status::text                                      AS status,
+     w.priority::text                                    AS priority,
+     w.requires_senior_approval,
+     w.requested_by_id::text                             AS requested_by,
+     w.requested_at,
+     reporting.sydney_date(w.requested_at)               AS requested_on,
+     w.approval_details_decided_by_id::text              AS decided_by,
+     w.approval_details_decided_at                       AS decided_at,
+     NULLIF(w.approval_details_approved_by, '')          AS approved_by,
+     w.approval_details_approved_at                      AS approved_at,
+     reporting.sydney_date(w.approval_details_approved_at) AS approved_on,
+     NULLIF(w.approval_details_rejected_by, '')          AS rejected_by,
+     w.approval_details_rejected_at                      AS rejected_at,
+     NULLIF(w.cancellation_details_cancelled_by, '')     AS cancelled_by,
+     w.cancellation_details_cancelled_at                 AS cancelled_at
+   FROM public.write_off_requests w`,
+
+  // One row per request to clear a re-application block.
+  `CREATE VIEW reporting.block_clear_request AS
+   SELECT
+     r.request_id,
+     r.request_number,
+     r.canonical_customer_id                             AS customer_id,
+     r.conversation_id,
+     CASE WHEN jsonb_typeof(r.reasons) = 'array'
+          THEN ARRAY(SELECT jsonb_array_elements_text(r.reasons)) END AS reasons,
+     r.status::text                                      AS status,
+     r.requested_by_id::text                             AS requested_by,
+     r.requested_at,
+     reporting.sydney_date(r.requested_at)               AS requested_on,
+     NULLIF(r.approval_details_approved_by, '')          AS approved_by,
+     r.approval_details_approved_at                      AS approved_at,
+     NULLIF(r.approval_details_rejected_by, '')          AS rejected_by,
+     r.approval_details_rejected_at                      AS rejected_at,
+     NULLIF(r.cancellation_details_cancelled_by, '')     AS cancelled_by,
+     r.cancellation_details_cancelled_at                 AS cancelled_at
+   FROM public.reapplication_block_clear_requests r`,
+
+  // One row per customer notification (email, SMS). No recipient, no content.
+  `CREATE VIEW reporting.notification AS
+   SELECT
+     n.notification_id,
+     n.customer_id,
+     n.status::text                              AS status,
+     n.channel::text                             AS channel,
+     n.template_name,
+     n.provider,
+     n.tags_category                             AS category,
+     n.tags_reason                               AS reason,
+     n.tags_step::integer                        AS step,
+     n.event_at,
+     n.sent_at,
+     reporting.sydney_date(n.sent_at)            AS sent_on,
+     n.failure_failed_at                         AS failed_at,
+     n.failure_error_type::text                  AS error_type,
+     n.failure_attempt::integer                  AS attempt,
+     n.failure_fallback_suggested                AS fallback_suggested,
+     n.statement_account_id                      AS statement_loan_account_id,
+     n.statement_period_start,
+     n.statement_period_end,
+     n.statement_dispatched_at,
+     n.suppression_mode::text                    AS suppression_mode,
+     n.suppression_set_at,
+     n.suppression_expires_at,
+     n.created_at,
+     reporting.sydney_date(n.created_at)         AS created_on
+   FROM public.notifications n`,
+
+  // One row per LLM call in a conversation, with its cost.
+  `CREATE VIEW reporting.llm_cost AS
+   SELECT
+     l.conversation_id,
+     l.seq::integer                        AS seq,
+     l.model,
+     l.agent_name,
+     l.service_tier,
+     l.prompt_tokens::bigint               AS prompt_tokens,
+     l.completion_tokens::bigint           AS completion_tokens,
+     l.cached_tokens::bigint               AS cached_tokens,
+     l.reasoning_tokens::bigint            AS reasoning_tokens,
+     l.total_tokens::bigint                AS total_tokens,
+     l.response_time_ms::integer           AS response_time_ms,
+     COALESCE(l.computed_cost_usd, l.logged_cost_usd) AS cost_usd,
+     l.priced,
+     l.has_usage,
+     l.called_at,
+     reporting.sydney_date(l.called_at)    AS called_on
+   FROM public.llm_costs l`,
+
+  // One row per staff contact note: what kind of contact, never its text.
+  `CREATE VIEW reporting.contact_note AS
+   SELECT
+     cn.id::text                           AS note_id,
+     cu.customer_id,
+     la.loan_account_id,
+     cv.conversation_id,
+     cn.channel::text                      AS channel,
+     cn.topic::text                        AS topic,
+     cn.contact_direction::text            AS direction,
+     cn.priority::text                     AS priority,
+     cn.sentiment::text                    AS sentiment,
+     cn.status::text                       AS status,
+     cn.created_by_id::text                AS created_by,
+     cn.amends_note_id::text               AS amends_note_id,
+     cn.created_at,
+     reporting.sydney_date(cn.created_at)  AS created_on
+   FROM public.contact_notes cn
+   LEFT JOIN public.customers cu ON cu.id = cn.customer_id
+   LEFT JOIN public.loan_accounts la ON la.id = cn.loan_account_id
+   LEFT JOIN public.conversations cv ON cv.id = cn.conversation_id`,
 
   // ── Grants ───────────────────────────────────────────────────────────────
   // The runtime role is DML-only and named outside this repo, so grant the

@@ -128,7 +128,19 @@ describe('reporting schema', () => {
       `SELECT table_name FROM information_schema.views WHERE table_schema = 'reporting'
         ORDER BY table_name`,
     )
-    expect(rows.map((r) => r.table_name)).toEqual(['application', 'decision', 'instalment', 'loan'])
+    expect(rows.map((r) => r.table_name)).toEqual([
+      'application',
+      'block_clear_request',
+      'collection_case',
+      'contact_note',
+      'customer',
+      'decision',
+      'instalment',
+      'llm_cost',
+      'loan',
+      'notification',
+      'write_off',
+    ])
   })
 
   it('maps decline reasons to the BTB-462 categories by longest prefix', async () => {
