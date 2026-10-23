@@ -29,7 +29,7 @@ import { GET as authorizationServer } from '@/app/api/oauth/authorization-server
 import { POST as register } from '@/app/api/oauth/register/route'
 import { POST as token } from '@/app/api/oauth/token/route'
 import { GET as authorize, POST as decide } from '@/app/api/oauth/authorize/route'
-import { reportingReaderUri } from '../utils/reportingReader'
+import { reportingReaderPool, reportingReaderUri } from '../utils/reportingReader'
 
 const P = 'TEST-OAUTH'
 const ORIGIN = 'https://crm.test'
@@ -38,6 +38,7 @@ const POST = REST_POST(config)
 
 let payload: Payload
 let pool: Pool
+let reader: Pool
 let previousAppUrl: string | undefined
 let previousReportingUri: string | undefined
 const users: Record<string, { id: string; email: string }> = {}
@@ -168,6 +169,9 @@ beforeAll(async () => {
   process.env.REPORTING_DATABASE_URI = reportingReaderUri()
   payload = await getPayload({ config })
   pool = getDashboardPool(payload) as unknown as Pool
+  // Creates reporting_reader with its password and grants: a fresh database
+  // (CI) has none until some suite does.
+  reader = await reportingReaderPool(pool)
   await cleanup()
   for (const role of ['supervisor', 'readonly', 'operations']) {
     const email = `test-oauth-${role}-${Date.now()}@billie.loans`
@@ -212,6 +216,7 @@ afterAll(async () => {
   // The MCP pool is left open: the Payload instance, and so the pool, is shared with
   // later files (report-mcp closes it).
   await cleanup()
+  await reader?.end()
   // Assigning undefined would store the string "undefined".
   for (const [name, value] of [
     ['NEXT_PUBLIC_APP_URL', previousAppUrl],
