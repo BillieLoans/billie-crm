@@ -12,7 +12,12 @@ export interface ParameterFormProps {
   values: ParameterValues
   errors: Record<string, string>
   onChange: (name: string, value: string | boolean) => void
+  /** Parameters drawn elsewhere (the period picker). */
+  exclude?: readonly string[]
 }
+
+/** Selects with this many options or fewer show as a row of choices. */
+const SEGMENTED_MAX = 4
 
 /** The id of a parameter's input, used by the error summary's links. */
 export function parameterInputId(idPrefix: string, name: string): string {
@@ -30,11 +35,13 @@ export function ParameterForm({
   values,
   errors,
   onChange,
+  exclude = [],
 }: ParameterFormProps) {
-  if (parameters.length === 0) return null
+  const shown = parameters.filter((p) => !exclude.includes(p.name))
+  if (shown.length === 0) return null
   return (
     <div className={styles.paramGrid}>
-      {parameters.map((param) => {
+      {shown.map((param) => {
         const id = parameterInputId(idPrefix, param.name)
         const hintId = param.help ? `${id}-hint` : undefined
         const errorId = errors[param.name] ? `${id}-error` : undefined
@@ -75,6 +82,51 @@ export function ParameterForm({
         }
 
         const stringValue = typeof value === 'string' ? value : ''
+
+        if (
+          param.type === 'select' &&
+          param.required &&
+          (param.options?.length ?? 0) <= SEGMENTED_MAX
+        ) {
+          return (
+            <fieldset
+              key={param.name}
+              className={styles.field}
+              aria-describedby={describedBy}
+              data-testid={`segmented-${param.name}`}
+            >
+              <legend className={styles.fieldLabel}>{param.label}</legend>
+              {param.help && (
+                <p id={hintId} className={styles.hint}>
+                  {param.help}
+                </p>
+              )}
+              {errorId && (
+                <p id={errorId} className={styles.fieldError}>
+                  <span className={styles.visuallyHidden}>Error: </span>
+                  {errors[param.name]}
+                </p>
+              )}
+              <div className={styles.segmented}>
+                {param.options?.map((o, i) => (
+                  <label key={o.value} className={styles.segment}>
+                    <input
+                      // The error summary links to the first choice.
+                      id={i === 0 ? id : undefined}
+                      type="radio"
+                      name={id}
+                      value={o.value}
+                      checked={stringValue === o.value}
+                      onChange={() => onChange(param.name, o.value)}
+                    />
+                    <span>{o.label}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )
+        }
+
         return (
           <div key={param.name} className={styles.field}>
             <label htmlFor={id} className={styles.fieldLabel}>

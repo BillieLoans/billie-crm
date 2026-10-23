@@ -216,13 +216,24 @@ A report is a document in the `report-definitions` collection, not code:
 SQL over the `reporting` schema, a parameter list, an optional chart and the
 roles that may run it. Publishing a new version changes the report with no
 deploy. Staff run reports at `/admin/reports`; authors (admin, supervisor)
-edit them at `/admin/collections/report-definitions`.
+write them in the report editor (`/admin/reports/new`, and "Edit report" on a
+report: `/admin/reports/<slug>/edit`). Versions and history stay at
+`/admin/collections/report-definitions`.
 
 ### Writing a report
 
-In the admin, SQL, parameters and chart are plain monospace text boxes: SQL
-as typed, parameters and chart as JSON, checked as you type. (Payload's code
-editor loads from a CDN that the admin's Content-Security-Policy blocks.)
+The report editor has the SQL in a highlighting editor (CodeMirror, bundled
+with the app; Ctrl/Cmd+Enter runs the preview) beside a live preview on the
+defaults, and form builders for the parameters, charts, headline numbers and
+column settings. "Publish…" first runs the same checks as a Claude draft
+(below) and refuses on any error, then shows what changed against the
+published version: the settings by name and a line diff of the SQL. A
+change is written through Payload's REST API, so access and validation are
+the collection's, and the collection runs the checks again on any publish
+over the API (`checksBeforePublish`, the Payload admin included): a report
+that fails them is not published, whatever the browser did. In the Payload admin the same fields are plain text boxes
+(its code editor loads from a CDN the admin's Content-Security-Policy
+blocks).
 
 - One `SELECT` or `WITH` statement. Unqualified names resolve in `reporting`.
 - Parameter N is `$N`, in the order the parameters are listed. Every
@@ -232,8 +243,29 @@ editor loads from a CDN that the admin's Content-Security-Policy blocks.)
   `date`, `text`, `integer`, `number`, `select`, `boolean`. Date defaults are
   `today`, `today-N` or `YYYY-MM-DD`, resolved in Sydney when the report
   runs. A report whose parameters all have defaults runs as soon as it opens.
-- Chart (optional): `{type: line | bar | area, x, series: [{column, label}],
-  stacked}`. One y-axis; up to eight series; series must be numeric columns.
+- Charts (optional, up to two): `{type, x, series: [{column, label}], stacked,
+  sort, rollingAverage, drill}`. Types `line`, `area`, `bar`,
+  `bar-horizontal` (ranked) and `stacked-100` (mix as shares). One y-axis; up
+  to eight series, numeric columns only. Categories sort largest first unless
+  `sort: "none"`; daily lines over three weeks get a 7-day average unless
+  `rollingAverage: 0`; `drill: {report, parameter}` opens another report with
+  the clicked category. An All/Total row is pinned below the table and drawn
+  as a reference line, not a bar.
+- Headline (optional, up to four): `{column, label, value, better}`, where
+  `value` is `total` (the All/Total row, or the sum of a count), `sum`,
+  `average`, `max`, `min`, `first`, `last` or `ratio` (with `numerator` and
+  `denominator`). They lead the page with their change on the previous period
+  and one or two sentences that read them, built in code from the result:
+  nothing about the results goes to Claude. The previous period is the same number of
+  days just before, or for whole calendar months the same number of months
+  (October against September).
+- Column settings (optional): `{name, label, format, base, minBase,
+  description, better}`. Without them a column's format follows its name
+  (`*_rate` a 0–1 share, `*_pct` 0–100, money names in dollars, then hours and
+  days). A rate with a `base` count is marked when the base is under `minBase`
+  (20) and its tooltip gives a 95% interval.
+- Area (`category`) places the report in the catalogue; `featured` puts its
+  first headline number on the Reports home.
 - Save as a draft and try it in the Reports view (see Drafts below), then
   publish. Viewers only ever run the published version.
 
@@ -349,6 +381,21 @@ primary, update `REPORTING_DATABASE_URI`, and run `make secrets` again.
 Dev without Neon: create the role in the local database the same way and point
 `REPORTING_DATABASE_URI` at it; restarting the app re-applies the grants.
 
+## Finding reports
+
+The Reports home (`/admin/reports`) leads with the headline number of each
+featured report (on its default period, with its change and a sparkline;
+`/api/reports/home`, cached for a minute across users, access checked per
+person), then the person's pinned and recently opened reports, then every
+report by area. Search matches titles, descriptions and areas; the sidebar
+groups and filters the same list, and Cmd+K finds reports from anywhere in
+the CRM. Pins are per person (`report-preferences`, up to 20). Searches,
+downloads and copies are logged to `report-events` for the usage page.
+
+A report's period, settings and comparison are kept in its link
+(`?from=…&to=…&_compare=1`), so a view can be shared with "Copy link".
+Changing a setting re-runs the report after 300 ms.
+
 ## First reports (BTB-507)
 
 Delivered as data by the `20261026_100000_first_reports` migration, which
@@ -397,9 +444,22 @@ subject and are not mistaken for production figures.
 
 ## Ask Claude (BTB-508)
 
-Authors (admin, supervisor) open **Reports → Ask Claude for a report**
+Any staff member can open **Reports → Ask Claude for a report**
 (`/admin/reports/ask`), describe a report in words, and get a draft
-definition: title, description, SQL, parameters and chart. Claude is sent the
+definition: title, plan, assumptions, description, SQL, parameters, charts,
+headline and column settings. Published reports that already answer the
+question are offered first, with no Claude call. The answer streams: the
+stages, then the title and plan as Claude writes them, so the wait shows
+progress; "Cancel" stops it and the call to Claude. A question uses high
+effort and a change medium.
+
+Staff who are not authors see the preview marked "Not reviewed", without the
+SQL; they cannot save, have 20 questions a day and one draft in progress at a
+time, and can check or change only a draft Claude gave them (by its logged
+`askId`). The allowance is held in the database (a `pending` report-asks
+row taken under a per-person advisory lock, `src/server/reporting/ask/quota.ts`),
+so it holds across servers. Authors can also "Save and publish" in one step, after confirming
+the area and who can run it. Claude is sent the
 question and the schema description in
 `src/server/reporting/schema-description.ts`, never result rows; a refinement
 also sends the draft and what the checks found, with result values and
@@ -442,7 +502,9 @@ Change `ASK_PROMPT_VERSION` or `SCHEMA_DESCRIPTION_VERSION` whenever the
 prompt or description changes, so logged results stay comparable. A call
 times out after 85 seconds with no retry (`ASK_TIMEOUT_MS`), inside
 Cloudflare's 100-second limit, so a slow draft fails visibly instead of being
-paid for and never shown.
+paid for and never shown. A streamed call, which sends a heartbeat every 10
+seconds, may run to 150 seconds (`ASK_STREAM_TIMEOUT_MS`). The log records
+the time to the first output and to the finished draft, and cancellations.
 
 Without `ANTHROPIC_API_KEY` the panel answers that Ask is not configured; the
 rest of Reports is unaffected.
@@ -603,15 +665,84 @@ not CRM roles, which is why only reviewed, aggregate reports go on the key.
 To rotate the key, create a new dashboard key, update the connector's header
 (remove and re-add the connector; members reconnect), then delete the old key.
 
+## Report emails and alerts
+
+On a published report, "Email me this…" sends it to the person daily, on
+Monday mornings or on the 1st of the month, with the settings on screen and
+a period that moves forward each time: the last 7 days, the last 30 days or
+last month (complete days only; "this month" would be one barely begun day
+on the 1st). The
+email leads with the headline numbers, their change and the sentence that
+reads them, then the first chart as an image and the data as a CSV. "Alert
+me…" watches one number (a row, or the headline figure) and emails when it
+goes above or below a threshold; it is checked each morning and sends only
+when the condition starts to hold. Report authors can send either to the
+shared Slack channel (`REPORTS_SLACK_WEBHOOK_URL`). People manage theirs at
+**Your emails and alerts** (`/admin/reports/subscriptions`).
+
+The deliveries job (`POST /api/reports/jobs/deliveries`,
+`src/server/reporting/deliveries.ts`) runs each due subscription **as its
+subscriber**, so someone who loses access to a report stops receiving it
+(the page then says why). Each delivery first claims
+`<subscription>:<day | month | alert:day>` in `report-deliveries` (unique),
+so repeated calls send nothing; a failed run or send releases the claim for
+the next call, and a claim left `sending` for 15 minutes by a call that died
+is taken over. Subscribers to the same report and settings share one run and
+one chart. A Resend 409 on the idempotency key counts as sent. Without
+`RESEND_API_KEY` the job still posts to Slack and checks alerts; each email
+fails on its own and the next call retries it.
+
+The chart is drawn as SVG (`src/server/reporting/chart-image.ts`) from the
+same prepared data as the page's chart and rasterised with sharp; the
+runtime images install `fontconfig` and `ttf-dejavu` so its text renders.
+
+## Boards
+
+A board (`/admin/reports/boards/<slug>`, collection `report-boards`) puts up
+to twelve reports on one page with one period, for a team's regular review.
+Each tile shows its report's headline numbers and first chart (or whichever
+the report has) and links to the report on the same period. Staff see only
+the tiles for reports they can run; a board with none is not found for them,
+and the raw collection is readable by authors only. Authors make boards at
+`/admin/reports/boards`, put a report on one from its page ("Add to board",
+keeping its settings but not its period), and reorder, change or remove
+tiles. A tile for a report that is not published now is kept, hidden, and
+comes back when the report is published again. A change is written only
+if the board is still the version it was read at: writers take a per-board
+advisory lock, check the version and write through Payload (so the
+collection's validation applies). An editor open on an old copy is asked to
+reload rather than undoing someone else's change. Tile runs are logged with
+trigger `board`.
+
+## Usage
+
+Authors see how Reports is used at `/admin/reports/usage`
+(`src/server/reporting/usage.ts`, aggregates over the last 30 days): people
+and reads in each of the last eight Sydney weeks; each report's reads,
+people, CSV downloads per read, people it is emailed to and last open;
+published reports nobody opened; Ask Claude's median and 95th percentile
+time to first output and to a finished draft, and the share of answered
+questions saved as reports; and searches with no report opened within ten
+minutes, grouped by what was typed.
+
+A read is a run from a report page or a board that succeeded: not a
+scheduled email, an author's draft, or the previous-period run made for a
+comparison (`report-runs.comparison`). A search is the last query a person
+typed before a two-minute pause, so "chu", "churn" counts once. Saves are
+recorded by the save route, not the browser; a report saved twice counts
+once, and a change to an existing report through Ask is not counted.
+
 ## Scheduling
 
-`.github/workflows/scheduled-reports.yml` calls both jobs. GitHub cron is UTC
+`.github/workflows/scheduled-reports.yml` calls the jobs. GitHub cron is UTC
 and can run late or not at all, so each job fires more than once and the CRM
 makes repeats harmless:
 
 - Weekly email, prod only on schedule: three runs on Monday morning, each
   with `?notBeforeSydneyHour=8`. A call sends only on a Sydney Monday at or
   after 08:00, so a late run still sends, and the claim stops the others.
+- Report emails and alerts, prod only on schedule: three runs each morning,
+  each with `?notBeforeSydneyHour=7`. Each delivery is claimed once (above).
 - Portfolio snapshot, demo and prod: two runs between midnight and 03:00
   Sydney, each with `?asOfDate=` the Sydney day just ended. The snapshot is an
   upsert, so the second run rewrites the same row.
@@ -634,9 +765,10 @@ workflow does not hold `CF_SECRET`.
 | Variable | Used by | Notes |
 |---|---|---|
 | `REPORTING_JOB_TOKEN` | scheduled jobs | Long random string, Fly secret |
-| `RESEND_API_KEY` | Monday email | Resend API key; the job refuses to run without it |
+| `RESEND_API_KEY` | Monday email, report emails and alerts | Resend API key; the job refuses to run without it |
 | `RESEND_FROM_ADDRESS` | Monday email | Defaults to `noreply@billie.loans`, the verified sender platform-services uses |
 | `NEXT_PUBLIC_APP_URL` | Monday email | Already set for Payload; used for the report link |
-| `REPORTS_EMAIL_LABEL` | Monday email | `DEMO` on demo; unset on prod |
+| `REPORTS_EMAIL_LABEL` | Monday email, report emails | `DEMO` on demo; unset on prod |
+| `REPORTS_SLACK_WEBHOOK_URL` | report emails and alerts | Slack incoming webhook for the shared channel; unset = Slack not offered |
 | `REPORTING_DATABASE_URI` | report runner | Logged in as `reporting_reader`; the Neon read replica in deployed environments. Required everywhere |
 | `ANTHROPIC_API_KEY` | Ask Claude | Fly secret on the CRM app; Ask is unavailable without it |

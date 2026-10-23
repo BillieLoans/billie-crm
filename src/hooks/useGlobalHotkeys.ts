@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useCallback } from 'react'
+import { isEditableTarget } from '@/lib/keyboard'
 
 interface HotkeyConfig {
   /** Key to listen for (case-insensitive) */
@@ -23,9 +24,7 @@ export function useGlobalHotkeys(hotkeys: HotkeyConfig[]): void {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Check if we're in an input/textarea/contenteditable
-      const target = e.target as HTMLElement
-      const isInput =
-        target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable
+      const isInput = isEditableTarget(e.target)
 
       for (const hotkey of hotkeys) {
         // Skip if in input and not allowed

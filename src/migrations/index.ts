@@ -43,6 +43,7 @@ import * as migration_20261024_090000_report_definitions from './20261024_090000
 import * as migration_20261025_090000_report_delivery from './20261025_090000_report_delivery';
 import * as migration_20261026_090000_report_asks from './20261026_090000_report_asks';
 import * as migration_20261026_095000_reporting_mcp from './20261026_095000_reporting_mcp'
+import * as migration_20261026_095500_report_presentation from './20261026_095500_report_presentation'
 import * as migration_20261026_100000_first_reports from './20261026_100000_first_reports';
 import * as migration_20261027_090000_mcp_oauth from './20261027_090000_mcp_oauth'
 import * as migration_20261027_100000_mcp_oauth_refresh_grace from './20261027_100000_mcp_oauth_refresh_grace'
@@ -51,6 +52,14 @@ import * as migration_20261028_100000_reporting_loan_lookup from './20261028_100
 import * as migration_20261028_110000_conversations_started_on_idx from './20261028_110000_conversations_started_on_idx'
 import * as migration_20261028_120000_reporting_acquisition_detail from './20261028_120000_reporting_acquisition_detail'
 import * as migration_20261029_090000_reporting_loan_purpose_category from './20261029_090000_reporting_loan_purpose_category'
+import * as migration_20261030_090000_reporting_data_freshness from './20261030_090000_reporting_data_freshness'
+import * as migration_20261030_110000_report_navigation from './20261030_110000_report_navigation'
+import * as migration_20261030_120000_report_ask_streaming from './20261030_120000_report_ask_streaming'
+import * as migration_20261030_130000_report_subscriptions from './20261030_130000_report_subscriptions'
+import * as migration_20261030_140000_report_boards from './20261030_140000_report_boards'
+import * as migration_20261030_150000_report_runs_comparison from './20261030_150000_report_runs_comparison'
+import * as migration_20261030_160000_report_ask_pending from './20261030_160000_report_ask_pending'
+import * as migration_20261030_170000_core_reports from './20261030_170000_core_reports'
 
 export const migrations = [
   {
@@ -279,6 +288,11 @@ export const migrations = [
     name: '20261026_095000_reporting_mcp',
   },
   {
+    up: migration_20261026_095500_report_presentation.up,
+    down: migration_20261026_095500_report_presentation.down,
+    name: '20261026_095500_report_presentation',
+  },
+  {
     up: migration_20261026_100000_first_reports.up,
     down: migration_20261026_100000_first_reports.down,
     name: '20261026_100000_first_reports',
@@ -317,5 +331,45 @@ export const migrations = [
     up: migration_20261029_090000_reporting_loan_purpose_category.up,
     down: migration_20261029_090000_reporting_loan_purpose_category.down,
     name: '20261029_090000_reporting_loan_purpose_category',
+  },
+  {
+    up: migration_20261030_090000_reporting_data_freshness.up,
+    down: migration_20261030_090000_reporting_data_freshness.down,
+    name: '20261030_090000_reporting_data_freshness',
+  },
+  {
+    up: migration_20261030_110000_report_navigation.up,
+    down: migration_20261030_110000_report_navigation.down,
+    name: '20261030_110000_report_navigation',
+  },
+  {
+    up: migration_20261030_120000_report_ask_streaming.up,
+    down: migration_20261030_120000_report_ask_streaming.down,
+    name: '20261030_120000_report_ask_streaming',
+  },
+  {
+    up: migration_20261030_130000_report_subscriptions.up,
+    down: migration_20261030_130000_report_subscriptions.down,
+    name: '20261030_130000_report_subscriptions',
+  },
+  {
+    up: migration_20261030_140000_report_boards.up,
+    down: migration_20261030_140000_report_boards.down,
+    name: '20261030_140000_report_boards',
+  },
+  {
+    up: migration_20261030_150000_report_runs_comparison.up,
+    down: migration_20261030_150000_report_runs_comparison.down,
+    name: '20261030_150000_report_runs_comparison',
+  },
+  {
+    up: migration_20261030_160000_report_ask_pending.up,
+    down: migration_20261030_160000_report_ask_pending.down,
+    name: '20261030_160000_report_ask_pending',
+  },
+  {
+    up: migration_20261030_170000_core_reports.up,
+    down: migration_20261030_170000_core_reports.down,
+    name: '20261030_170000_core_reports',
   },
 ];

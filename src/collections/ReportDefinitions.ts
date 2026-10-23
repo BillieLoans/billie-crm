@@ -6,16 +6,20 @@ import type {
   FieldHook,
   Validate,
 } from 'payload'
-import { Forbidden } from 'payload'
+import { Forbidden, ValidationError } from 'payload'
 import { hasApprovalAuthority, isAdmin } from '@/lib/access'
 import {
   REPORT_SLUG_RE,
   REPORT_VIEWER_ROLES,
+  REPORT_CATEGORIES,
   RESERVED_REPORT_SLUGS,
-  chartSpecSchema,
+  chartsSchema,
+  columnSpecsSchema,
+  headlineSpecsSchema,
   reportParametersSchema,
 } from '@/lib/schemas/reports'
 import { checkPlaceholders, checkReportSql } from '@/server/reporting/sql-guard'
+import { checkAndPreview } from '@/server/reporting/ask/preview'
 
 /** Admins and supervisors author reports. */
 const canAuthor: Access = ({ req }) => hasApprovalAuthority(req.user)
@@ -35,6 +39,64 @@ const validateSlug: Validate = (value) => {
   return true
 }
 
+/**
+ * The slug rule, for drafts too: Payload skips field validation on a draft
+ * save, and a draft at a reserved link (`new`, `ask`, ...) could never be
+ * opened from Reports. The unique index still applies to drafts.
+ */
+const slugEvenForDrafts: CollectionBeforeChangeHook = ({ data, collection }) => {
+  if (data.slug === undefined) return data
+  const result = validateSlug(data.slug, {} as never)
+  if (result !== true) {
+    throw new ValidationError({
+      collection: collection.slug,
+      errors: [{ path: 'slug', message: String(result) }],
+    })
+  }
+  return data
+}
+
+/**
+ * A publish over the API (the report editor, the Payload admin) runs the
+ * same checks as an Ask Claude draft, the run on its defaults included,
+ * and is refused on any error: nothing that fails them goes live, whatever
+ * the browser did. The Local API (seed migrations, server code that has
+ * checked already) is not re-run here; MCP writes are always drafts.
+ */
+export const checksBeforePublish: CollectionBeforeChangeHook = async ({
+  data,
+  originalDoc,
+  req,
+  collection,
+}) => {
+  const api = req.payloadAPI as string
+  if (api !== 'REST' && api !== 'GraphQL') return data
+  // A change to a published report that names no status (and is not saved
+  // as a draft) is published too.
+  const draftSave = String((req.query as { draft?: unknown } | undefined)?.draft) === 'true'
+  const status = data._status ?? (draftSave ? 'draft' : originalDoc?._status)
+  if (status !== 'published') return data
+  const doc = { ...(originalDoc ?? {}), ...data } as Record<string, unknown>
+  const { issues } = await checkAndPreview({
+    title: String(doc.title ?? ''),
+    description: typeof doc.description === 'string' ? doc.description : '',
+    sql: String(doc.sql ?? ''),
+    parameters: doc.parameters ?? [],
+    chart: doc.chart ?? null,
+    headline: doc.headline ?? [],
+    columnSettings: doc.columnSettings ?? [],
+    category: typeof doc.category === 'string' ? doc.category : 'other',
+  })
+  const errors = issues.filter((i) => i.level === 'error')
+  if (errors.length > 0) {
+    throw new ValidationError({
+      collection: collection.slug,
+      errors: errors.map((i) => ({ path: 'sql', message: `Not published: ${i.message}` })),
+    })
+  }
+  return data
+}
+
 /** JSON edited as text: Payload's JSON editor loads from a CDN the admin's CSP blocks. */
 const JSON_TEXTAREA = '@/components/fields/JsonTextareaField#JsonTextareaField'
 
@@ -45,7 +107,17 @@ const validateParameters: Validate = (value) => {
 
 const validateChart: Validate = (value) => {
   if (value === null || value === undefined) return true
-  const parsed = chartSpecSchema.safeParse(value)
+  const parsed = chartsSchema.safeParse(value)
+  return parsed.success ? true : firstIssue(parsed.error)
+}
+
+const validateColumns: Validate = (value) => {
+  const parsed = columnSpecsSchema.safeParse(value ?? [])
+  return parsed.success ? true : firstIssue(parsed.error)
+}
+
+const validateHeadline: Validate = (value) => {
+  const parsed = headlineSpecsSchema.safeParse(value ?? [])
   return parsed.success ? true : firstIssue(parsed.error)
 }
 
@@ -143,7 +215,10 @@ export const ReportDefinitions: CollectionConfig = {
     // high enough that drafting (by hand or over MCP) does not lose history.
     maxPerDoc: 500,
   },
-  hooks: { beforeOperation: [mcpDraftsOnly], beforeChange: [setOrigin] },
+  hooks: {
+    beforeOperation: [mcpDraftsOnly],
+    beforeChange: [slugEvenForDrafts, checksBeforePublish, setOrigin],
+  },
   fields: [
     { name: 'title', type: 'text', required: true, maxLength: 120 },
     {
@@ -156,6 +231,22 @@ export const ReportDefinitions: CollectionConfig = {
       admin: { description: 'Used in the report link: /admin/reports/<slug>' },
     },
     { name: 'description', type: 'textarea', maxLength: 1000 },
+    {
+      name: 'category',
+      type: 'select',
+      defaultValue: 'other',
+      options: REPORT_CATEGORIES.map((c) => ({ label: c.label, value: c.value })),
+      admin: { position: 'sidebar', description: 'Where the report sits in the catalogue.' },
+    },
+    {
+      name: 'featured',
+      type: 'checkbox',
+      defaultValue: false,
+      admin: {
+        position: 'sidebar',
+        description: 'Show its headline numbers on the Reports home.',
+      },
+    },
     {
       name: 'sql',
       label: 'SQL',
@@ -192,7 +283,35 @@ export const ReportDefinitions: CollectionConfig = {
       admin: {
         components: { Field: JSON_TEXTAREA },
         description:
-          'Optional: {type: line | bar | area, x: column, series: [{column, label}], stacked}.',
+          'Optional: one chart or a list of two. {type: line | bar | area | bar-horizontal | ' +
+          'stacked-100, x: column, series: [{column, label}], stacked, sort: value | none, ' +
+          'rollingAverage: days, drill: {report, parameter}}.',
+      },
+    },
+    {
+      name: 'headline',
+      type: 'json',
+      defaultValue: [],
+      validate: validateHeadline,
+      admin: {
+        components: { Field: JSON_TEXTAREA },
+        description:
+          'Up to four headline numbers above the chart: [{column, label, value: total | sum | ' +
+          'last | first | average | max | min, better: higher | lower}].',
+      },
+    },
+    {
+      name: 'columnSettings',
+      label: 'Columns',
+      type: 'json',
+      defaultValue: [],
+      validate: validateColumns,
+      admin: {
+        components: { Field: JSON_TEXTAREA },
+        description:
+          'Optional per-column settings: [{name, label, format, description, base, minBase, ' +
+          'better}]. Formats otherwise follow the name: *_rate and *_pct are percentages, ' +
+          'amounts and balances are dollars.',
       },
     },
     {

@@ -11,20 +11,35 @@ import { getUserRole } from '@/lib/access'
 import {
   REPORT_AUTHOR_ROLES,
   bindParameters,
-  chartSpecSchema,
+  columnSpecsSchema,
+  headlineSpecsSchema,
+  normaliseCharts,
   reportParametersSchema,
+  REPORT_CATEGORY_VALUES,
   type ChartSpec,
+  type ColumnSpec,
+  type HeadlineSpec,
+  type ReportCategory,
   type ReportColumn,
   type ReportParameter,
 } from '@/lib/schemas/reports'
+import { dateRangeParameters, previousPeriod } from '@/lib/reports/periods'
 import { ReportRunError, runReportSql, type RunOptions } from './runner'
 
-/** What the form and chart of one version of a report need. Never the SQL. */
+/** What the form, charts and headline of one version of a report need. Never the SQL. */
 export interface ReportSpec {
   title: string
   description: string | null
+  category: ReportCategory
   parameters: ReportParameter[]
-  chart: ChartSpec | null
+  /** Zero, one or two charts. */
+  charts: ChartSpec[]
+  columns: ColumnSpec[]
+  headline: HeadlineSpec[]
+  /** Its headline numbers show on the Reports home. */
+  featured: boolean
+  /** The SQL filters out mock applications (`mock_origin`). */
+  excludesMock: boolean
 }
 
 export interface ReportSummary extends ReportSpec {
@@ -46,6 +61,16 @@ export interface ReportRunResponse {
   rowCount: number
   truncated: boolean
   durationMs: number
+  /** The same report on the period before, when asked for and the report has a period. */
+  previous?: {
+    from: string
+    to: string
+    rows: Array<Record<string, unknown>>
+    rowCount: number
+    truncated: boolean
+  } | null
+  /** The latest change the reporting data has seen (ISO 8601), or null if unknown. */
+  dataAsAt?: string | null
 }
 
 export type RunOutcome =
@@ -65,6 +90,10 @@ export interface ReportDoc {
   sql: string
   parameters?: unknown
   chart?: unknown
+  columnSettings?: unknown
+  headline?: unknown
+  category?: string | null
+  featured?: boolean | null
   roles?: string[] | null
   _status?: 'draft' | 'published' | null
   schedule?: string | null
@@ -82,23 +111,35 @@ export function canRunReport(user: unknown, roles: readonly string[] | null | un
   return isReportAuthor(user) || (roles ?? []).includes(role)
 }
 
-function specOf(doc: ReportDoc): ReportSpec {
+/** `NOT mock_origin`, `mock_origin = false` or `mock_origin IS NOT TRUE`, any alias. */
+const EXCLUDES_MOCK =
+  /\bnot\s+(?:\w+\.)?mock_origin\b|\bmock_origin\s*(?:=\s*false|is\s+(?:not\s+true|false))/i
+
+export function specOf(doc: ReportDoc): ReportSpec {
   const params = reportParametersSchema.safeParse(doc.parameters ?? [])
-  const chart = chartSpecSchema.safeParse(doc.chart)
+  const columns = columnSpecsSchema.safeParse(doc.columnSettings ?? [])
+  const headline = headlineSpecsSchema.safeParse(doc.headline ?? [])
+  const category = (REPORT_CATEGORY_VALUES as readonly string[]).includes(doc.category ?? '')
+    ? (doc.category as ReportCategory)
+    : 'other'
   return {
     title: doc.title,
     description: doc.description ?? null,
+    category,
     parameters: params.success ? params.data : [],
-    chart: chart.success ? chart.data : null,
+    charts: normaliseCharts(doc.chart),
+    columns: columns.success ? columns.data : [],
+    headline: headline.success ? headline.data : [],
+    featured: doc.featured === true,
+    excludesMock: EXCLUDES_MOCK.test(doc.sql ?? ''),
   }
 }
 
-/**
- * The reports the user may run, by title. Viewers see published reports.
- * Authors also see draft-only reports and, for published ones, the newer
- * draft's form, so they can try a change before publishing it.
- */
-export async function listReports(payload: Payload, user: unknown): Promise<ReportSummary[]> {
+/** The published reports the user may run, by title (no drafts). */
+export async function listPublishedReports(
+  payload: Payload,
+  user: unknown,
+): Promise<ReportSummary[]> {
   const published = await payload.find({
     collection: 'report-definitions',
     where: { _status: { equals: 'published' } },
@@ -107,9 +148,18 @@ export async function listReports(payload: Payload, user: unknown): Promise<Repo
     depth: 0,
     overrideAccess: true,
   })
-  const reports: ReportSummary[] = (published.docs as unknown as ReportDoc[])
+  return (published.docs as unknown as ReportDoc[])
     .filter((doc) => canRunReport(user, doc.roles))
     .map((doc) => ({ id: String(doc.id), slug: doc.slug, published: true, ...specOf(doc) }))
+}
+
+/**
+ * The reports the user may run, by title. Viewers see published reports.
+ * Authors also see draft-only reports and, for published ones, the newer
+ * draft's form, so they can try a change before publishing it.
+ */
+export async function listReports(payload: Payload, user: unknown): Promise<ReportSummary[]> {
+  const reports = await listPublishedReports(payload, user)
 
   if (isReportAuthor(user)) {
     // With `draft: true`, each document comes back as its latest version.
@@ -185,8 +235,10 @@ export interface RunLogEntry {
   durationMs?: number
   rowCount?: number
   truncated?: boolean
-  trigger?: 'view' | 'schedule' | 'mcp'
+  trigger?: 'view' | 'schedule' | 'mcp' | 'home' | 'subscription' | 'alert' | 'board'
   scheduledFor?: string
+  /** The previous-period run made for a comparison. */
+  comparison?: boolean
 }
 
 /** Logged values are short: dates, codes and numbers, never pasted text. */
@@ -252,7 +304,13 @@ export async function runReport(
   payload: Payload,
   user: unknown,
   slug: string,
-  input: { parameters?: Record<string, unknown>; draft?: boolean; trigger?: 'view' | 'mcp' },
+  input: {
+    parameters?: Record<string, unknown>
+    draft?: boolean
+    trigger?: 'view' | 'mcp' | 'home' | 'board' | 'subscription' | 'alert'
+    /** Also run the period before (reports with a date range only). */
+    compare?: boolean
+  },
   options: RunOptions = {},
 ): Promise<RunOutcome> {
   const log = (entry: RunLogEntry) =>
@@ -315,6 +373,15 @@ export async function runReport(
   const parameters = loggedParameters(params.data, bound.values)
   const version = draft ? 'draft' : await publishedVersionId(payload, String(doc.id))
 
+  // The comparison and the freshness reading run alongside the report, not
+  // after it; neither can fail the run.
+  const previousRun = input.compare
+    ? runPrevious(doc, params.data, bound.values, options, (entry) =>
+        log({ ...base, version, ...entry }),
+      )
+    : undefined
+  const freshnessRead = dataAsAt(options)
+
   try {
     const result = await runReportSql(doc.sql, bound.values, options)
     await log({
@@ -326,14 +393,19 @@ export async function runReport(
       rowCount: result.rowCount,
       truncated: result.truncated,
     })
+    const previous = await previousRun
     return {
       status: 200,
       body: {
         report: { slug: doc.slug, title: doc.title, version, draft },
         ...result,
+        ...(previous !== undefined ? { previous } : {}),
+        dataAsAt: await freshnessRead,
       },
     }
   } catch (error) {
+    // Let the side runs finish (and log) before answering.
+    await Promise.allSettled([previousRun, freshnessRead])
     const runError =
       error instanceof ReportRunError
         ? error
@@ -356,6 +428,91 @@ export async function runReport(
       },
     }
   }
+}
+
+/**
+ * Run a report again on the period before its own, for comparison. Null
+ * when the report has no date range or the run fails: the comparison is
+ * extra, so its failure never costs the user their report.
+ */
+async function runPrevious(
+  doc: ReportDoc,
+  params: readonly ReportParameter[],
+  values: readonly unknown[],
+  options: RunOptions,
+  log: (entry: Omit<RunLogEntry, 'reportSlug'>) => Promise<void>,
+): Promise<ReportRunResponse['previous']> {
+  const range = dateRangeParameters(params)
+  if (!range) return null
+  const fromIndex = params.indexOf(range.from)
+  const toIndex = params.indexOf(range.to)
+  const from = values[fromIndex]
+  const to = values[toIndex]
+  if (typeof from !== 'string' || typeof to !== 'string' || from > to) return null
+  const period = previousPeriod(from, to)
+  const shifted = [...values]
+  shifted[fromIndex] = period.from
+  shifted[toIndex] = period.to
+  try {
+    const result = await runReportSql(doc.sql, shifted, options)
+    await log({
+      parameters: loggedParameters(params, shifted),
+      comparison: true,
+      outcome: 'ok',
+      durationMs: result.durationMs,
+      rowCount: result.rowCount,
+      truncated: result.truncated,
+    })
+    return {
+      ...period,
+      rows: result.rows,
+      rowCount: result.rowCount,
+      truncated: result.truncated,
+    }
+  } catch (error) {
+    await log({
+      parameters: loggedParameters(params, shifted),
+      comparison: true,
+      outcome: 'error',
+      errorCode: error instanceof ReportRunError ? error.code : 'QUERY_FAILED',
+    })
+    return null
+  }
+}
+
+/** How long the freshness reading is reused before it is read again. */
+const FRESHNESS_TTL_MS = 60_000
+let freshness: { at: Promise<string | null>; readAt: number } | undefined
+
+async function readFreshness(options: RunOptions): Promise<string | null> {
+  try {
+    const result = await runReportSql(
+      'SELECT latest_change_at FROM reporting.data_freshness',
+      [],
+      options,
+    )
+    const at = result.rows[0]?.latest_change_at
+    return typeof at === 'string' ? at : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The latest change in the reporting data (reporting.data_freshness), cached
+ * for a minute. Runs that arrive together share one reading, so they take
+ * one connection from the reporting pool, not one each.
+ */
+export function dataAsAt(options: RunOptions = {}): Promise<string | null> {
+  if (!freshness || Date.now() - freshness.readAt >= FRESHNESS_TTL_MS) {
+    freshness = { at: readFreshness(options), readAt: Date.now() }
+  }
+  return freshness.at
+}
+
+/** Tests only: forget the cached freshness reading. */
+export function resetDataAsAtCache(): void {
+  freshness = undefined
 }
 
 function forbidden(): RunOutcome {

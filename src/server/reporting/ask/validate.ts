@@ -10,12 +10,20 @@
  * returned. Neither sends anything to Claude.
  */
 import {
-  chartSpecSchema,
+  chartsSchema,
+  columnSpecsSchema,
+  headlineSpecsSchema,
   reportParametersSchema,
+  REPORT_CATEGORY_VALUES,
   type ChartSpec,
+  type ColumnSpec,
+  type HeadlineSpec,
+  type ReportCategory,
   type ReportColumn,
   type ReportParameter,
 } from '@/lib/schemas/reports'
+import { chartProblem } from '@/lib/reports/chart-data'
+import { resultHints } from '@/lib/reports/quality'
 import { checkPlaceholders, checkReportSql, stripLiterals } from '../sql-guard'
 
 export interface DraftDefinition {
@@ -24,6 +32,9 @@ export interface DraftDefinition {
   sql: string
   parameters: unknown
   chart: unknown
+  headline?: unknown
+  columnSettings?: unknown
+  category?: unknown
 }
 
 export interface ValidDraft {
@@ -31,7 +42,10 @@ export interface ValidDraft {
   description: string
   sql: string
   parameters: ReportParameter[]
-  chart: ChartSpec | null
+  chart: ChartSpec | ChartSpec[] | null
+  headline: HeadlineSpec[]
+  columnSettings: ColumnSpec[]
+  category: ReportCategory
 }
 
 export interface ValidationIssue {
@@ -42,9 +56,6 @@ export interface ValidationIssue {
 
 /** Schemas other than `reporting` (and any `pg_*` one). */
 const OTHER_SCHEMAS = new Set(['public', 'information_schema', 'portal'])
-
-const TOTAL_LABELS = new Set(['all', 'all sources', 'total'])
-const NOT_ADDITIVE = /(rate|pct|percent|median|avg|average|mean|hours|days|share)/i
 
 /**
  * Check the definition without running it.
@@ -71,8 +82,17 @@ export function validateStatic(draft: DraftDefinition): {
   const chart =
     draft.chart === null || draft.chart === undefined
       ? { success: true as const, data: null }
-      : chartSpecSchema.safeParse(draft.chart)
+      : chartsSchema.safeParse(draft.chart)
   if (!chart.success) error('CHART', `Chart: ${chart.error.issues[0]?.message}`)
+  const headline = headlineSpecsSchema.safeParse(draft.headline ?? [])
+  if (!headline.success) error('HEADLINE', `Headline: ${headline.error.issues[0]?.message}`)
+  const columnSettings = columnSpecsSchema.safeParse(draft.columnSettings ?? [])
+  if (!columnSettings.success) {
+    error('COLUMNS', `Column settings: ${columnSettings.error.issues[0]?.message}`)
+  }
+  const category = (REPORT_CATEGORY_VALUES as readonly unknown[]).includes(draft.category)
+    ? (draft.category as ReportCategory)
+    : 'other'
 
   const sql = checkReportSql(draft.sql)
   if (!sql.ok) {
@@ -141,66 +161,59 @@ export function validateStatic(draft: DraftDefinition): {
   const ok = !issues.some((i) => i.level === 'error')
   return {
     valid:
-      ok && params.success && chart.success && sql.ok
+      ok && params.success && chart.success && headline.success && columnSettings.success && sql.ok
         ? {
             title: draft.title.trim(),
             description: (draft.description ?? '').trim(),
             sql: sql.sql,
             parameters: params.data,
             chart: chart.data,
+            headline: headline.data,
+            columnSettings: columnSettings.data,
+            category,
           }
         : null,
     issues,
   }
 }
 
-/** Check the rows a definition returned. */
+/**
+ * Check the rows a definition returned (`lib/reports/quality.ts`), and,
+ * given the definition, that its charts and headline read columns the
+ * result has.
+ */
 export function validateResult(
   columns: readonly ReportColumn[],
   rows: ReadonlyArray<Record<string, unknown>>,
+  presentation?: Pick<ValidDraft, 'chart' | 'headline' | 'columnSettings'>,
 ): ValidationIssue[] {
-  const issues: ValidationIssue[] = []
-
-  // Rates within [0, 1]; percentages within [0, 100].
-  for (const col of columns) {
-    if (col.kind !== 'number') continue
-    const isRate = /(^|_)rate$/i.test(col.name)
-    const isPct = /(_pct|_percent)$/i.test(col.name)
-    if (!isRate && !isPct) continue
-    const max = isRate ? 1 : 100
-    const bad = rows.find((r) => {
-      const v = r[col.name]
-      return typeof v === 'number' && (v < 0 || v > max)
-    })
-    if (bad) {
+  const issues: ValidationIssue[] = resultHints(columns, rows)
+  if (!presentation) return issues
+  const charts = presentation.chart === null ? [] : [presentation.chart].flat()
+  for (const chart of charts) {
+    const problem = chartProblem(chart, columns)
+    if (problem) issues.push({ level: 'error', code: 'CHART', message: problem })
+  }
+  const names = new Set(columns.map((c) => c.name))
+  for (const h of presentation.headline) {
+    const missing = [h.column, h.numerator, h.denominator].filter(
+      (c): c is string => c !== undefined && !names.has(c),
+    )
+    if (missing.length) {
       issues.push({
         level: 'error',
-        code: 'RATE_RANGE',
-        message: `${col.name} must be between 0 and ${max}; got ${String(bad[col.name])}`,
+        code: 'HEADLINE',
+        message: `The headline "${h.label ?? h.column}" reads ${missing.join(', ')}, which the results do not have`,
       })
     }
   }
-
-  // A total row must equal the sum of the other rows for additive columns.
-  const label = columns.find((c) => c.kind === 'text')
-  if (label) {
-    const totals = rows.filter((r) => TOTAL_LABELS.has(String(r[label.name] ?? '').toLowerCase()))
-    const parts = rows.filter((r) => !totals.includes(r))
-    if (totals.length === 1 && parts.length > 0) {
-      for (const col of columns) {
-        if (col.kind !== 'number' || NOT_ADDITIVE.test(col.name)) continue
-        const values = parts.map((r) => r[col.name])
-        if (!values.every((v) => typeof v === 'number' && Number.isInteger(v))) continue
-        const sum = (values as number[]).reduce((a, b) => a + b, 0)
-        const total = totals[0][col.name]
-        if (typeof total === 'number' && total !== sum) {
-          issues.push({
-            level: 'warning',
-            code: 'TOTAL',
-            message: `The ${String(totals[0][label.name])} row has ${col.name} ${total}, but the other rows add up to ${sum}`,
-          })
-        }
-      }
+  for (const c of presentation.columnSettings) {
+    if (!names.has(c.name) || (c.base && !names.has(c.base))) {
+      issues.push({
+        level: 'warning',
+        code: 'COLUMNS',
+        message: `Column settings name ${!names.has(c.name) ? c.name : c.base}, which the results do not have`,
+      })
     }
   }
   return issues

@@ -18,6 +18,7 @@ import {
 import { formatCurrency } from '@/lib/formatters'
 import { Modal } from '@/components/ui/Modal'
 import styles from './styles.module.css'
+import { characterShortcutAllowed, isEditableTarget } from '@/lib/keyboard'
 
 const STATUS_LABEL: Record<AccountStatus, string> = {
   pending_disbursement: 'Pending',
@@ -160,13 +161,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   // `/` focuses the search input (matches the cheatsheet promise).
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null
-      const inInput =
-        !!target &&
-        (target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA' ||
-          target.isContentEditable)
-      if (inInput) return
+      if (isEditableTarget(e.target) || !characterShortcutAllowed(e)) return
       if (e.key === '/' && !e.metaKey && !e.ctrlKey) {
         e.preventDefault()
         searchInputRef.current?.focus()
@@ -330,9 +325,7 @@ const FilterModal: React.FC<FilterModalProps> = ({ initial, onApply, onClose }) 
     initial.isInArrears === true ? 'true' : initial.isInArrears === false ? 'false' : 'any',
   )
   const [agingBucket, setAgingBucket] = useState<AgingBucket[]>(initial.agingBucket ?? [])
-  const [minDpd, setMinDpd] = useState<string>(
-    initial.minDpd != null ? String(initial.minDpd) : '',
-  )
+  const [minDpd, setMinDpd] = useState<string>(initial.minDpd != null ? String(initial.minDpd) : '')
 
   // Esc closes.
   useEffect(() => {
@@ -403,277 +396,272 @@ const FilterModal: React.FC<FilterModalProps> = ({ initial, onApply, onClose }) 
 
   return (
     <Modal title="Filters" onClose={onClose} maxWidth="520px">
-
-        <div className={styles.modalGroup}>
-          {/* Toggle-button groups have no single control to label, so the caption is a
+      <div className={styles.modalGroup}>
+        {/* Toggle-button groups have no single control to label, so the caption is a
               span and the group carries the accessible name. Selection state is exposed
               via aria-pressed — colour alone would fail SC 1.4.1. */}
-          <span className={styles.modalLabel} id="filter-status-label">
-            Status
-          </span>
-          <div className={styles.statusChoices} role="group" aria-labelledby="filter-status-label">
-            {ACCOUNT_STATUSES.map((s) => (
-              <button
-                key={s}
-                type="button"
-                aria-pressed={status.includes(s)}
-                className={`${styles.statusChoice} ${status.includes(s) ? styles.selected : ''}`}
-                onClick={() => toggleStatus(s)}
-              >
-                {STATUS_LABEL[s]}
-              </button>
-            ))}
-          </div>
+        <span className={styles.modalLabel} id="filter-status-label">
+          Status
+        </span>
+        <div className={styles.statusChoices} role="group" aria-labelledby="filter-status-label">
+          {ACCOUNT_STATUSES.map((s) => (
+            <button
+              key={s}
+              type="button"
+              aria-pressed={status.includes(s)}
+              className={`${styles.statusChoice} ${status.includes(s) ? styles.selected : ''}`}
+              onClick={() => toggleStatus(s)}
+            >
+              {STATUS_LABEL[s]}
+            </button>
+          ))}
         </div>
+      </div>
 
-        <div className={styles.modalGroup}>
-          <span className={styles.modalLabel} id="filter-arrears-label">
-            Arrears state (from aging service)
-          </span>
-          <div className={styles.statusChoices} role="group" aria-labelledby="filter-arrears-label">
-            {(['any', 'true', 'false'] as const).map((choice) => (
-              <button
-                key={choice}
-                type="button"
-                aria-pressed={inArrearsChoice === choice}
-                className={`${styles.statusChoice} ${inArrearsChoice === choice ? styles.selected : ''}`}
-                onClick={() => setInArrearsChoice(choice)}
-              >
-                {choice === 'any' ? 'Any' : choice === 'true' ? 'In arrears' : 'Not in arrears'}
-              </button>
-            ))}
-          </div>
+      <div className={styles.modalGroup}>
+        <span className={styles.modalLabel} id="filter-arrears-label">
+          Arrears state (from aging service)
+        </span>
+        <div className={styles.statusChoices} role="group" aria-labelledby="filter-arrears-label">
+          {(['any', 'true', 'false'] as const).map((choice) => (
+            <button
+              key={choice}
+              type="button"
+              aria-pressed={inArrearsChoice === choice}
+              className={`${styles.statusChoice} ${inArrearsChoice === choice ? styles.selected : ''}`}
+              onClick={() => setInArrearsChoice(choice)}
+            >
+              {choice === 'any' ? 'Any' : choice === 'true' ? 'In arrears' : 'Not in arrears'}
+            </button>
+          ))}
         </div>
+      </div>
 
-        <div className={styles.modalGroup}>
-          <span className={styles.modalLabel} id="filter-aging-bucket-label">
-            Aging bucket
-          </span>
-          <div
-            className={styles.statusChoices}
-            role="group"
-            aria-labelledby="filter-aging-bucket-label"
-          >
-            {AGING_BUCKETS.map((b) => (
-              <button
-                key={b}
-                type="button"
-                aria-pressed={agingBucket.includes(b)}
-                className={`${styles.statusChoice} ${agingBucket.includes(b) ? styles.selected : ''}`}
-                onClick={() => toggleBucket(b)}
-              >
-                {b.replace('_', ' ')}
-              </button>
-            ))}
-          </div>
+      <div className={styles.modalGroup}>
+        <span className={styles.modalLabel} id="filter-aging-bucket-label">
+          Aging bucket
+        </span>
+        <div
+          className={styles.statusChoices}
+          role="group"
+          aria-labelledby="filter-aging-bucket-label"
+        >
+          {AGING_BUCKETS.map((b) => (
+            <button
+              key={b}
+              type="button"
+              aria-pressed={agingBucket.includes(b)}
+              className={`${styles.statusChoice} ${agingBucket.includes(b) ? styles.selected : ''}`}
+              onClick={() => toggleBucket(b)}
+            >
+              {b.replace('_', ' ')}
+            </button>
+          ))}
         </div>
+      </div>
 
-        <div className={styles.modalGroup}>
-          <label className={styles.modalLabel} htmlFor="filter-min-dpd">
-            Minimum DPD
-          </label>
+      <div className={styles.modalGroup}>
+        <label className={styles.modalLabel} htmlFor="filter-min-dpd">
+          Minimum DPD
+        </label>
+        <input
+          id="filter-min-dpd"
+          className={styles.modalInput}
+          type="number"
+          inputMode="numeric"
+          min="0"
+          placeholder="e.g. 15"
+          value={minDpd}
+          onChange={(e) => setMinDpd(e.target.value)}
+        />
+      </div>
+
+      <div className={styles.modalGroup}>
+        {/* A from/to pair needs a name per input — a placeholder is not an
+              accessible name, so both fields previously announced as "edit text". */}
+        <span className={styles.modalLabel} id="filter-balance-label">
+          Outstanding balance
+        </span>
+        <div className={styles.modalInputs} role="group" aria-labelledby="filter-balance-label">
           <input
-            id="filter-min-dpd"
             className={styles.modalInput}
             type="number"
             inputMode="numeric"
             min="0"
-            placeholder="e.g. 15"
-            value={minDpd}
-            onChange={(e) => setMinDpd(e.target.value)}
+            step="0.01"
+            placeholder="Min $"
+            aria-label="Minimum outstanding balance"
+            value={minBalance}
+            onChange={(e) => setMinBalance(e.target.value)}
+          />
+          <input
+            className={styles.modalInput}
+            type="number"
+            inputMode="numeric"
+            min="0"
+            step="0.01"
+            placeholder="Max $"
+            aria-label="Maximum outstanding balance"
+            value={maxBalance}
+            onChange={(e) => setMaxBalance(e.target.value)}
           />
         </div>
+      </div>
 
-        <div className={styles.modalGroup}>
-          {/* A from/to pair needs a name per input — a placeholder is not an
-              accessible name, so both fields previously announced as "edit text". */}
-          <span className={styles.modalLabel} id="filter-balance-label">
-            Outstanding balance
-          </span>
-          <div className={styles.modalInputs} role="group" aria-labelledby="filter-balance-label">
-            <input
-              className={styles.modalInput}
-              type="number"
-              inputMode="numeric"
-              min="0"
-              step="0.01"
-              placeholder="Min $"
-              aria-label="Minimum outstanding balance"
-              value={minBalance}
-              onChange={(e) => setMinBalance(e.target.value)}
-            />
-            <input
-              className={styles.modalInput}
-              type="number"
-              inputMode="numeric"
-              min="0"
-              step="0.01"
-              placeholder="Max $"
-              aria-label="Maximum outstanding balance"
-              value={maxBalance}
-              onChange={(e) => setMaxBalance(e.target.value)}
-            />
-          </div>
-        </div>
-
-        <div className={styles.modalGroup}>
-          <span className={styles.modalLabel} id="filter-opened-label">
-            Opened date range
-          </span>
-          <div className={styles.modalInputs} role="group" aria-labelledby="filter-opened-label">
-            <input
-              className={styles.modalInput}
-              type="date"
-              aria-label="Opened from"
-              value={openedFrom}
-              onChange={(e) => setOpenedFrom(e.target.value)}
-            />
-            <input
-              className={styles.modalInput}
-              type="date"
-              aria-label="Opened to"
-              value={openedTo}
-              onChange={(e) => setOpenedTo(e.target.value)}
-            />
-          </div>
-        </div>
-
-        <div className={styles.modalGroup}>
-          <span className={styles.modalLabel} id="filter-disbursed-label">
-            Disbursed date range
-          </span>
-          <div className={styles.modalInputs} role="group" aria-labelledby="filter-disbursed-label">
-            <input
-              className={styles.modalInput}
-              type="date"
-              aria-label="Disbursed from"
-              value={disbursedFrom}
-              onChange={(e) => setDisbursedFrom(e.target.value)}
-            />
-            <input
-              className={styles.modalInput}
-              type="date"
-              aria-label="Disbursed to"
-              value={disbursedTo}
-              onChange={(e) => setDisbursedTo(e.target.value)}
-            />
-          </div>
-        </div>
-
-        <div className={styles.modalGroup}>
-          <span className={styles.modalLabel} id="filter-closed-label">
-            Closed date range
-          </span>
-          <div className={styles.modalInputs} role="group" aria-labelledby="filter-closed-label">
-            <input
-              className={styles.modalInput}
-              type="date"
-              aria-label="Closed from"
-              value={closedFrom}
-              onChange={(e) => setClosedFrom(e.target.value)}
-            />
-            <input
-              className={styles.modalInput}
-              type="date"
-              aria-label="Closed to"
-              value={closedTo}
-              onChange={(e) => setClosedTo(e.target.value)}
-            />
-          </div>
-        </div>
-
-        <div className={styles.modalGroup}>
-          <label className={styles.modalLabel} htmlFor="filter-last-payment-before">
-            Last payment before
-          </label>
+      <div className={styles.modalGroup}>
+        <span className={styles.modalLabel} id="filter-opened-label">
+          Opened date range
+        </span>
+        <div className={styles.modalInputs} role="group" aria-labelledby="filter-opened-label">
           <input
-            id="filter-last-payment-before"
             className={styles.modalInput}
             type="date"
-            value={lastPmtBefore}
-            onChange={(e) => setLastPmtBefore(e.target.value)}
+            aria-label="Opened from"
+            value={openedFrom}
+            onChange={(e) => setOpenedFrom(e.target.value)}
+          />
+          <input
+            className={styles.modalInput}
+            type="date"
+            aria-label="Opened to"
+            value={openedTo}
+            onChange={(e) => setOpenedTo(e.target.value)}
           />
         </div>
+      </div>
 
-        <div className={styles.modalGroup}>
-          <label className={styles.modalLabel} htmlFor="filter-closure-reason">
-            Closure reason
-          </label>
-          <select
-            id="filter-closure-reason"
+      <div className={styles.modalGroup}>
+        <span className={styles.modalLabel} id="filter-disbursed-label">
+          Disbursed date range
+        </span>
+        <div className={styles.modalInputs} role="group" aria-labelledby="filter-disbursed-label">
+          <input
             className={styles.modalInput}
-            value={closureReason}
-            onChange={(e) => setClosureReason((e.target.value || '') as ClosureReason | '')}
-          >
-            <option value="">Any</option>
-            {CLOSURE_REASONS.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className={styles.modalGroup}>
-          <label className={styles.modalLabel} htmlFor="filter-customer-status">
-            Customer status
-          </label>
-          <select
-            id="filter-customer-status"
+            type="date"
+            aria-label="Disbursed from"
+            value={disbursedFrom}
+            onChange={(e) => setDisbursedFrom(e.target.value)}
+          />
+          <input
             className={styles.modalInput}
-            value={customerStatus}
-            onChange={(e) =>
-              setCustomerStatus((e.target.value || '') as CustomerStatus | '')
-            }
-          >
-            <option value="">Any</option>
-            {CUSTOMER_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
+            type="date"
+            aria-label="Disbursed to"
+            value={disbursedTo}
+            onChange={(e) => setDisbursedTo(e.target.value)}
+          />
         </div>
+      </div>
 
-        <div className={styles.modalGroup}>
-          <label className={styles.modalLabel} htmlFor="filter-payment-frequency">
-            Payment frequency
-          </label>
-          <select
-            id="filter-payment-frequency"
+      <div className={styles.modalGroup}>
+        <span className={styles.modalLabel} id="filter-closed-label">
+          Closed date range
+        </span>
+        <div className={styles.modalInputs} role="group" aria-labelledby="filter-closed-label">
+          <input
             className={styles.modalInput}
-            value={paymentFrequency}
-            onChange={(e) =>
-              setPaymentFrequency((e.target.value || '') as PaymentFrequency | '')
-            }
-          >
-            <option value="">Any</option>
-            {PAYMENT_FREQUENCIES.map((f) => (
-              <option key={f} value={f}>
-                {f}
-              </option>
-            ))}
-          </select>
+            type="date"
+            aria-label="Closed from"
+            value={closedFrom}
+            onChange={(e) => setClosedFrom(e.target.value)}
+          />
+          <input
+            className={styles.modalInput}
+            type="date"
+            aria-label="Closed to"
+            value={closedTo}
+            onChange={(e) => setClosedTo(e.target.value)}
+          />
         </div>
+      </div>
 
-        <div className={styles.modalActions}>
-          <button type="button" className={styles.modalSecondary} onClick={handleClear}>
-            Clear all
+      <div className={styles.modalGroup}>
+        <label className={styles.modalLabel} htmlFor="filter-last-payment-before">
+          Last payment before
+        </label>
+        <input
+          id="filter-last-payment-before"
+          className={styles.modalInput}
+          type="date"
+          value={lastPmtBefore}
+          onChange={(e) => setLastPmtBefore(e.target.value)}
+        />
+      </div>
+
+      <div className={styles.modalGroup}>
+        <label className={styles.modalLabel} htmlFor="filter-closure-reason">
+          Closure reason
+        </label>
+        <select
+          id="filter-closure-reason"
+          className={styles.modalInput}
+          value={closureReason}
+          onChange={(e) => setClosureReason((e.target.value || '') as ClosureReason | '')}
+        >
+          <option value="">Any</option>
+          {CLOSURE_REASONS.map((r) => (
+            <option key={r} value={r}>
+              {r}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className={styles.modalGroup}>
+        <label className={styles.modalLabel} htmlFor="filter-customer-status">
+          Customer status
+        </label>
+        <select
+          id="filter-customer-status"
+          className={styles.modalInput}
+          value={customerStatus}
+          onChange={(e) => setCustomerStatus((e.target.value || '') as CustomerStatus | '')}
+        >
+          <option value="">Any</option>
+          {CUSTOMER_STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className={styles.modalGroup}>
+        <label className={styles.modalLabel} htmlFor="filter-payment-frequency">
+          Payment frequency
+        </label>
+        <select
+          id="filter-payment-frequency"
+          className={styles.modalInput}
+          value={paymentFrequency}
+          onChange={(e) => setPaymentFrequency((e.target.value || '') as PaymentFrequency | '')}
+        >
+          <option value="">Any</option>
+          {PAYMENT_FREQUENCIES.map((f) => (
+            <option key={f} value={f}>
+              {f}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className={styles.modalActions}>
+        <button type="button" className={styles.modalSecondary} onClick={handleClear}>
+          Clear all
+        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button type="button" className={styles.modalSecondary} onClick={onClose}>
+            Cancel
           </button>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button type="button" className={styles.modalSecondary} onClick={onClose}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              className={styles.modalPrimary}
-              onClick={handleApply}
-              data-testid="filters-apply"
-            >
-              Apply
-            </button>
-          </div>
+          <button
+            type="button"
+            className={styles.modalPrimary}
+            onClick={handleApply}
+            data-testid="filters-apply"
+          >
+            Apply
+          </button>
         </div>
+      </div>
     </Modal>
   )
 }

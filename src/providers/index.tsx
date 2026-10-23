@@ -28,6 +28,8 @@ import { useCustomerSearch } from '@/hooks/queries/useCustomerSearch'
 import { useLoanAccountSearch } from '@/hooks/queries/useLoanAccountSearch'
 import { useMarketingContactSearch } from '@/hooks/queries/useMarketingContactSearch'
 import { SMART_VIEWS } from '@/lib/smart-views'
+import { useReports } from '@/hooks/queries/useReports'
+import { matchReports } from '@/lib/reports/catalogue'
 
 /**
  * Component that syncs ledger health with read-only mode.
@@ -61,6 +63,13 @@ const GlobalCommandPalette: React.FC = () => {
   // Marketing contacts (leads/waitlist) — returns empty for users without
   // marketing access, so the group simply doesn't render for them.
   const contactSearch = useMarketingContactSearch(commandPaletteQuery)
+
+  // Reports, by name: staff roles only (marketing never sees lending data).
+  const hasLendingAccess = useLendingAccess()
+  const reports = useReports({ enabled: hasLendingAccess && commandPaletteOpen })
+  const reportQuery = commandPaletteQuery.trim()
+  const reportEntries =
+    reportQuery.length > 0 ? matchReports(reports.data?.reports ?? [], reportQuery).slice(0, 6) : []
 
   // Combined loading state
   const isSearching =
@@ -122,6 +131,14 @@ const GlobalCommandPalette: React.FC = () => {
     }
   }, [hasError, commandPaletteQuery])
 
+  const handleSelectReport = useCallback(
+    (slug: string) => {
+      setCommandPaletteOpen(false)
+      window.location.href = `/admin/reports/${slug}`
+    },
+    [setCommandPaletteOpen],
+  )
+
   // Navigate to the marketing contact profile when a contact is selected.
   const handleSelectContact = useCallback(
     (contactId: string) => {
@@ -159,6 +176,25 @@ const GlobalCommandPalette: React.FC = () => {
                 {view.icon}
               </span>
               <span>Browse: {view.label}</span>
+            </Command.Item>
+          ))}
+        </Command.Group>
+      )}
+
+      {/* Reports by name */}
+      {reportEntries.length > 0 && (
+        <Command.Group heading="Reports">
+          {reportEntries.map((report) => (
+            <Command.Item
+              key={report.slug}
+              value={`report-${report.slug}-${report.title}`}
+              onSelect={() => handleSelectReport(report.slug)}
+              data-testid={`palette-report-${report.slug}`}
+            >
+              <span style={{ marginRight: 10, fontSize: 16 }} aria-hidden="true">
+                📈
+              </span>
+              <span>Report: {report.title}</span>
             </Command.Item>
           ))}
         </Command.Group>

@@ -23,6 +23,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^1.1.0",
     "@aws-sdk/client-s3": "^3.989.0",
+    "@codemirror/lang-sql": "6.10.0",
     "@grpc/grpc-js": "^1.14.4",
     "@grpc/proto-loader": "^0.8.1",
     "@hookform/resolvers": "^5.2.2",
@@ -44,6 +45,7 @@
     "@types/lodash": "^4.17.20",
     "@types/multer": "^2.0.0",
     "cmdk": "^1.1.1",
+    "codemirror": "6.0.2",
     "cross-env": "^7.0.3",
     "dompurify": "^3.3.3",
     "dotenv": "16.4.7",

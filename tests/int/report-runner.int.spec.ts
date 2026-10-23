@@ -251,6 +251,21 @@ describe('report definitions and runs', () => {
     ).toMatch(/uses \$1 but the report has 0 parameters/)
   })
 
+  it('refuses a reserved or malformed link, even on a draft save', async () => {
+    for (const slug of ['new', 'Not A Slug']) {
+      expect(
+        await fieldErrors(
+          payload.create({
+            collection: 'report-definitions',
+            data: { title: 'Draft', slug, sql: 'SELECT 1 AS n', roles: ['admin'] },
+            draft: true,
+            overrideAccess: true,
+          }),
+        ),
+      ).toMatch(/reserved|lower case/)
+    }
+  })
+
   it('lists the report only for roles it is shared with, without its SQL', async () => {
     const forOps = await listReports(payload, users.operations)
     const mine = forOps.find((r) => r.slug === `${PREFIX}-scaled`)

@@ -2,6 +2,7 @@
 
 import { useEffect, useCallback } from 'react'
 import type { TabId } from './AccountTabs'
+import { characterShortcutAllowed, isEditableTarget } from '@/lib/keyboard'
 
 const TAB_ORDER: TabId[] = ['overview', 'transactions', 'fees', 'accruals', 'ecl', 'actions']
 
@@ -45,15 +46,7 @@ export function useAccountPanelHotkeys({
       if (!isActive) return
 
       // Don't handle if user is typing in an input
-      const target = event.target as HTMLElement
-      if (
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.tagName === 'SELECT' ||
-        target.isContentEditable
-      ) {
-        return
-      }
+      if (isEditableTarget(event.target) || !characterShortcutAllowed(event)) return
 
       // Don't handle if modifier keys are pressed (except shift for Escape)
       if (event.metaKey || event.ctrlKey || event.altKey) {
@@ -73,9 +66,7 @@ export function useAccountPanelHotkeys({
       // Account navigation with arrow keys
       if ((event.key === 'ArrowUp' || event.key === 'ArrowDown') && accountIds.length > 1) {
         event.preventDefault()
-        const currentIndex = selectedAccountId
-          ? accountIds.indexOf(selectedAccountId)
-          : -1
+        const currentIndex = selectedAccountId ? accountIds.indexOf(selectedAccountId) : -1
 
         let newIndex: number
         if (event.key === 'ArrowUp') {
@@ -97,7 +88,7 @@ export function useAccountPanelHotkeys({
         return
       }
     },
-    [isActive, onTabChange, accountIds, selectedAccountId, onSwitchAccount, onClose]
+    [isActive, onTabChange, accountIds, selectedAccountId, onSwitchAccount, onClose],
   )
 
   useEffect(() => {

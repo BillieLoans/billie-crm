@@ -57,6 +57,10 @@ export const ReportRuns: CollectionConfig = {
         { label: 'Reports view', value: 'view' },
         { label: 'Schedule', value: 'schedule' },
         { label: 'MCP connector', value: 'mcp' },
+        { label: 'Reports home', value: 'home' },
+        { label: 'Subscription', value: 'subscription' },
+        { label: 'Alert', value: 'alert' },
+        { label: 'Board', value: 'board' },
       ],
     },
     {
@@ -71,5 +75,12 @@ export const ReportRuns: CollectionConfig = {
     { name: 'durationMs', type: 'number' },
     { name: 'rowCount', type: 'number' },
     { name: 'truncated', type: 'checkbox', defaultValue: false },
+    {
+      // The previous period, run alongside a report to compare: not a read.
+      name: 'comparison',
+      type: 'checkbox',
+      defaultValue: false,
+      admin: { description: 'The previous-period run made for a comparison.' },
+    },
   ],
 }

@@ -92,6 +92,11 @@ export interface Config {
     'report-definitions': ReportDefinition;
     'report-runs': ReportRun;
     'report-asks': ReportAsk;
+    'report-preferences': ReportPreference;
+    'report-events': ReportEvent;
+    'report-subscriptions': ReportSubscription;
+    'report-deliveries': ReportDelivery;
+    'report-boards': ReportBoard;
     'mcp-oauth-clients': McpOauthClient;
     'mcp-oauth-grants': McpOauthGrant;
     'payload-mcp-api-keys': PayloadMcpApiKey;
@@ -127,6 +132,11 @@ export interface Config {
     'report-definitions': ReportDefinitionsSelect<false> | ReportDefinitionsSelect<true>;
     'report-runs': ReportRunsSelect<false> | ReportRunsSelect<true>;
     'report-asks': ReportAsksSelect<false> | ReportAsksSelect<true>;
+    'report-preferences': ReportPreferencesSelect<false> | ReportPreferencesSelect<true>;
+    'report-events': ReportEventsSelect<false> | ReportEventsSelect<true>;
+    'report-subscriptions': ReportSubscriptionsSelect<false> | ReportSubscriptionsSelect<true>;
+    'report-deliveries': ReportDeliveriesSelect<false> | ReportDeliveriesSelect<true>;
+    'report-boards': ReportBoardsSelect<false> | ReportBoardsSelect<true>;
     'mcp-oauth-clients': McpOauthClientsSelect<false> | McpOauthClientsSelect<true>;
     'mcp-oauth-grants': McpOauthGrantsSelect<false> | McpOauthGrantsSelect<true>;
     'payload-mcp-api-keys': PayloadMcpApiKeysSelect<false> | PayloadMcpApiKeysSelect<true>;
@@ -2274,6 +2284,14 @@ export interface ReportDefinition {
   slug: string;
   description?: string | null;
   /**
+   * Where the report sits in the catalogue.
+   */
+  category?: ('acquisition' | 'credit' | 'loan_book' | 'arrears' | 'operations' | 'finance' | 'other') | null;
+  /**
+   * Show its headline numbers on the Reports home.
+   */
+  featured?: boolean | null;
+  /**
    * One SELECT or WITH statement over the reporting schema (docs/reporting.md). Read parameter 1 as $1, parameter 2 as $2, and so on.
    */
   sql: string;
@@ -2290,9 +2308,33 @@ export interface ReportDefinition {
     | boolean
     | null;
   /**
-   * Optional: {type: line | bar | area, x: column, series: [{column, label}], stacked}.
+   * Optional: one chart or a list of two. {type: line | bar | area | bar-horizontal | stacked-100, x: column, series: [{column, label}], stacked, sort: value | none, rollingAverage: days, drill: {report, parameter}}.
    */
   chart?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Up to four headline numbers above the chart: [{column, label, value: total | sum | last | first | average | max | min, better: higher | lower}].
+   */
+  headline?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Optional per-column settings: [{name, label, format, description, base, minBase, better}]. Formats otherwise follow the name: *_rate and *_pct are percentages, amounts and balances are dollars.
+   */
+  columnSettings?:
     | {
         [k: string]: unknown;
       }
@@ -2336,7 +2378,7 @@ export interface ReportRun {
     | null;
   outcome: 'ok' | 'sending' | 'timeout' | 'refused' | 'error';
   errorCode?: string | null;
-  trigger?: ('view' | 'schedule' | 'mcp') | null;
+  trigger?: ('view' | 'schedule' | 'mcp' | 'home' | 'subscription' | 'alert' | 'board') | null;
   /**
    * Sydney date a scheduled delivery claimed (YYYY-MM-DD). Delete a stuck "sending" run to let the day send again.
    */
@@ -2344,6 +2386,10 @@ export interface ReportRun {
   durationMs?: number | null;
   rowCount?: number | null;
   truncated?: boolean | null;
+  /**
+   * The previous-period run made for a comparison.
+   */
+  comparison?: boolean | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -2357,7 +2403,7 @@ export interface ReportAsk {
   kind: 'ask' | 'refine' | 'check' | 'mcp_query';
   question?: string | null;
   refinement?: string | null;
-  outcome: 'ok' | 'invalid' | 'unanswerable' | 'refused' | 'invalid_output' | 'error';
+  outcome: 'ok' | 'invalid' | 'unanswerable' | 'refused' | 'invalid_output' | 'error' | 'cancelled' | 'pending';
   model?: string | null;
   effort?: string | null;
   promptVersion?: string | null;
@@ -2366,7 +2412,18 @@ export interface ReportAsk {
   outputTokens?: number | null;
   cacheReadTokens?: number | null;
   cacheWriteTokens?: number | null;
+  /**
+   * Claude call, end to end
+   */
   latencyMs?: number | null;
+  /**
+   * Until the first streamed text (the plan) reached the person
+   */
+  firstOutputMs?: number | null;
+  /**
+   * Whole request, checks and preview included
+   */
+  totalMs?: number | null;
   errorCount?: number | null;
   warningCount?: number | null;
   definition?:
@@ -2378,6 +2435,131 @@ export interface ReportAsk {
     | number
     | boolean
     | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "report-preferences".
+ */
+export interface ReportPreference {
+  id: string;
+  user?: (string | null) | User;
+  /**
+   * Report slugs, in pin order.
+   */
+  pinned?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "report-events".
+ */
+export interface ReportEvent {
+  id: string;
+  kind: 'search' | 'search_open' | 'csv' | 'copy_link' | 'copy_table' | 'copy_chart' | 'ask_save';
+  reportSlug?: string | null;
+  query?: string | null;
+  user?: (string | null) | User;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "report-subscriptions".
+ */
+export interface ReportSubscription {
+  id: string;
+  user?: (string | null) | User;
+  report?: (string | null) | ReportDefinition;
+  kind: 'digest' | 'alert';
+  /**
+   * Digests only. Alerts are checked every morning.
+   */
+  frequency?: ('daily' | 'weekly' | 'monthly') | null;
+  /**
+   * The period preset each delivery covers, e.g. last-7.
+   */
+  range?: string | null;
+  parameters?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  channel: 'email' | 'slack';
+  alert?: {
+    column?: string | null;
+    row?: string | null;
+    value?: string | null;
+    operator?: ('above' | 'below') | null;
+    threshold?: number | null;
+    /**
+     * The condition held at the last check; alerts send on a change.
+     */
+    active?: boolean | null;
+    lastValue?: number | null;
+  };
+  paused?: boolean | null;
+  lastCheckedAt?: string | null;
+  lastSentAt?: string | null;
+  lastError?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "report-deliveries".
+ */
+export interface ReportDelivery {
+  id: string;
+  subscription?: (string | null) | ReportSubscription;
+  /**
+   * <subscription id>:<day, month or alert:day>
+   */
+  claimKey: string;
+  status: 'sending' | 'sent' | 'checked' | 'skipped';
+  detail?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "report-boards".
+ */
+export interface ReportBoard {
+  id: string;
+  title: string;
+  /**
+   * Used in the board link: /admin/reports/boards/<slug>
+   */
+  slug: string;
+  description?: string | null;
+  /**
+   * A list of {id, report, parameters, show}.
+   */
+  tiles?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  author?: (string | null) | User;
   updatedAt: string;
   createdAt: string;
 }
@@ -2634,6 +2816,26 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'report-asks';
         value: string | ReportAsk;
+      } | null)
+    | ({
+        relationTo: 'report-preferences';
+        value: string | ReportPreference;
+      } | null)
+    | ({
+        relationTo: 'report-events';
+        value: string | ReportEvent;
+      } | null)
+    | ({
+        relationTo: 'report-subscriptions';
+        value: string | ReportSubscription;
+      } | null)
+    | ({
+        relationTo: 'report-deliveries';
+        value: string | ReportDelivery;
+      } | null)
+    | ({
+        relationTo: 'report-boards';
+        value: string | ReportBoard;
       } | null)
     | ({
         relationTo: 'mcp-oauth-clients';
@@ -3581,9 +3783,13 @@ export interface ReportDefinitionsSelect<T extends boolean = true> {
   title?: T;
   slug?: T;
   description?: T;
+  category?: T;
+  featured?: T;
   sql?: T;
   parameters?: T;
   chart?: T;
+  headline?: T;
+  columnSettings?: T;
   roles?: T;
   author?: T;
   origin?: T;
@@ -3609,6 +3815,7 @@ export interface ReportRunsSelect<T extends boolean = true> {
   durationMs?: T;
   rowCount?: T;
   truncated?: T;
+  comparison?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -3631,9 +3838,88 @@ export interface ReportAsksSelect<T extends boolean = true> {
   cacheReadTokens?: T;
   cacheWriteTokens?: T;
   latencyMs?: T;
+  firstOutputMs?: T;
+  totalMs?: T;
   errorCount?: T;
   warningCount?: T;
   definition?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "report-preferences_select".
+ */
+export interface ReportPreferencesSelect<T extends boolean = true> {
+  user?: T;
+  pinned?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "report-events_select".
+ */
+export interface ReportEventsSelect<T extends boolean = true> {
+  kind?: T;
+  reportSlug?: T;
+  query?: T;
+  user?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "report-subscriptions_select".
+ */
+export interface ReportSubscriptionsSelect<T extends boolean = true> {
+  user?: T;
+  report?: T;
+  kind?: T;
+  frequency?: T;
+  range?: T;
+  parameters?: T;
+  channel?: T;
+  alert?:
+    | T
+    | {
+        column?: T;
+        row?: T;
+        value?: T;
+        operator?: T;
+        threshold?: T;
+        active?: T;
+        lastValue?: T;
+      };
+  paused?: T;
+  lastCheckedAt?: T;
+  lastSentAt?: T;
+  lastError?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "report-deliveries_select".
+ */
+export interface ReportDeliveriesSelect<T extends boolean = true> {
+  subscription?: T;
+  claimKey?: T;
+  status?: T;
+  detail?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "report-boards_select".
+ */
+export interface ReportBoardsSelect<T extends boolean = true> {
+  title?: T;
+  slug?: T;
+  description?: T;
+  tiles?: T;
+  author?: T;
   updatedAt?: T;
   createdAt?: T;
 }

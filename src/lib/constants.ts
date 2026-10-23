@@ -80,6 +80,10 @@ export const SESSION_USER_STORAGE_KEY = 'billie-session-user'
  * SECURITY: Cleared on user change by UserSessionGuard.
  */
 export const RECENT_CUSTOMERS_STORAGE_KEY = 'billie-recent-customers'
+export const RECENT_REPORTS_STORAGE_KEY = 'billie-recent-reports'
+
+/** sessionStorage key for the Ask Claude draft kept across pages. */
+export const ASK_DRAFT_STORAGE_KEY = 'billie-ask-draft'
 
 /**
  * localStorage key for the Applications view layout (tiles | list).

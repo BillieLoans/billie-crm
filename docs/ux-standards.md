@@ -59,6 +59,11 @@ Four of the six land directly on patterns this app already commits to.
   hoverable, and persistent.
 - **2.1.1 / 2.1.2 Keyboard** — every action reachable, no focus traps. This is already a
   product requirement ("Sarah"), not only an accessibility one.
+- **2.1.4 Character Key Shortcuts** — a one-character shortcut (a letter, digit or
+  punctuation key with no modifier) MUST either act only while focus is inside its own
+  component, or obey the CRM-wide off switch: check `characterShortcutAllowed(e)` and
+  `isEditableTarget(e.target)` from `src/lib/keyboard.ts`. The switch is in the keyboard
+  shortcuts list (`?` on the Accounts page).
 - **2.4.3 Focus Order** — closing a slide-over or modal MUST return focus to the element
   that opened it.
 - **4.1.3 Status Messages** — optimistic UI transitions MUST be announced via

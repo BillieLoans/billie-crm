@@ -111,16 +111,17 @@ export function formatDateOnly(date: string | Date): string {
  * @param showAbsoluteAfterWeek - If true, shows absolute date after 7 days (default: false)
  * @returns Human-readable relative time string
  */
-export function formatRelativeTime(timestamp: string | Date, showAbsoluteAfterWeek = false): string {
+export function formatRelativeTime(
+  timestamp: string | Date,
+  showAbsoluteAfterWeek = false,
+): string {
   // MongoDB stores naive UTC datetimes (no 'Z'). new Date() treats those as local time,
   // shifting by UTC offset (e.g. UTC+11 in Sydney = "11h ago" for a just-now event).
   // Append 'Z' if the string has no timezone indicator so it's always parsed as UTC.
-  const hasTimezone = typeof timestamp !== 'string' ||
-    /Z$/i.test(timestamp) ||
-    /[+-]\d{2}:?\d{2}$/.test(timestamp)
-  const date = typeof timestamp === 'string'
-    ? new Date(hasTimezone ? timestamp : timestamp + 'Z')
-    : timestamp
+  const hasTimezone =
+    typeof timestamp !== 'string' || /Z$/i.test(timestamp) || /[+-]\d{2}:?\d{2}$/.test(timestamp)
+  const date =
+    typeof timestamp === 'string' ? new Date(hasTimezone ? timestamp : timestamp + 'Z') : timestamp
   const now = new Date()
   const diffMs = now.getTime() - date.getTime()
   const diffMins = Math.floor(diffMs / 60000)
@@ -165,4 +166,53 @@ export function formatNumber(value: number | string | null | undefined): string 
   if (value === null || value === undefined || value === '') return ''
   const n = typeof value === 'number' ? value : Number(value)
   return Number.isFinite(n) ? numberFormatter.format(n) : String(value)
+}
+
+const percentFormatter = new Intl.NumberFormat('en-AU', {
+  style: 'percent',
+  maximumFractionDigits: 1,
+})
+
+/** A share given as a fraction of 1, as a percentage: 0.5934 → "59.3%". */
+export function formatPercent(fraction: number | null | undefined): string {
+  if (fraction === null || fraction === undefined || !Number.isFinite(fraction)) return ''
+  return percentFormatter.format(fraction)
+}
+
+/** A number with one decimal at most, for units such as hours: 22.75 → "22.8". */
+export function formatOneDecimal(value: number): string {
+  return oneDecimalFormatter.format(value)
+}
+const oneDecimalFormatter = new Intl.NumberFormat('en-AU', { maximumFractionDigits: 1 })
+
+/** A compact number for chart axes: 25,000 → "25K"; small numbers in full. */
+export function formatCompactNumber(value: number): string {
+  return new Intl.NumberFormat('en-AU', {
+    notation: Math.abs(value) >= 10_000 ? 'compact' : 'standard',
+    maximumFractionDigits: 1,
+  }).format(value)
+}
+
+const calendarNumeric = new Intl.DateTimeFormat('en-AU', {
+  day: '2-digit',
+  month: '2-digit',
+  year: '2-digit',
+  timeZone: 'UTC',
+})
+const calendarAxis = new Intl.DateTimeFormat('en-AU', {
+  day: 'numeric',
+  month: 'short',
+  timeZone: 'UTC',
+})
+
+/**
+ * A calendar date (`YYYY-MM-DD`, no time zone) for tables and chart axes:
+ * `numeric` gives "14/09/26", `axis` gives "14 Sept". Read at midday UTC
+ * and formatted in UTC, so the day never shifts with the browser's zone.
+ * Anything that is not a date comes back as it was.
+ */
+export function formatCalendarDate(value: string, style: 'numeric' | 'axis' = 'numeric'): string {
+  const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T12:00:00Z` : value)
+  if (Number.isNaN(date.getTime())) return value
+  return (style === 'axis' ? calendarAxis : calendarNumeric).format(date)
 }

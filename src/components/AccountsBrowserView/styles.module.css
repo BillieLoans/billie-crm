@@ -777,3 +777,13 @@
     grid-template-columns: 1fr;
   }
 }
+
+.cheatsheetSetting {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--theme-elevation-150, #e5e5e5);
+  font-size: 13px;
+}

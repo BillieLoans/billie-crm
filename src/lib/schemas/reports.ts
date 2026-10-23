@@ -15,8 +15,20 @@ export type ReportViewerRole = (typeof REPORT_VIEWER_ROLES)[number]
 /** Roles that author reports: create, edit, publish and run drafts. */
 export const REPORT_AUTHOR_ROLES: readonly string[] = ['admin', 'supervisor']
 
-/** Slugs the `/api/reports/*` routes already use. */
-export const RESERVED_REPORT_SLUGS: readonly string[] = ['jobs', 'ask']
+/** Slugs the `/api/reports/*` routes and `/admin/reports/*` pages already use. */
+export const RESERVED_REPORT_SLUGS: readonly string[] = [
+  'jobs',
+  'ask',
+  'home',
+  'new',
+  'boards',
+  'usage',
+  'subscriptions',
+  'preferences',
+  'preview',
+  'events',
+  'alerts',
+]
 
 export const REPORT_SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
@@ -72,18 +84,139 @@ export const reportParametersSchema = z
     }
   })
 
+export const CHART_TYPES = ['line', 'bar', 'area', 'bar-horizontal', 'stacked-100'] as const
+
 export const chartSpecSchema = z.object({
-  type: z.enum(['line', 'bar', 'area']),
-  /** Result column on the horizontal axis. */
+  /**
+   * `bar-horizontal` reads best for categories with long names or a ranking;
+   * `stacked-100` shows each row's mix as shares of 100%, so mixes compare
+   * whatever the volume.
+   */
+  type: z.enum(CHART_TYPES),
+  /** Result column on the category / horizontal axis. */
   x: z.string().min(1),
   series: z
     .array(z.object({ column: z.string().min(1), label: z.string().max(60).optional() }))
     .min(1)
     .max(8),
   stacked: z.boolean().optional(),
+  /**
+   * Category bars are sorted by their first series, largest first, unless
+   * `none`. Dates and numbers on the axis always keep their order.
+   */
+  sort: z.enum(['value', 'none']).optional(),
+  /**
+   * Days in a rolling average drawn over a daily line, the raw line faded
+   * behind it. Daily lines longer than three weeks get a 7-day average
+   * unless this is 0.
+   */
+  rollingAverage: z.number().int().min(0).max(90).optional(),
+  /** Clicking a category opens this report with the category as this parameter. */
+  drill: z
+    .object({
+      report: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+      parameter: z.string().regex(/^[a-z][a-z0-9_]{0,39}$/),
+    })
+    .optional(),
 })
 
 export type ChartSpec = z.infer<typeof chartSpecSchema>
+
+/** A report shows up to two charts: one chart spec, or a list of one or two. */
+export const chartsSchema = z.union([chartSpecSchema, z.array(chartSpecSchema).min(1).max(2)])
+
+/** A stored chart value as a list (empty when there is none or it is invalid). */
+export function normaliseCharts(value: unknown): ChartSpec[] {
+  if (value === null || value === undefined) return []
+  const parsed = chartsSchema.safeParse(value)
+  if (!parsed.success) return []
+  return Array.isArray(parsed.data) ? parsed.data : [parsed.data]
+}
+
+/** How a result column is shown. Unset, the column name decides (see `lib/reports/columns.ts`). */
+export const COLUMN_FORMATS = [
+  'number',
+  'integer',
+  'percent',
+  'percent100',
+  'currency',
+  'usd',
+  'hours',
+  'days',
+  'date',
+  'text',
+] as const
+export type ColumnFormat = (typeof COLUMN_FORMATS)[number]
+
+/** Optional per-column display settings. */
+export const columnSpecSchema = z.object({
+  name: z.string().min(1).max(63),
+  label: z.string().trim().min(1).max(60).optional(),
+  format: z.enum(COLUMN_FORMATS).optional(),
+  /** What the column means, shown under "About this report". */
+  description: z.string().max(300).optional(),
+  /** For a rate: the count it is a share of. Rates on small bases are flagged. */
+  base: z.string().min(1).max(63).optional(),
+  /** Below this base a rate is flagged as a small sample (default 20). */
+  minBase: z.number().int().min(1).max(100_000).optional(),
+  /** Whether a rise is good news. Colours the change against the previous period. */
+  better: z.enum(['higher', 'lower']).optional(),
+})
+export type ColumnSpec = z.infer<typeof columnSpecSchema>
+export const columnSpecsSchema = z.array(columnSpecSchema).max(50)
+
+/** How a headline tile reduces a column to one number. */
+export const HEADLINE_VALUES = [
+  'total',
+  'sum',
+  'last',
+  'first',
+  'average',
+  'max',
+  'min',
+  'ratio',
+] as const
+
+export const headlineSpecSchema = z
+  .object({
+    column: z.string().min(1).max(63),
+    label: z.string().trim().min(1).max(60).optional(),
+    /**
+     * `total` (the default) reads the All/Total row, or sums a count column
+     * when there is none. `ratio` is the sum of `numerator` over the sum of
+     * `denominator`: the right way to total a rate across weeks. Other
+     * values reduce the rows that are not totals.
+     */
+    value: z.enum(HEADLINE_VALUES).optional(),
+    numerator: z.string().min(1).max(63).optional(),
+    denominator: z.string().min(1).max(63).optional(),
+    better: z.enum(['higher', 'lower']).optional(),
+  })
+  .refine((h) => h.value !== 'ratio' || (h.numerator && h.denominator), {
+    message: 'A ratio headline needs a numerator and a denominator column',
+  })
+export type HeadlineSpec = z.infer<typeof headlineSpecSchema>
+export const headlineSpecsSchema = z.array(headlineSpecSchema).max(4)
+
+/** Where a report sits in the catalogue. */
+export const REPORT_CATEGORIES = [
+  { value: 'acquisition', label: 'Acquisition' },
+  { value: 'credit', label: 'Credit decisions' },
+  { value: 'loan_book', label: 'Loan book' },
+  { value: 'arrears', label: 'Arrears & collections' },
+  { value: 'operations', label: 'Operations' },
+  { value: 'finance', label: 'Finance' },
+  { value: 'other', label: 'Other' },
+] as const
+export type ReportCategory = (typeof REPORT_CATEGORIES)[number]['value']
+export const REPORT_CATEGORY_VALUES = REPORT_CATEGORIES.map((c) => c.value) as [
+  ReportCategory,
+  ...ReportCategory[],
+]
+
+export function categoryLabel(value: string | null | undefined): string {
+  return REPORT_CATEGORIES.find((c) => c.value === value)?.label ?? 'Other'
+}
 
 /** A column of a report result, with the kind the view formats it as. */
 export interface ReportColumn {

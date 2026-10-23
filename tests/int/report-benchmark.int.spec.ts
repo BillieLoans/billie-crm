@@ -27,7 +27,13 @@ vi.mock('@/server/reporting/ask/claude', async () => {
   return { ...actual, askClaude: (...args: unknown[]) => askClaude(...args) }
 })
 
-import { attempt, readRawDdl, summarise } from '../../scripts/report-benchmark/run'
+import {
+  attempt,
+  parseSettings,
+  percentile,
+  readRawDdl,
+  summarise,
+} from '../../scripts/report-benchmark/run'
 
 let payload: Payload
 let pool: Pool
@@ -139,11 +145,15 @@ const draft = (sql: string, answerable = true) => ({
     answerable,
     not_answerable_reason: answerable ? null : 'No ad spend in the schema',
     title: 'TEST benchmark draft',
-    description: 'TEST',
-    sql,
-    parameters: [],
-    chart: null,
+    plan: [],
     assumptions: [],
+    description: 'TEST',
+    category: 'other' as const,
+    parameters: [],
+    sql,
+    charts: [],
+    headline: [],
+    columns: [],
   },
 })
 
@@ -158,6 +168,24 @@ describe('benchmark runner', () => {
     expect(ddl).toContain('CREATE TABLE decision_event (')
     expect(ddl).toMatch(/FUNCTION sydney_date\(/)
     for (const rule of BUSINESS_RULES) expect(ddl).not.toContain(rule.slice(0, 40))
+  })
+
+  it('runs H1 with each model and effort setting, and reports latency beside accuracy', async () => {
+    const [fast] = parseSettings('sonnet:medium')
+    expect(fast).toEqual({ label: 'sonnet:medium', model: 'claude-sonnet-5-5', effort: 'medium' })
+    expect(() => parseSettings('opus:max')).toThrow(/low, medium or high/)
+    askClaude.mockReset().mockResolvedValueOnce({
+      ...draft(question('Q01').referenceSql!),
+      usage: { ...USAGE, latencyMs: 4200 },
+    })
+    const a = await attempt('H1', question('Q01'), 1, await reference('Q01'), reader, '', fast)
+    expect(askClaude.mock.calls[0][1]).toEqual({ model: 'claude-sonnet-5-5', effort: 'medium' })
+    expect(a.setting).toBe('sonnet:medium')
+    const summary = summarise([a], [question('Q01')])
+    expect(summary).toContain('| H1 | sonnet:medium | 1 | 100.0% | 100.0% |')
+    expect(summary).toContain('| 4.2s | 4.2s |')
+    expect(percentile([1, 2, 3, 4], 0.5)).toBe(2)
+    expect(percentile([], 0.5)).toBeNull()
   })
 
   it('scores a correct H1 draft as equivalent', async () => {
@@ -193,7 +221,7 @@ describe('benchmark runner', () => {
     const a = await attempt('H1', question('Q40'), 1, null, reader, '')
     expect(a.correctlyUnanswerable).toBe(true)
     const summary = summarise([a], [question('Q40')])
-    expect(summary).toContain('| H1 | 1 |')
+    expect(summary).toContain('| H1 | live (high) | 1 |')
     expect(summary).toContain('1/1')
     expect(summary).toContain('unreviewed drafts')
   })

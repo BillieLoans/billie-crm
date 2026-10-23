@@ -4,10 +4,13 @@ name: scheduled reports
 #   - weekly report email, Monday from 08:00 Sydney, prod only on schedule
 #     (BTB-507). Demo: run the workflow by hand.
 #   - portfolio snapshot for the previous Sydney day, nightly (BTB-504).
+#   - report emails, Slack posts and alerts people subscribed to, every
+#     morning from 07:00 Sydney, prod only on schedule. Demo: by hand.
 # GitHub cron is UTC, has no time zones and can run late or not at all, so
 # each job fires more than once. The CRM makes repeats harmless: the email
 # sends only on Monday at or after 08:00 Sydney and once per report per day;
-# the snapshot is an upsert for an explicit date.
+# subscriptions send from 07:00 Sydney, each at most once per day (week,
+# month); the snapshot is an upsert for an explicit date.
 #
 # Secrets per environment (an environment is skipped while its URL is unset):
 #   CRM_URL_DEMO / CRM_URL_PROD             e.g. https://crm.billie.loans
@@ -21,12 +24,15 @@ on:
     - cron: '30 23 * * 0' # Monday 10:30 AEDT / 09:30 AEST, in case the others ran late
     - cron: '0 14 * * *' # 01:00 AEDT / 00:00 AEST
     - cron: '0 16 * * *' # 03:00 AEDT / 02:00 AEST
+    - cron: '15 20 * * *' # subscriptions: 07:15 AEDT / 06:15 AEST
+    - cron: '15 21 * * *' # subscriptions: 08:15 AEDT / 07:15 AEST
+    - cron: '45 22 * * *' # subscriptions: 09:45 AEDT / 08:45 AEST, in case the others ran late
   workflow_dispatch:
     inputs:
       job:
         description: Job to run now (the email ignores the Monday 08:00 rule)
         type: choice
-        options: [weekly-email, portfolio-snapshot]
+        options: [weekly-email, subscriptions, portfolio-snapshot]
         required: true
       environment:
         description: Where
@@ -46,13 +52,13 @@ jobs:
       matrix:
         env: [DEMO, PROD]
     concurrency:
-      group: scheduled-reports-${{ matrix.env }}-${{ inputs.job || (contains(github.event.schedule, ' * * 0') && 'weekly-email' || 'portfolio-snapshot') }}
+      group: scheduled-reports-${{ matrix.env }}-${{ inputs.job || (contains(github.event.schedule, ' * * 0') && 'weekly-email') || ((startsWith(github.event.schedule, '15 ') || startsWith(github.event.schedule, '45 ')) && 'subscriptions') || 'portfolio-snapshot' }}
       cancel-in-progress: false
     env:
       CRM_URL: ${{ secrets[format('CRM_URL_{0}', matrix.env)] }}
       JOB_TOKEN: ${{ secrets[format('REPORTING_JOB_TOKEN_{0}', matrix.env)] }}
       ENV_NAME: ${{ matrix.env }}
-      JOB: ${{ inputs.job || (contains(github.event.schedule, ' * * 0') && 'weekly-email' || 'portfolio-snapshot') }}
+      JOB: ${{ inputs.job || (contains(github.event.schedule, ' * * 0') && 'weekly-email') || ((startsWith(github.event.schedule, '15 ') || startsWith(github.event.schedule, '45 ')) && 'subscriptions') || 'portfolio-snapshot' }}
       MANUAL_ENV: ${{ inputs.environment }}
       SCHEDULED: ${{ github.event_name == 'schedule' }}
     steps:
@@ -75,6 +81,14 @@ jobs:
               path="/api/reports/jobs/scheduled?schedule=weekly_monday"
               if [ "$SCHEDULED" = "true" ]; then path="${path}&notBeforeSydneyHour=8"; fi
               ;;
+            subscriptions)
+              if [ "$SCHEDULED" = "true" ] && [ "$ENV_NAME" != "PROD" ]; then
+                echo "Subscriptions are scheduled for prod only; skipping ${ENV_NAME}."
+                exit 0
+              fi
+              path="/api/reports/jobs/deliveries"
+              if [ "$SCHEDULED" = "true" ]; then path="${path}?notBeforeSydneyHour=7"; fi
+              ;;
             portfolio-snapshot)
               as_of=$(TZ=Australia/Sydney date -d yesterday +%F)
               path="/api/reports/jobs/portfolio-snapshot?asOfDate=${as_of}"
@@ -86,7 +100,7 @@ jobs:
           echo "HTTP ${status} for ${JOB} on ${ENV_NAME}"
           if [ "$status" -ge 300 ]; then
             # Error bodies carry a message only, never report data.
-            jq -c '{error, reports: [.reports[]? | {slug, status, error}]}' response.json || true
+            jq -c '{error, reports: [.reports[]? | {slug, status, error}], failed}' response.json || true
             exit 1
           fi
-          jq -c '{skipped, scheduledFor, reports: [.reports[]? | {slug, status}]}' response.json || true
+          jq -c '{skipped, scheduledFor, reports: [.reports[]? | {slug, status}], day, due, counts}' response.json || true

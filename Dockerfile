@@ -55,6 +55,10 @@ ENV NODE_ENV production
 # Uncomment the following line in case you want to disable telemetry during runtime.
 # ENV NEXT_TELEMETRY_DISABLED 1
 
+# Fonts for the charts drawn into report emails (sharp renders their SVG
+# text with fontconfig; alpine ships no fonts).
+RUN apk add --no-cache fontconfig ttf-dejavu
+
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 

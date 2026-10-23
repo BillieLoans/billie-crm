@@ -155,6 +155,26 @@ export { useReports, reportsKeys } from './queries/useReports'
 export type { ReportsResponse, ReportSummary, ReportSpec } from './queries/useReports'
 export { useReportRun, ReportRunFailure } from './queries/useReportRun'
 export type { ReportRunRequest, ReportRunResponse } from './queries/useReportRun'
+export { useReportPins } from './queries/useReportPreferences'
+export { useReportsHome } from './queries/useReportsHome'
+export { useReportSubscriptions, SubscriptionFailure } from './queries/useReportSubscriptions'
+export {
+  useCreateSubscription,
+  usePauseSubscription,
+  useDeleteSubscription,
+} from './mutations/useReportSubscriptionMutations'
+export { useReportBoards, useReportBoard, BoardFailure } from './queries/useReportBoards'
+export type { BoardSummary, BoardView } from './queries/useReportBoards'
+export {
+  useCreateBoard,
+  useUpdateBoard,
+  useDeleteBoard,
+  useAddBoardTile,
+} from './mutations/useReportBoardMutations'
+export { useReportUsage } from './queries/useReportUsage'
+export type { UsageSummary } from './queries/useReportUsage'
+export type { SubscriptionView, SubscriptionsResponse } from './queries/useReportSubscriptions'
+export type { HomeTile } from './queries/useReportsHome'
 export { useAskClaude, useSaveAskDraft, AskClaudeFailure } from './mutations/useAskClaude'
 export type { AskClaudeParams, DraftOutcome } from './mutations/useAskClaude'
 

@@ -26,10 +26,11 @@ async function fetchReports(): Promise<ReportsResponse> {
 }
 
 /** The reports the signed-in user may run (BTB-506); authors also get drafts. */
-export function useReports() {
+export function useReports(options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: reportsKeys.list,
     queryFn: fetchReports,
     staleTime: 60_000,
+    enabled: options.enabled ?? true,
   })
 }

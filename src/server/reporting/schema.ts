@@ -132,6 +132,7 @@ const VIEW_NAMES = [
   'notification',
   'llm_cost',
   'contact_note',
+  'data_freshness',
 ] as const
 
 /** Statements, in order. Each is safe to re-run. */
@@ -665,6 +666,15 @@ export const REPORTING_SCHEMA_STATEMENTS: readonly string[] = [
    LEFT JOIN public.customers cu ON cu.id = cn.customer_id
    LEFT JOIN public.loan_accounts la ON la.id = cn.loan_account_id
    LEFT JOIN public.conversations cv ON cv.id = cn.conversation_id`,
+
+  // How fresh the reporting data is: the latest application started or loan
+  // changed. Both columns are indexed, so this is two index lookups. Reports
+  // show it as "Data to 10:29 today".
+  `CREATE VIEW reporting.data_freshness AS
+   SELECT GREATEST(
+     (SELECT max(created_at) FROM public.conversations),
+     (SELECT max(updated_at) FROM public.loan_accounts)
+   ) AS latest_change_at`,
 
   // ── Grants ───────────────────────────────────────────────────────────────
   // The runtime role is DML-only and named outside this repo, so grant the

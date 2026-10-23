@@ -10,6 +10,10 @@ export interface ReportRunRequest {
   slug: string
   parameters: Record<string, unknown>
   draft: boolean
+  /** Also run the previous period, for comparison. */
+  compare?: boolean
+  /** Logged with the run: a board tile rather than the report page. */
+  trigger?: 'board'
   attempt: number
 }
 
@@ -31,7 +35,12 @@ async function fetchReportRun(request: ReportRunRequest): Promise<ReportRunRespo
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
-    body: JSON.stringify({ parameters: request.parameters, draft: request.draft }),
+    body: JSON.stringify({
+      parameters: request.parameters,
+      draft: request.draft,
+      compare: request.compare === true,
+      ...(request.trigger ? { trigger: request.trigger } : {}),
+    }),
   })
   const body = await res.json().catch(() => null)
   if (!res.ok) {
