@@ -391,13 +391,18 @@ export const REPORTING_SCHEMA_STATEMENTS: readonly string[] = [
      la.closure_final_balance                               AS final_balance,
      la.closure_total_paid                                  AS total_paid_at_closure
    FROM public.loan_accounts la
+   -- Find the conversation on the raw column, so the lookup uses
+   -- conversations_application_number_idx; matching the application view's
+   -- NULLIF'd column scanned every conversation once per loan.
    LEFT JOIN LATERAL (
-     SELECT ap.conversation_id, ap.source, ap.medium, ap.channel, ap.acquisition
-       FROM reporting.application ap
-      WHERE ap.application_number = NULLIF(la.application_number, '')
-      ORDER BY ap.started_at DESC
+     SELECT c.conversation_id
+       FROM public.conversations c
+      WHERE c.application_number = la.application_number
+        AND la.application_number <> ''
+      ORDER BY c.started_at DESC
       LIMIT 1
-   ) a ON true`,
+   ) lc ON true
+   LEFT JOIN reporting.application a ON a.conversation_id = lc.conversation_id`,
 
   // One row per scheduled instalment.
   `CREATE VIEW reporting.instalment AS

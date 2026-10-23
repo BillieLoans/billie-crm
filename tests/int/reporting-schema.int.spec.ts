@@ -283,6 +283,21 @@ describe('reporting schema', () => {
     expect(inst).toEqual([{ payment_number: 1, status: 'scheduled', d: '2026-10-16' }])
   })
 
+  it("finds a loan's conversation through the application_number index", async () => {
+    // With sequential scans priced out, a lookup that cannot use the index
+    // still shows one. That is the bug this guards: matching on the
+    // application view's NULLIF'd column scanned every conversation per loan.
+    const results = (await pool.query(
+      `BEGIN;
+       SET LOCAL enable_seqscan = off;
+       EXPLAIN SELECT acquisition FROM reporting.loan;
+       COMMIT;`,
+    )) as unknown as Array<{ rows: Array<{ 'QUERY PLAN': string }> }>
+    const plan = results[2].rows.map((r) => r['QUERY PLAN']).join('\n')
+    expect(plan).toContain('conversations_application_number_idx')
+    expect(plan).not.toMatch(/Seq Scan on conversations/)
+  })
+
   it('stores ledger figures exactly', async () => {
     await pool.query(
       `INSERT INTO reporting.snap_portfolio
