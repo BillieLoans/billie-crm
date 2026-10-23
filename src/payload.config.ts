@@ -1,6 +1,6 @@
 // storage-adapter-import-placeholder
 import { postgresAdapter } from '@payloadcms/db-postgres'
-import { desc } from 'drizzle-orm'
+import { desc, sql } from 'drizzle-orm'
 import { index, uniqueIndex } from 'drizzle-orm/pg-core'
 import { payloadCloudPlugin } from '@payloadcms/payload-cloud'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
@@ -31,6 +31,14 @@ import { ReleaseBatches } from './collections/ReleaseBatches'
 import { ReleaseGrants } from './collections/ReleaseGrants'
 import { ReleaseGateStatus } from './collections/ReleaseGateStatus'
 import { Issues } from './collections/Issues'
+import { ReportDefinitions } from './collections/ReportDefinitions'
+import { ReportRuns } from './collections/ReportRuns'
+import { ReportAsks } from './collections/ReportAsks'
+import { McpOAuthClients } from './collections/McpOAuthClients'
+import { McpOAuthGrants } from './collections/McpOAuthGrants'
+import { applyReportingSchema, dropReportingViews } from './server/reporting/schema'
+import { getDashboardPool } from './lib/dashboard-aggregates'
+import { reportingMcp } from './server/reporting/mcp'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -71,6 +79,7 @@ export default buildConfig({
         '@/components/navigation/NavPeriodCloseLink#NavPeriodCloseLink',
         '@/components/navigation/NavECLConfigLink#NavECLConfigLink',
         '@/components/navigation/NavExportsLink#NavExportsLink',
+        '@/components/navigation/NavReportsLink#NavReportsLink',
         '@/components/navigation/NavInvestigationLink#NavInvestigationLink',
         '@/components/navigation/NavMarketingLink#NavMarketingLink',
         '@/components/navigation/NavIssueReportsLink#NavIssueReportsLink',
@@ -164,10 +173,16 @@ export default buildConfig({
             '@/components/IssueReportsView/IssueReportsViewWithTemplate#IssueReportsViewWithTemplate',
           path: '/issue-reports/:segments*',
         },
+        // Reports (BTB-506). Definitions live in the report-definitions
+        // collection; /admin/reports does not collide with /admin/collections/*.
+        reports: {
+          Component: '@/components/ReportsView/ReportsViewWithTemplate#ReportsViewWithTemplate',
+          path: '/reports/:segments*',
+        },
       },
     },
   },
-  collections: [Users, Media, Customers, Conversations, Applications, LoanAccounts, WriteOffRequests, ReapplicationBlockClearRequests, ContactNotes, Notifications, CollectionsCases, Contacts, Interactions, ContactAuditLog, Batches, Feedback, ReleaseBatches, ReleaseGrants, ReleaseGateStatus, Issues, LlmCosts, DisbursementAccessLog],
+  collections: [Users, Media, Customers, Conversations, Applications, LoanAccounts, WriteOffRequests, ReapplicationBlockClearRequests, ContactNotes, Notifications, CollectionsCases, Contacts, Interactions, ContactAuditLog, Batches, Feedback, ReleaseBatches, ReleaseGrants, ReleaseGateStatus, Issues, LlmCosts, DisbursementAccessLog, ReportDefinitions, ReportRuns, ReportAsks, McpOAuthClients, McpOAuthGrants],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || 'build-placeholder-not-for-production',
   typescript: {
@@ -183,6 +198,18 @@ export default buildConfig({
     },
     idType: 'uuid',
     push: process.env.NODE_ENV !== 'production',
+    // BTB-504: `push` cannot alter a column a reporting view depends on, so
+    // dev and test drop the views first; onInit recreates them after the push.
+    beforeSchemaInit: [
+      async ({ schema }) => {
+        if (process.env.NODE_ENV !== 'production' && process.env.PAYLOAD_MIGRATING !== 'true') {
+          await dropReportingViews(
+            process.env.DATABASE_URI || 'postgresql://localhost:5432/billie_crm',
+          )
+        }
+        return schema
+      },
+    ],
     afterSchemaInit: [
       ({ schema, extendTable }) => {
         // Enforce the natural key for the schedule-payments child table so the
@@ -223,6 +250,31 @@ export default buildConfig({
               conversationsByCustomerIdx: index('conversations_by_customer_idx').on(
                 t.customerIdString,
                 desc(t.updatedAt),
+              ),
+              // Reports filter on reporting.application.started_on, which is
+              // reporting.sydney_date(started_at). The expression must match
+              // that function's body for the planner to use the index.
+              conversationsStartedOnIdx: index('conversations_started_on_idx').on(
+                sql`((${t.startedAt} AT TIME ZONE 'Australia/Sydney')::date)`,
+              ),
+            }),
+          })
+        }
+
+        // One scheduled delivery per report per Sydney day (BTB-507). A
+        // delivery claims its day by inserting a run with scheduled_for; a
+        // second caller hits this index and sends nothing. View runs have no
+        // scheduled_for, and NULLs never conflict.
+        const reportRuns = (schema.tables as Record<string, unknown>).report_runs as
+          | Parameters<typeof extendTable>[0]['table']
+          | undefined
+        if (reportRuns) {
+          extendTable({
+            table: reportRuns,
+            extraConfig: (t) => ({
+              reportRunsScheduledDeliveryKey: uniqueIndex('report_runs_scheduled_delivery_key').on(
+                t.reportSlug,
+                t.scheduledFor,
               ),
             }),
           })
@@ -288,8 +340,19 @@ export default buildConfig({
     ],
   }),
   sharp,
+  // BTB-504: dev and test sync Payload's tables with `push`, which knows
+  // nothing of the `reporting` schema; apply it here, after the push.
+  // Deployed environments get it from the reporting_schema migration (the
+  // runtime role there cannot run DDL).
+  onInit: async (payload) => {
+    if (process.env.NODE_ENV === 'production') return
+    const pool = getDashboardPool(payload)
+    if (pool) await applyReportingSchema(pool)
+  },
   plugins: [
     payloadCloudPlugin(),
+    // The reporting MCP connector (BTB-509): /api/mcp, per-person keys.
+    reportingMcp,
     // storage-adapter-placeholder
   ],
 })

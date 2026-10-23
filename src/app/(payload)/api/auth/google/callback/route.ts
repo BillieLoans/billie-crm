@@ -4,13 +4,15 @@
  * Handles the Google OAuth callback: validates state, exchanges the
  * authorization code for tokens, verifies the ID token, looks up the
  * user in Payload, issues a payload-token JWT, and redirects to the
- * admin dashboard.
+ * admin dashboard, or to the same-origin path the sign-in started from
+ * (`google_oauth_redirect`, set by /api/auth/google).
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { SignJWT } from 'jose'
 import { getPayload } from 'payload'
 import config from '@payload-config'
+import { safeReturnPath } from '@/lib/safeReturnPath'
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || ''
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || ''
@@ -171,8 +173,14 @@ export async function GET(request: NextRequest) {
     // navigation from this same-origin page IS same-site, so the Lax cookie is
     // sent and SSR auth succeeds. (Payload's own login is unaffected — it sets
     // the cookie via a same-origin XHR.)
-    const dashboardUrl = new URL('/admin/dashboard', APP_URL).toString()
-    const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=${dashboardUrl}"><title>Signing in…</title></head><body style="font-family:system-ui,sans-serif;padding:2rem">Signing you in…<script>window.location.replace(${JSON.stringify(dashboardUrl)})</script></body></html>`
+    const returnTo =
+      safeReturnPath(request.cookies.get('google_oauth_redirect')?.value, APP_URL) ??
+      '/admin/dashboard'
+    const target = new URL(returnTo, APP_URL)
+    const dashboardUrl = (
+      target.origin === new URL(APP_URL).origin ? target : new URL('/admin/dashboard', APP_URL)
+    ).toString()
+    const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=${dashboardUrl.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"><title>Signing in…</title></head><body style="font-family:system-ui,sans-serif;padding:2rem">Signing you in…<script>window.location.replace(${JSON.stringify(dashboardUrl)})</script></body></html>`
 
     const response = new NextResponse(html, {
       status: 200,
@@ -187,8 +195,9 @@ export async function GET(request: NextRequest) {
       maxAge: 7200, // 2 hours
     })
 
-    // Clean up the state cookie
+    // Clean up the state and return-path cookies
     response.cookies.delete('google_oauth_state')
+    response.cookies.delete('google_oauth_redirect')
 
     return response
   } catch (error) {

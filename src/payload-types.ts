@@ -89,6 +89,12 @@ export interface Config {
     issues: Issue;
     'llm-costs': LlmCost;
     'disbursement-access-log': DisbursementAccessLog;
+    'report-definitions': ReportDefinition;
+    'report-runs': ReportRun;
+    'report-asks': ReportAsk;
+    'mcp-oauth-clients': McpOauthClient;
+    'mcp-oauth-grants': McpOauthGrant;
+    'payload-mcp-api-keys': PayloadMcpApiKey;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -118,6 +124,12 @@ export interface Config {
     issues: IssuesSelect<false> | IssuesSelect<true>;
     'llm-costs': LlmCostsSelect<false> | LlmCostsSelect<true>;
     'disbursement-access-log': DisbursementAccessLogSelect<false> | DisbursementAccessLogSelect<true>;
+    'report-definitions': ReportDefinitionsSelect<false> | ReportDefinitionsSelect<true>;
+    'report-runs': ReportRunsSelect<false> | ReportRunsSelect<true>;
+    'report-asks': ReportAsksSelect<false> | ReportAsksSelect<true>;
+    'mcp-oauth-clients': McpOauthClientsSelect<false> | McpOauthClientsSelect<true>;
+    'mcp-oauth-grants': McpOauthGrantsSelect<false> | McpOauthGrantsSelect<true>;
+    'payload-mcp-api-keys': PayloadMcpApiKeysSelect<false> | PayloadMcpApiKeysSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -845,6 +857,10 @@ export interface Conversation {
      * End of the re-application exclusion window (inclusive)
      */
     blockedUntil?: string | null;
+    /**
+     * Credit ruleset that made the decision (BTB-505)
+     */
+    rulesetVersion?: string | null;
   };
   /**
    * Decline evidence from final_credit_decision.decision_metadata (BTB-462)
@@ -2244,6 +2260,258 @@ export interface DisbursementAccessLog {
   createdAt: string;
 }
 /**
+ * Report definitions. Staff run published reports from Reports in the sidebar.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "report-definitions".
+ */
+export interface ReportDefinition {
+  id: string;
+  title: string;
+  /**
+   * Used in the report link: /admin/reports/<slug>
+   */
+  slug: string;
+  description?: string | null;
+  /**
+   * One SELECT or WITH statement over the reporting schema (docs/reporting.md). Read parameter 1 as $1, parameter 2 as $2, and so on.
+   */
+  sql: string;
+  /**
+   * A list of {name, label, type, required, default, options, help}. Types: date, text, integer, number, select, boolean. Date defaults: today, today-N or YYYY-MM-DD.
+   */
+  parameters?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Optional: {type: line | bar | area, x: column, series: [{column, label}], stacked}.
+   */
+  chart?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Who can run the published report. Authors can always run it.
+   */
+  roles: ('admin' | 'supervisor' | 'operations' | 'readonly')[];
+  author?: (string | null) | User;
+  origin?: ('manual' | 'ask' | 'mcp') | null;
+  schedule?: ('none' | 'weekly_monday') | null;
+  updatedAt: string;
+  createdAt: string;
+  _status?: ('draft' | 'published') | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "report-runs".
+ */
+export interface ReportRun {
+  id: string;
+  reportSlug?: string | null;
+  report?: (string | null) | ReportDefinition;
+  /**
+   * Published version id, or "draft"
+   */
+  version?: string | null;
+  user?: (string | null) | User;
+  parameters?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  outcome: 'ok' | 'sending' | 'timeout' | 'refused' | 'error';
+  errorCode?: string | null;
+  trigger?: ('view' | 'schedule' | 'mcp') | null;
+  /**
+   * Sydney date a scheduled delivery claimed (YYYY-MM-DD). Delete a stuck "sending" run to let the day send again.
+   */
+  scheduledFor?: string | null;
+  durationMs?: number | null;
+  rowCount?: number | null;
+  truncated?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "report-asks".
+ */
+export interface ReportAsk {
+  id: string;
+  user?: (string | null) | User;
+  kind: 'ask' | 'refine' | 'check' | 'mcp_query';
+  question?: string | null;
+  refinement?: string | null;
+  outcome: 'ok' | 'invalid' | 'unanswerable' | 'refused' | 'invalid_output' | 'error';
+  model?: string | null;
+  effort?: string | null;
+  promptVersion?: string | null;
+  schemaVersion?: string | null;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  cacheReadTokens?: number | null;
+  cacheWriteTokens?: number | null;
+  latencyMs?: number | null;
+  errorCount?: number | null;
+  warningCount?: number | null;
+  definition?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "mcp-oauth-clients".
+ */
+export interface McpOauthClient {
+  id: string;
+  clientId: string;
+  /**
+   * Chosen by the client when it registered; not verified
+   */
+  clientName?: string | null;
+  redirectUris:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  tokenEndpointAuthMethod: 'none' | 'client_secret_post' | 'client_secret_basic';
+  /**
+   * HMAC of the client secret, for confidential clients
+   */
+  secretIndex?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Claude apps people have connected to the reporting connector by signing in. Delete one to revoke it.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "mcp-oauth-grants".
+ */
+export interface McpOauthGrant {
+  id: string;
+  user: string | User;
+  clientId: string;
+  clientName?: string | null;
+  redirectUri: string;
+  /**
+   * Where the person was sent back to after approving
+   */
+  redirectHost?: string | null;
+  scope?: string | null;
+  resource: string;
+  codeIndex?: string | null;
+  codeChallenge?: string | null;
+  codeExpiresAt?: string | null;
+  codeUsed?: boolean | null;
+  accessIndex?: string | null;
+  accessExpiresAt?: string | null;
+  previousAccessIndex?: string | null;
+  previousAccessExpiresAt?: string | null;
+  refreshIndex?: string | null;
+  previousRefreshIndex?: string | null;
+  refreshExpiresAt?: string | null;
+  refreshedAt?: string | null;
+  lastUsedAt?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Keys for the reporting connector (BTB-509): one per person, for report authors only. Delete a key to revoke it.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "payload-mcp-api-keys".
+ */
+export interface PayloadMcpApiKey {
+  id: string;
+  /**
+   * The user that the API key is associated with.
+   */
+  user: string | User;
+  /**
+   * A useful label for the API key.
+   */
+  label?: string | null;
+  /**
+   * The purpose of the API key.
+   */
+  description?: string | null;
+  reportDefinitions?: {
+    /**
+     * Allow clients to find report-definitions.
+     */
+    find?: boolean | null;
+    /**
+     * Allow clients to create report-definitions.
+     */
+    create?: boolean | null;
+  };
+  'payload-mcp-tool'?: {
+    /**
+     * List the published reports this key can run: slug, title, description and parameters (with defaults). Run one with run_report.
+     */
+    listReports?: boolean | null;
+    /**
+     * Describe the reporting schema: every view and table with its grain, every column with its meaning, the helper functions, and the business rules a report must follow. Read this before writing report SQL.
+     */
+    describeReportingSchema?: boolean | null;
+    /**
+     * Run one SELECT (or WITH) over the reporting schema, read-only, as the reporting role, and return its columns and up to 1000 rows. Bind values as $1, $2… with parameters, in order. Use it to test report SQL before saving a draft. Prefer aggregates: never pull customer-level rows you do not need.
+     */
+    runReportQuery?: boolean | null;
+    /**
+     * Run a published report by its slug on the given parameters (blank ones take their defaults) and return its columns and rows. Find slugs and parameters with list_reports. Dashboards should use this, so they show reviewed, aggregate reports only.
+     */
+    runReport?: boolean | null;
+    /**
+     * Change a report definition by id (find ids with findReportDefinitions). Saves a new draft version for a supervisor to publish; the published report, if any, is unchanged until then. Send only the fields to change.
+     */
+    updateReportDraft?: boolean | null;
+  };
+  /**
+   * A dashboard key is shared by everyone in the Claude organisation and can only list and run the reports ticked below; the switches in the sidebar do not apply to it.
+   */
+  scope: 'personal' | 'dashboard';
+  /**
+   * Published reports the dashboard key may run. Choose aggregate reports only: anyone in the Claude organisation can see their results.
+   */
+  reports?: (string | ReportDefinition)[] | null;
+  /**
+   * Generated when the key is saved and shown for 15 minutes: copy it to the person, who adds it to Claude as a bearer token. If it is lost, delete the key and create another.
+   */
+  apiKey?: string | null;
+  apiKeyIndex?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
@@ -2354,6 +2622,30 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'disbursement-access-log';
         value: string | DisbursementAccessLog;
+      } | null)
+    | ({
+        relationTo: 'report-definitions';
+        value: string | ReportDefinition;
+      } | null)
+    | ({
+        relationTo: 'report-runs';
+        value: string | ReportRun;
+      } | null)
+    | ({
+        relationTo: 'report-asks';
+        value: string | ReportAsk;
+      } | null)
+    | ({
+        relationTo: 'mcp-oauth-clients';
+        value: string | McpOauthClient;
+      } | null)
+    | ({
+        relationTo: 'mcp-oauth-grants';
+        value: string | McpOauthGrant;
+      } | null)
+    | ({
+        relationTo: 'payload-mcp-api-keys';
+        value: string | PayloadMcpApiKey;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -2612,6 +2904,7 @@ export interface ConversationsSelect<T extends boolean = true> {
         retryEligible?: T;
         sourceApplicationNumber?: T;
         blockedUntil?: T;
+        rulesetVersion?: T;
       };
   decisionMetadata?: T;
   reapplicationBlock?:
@@ -3277,6 +3570,141 @@ export interface DisbursementAccessLogSelect<T extends boolean = true> {
   actor?: T;
   actorEmail?: T;
   occurredAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "report-definitions_select".
+ */
+export interface ReportDefinitionsSelect<T extends boolean = true> {
+  title?: T;
+  slug?: T;
+  description?: T;
+  sql?: T;
+  parameters?: T;
+  chart?: T;
+  roles?: T;
+  author?: T;
+  origin?: T;
+  schedule?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  _status?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "report-runs_select".
+ */
+export interface ReportRunsSelect<T extends boolean = true> {
+  reportSlug?: T;
+  report?: T;
+  version?: T;
+  user?: T;
+  parameters?: T;
+  outcome?: T;
+  errorCode?: T;
+  trigger?: T;
+  scheduledFor?: T;
+  durationMs?: T;
+  rowCount?: T;
+  truncated?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "report-asks_select".
+ */
+export interface ReportAsksSelect<T extends boolean = true> {
+  user?: T;
+  kind?: T;
+  question?: T;
+  refinement?: T;
+  outcome?: T;
+  model?: T;
+  effort?: T;
+  promptVersion?: T;
+  schemaVersion?: T;
+  inputTokens?: T;
+  outputTokens?: T;
+  cacheReadTokens?: T;
+  cacheWriteTokens?: T;
+  latencyMs?: T;
+  errorCount?: T;
+  warningCount?: T;
+  definition?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "mcp-oauth-clients_select".
+ */
+export interface McpOauthClientsSelect<T extends boolean = true> {
+  clientId?: T;
+  clientName?: T;
+  redirectUris?: T;
+  tokenEndpointAuthMethod?: T;
+  secretIndex?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "mcp-oauth-grants_select".
+ */
+export interface McpOauthGrantsSelect<T extends boolean = true> {
+  user?: T;
+  clientId?: T;
+  clientName?: T;
+  redirectUri?: T;
+  redirectHost?: T;
+  scope?: T;
+  resource?: T;
+  codeIndex?: T;
+  codeChallenge?: T;
+  codeExpiresAt?: T;
+  codeUsed?: T;
+  accessIndex?: T;
+  accessExpiresAt?: T;
+  previousAccessIndex?: T;
+  previousAccessExpiresAt?: T;
+  refreshIndex?: T;
+  previousRefreshIndex?: T;
+  refreshExpiresAt?: T;
+  refreshedAt?: T;
+  lastUsedAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "payload-mcp-api-keys_select".
+ */
+export interface PayloadMcpApiKeysSelect<T extends boolean = true> {
+  user?: T;
+  label?: T;
+  description?: T;
+  reportDefinitions?:
+    | T
+    | {
+        find?: T;
+        create?: T;
+      };
+  'payload-mcp-tool'?:
+    | T
+    | {
+        listReports?: T;
+        describeReportingSchema?: T;
+        runReportQuery?: T;
+        runReport?: T;
+        updateReportDraft?: T;
+      };
+  scope?: T;
+  reports?: T;
+  apiKey?: T;
+  apiKeyIndex?: T;
   updatedAt?: T;
   createdAt?: T;
 }

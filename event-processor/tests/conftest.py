@@ -31,19 +31,19 @@ def event_loop():
 # ---------------------------------------------------------------------------
 
 _INSERT_RE = re.compile(
-    r"INSERT\s+INTO\s+(\w+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)",
+    r"INSERT\s+INTO\s+([\w.]+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)",
     re.IGNORECASE | re.DOTALL,
 )
 _UPDATE_RE = re.compile(
-    r"UPDATE\s+(\w+)\s+SET\s+(.+?)\s+WHERE\s+(.+?)(?:$|;)",
+    r"UPDATE\s+([\w.]+)\s+SET\s+(.+?)\s+WHERE\s+(.+?)(?:$|;)",
     re.IGNORECASE | re.DOTALL,
 )
 _SELECT_RE = re.compile(
-    r"SELECT\s+.+?\s+FROM\s+(\w+)",
+    r"SELECT\s+.+?\s+FROM\s+([\w.]+)",
     re.IGNORECASE | re.DOTALL,
 )
 _DELETE_RE = re.compile(
-    r"DELETE\s+FROM\s+(\w+)",
+    r"DELETE\s+FROM\s+([\w.]+)",
     re.IGNORECASE | re.DOTALL,
 )
 _CONFLICT_RE = re.compile(

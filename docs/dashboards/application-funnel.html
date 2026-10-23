@@ -1,0 +1,458 @@
+<title>Billie Application Funnel</title>
+<!-- Per environment: the claude.ai connector to read from, and a label shown when it is not prod. -->
+<meta name="billie:connector" content="Billie CRM reporting">
+<meta name="billie:environment" content="">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=Public+Sans:wght@400;500;600&display=swap">
+<!--
+  Billie application funnel (BTB-509). An aggregate-only Claude artifact
+  dashboard: it reads the published "application-funnel" report through the
+  claude.ai connector named in the billie:connector meta tag (run_report,
+  with the viewer's own CRM sign-in) and never holds data of its own. One
+  copy is published per environment. See docs/reporting.md, "MCP connector".
+-->
+<style>
+  /* Layout: one column; filters, then the funnel summary, then the groups, then the detail table. */
+  :root {
+    --bg: #f6f8fa;
+    --surface: #ffffff;
+    --fg: #14202b;
+    --muted: #5b6b79;
+    --line: #dde4ea;
+    --accent: #1f6f8b;
+    --accent-soft: #d6e9f0;
+    --warn-bg: #fff4e0;
+    --warn-fg: #7a4b00;
+    --font-display: 'Familjen Grotesk', 'Helvetica Neue', Arial, sans-serif;
+    --font-body: 'Public Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f171e; --surface: #16212a; --fg: #e6edf2; --muted: #9aabb8; --line: #263541;
+      --accent: #5fb3d1; --accent-soft: #1d3a47; --warn-bg: #3a2a0d; --warn-fg: #f3c77a;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f171e; --surface: #16212a; --fg: #e6edf2; --muted: #9aabb8; --line: #263541;
+    --accent: #5fb3d1; --accent-soft: #1d3a47; --warn-bg: #3a2a0d; --warn-fg: #f3c77a;
+    color-scheme: dark;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  .page {
+    max-width: 1040px;
+    margin: 0 auto;
+    padding-block: 28px 48px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: grid;
+    gap: 28px;
+  }
+  h1, h2 { font-family: var(--font-display); text-wrap: balance; margin: 0; }
+  h1 { font-size: 1.9rem; font-weight: 700; letter-spacing: -0.01em; }
+  h2 { font-size: 1.15rem; font-weight: 600; }
+  p { margin: 0; }
+  .num { font-variant-numeric: tabular-nums; }
+  .muted { color: var(--muted); }
+  .eyebrow {
+    font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted); font-weight: 600;
+  }
+
+  header { display: grid; gap: 6px; }
+  header p { max-width: 65ch; }
+
+  .filters { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: end; }
+  .range { display: flex; flex-wrap: wrap; gap: 6px; }
+  .range button, .custom button {
+    font: inherit; font-size: 0.9rem; border: 1px solid var(--line); background: var(--surface);
+    color: var(--fg); border-radius: 999px; padding: 6px 14px; cursor: pointer;
+  }
+  .range button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+  .custom { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+  .custom label { display: grid; gap: 2px; font-size: 0.8rem; color: var(--muted); }
+  .custom input {
+    font: inherit; font-size: 0.9rem; padding: 5px 8px; border: 1px solid var(--line);
+    border-radius: 6px; background: var(--surface); color: var(--fg);
+  }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .freshness { font-size: 0.85rem; color: var(--muted); margin-left: auto; }
+
+  .notice {
+    border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px;
+    background: var(--warn-bg); color: var(--warn-fg); display: grid; gap: 8px;
+  }
+  .notice button {
+    justify-self: start; font: inherit; font-size: 0.9rem; padding: 6px 14px; border-radius: 999px;
+    border: 1px solid currentColor; background: transparent; color: inherit; cursor: pointer;
+  }
+
+  /* Funnel: one bar per stage, widths to one scale (started = 100%). */
+  .funnel {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+    padding: 20px; display: grid; gap: 14px;
+  }
+  .stage { display: grid; grid-template-columns: 8.5rem 1fr 10rem; gap: 12px; align-items: center; }
+  .stage-name { font-weight: 600; }
+  .track { height: 28px; background: var(--accent-soft); border-radius: 4px; overflow: hidden; }
+  .bar { height: 100%; background: var(--accent); border-radius: 0 4px 4px 0; transition: width 300ms ease; }
+  .stage-figures { text-align: right; display: grid; line-height: 1.2; }
+  .stage-figures strong { font-family: var(--font-display); font-size: 1.15rem; }
+  .stage-figures span { font-size: 0.8rem; color: var(--muted); }
+  @media (max-width: 560px) {
+    .stage { grid-template-columns: 1fr auto; }
+    .track { grid-column: 1 / -1; grid-row: 2; }
+  }
+
+  .env { display: inline-block; margin-left: 8px; padding: 1px 8px; border: 1px solid #b38600; border-radius: 4px; background: #fff7d6; color: #14202b; font-size: 0.75rem; letter-spacing: 0.04em; }
+
+  section { display: grid; gap: 12px; min-width: 0; }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+  caption { text-align: left; padding: 12px 16px 0; color: var(--muted); font-size: 0.85rem; }
+  th, td { padding: 9px 16px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  thead th { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+  tbody tr:last-child td { border-bottom: 0; }
+  .rate-cell { display: inline-flex; align-items: center; gap: 8px; justify-content: flex-end; }
+  .rate-bar { width: 56px; height: 6px; background: var(--accent-soft); border-radius: 3px; overflow: hidden; }
+  .rate-bar i { display: block; height: 100%; background: var(--accent); }
+
+  .skeleton { color: var(--muted); padding: 18px 16px; }
+  footer { font-size: 0.8rem; color: var(--muted); max-width: 70ch; }
+
+  @media (prefers-reduced-motion: reduce) { .bar { transition: none; } }
+</style>
+
+<main class="page">
+  <header>
+    <span class="eyebrow">Billie · Applications<span class="env" id="env" hidden></span></span>
+    <h1>Application funnel</h1>
+    <p class="muted">Applications started in the period (Sydney dates) and how far they got. Mock decisions are excluded. Figures come live from the CRM's published report, so they match the Reports view.</p>
+  </header>
+
+  <div class="filters" role="group" aria-label="Period">
+    <div class="range" id="range">
+      <button type="button" id="r7" data-days="7" aria-pressed="true">Last 7 days</button>
+      <button type="button" id="r30" data-days="30" aria-pressed="false">Last 30 days</button>
+      <button type="button" id="r90" data-days="90" aria-pressed="false">Last 90 days</button>
+    </div>
+    <form class="custom" id="custom">
+      <label for="from">From<input type="date" id="from" required></label>
+      <label for="to">To<input type="date" id="to" required></label>
+      <button type="submit" id="apply">Show period</button>
+    </form>
+    <p class="freshness" id="freshness" aria-live="polite"></p>
+  </div>
+
+  <div class="notice" id="notice" role="alert" hidden></div>
+
+  <div class="funnel" id="funnel" aria-label="Funnel totals">
+    <p class="skeleton" id="funnel-empty">Loading the funnel from the CRM…</p>
+  </div>
+
+  <section aria-labelledby="groups-title">
+    <h2 id="groups-title">By acquisition group</h2>
+    <div class="table-wrap">
+      <table id="groups">
+        <caption>Each group's share of starts and how many reached money.</caption>
+        <thead><tr><th scope="col">Group</th><th scope="col">Started</th><th scope="col">Submitted</th><th scope="col">Approved</th><th scope="col">Funded</th><th scope="col">Funded rate</th></tr></thead>
+        <tbody><tr><td colspan="6" class="skeleton">Waiting for data.</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="detail-title">
+    <h2 id="detail-title">By source and medium</h2>
+    <div class="table-wrap">
+      <table id="detail">
+        <caption>Rows without a recorded source are named by group: "(direct)", "(paid)" for an ad click without UTM tags, "(not recorded)" before 6 October 2026.</caption>
+        <thead><tr><th scope="col">Source / medium</th><th scope="col">Started</th><th scope="col">Submitted</th><th scope="col">Decided</th><th scope="col">Approved</th><th scope="col">Funded</th></tr></thead>
+        <tbody><tr><td colspan="6" class="skeleton">Waiting for data.</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>Aggregate counts only. Each viewer reads through their own CRM sign-in, so the figures need a CRM role that can run the report. Definitions: submitted means bank statements shared or decided; funded means disbursed.</footer>
+</main>
+
+<script>
+(() => {
+  const setting = (name) => document.querySelector(`meta[name="billie:${name}"]`)?.content?.trim() ?? ''
+  const SERVER = setting('connector') || 'Billie CRM reporting'
+  const ENVIRONMENT = setting('environment')
+  if (ENVIRONMENT) {
+    const badge = document.getElementById('env')
+    badge.textContent = ENVIRONMENT
+    badge.hidden = false
+    document.title = `${document.title} (${ENVIRONMENT})`
+  }
+  const REPORT = 'application-funnel'
+  const STAGES = [
+    ['started', 'Started'],
+    ['submitted', 'Submitted'],
+    ['decided', 'Decided'],
+    ['approved', 'Approved'],
+    ['funded', 'Funded'],
+  ]
+  const $ = (id) => document.getElementById(id)
+  const fmt = new Intl.NumberFormat('en-AU')
+  const pct = (n, d) => (d > 0 ? `${((100 * n) / d).toFixed(1)}%` : '–')
+  const sydneyDay = (offsetDays) => {
+    const d = new Date(Date.now() + offsetDays * 86_400_000)
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney' }).format(d)
+  }
+
+  let mcp = null
+  let unwatch = null
+  let params = { from: sydneyDay(-7), to: sydneyDay(-1) }
+
+  function notice(text, action) {
+    const box = $('notice')
+    box.replaceChildren()
+    if (!text) { box.hidden = true; return }
+    const p = document.createElement('p')
+    p.textContent = text
+    box.append(p)
+    if (action) {
+      const b = document.createElement('button')
+      b.type = 'button'
+      b.textContent = action.label
+      b.addEventListener('click', action.run)
+      box.append(b)
+    }
+    box.hidden = false
+  }
+
+  function cell(text, cls) {
+    const td = document.createElement('td')
+    td.textContent = text
+    if (cls) td.className = cls
+    return td
+  }
+
+  function rateCell(n, d) {
+    const td = document.createElement('td')
+    const wrap = document.createElement('span')
+    wrap.className = 'rate-cell num'
+    const bar = document.createElement('span')
+    bar.className = 'rate-bar'
+    bar.setAttribute('aria-hidden', 'true')
+    const fill = document.createElement('i')
+    fill.style.width = d > 0 ? `${Math.min(100, (100 * n) / d)}%` : '0'
+    bar.append(fill)
+    wrap.append(bar, document.createTextNode(pct(n, d)))
+    td.append(wrap)
+    return td
+  }
+
+  function sum(rows, key) {
+    return rows.reduce((s, r) => s + (Number(r[key]) || 0), 0)
+  }
+
+  function renderFunnel(rows) {
+    const box = $('funnel')
+    box.replaceChildren()
+    const totals = Object.fromEntries(STAGES.map(([k]) => [k, sum(rows, k)]))
+    if (totals.started === 0) {
+      const p = document.createElement('p')
+      p.className = 'skeleton'
+      p.textContent = 'No applications were started in this period.'
+      box.append(p)
+      return
+    }
+    STAGES.forEach(([key, label], i) => {
+      const row = document.createElement('div')
+      row.className = 'stage'
+      const name = document.createElement('span')
+      name.className = 'stage-name'
+      name.textContent = label
+      const track = document.createElement('div')
+      track.className = 'track'
+      track.setAttribute('role', 'img')
+      track.setAttribute('aria-label', `${label}: ${fmt.format(totals[key])}, ${pct(totals[key], totals.started)} of started`)
+      const bar = document.createElement('div')
+      bar.className = 'bar'
+      bar.style.width = `${(100 * totals[key]) / totals.started}%`
+      track.append(bar)
+      const figs = document.createElement('div')
+      figs.className = 'stage-figures num'
+      const strong = document.createElement('strong')
+      strong.textContent = fmt.format(totals[key])
+      const sub = document.createElement('span')
+      const prev = i === 0 ? null : totals[STAGES[i - 1][0]]
+      sub.textContent = i === 0 ? 'applications' : `${pct(totals[key], prev)} of ${STAGES[i - 1][1].toLowerCase()}`
+      figs.append(strong, sub)
+      row.append(name, track, figs)
+      box.append(row)
+    })
+  }
+
+  function renderGroups(rows) {
+    const byGroup = new Map()
+    for (const r of rows) {
+      const g = byGroup.get(r.acquisition) ?? { started: 0, submitted: 0, approved: 0, funded: 0 }
+      for (const k of Object.keys(g)) g[k] += Number(r[k]) || 0
+      byGroup.set(r.acquisition, g)
+    }
+    const total = sum(rows, 'started')
+    const body = $('groups').tBodies[0]
+    body.replaceChildren()
+    ;[...byGroup.entries()].sort((a, b) => b[1].started - a[1].started).forEach(([group, g]) => {
+      const tr = document.createElement('tr')
+      const name = document.createElement('th')
+      name.scope = 'row'
+      name.textContent = group
+      tr.append(
+        name,
+        cell(`${fmt.format(g.started)} (${pct(g.started, total)})`, 'num'),
+        cell(fmt.format(g.submitted), 'num'),
+        cell(fmt.format(g.approved), 'num'),
+        cell(fmt.format(g.funded), 'num'),
+        rateCell(g.funded, g.started),
+      )
+      body.append(tr)
+    })
+    if (!byGroup.size) body.innerHTML = '<tr><td colspan="6" class="skeleton">No applications in this period.</td></tr>'
+  }
+
+  function renderDetail(rows) {
+    const body = $('detail').tBodies[0]
+    body.replaceChildren()
+    for (const r of rows) {
+      const tr = document.createElement('tr')
+      const name = document.createElement('th')
+      name.scope = 'row'
+      name.textContent = r.source_medium
+      tr.append(name, ...['started', 'submitted', 'decided', 'approved', 'funded'].map((k) => cell(fmt.format(Number(r[k]) || 0), 'num')))
+      body.append(tr)
+    }
+    if (!rows.length) body.innerHTML = '<tr><td colspan="6" class="skeleton">No applications in this period.</td></tr>'
+  }
+
+  function clearData(message) {
+    $('funnel').innerHTML = ''
+    const p = document.createElement('p')
+    p.className = 'skeleton'
+    p.textContent = message
+    $('funnel').append(p)
+    for (const id of ['groups', 'detail']) {
+      $(id).tBodies[0].innerHTML = '<tr><td colspan="6" class="skeleton">No data shown.</td></tr>'
+    }
+    $('freshness').textContent = ''
+  }
+
+  function render(result) {
+    const payload = result.payload
+    if (typeof payload === 'string') {
+      // The connector answers a refused or failed run as text.
+      notice(payload.replace(/^Error:\s*/, ''))
+      return
+    }
+    const rows = Array.isArray(payload?.rows) ? payload.rows : []
+    notice(payload?.truncated ? 'Showing the first rows only: narrow the period to see them all.' : '')
+    renderFunnel(rows)
+    renderGroups(rows)
+    renderDetail(rows)
+    const at = result.cache?.storedAt ? new Date(result.cache.storedAt) : new Date()
+    $('freshness').textContent = `${params.from} to ${params.to} · updated ${at.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })}`
+  }
+
+  function onError(error) {
+    switch (error?.code) {
+      case 'server_not_connected':
+      case 'server_not_found':
+      case 'selection_required':
+        clearData('Not connected to the CRM.')
+        notice(`Add the "${SERVER}" connector in claude.ai Settings → Connectors, then reload this page.`)
+        break
+      case 'needs_reauth':
+        clearData('The CRM connection needs renewing.')
+        notice(`Reconnect "${SERVER}" in claude.ai Settings → Connectors, then reload this page.`)
+        break
+      case 'approval_required':
+      case 'not_in_manifest':
+      case 'consent_required':
+        clearData('This page needs your permission to read the CRM report.')
+        notice('Allow this page to use the CRM reporting connector.', { label: 'Allow and load', run: load })
+        break
+      case 'blocked_by_policy':
+        clearData('Your organisation does not allow this connector here.')
+        notice('Ask an organisation owner to allow the CRM reporting connector for artifacts.')
+        break
+      case 'tool_error':
+        notice(error.message || 'The CRM could not run the report.')
+        break
+      default:
+        // Transient: keep what is shown and say so.
+        notice('The CRM did not answer just now. The figures shown may be out of date.', { label: 'Try again', run: load })
+    }
+  }
+
+  function load() {
+    if (!mcp) return
+    if (unwatch) unwatch()
+    notice('')
+    unwatch = mcp.watchTool(
+      SERVER,
+      'run_report',
+      { slug: REPORT, parameters: params },
+      (event) => (event.type === 'data' ? render(event.result) : onError(event.error)),
+      { cache: { staleTime: 5 * 60_000, gcTime: 60 * 60_000 }, refetchInterval: 15 * 60_000 },
+    )
+  }
+
+  function setRange(days) {
+    params = { from: sydneyDay(-days), to: sydneyDay(-1) }
+    $('from').value = params.from
+    $('to').value = params.to
+    for (const b of $('range').querySelectorAll('button')) {
+      b.setAttribute('aria-pressed', String(Number(b.dataset.days) === days))
+    }
+    load()
+  }
+
+  $('range').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-days]')
+    if (b) setRange(Number(b.dataset.days))
+  })
+  $('custom').addEventListener('submit', (e) => {
+    e.preventDefault()
+    const from = $('from').value
+    const to = $('to').value
+    if (!from || !to || from > to) {
+      notice('Choose a From date on or before the To date.')
+      return
+    }
+    params = { from, to }
+    for (const b of $('range').querySelectorAll('button')) b.setAttribute('aria-pressed', 'false')
+    load()
+  })
+
+  $('from').value = params.from
+  $('to').value = params.to
+
+  if (!window.claude?.use) {
+    clearData('Open this page in Claude to see the funnel.')
+    return
+  }
+  window.claude.use('mcp').then((ns) => {
+    mcp = ns
+    if (!mcp) {
+      clearData('This view cannot reach the CRM connector.')
+      notice(`Open this dashboard in claude.ai with the "${SERVER}" connector added.`)
+      return
+    }
+    load()
+  })
+})()
+</script>

@@ -38,6 +38,18 @@ import * as migration_20260929_090000_customer_login_email_rebound from './20260
 import * as migration_20261005_090000_conversation_attribution from './20261005_090000_conversation_attribution';
 import * as migration_20261006_090000_conversation_network from './20261006_090000_conversation_network';
 import * as migration_20261020_090000_conversation_decision_metadata from './20261020_090000_conversation_decision_metadata';
+import * as migration_20261023_090000_reporting_schema from './20261023_090000_reporting_schema';
+import * as migration_20261024_090000_report_definitions from './20261024_090000_report_definitions';
+import * as migration_20261025_090000_report_delivery from './20261025_090000_report_delivery';
+import * as migration_20261026_090000_report_asks from './20261026_090000_report_asks';
+import * as migration_20261026_095000_reporting_mcp from './20261026_095000_reporting_mcp'
+import * as migration_20261026_100000_first_reports from './20261026_100000_first_reports';
+import * as migration_20261027_090000_mcp_oauth from './20261027_090000_mcp_oauth'
+import * as migration_20261027_100000_mcp_oauth_refresh_grace from './20261027_100000_mcp_oauth_refresh_grace'
+import * as migration_20261028_090000_reporting_all_data from './20261028_090000_reporting_all_data'
+import * as migration_20261028_100000_reporting_loan_lookup from './20261028_100000_reporting_loan_lookup'
+import * as migration_20261028_110000_conversations_started_on_idx from './20261028_110000_conversations_started_on_idx'
+import * as migration_20261028_120000_reporting_acquisition_detail from './20261028_120000_reporting_acquisition_detail'
 
 export const migrations = [
   {
@@ -239,5 +251,65 @@ export const migrations = [
     up: migration_20261020_090000_conversation_decision_metadata.up,
     down: migration_20261020_090000_conversation_decision_metadata.down,
     name: '20261020_090000_conversation_decision_metadata',
+  },
+  {
+    up: migration_20261023_090000_reporting_schema.up,
+    down: migration_20261023_090000_reporting_schema.down,
+    name: '20261023_090000_reporting_schema',
+  },
+  {
+    up: migration_20261024_090000_report_definitions.up,
+    down: migration_20261024_090000_report_definitions.down,
+    name: '20261024_090000_report_definitions',
+  },
+  {
+    up: migration_20261025_090000_report_delivery.up,
+    down: migration_20261025_090000_report_delivery.down,
+    name: '20261025_090000_report_delivery',
+  },
+  {
+    up: migration_20261026_090000_report_asks.up,
+    down: migration_20261026_090000_report_asks.down,
+    name: '20261026_090000_report_asks',
+  },
+  {
+    up: migration_20261026_095000_reporting_mcp.up,
+    down: migration_20261026_095000_reporting_mcp.down,
+    name: '20261026_095000_reporting_mcp',
+  },
+  {
+    up: migration_20261026_100000_first_reports.up,
+    down: migration_20261026_100000_first_reports.down,
+    name: '20261026_100000_first_reports',
+  },
+  {
+    up: migration_20261027_090000_mcp_oauth.up,
+    down: migration_20261027_090000_mcp_oauth.down,
+    name: '20261027_090000_mcp_oauth',
+  },
+  {
+    up: migration_20261027_100000_mcp_oauth_refresh_grace.up,
+    down: migration_20261027_100000_mcp_oauth_refresh_grace.down,
+    name: '20261027_100000_mcp_oauth_refresh_grace',
+  },
+  {
+    up: migration_20261028_090000_reporting_all_data.up,
+    down: migration_20261028_090000_reporting_all_data.down,
+    name: '20261028_090000_reporting_all_data',
+  },
+  {
+    up: migration_20261028_100000_reporting_loan_lookup.up,
+    down: migration_20261028_100000_reporting_loan_lookup.down,
+    name: '20261028_100000_reporting_loan_lookup',
+  },
+  {
+    up: migration_20261028_110000_conversations_started_on_idx.up,
+    down: migration_20261028_110000_conversations_started_on_idx.down,
+    name: '20261028_110000_conversations_started_on_idx',
+  },
+  {
+    up: migration_20261028_120000_reporting_acquisition_detail.up,
+    down: migration_20261028_120000_reporting_acquisition_detail.down,
+    name: '20261028_120000_reporting_acquisition_detail',
   },
 ];

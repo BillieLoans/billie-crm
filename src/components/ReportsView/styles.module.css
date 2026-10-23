@@ -1,0 +1,491 @@
+/* Reports view (BTB-506). Page chrome uses Payload theme variables; the
+ * chart palette is the validated categorical order from the data-viz
+ * reference palette, stepped separately for light and dark. */
+
+.container {
+  padding: 1.5rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.sidebar {
+  border-right: 1px solid var(--theme-elevation-150, #ddd);
+  padding-right: 1rem;
+}
+
+.sidebarHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.sidebarTitle {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--theme-text, #111);
+}
+
+.reportList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.reportLink {
+  display: block;
+  min-height: 32px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  color: var(--theme-elevation-800, #222);
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.reportLink:hover {
+  background: var(--theme-elevation-50, #f5f5f5);
+}
+
+.reportLink:focus-visible,
+.textLink:focus-visible,
+.askLink:focus-visible,
+.sortButton:focus-visible,
+.primaryButton:focus-visible,
+.secondaryButton:focus-visible,
+.input:focus-visible,
+.checkbox:focus-visible,
+.tableScroll:focus-visible,
+.errorSummary:focus {
+  outline: 2px solid var(--theme-success-500, #0ea5e9);
+  outline-offset: 2px;
+}
+
+/* Current page: weight and a bar, not colour alone. */
+.reportLinkActive {
+  font-weight: 600;
+  background: var(--theme-elevation-100, #eee);
+  box-shadow: inset 3px 0 0 var(--theme-elevation-800, #222);
+}
+
+.main {
+  min-width: 0;
+}
+
+.listTag {
+  font-weight: 400;
+  color: var(--theme-elevation-650, #555);
+}
+
+.header {
+  margin-bottom: 1rem;
+}
+
+.title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0 0 0.25rem;
+  color: var(--theme-text, #111);
+}
+
+.subtitle {
+  font-size: 0.875rem;
+  color: var(--theme-elevation-650, #555);
+  margin: 0 0 0.5rem;
+}
+
+.textLink {
+  font-size: 14px;
+  color: var(--theme-text, #111);
+  text-decoration: underline;
+}
+
+.accessDenied {
+  padding: 2rem 0;
+}
+
+/* Form */
+.form {
+  margin-bottom: 0.75rem;
+}
+
+.paramGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fieldLabel {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--theme-text, #111);
+}
+
+.optional {
+  font-weight: 400;
+  color: var(--theme-elevation-650, #555);
+}
+
+.hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--theme-elevation-650, #555);
+}
+
+.input {
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--theme-elevation-500, #767676);
+  border-radius: 6px;
+  background: var(--theme-input-bg, var(--theme-elevation-0, #fff));
+  color: var(--theme-text, #111);
+  font-size: 14px;
+}
+
+.inputInvalid {
+  border: 2px solid #b91c1c;
+}
+
+.fieldError {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #b91c1c;
+}
+
+.checkboxRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+}
+
+.checkbox {
+  width: 20px;
+  height: 20px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.primaryButton,
+.secondaryButton {
+  min-height: 36px;
+  padding: 0 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.primaryButton {
+  background: var(--theme-elevation-900, #111);
+  color: var(--theme-elevation-0, #fff);
+  border: 1px solid var(--theme-elevation-900, #111);
+}
+
+.secondaryButton {
+  background: transparent;
+  color: var(--theme-text, #111);
+  border: 1px solid var(--theme-elevation-500, #767676);
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--theme-elevation-500, #767676);
+  border-radius: 6px;
+  background: var(--theme-input-bg, var(--theme-elevation-0, #fff));
+  color: var(--theme-text, #111);
+  font: inherit;
+  font-size: 14px;
+  resize: vertical;
+}
+
+.textarea:focus-visible {
+  outline: 2px solid var(--theme-success-500, #0ea5e9);
+  outline-offset: 2px;
+}
+
+.code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.sectionTitle {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0 0 0.25rem;
+  color: var(--theme-text, #111);
+}
+
+.subheading {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0 0 0.25rem;
+  color: var(--theme-text, #111);
+}
+
+.plainList {
+  margin: 0.25rem 0 0;
+  padding-left: 1.25rem;
+  font-size: 14px;
+  color: var(--theme-text, #111);
+}
+
+.askLink {
+  display: block;
+  margin: 0.25rem 0 0.75rem;
+  font-size: 14px;
+  color: var(--theme-text, #111);
+  text-decoration: underline;
+}
+
+/* Error summary (ux-standards §3) */
+.errorSummary {
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  border: 2px solid #b91c1c;
+  border-radius: 6px;
+  background: rgba(185, 28, 28, 0.06);
+}
+
+.errorSummaryTitle {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #b91c1c;
+}
+
+.errorSummaryList {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 14px;
+}
+
+.errorSummaryList a {
+  color: #b91c1c;
+  text-decoration: underline;
+}
+
+.errorDetail {
+  margin-top: 8px;
+  font-size: 13px;
+}
+
+.errorDetail code {
+  display: block;
+  margin-top: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Results */
+.status {
+  min-height: 1.25rem;
+  margin: 0 0 0.75rem;
+  font-size: 14px;
+  color: var(--theme-elevation-750, #333);
+}
+
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.note {
+  margin: 0;
+  font-size: 14px;
+  color: var(--theme-elevation-650, #555);
+}
+
+.warning,
+.draftBadge {
+  margin: 0;
+  padding: 8px 12px;
+  border-left: 4px solid #b45309;
+  background: rgba(180, 83, 9, 0.08);
+  font-size: 14px;
+  color: var(--theme-text, #111);
+}
+
+.draftBadge {
+  border-left-color: var(--theme-elevation-700, #444);
+  background: var(--theme-elevation-50, #f5f5f5);
+}
+
+/* Chart */
+.chartFigure {
+  margin: 0;
+}
+
+.chart {
+  --chart-surface: #fcfcfb;
+  --chart-grid: #e7e6e2;
+  --chart-axis: #a3a29c;
+  --chart-text: #52514e;
+  --chart-text-strong: #0b0b0b;
+  --chart-cursor: rgba(0, 0, 0, 0.04);
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #6250d6;
+  --series-8: #e34948;
+  width: 100%;
+  padding: 8px 0;
+  background: var(--chart-surface);
+  border-radius: 8px;
+}
+
+:global(html[data-theme='dark']) .chart {
+  --chart-surface: #1a1a19;
+  --chart-grid: #2e2e2c;
+  --chart-axis: #6b6a65;
+  --chart-text: #c3c2b7;
+  --chart-text-strong: #f0efec;
+  --chart-cursor: rgba(255, 255, 255, 0.06);
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+}
+
+/* Table */
+.tableBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.tableScroll {
+  overflow: auto;
+  max-height: 70vh;
+  border: 1px solid var(--theme-elevation-150, #ddd);
+  border-radius: 6px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.table th,
+.table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--theme-elevation-100, #eee);
+  text-align: left;
+  white-space: nowrap;
+  color: var(--theme-text, #111);
+}
+
+.table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--theme-elevation-50, #f5f5f5);
+  padding: 0;
+}
+
+.table .numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.sortButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-align: inherit;
+  justify-content: inherit;
+  cursor: pointer;
+}
+
+.numeric .sortButton {
+  justify-content: flex-end;
+}
+
+.sortMark {
+  font-size: 10px;
+  color: var(--theme-elevation-650, #555);
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.pagerText {
+  font-size: 13px;
+  color: var(--theme-elevation-750, #333);
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reportLink,
+  .primaryButton,
+  .secondaryButton {
+    transition: none;
+  }
+}

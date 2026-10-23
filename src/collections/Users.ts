@@ -1,5 +1,6 @@
 import type { CollectionConfig, Access, AuthStrategyResult } from 'payload'
 import { hideFromNonAdmins, isAdmin } from '@/lib/access'
+import { deleteMcpKeysOfUser, revokeMcpKeysOnRoleChange } from '@/server/reporting/mcp-keys'
 
 const isServiceAccount = (user: unknown): boolean => {
   if (user && typeof user === 'object' && 'role' in user) {
@@ -76,6 +77,11 @@ export const Users: CollectionConfig = {
     create: ({ req: { user } }) => isAdmin(user),
     update: canUpdateUsers,
     delete: ({ req: { user } }) => isAdmin(user),
+  },
+  hooks: {
+    // BTB-509: reporting MCP keys belong to report authors only.
+    afterChange: [revokeMcpKeysOnRoleChange],
+    beforeDelete: [deleteMcpKeysOfUser],
   },
   fields: [
     {

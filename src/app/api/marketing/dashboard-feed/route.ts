@@ -18,6 +18,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
+import { ACQUISITION_CHANNEL_SQL } from '@/server/reporting/schema'
 import { safeEqual } from '@/lib/intake-auth'
 
 /** Canonical funnel order (mirrors Contacts.derivedStage options). */
@@ -49,17 +50,7 @@ const FUNNEL_ORDER = [
  * The click id keys are tested for presence only; their values are never
  * selected.
  */
-const CHANNEL_SQL = `CASE
-  WHEN attribution IS NULL THEN 'direct'
-  WHEN attribution->>'gclid' IS NOT NULL
-    OR attribution->>'gbraid' IS NOT NULL
-    OR attribution->>'wbraid' IS NOT NULL
-    OR LOWER(attribution->>'utm_medium') IN ('cpc', 'ppc', 'paid', 'paid_search', 'paidsearch', 'display')
-    THEN 'paid'
-  WHEN LOWER(attribution->>'utm_medium') IN ('organic', 'llm', 'social', 'referral', 'email', 'sms')
-    THEN LOWER(attribution->>'utm_medium')
-  ELSE 'other'
-END`
+const CHANNEL_SQL = ACQUISITION_CHANNEL_SQL('attribution')
 
 interface CountRow {
   k: unknown

@@ -1,0 +1,35 @@
+.navLink {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  text-decoration: none;
+  color: var(--theme-elevation-700, #444);
+  font-size: 14px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.navLink:hover {
+  background: var(--theme-elevation-50, #f5f5f5);
+  color: var(--theme-elevation-900, #111);
+}
+
+.navLink:focus {
+  outline: 2px solid var(--theme-success, #0ea5e9);
+  outline-offset: 2px;
+}
+
+.navLink.active {
+  background: var(--theme-success-50, #f0fdf4);
+  color: var(--theme-success-700, #15803d);
+  font-weight: 500;
+}
+
+.icon {
+  font-size: 18px;
+}
+
+.label {
+  flex: 1;
+}

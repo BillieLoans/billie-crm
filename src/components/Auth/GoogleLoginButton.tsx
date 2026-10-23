@@ -7,7 +7,12 @@ export const GoogleLoginButton = () => {
 
   const handleClick = () => {
     setLoading(true)
-    window.location.href = '/api/auth/google'
+    // Carry the login page's return path (e.g. the reporting connector's
+    // sign-in page) through Google; the server checks it is same-origin.
+    const redirect = new URLSearchParams(window.location.search).get('redirect')
+    window.location.href = redirect
+      ? `/api/auth/google?redirect=${encodeURIComponent(redirect)}`
+      : '/api/auth/google'
   }
 
   return (

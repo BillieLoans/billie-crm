@@ -1,4 +1,5 @@
 import { LoanAccountServicingRedirect as LoanAccountServicingRedirect_a26a66e8d88b18fecfb555f3364bc708 } from '@/components/LoanAccountServicingRedirect'
+import { JsonTextareaField as JsonTextareaField_04b7a20c73b9f19348ed091ea4b89c6f } from '@/components/fields/JsonTextareaField'
 import { LogoutButton as LogoutButton_81f5d08e777904dedf54cf0c6c30c1a5 } from '@/components/Auth/LogoutButton'
 import { BillieLogo as BillieLogo_06150f4bc6153791903834b4df8ef7c8 } from '@/components/graphics/BillieLogo'
 import { NotificationAction as NotificationAction_ff7594e27eaf34e7ce9acae213b05415 } from '@/components/Notifications/NotificationAction'
@@ -12,6 +13,7 @@ import { NavApprovalsLink as NavApprovalsLink_432895ce587e4825ef60ac4a4de8aa43 }
 import { NavPeriodCloseLink as NavPeriodCloseLink_b876b3abd416c3d860c4802b5c1185f1 } from '@/components/navigation/NavPeriodCloseLink'
 import { NavECLConfigLink as NavECLConfigLink_3ff0f20809012ed106da89f9feaf716c } from '@/components/navigation/NavECLConfigLink'
 import { NavExportsLink as NavExportsLink_30210b8f1b8d6622c22618d359a47328 } from '@/components/navigation/NavExportsLink'
+import { NavReportsLink as NavReportsLink_89c84902c4708465249a638524ea94b4 } from '@/components/navigation/NavReportsLink'
 import { NavInvestigationLink as NavInvestigationLink_25d4a0e46dfdaebb4b30fe5c09ac4503 } from '@/components/navigation/NavInvestigationLink'
 import { NavMarketingLink as NavMarketingLink_c6514228dd06694357c8fb92026941af } from '@/components/navigation/NavMarketingLink'
 import { NavIssueReportsLink as NavIssueReportsLink_88cd6c2e016aec218475945dc9837306 } from '@/components/navigation/NavIssueReportsLink'
@@ -31,11 +33,13 @@ import { InvestigationViewWithTemplate as InvestigationViewWithTemplate_da95a625
 import { ApplicationsViewWithTemplate as ApplicationsViewWithTemplate_d004262689768525c348b9fc1d1da517 } from '@/components/ApplicationsView/ApplicationsViewWithTemplate'
 import { MarketingViewWithTemplate as MarketingViewWithTemplate_5657a34efbe268fc73a330d9d42f6a37 } from '@/components/MarketingView/MarketingViewWithTemplate'
 import { IssueReportsViewWithTemplate as IssueReportsViewWithTemplate_ae408fd0f3e7d3f25f6e5a979b263bc9 } from '@/components/IssueReportsView/IssueReportsViewWithTemplate'
+import { ReportsViewWithTemplate as ReportsViewWithTemplate_06a1fc017213e7a8288bc27c6c4f8f38 } from '@/components/ReportsView/ReportsViewWithTemplate'
 import { CollectionCards as CollectionCards_f9c02e79a4aed9a3924487c0cd4cafb1 } from '@payloadcms/next/rsc'
 
 /** @type import('payload').ImportMap */
 export const importMap = {
   "@/components/LoanAccountServicingRedirect#LoanAccountServicingRedirect": LoanAccountServicingRedirect_a26a66e8d88b18fecfb555f3364bc708,
+  "@/components/fields/JsonTextareaField#JsonTextareaField": JsonTextareaField_04b7a20c73b9f19348ed091ea4b89c6f,
   "@/components/Auth/LogoutButton#LogoutButton": LogoutButton_81f5d08e777904dedf54cf0c6c30c1a5,
   "@/components/graphics/BillieLogo#BillieLogo": BillieLogo_06150f4bc6153791903834b4df8ef7c8,
   "@/components/Notifications/NotificationAction#NotificationAction": NotificationAction_ff7594e27eaf34e7ce9acae213b05415,
@@ -49,6 +53,7 @@ export const importMap = {
   "@/components/navigation/NavPeriodCloseLink#NavPeriodCloseLink": NavPeriodCloseLink_b876b3abd416c3d860c4802b5c1185f1,
   "@/components/navigation/NavECLConfigLink#NavECLConfigLink": NavECLConfigLink_3ff0f20809012ed106da89f9feaf716c,
   "@/components/navigation/NavExportsLink#NavExportsLink": NavExportsLink_30210b8f1b8d6622c22618d359a47328,
+  "@/components/navigation/NavReportsLink#NavReportsLink": NavReportsLink_89c84902c4708465249a638524ea94b4,
   "@/components/navigation/NavInvestigationLink#NavInvestigationLink": NavInvestigationLink_25d4a0e46dfdaebb4b30fe5c09ac4503,
   "@/components/navigation/NavMarketingLink#NavMarketingLink": NavMarketingLink_c6514228dd06694357c8fb92026941af,
   "@/components/navigation/NavIssueReportsLink#NavIssueReportsLink": NavIssueReportsLink_88cd6c2e016aec218475945dc9837306,
@@ -68,5 +73,6 @@ export const importMap = {
   "@/components/ApplicationsView/ApplicationsViewWithTemplate#ApplicationsViewWithTemplate": ApplicationsViewWithTemplate_d004262689768525c348b9fc1d1da517,
   "@/components/MarketingView/MarketingViewWithTemplate#MarketingViewWithTemplate": MarketingViewWithTemplate_5657a34efbe268fc73a330d9d42f6a37,
   "@/components/IssueReportsView/IssueReportsViewWithTemplate#IssueReportsViewWithTemplate": IssueReportsViewWithTemplate_ae408fd0f3e7d3f25f6e5a979b263bc9,
+  "@/components/ReportsView/ReportsViewWithTemplate#ReportsViewWithTemplate": ReportsViewWithTemplate_06a1fc017213e7a8288bc27c6c4f8f38,
   "@payloadcms/next/rsc#CollectionCards": CollectionCards_f9c02e79a4aed9a3924487c0cd4cafb1
 }

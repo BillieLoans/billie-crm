@@ -104,3 +104,6 @@ event-processor/.venv/*
 
 # Claude Code worktrees (per-session isolated checkouts)
 .claude/worktrees/
+
+# AI-authored reports benchmark output (BTB-508)
+/bench-out/

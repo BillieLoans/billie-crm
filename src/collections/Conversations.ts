@@ -303,6 +303,13 @@ export const Conversations: CollectionConfig = {
           type: 'date',
           admin: { description: 'End of the re-application exclusion window (inclusive)' },
         },
+        {
+          // BTB-505: hash of the credit rule files config selected when this
+          // decision was made. Changes when a rule changes.
+          name: 'rulesetVersion',
+          type: 'text',
+          admin: { description: 'Credit ruleset that made the decision (BTB-505)' },
+        },
       ],
     },
     {

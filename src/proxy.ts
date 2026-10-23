@@ -132,15 +132,24 @@ function verifyCsrfOrigin(request: NextRequest): NextResponse | null {
 
 /**
  * Public endpoints authenticated by their own secret rather than a session
- * cookie — the marketing-site intake forms (API key + HMAC) and inbound
- * webhooks (shared secret). They are called cross-origin / server-to-server
- * (e.g. ClickSend), so the browser CSRF origin check does not apply and would
- * wrongly reject them (no Origin/Referer to match). Auth is enforced in-route.
+ * cookie — the marketing-site intake forms (API key + HMAC), inbound
+ * webhooks (shared secret), scheduled reporting jobs (bearer token,
+ * BTB-504), the reporting MCP connector (bearer API key or OAuth token,
+ * never a cookie, BTB-509) and its OAuth token and registration endpoints
+ * (client credentials and PKCE, never a cookie). They are called
+ * cross-origin / server-to-server (e.g. ClickSend, Claude), so the browser
+ * CSRF origin check does not apply and would wrongly reject them (no
+ * Origin/Referer to match). Auth is enforced in-route. The OAuth consent
+ * form (`/api/oauth/authorize`) uses the session cookie and stays checked.
  */
-const CSRF_EXEMPT_PREFIXES = ['/api/intake/', '/api/webhooks/']
+const CSRF_EXEMPT_PREFIXES = ['/api/intake/', '/api/webhooks/', '/api/reports/jobs/']
+const CSRF_EXEMPT_PATHS = ['/api/mcp', '/api/oauth/token', '/api/oauth/register']
 
-function isCsrfExemptPath(pathname: string): boolean {
-  return CSRF_EXEMPT_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+export function isCsrfExemptPath(pathname: string): boolean {
+  return (
+    CSRF_EXEMPT_PATHS.includes(pathname) ||
+    CSRF_EXEMPT_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+  )
 }
 
 function setSecurityHeaders(response: NextResponse): NextResponse {
