@@ -14,7 +14,6 @@ import {
 } from '@/lib/schemas/reports'
 import { resolveColumns } from '@/lib/reports/columns'
 import { buildNarrative, computeHeadline } from '@/lib/reports/headline'
-import { logReportEvent } from '@/lib/reports/events'
 import {
   AskClaudeFailure,
   findExistingReports,
@@ -328,7 +327,6 @@ export function AskPanel({ initialQuestion = '', fromSlug, canAuthor = true }: A
           setSavedReportId(result.id)
           setConfirming(false)
           writeStored(null)
-          logReportEvent({ kind: 'ask_save', reportSlug: result.slug })
         },
         onError: (e) => {
           setFailure(e instanceof AskClaudeFailure ? e.message : 'The report could not be saved.')

@@ -408,6 +408,13 @@ describe('comparing with the previous period', () => {
       '2001-01-29',
       '2001-03-01',
     ])
+    // The previous period's run is marked, so usage does not count it as a read.
+    expect(
+      logged.docs.map((d) => [(d.parameters as { from: string }).from, d.comparison]).sort(),
+    ).toEqual([
+      ['2001-01-29', true],
+      ['2001-03-01', false],
+    ])
   })
 
   it('has nothing to compare for a report without a period', async () => {

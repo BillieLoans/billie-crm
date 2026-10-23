@@ -237,6 +237,8 @@ export interface RunLogEntry {
   truncated?: boolean
   trigger?: 'view' | 'schedule' | 'mcp' | 'home' | 'subscription' | 'alert' | 'board'
   scheduledFor?: string
+  /** The previous-period run made for a comparison. */
+  comparison?: boolean
 }
 
 /** Logged values are short: dates, codes and numbers, never pasted text. */
@@ -455,6 +457,7 @@ async function runPrevious(
     const result = await runReportSql(doc.sql, shifted, options)
     await log({
       parameters: loggedParameters(params, shifted),
+      comparison: true,
       outcome: 'ok',
       durationMs: result.durationMs,
       rowCount: result.rowCount,
@@ -469,6 +472,7 @@ async function runPrevious(
   } catch (error) {
     await log({
       parameters: loggedParameters(params, shifted),
+      comparison: true,
       outcome: 'error',
       errorCode: error instanceof ReportRunError ? error.code : 'QUERY_FAILED',
     })

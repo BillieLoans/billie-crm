@@ -16,6 +16,7 @@ import { ReportEditor } from './ReportEditor'
 import { SubscriptionsPage } from './SubscriptionsPage'
 import { BoardsPage } from './BoardsPage'
 import { BoardView } from './BoardView'
+import { UsagePage } from './UsagePage'
 import styles from './styles.module.css'
 
 export interface ReportsViewProps {
@@ -95,17 +96,19 @@ export function ReportsView({ slug, mode, board }: ReportsViewProps) {
               ? [{ label: 'Reports', href: '/admin/reports' }, { label: 'Ask Claude' }]
               : slug === 'subscriptions'
                 ? [{ label: 'Reports', href: '/admin/reports' }, { label: 'Emails and alerts' }]
-                : slug === 'boards'
-                  ? [
-                      { label: 'Reports', href: '/admin/reports' },
-                      ...(board
-                        ? [
-                            { label: 'Boards', href: '/admin/reports/boards' },
-                            { label: boardTitle ?? 'Board' },
-                          ]
-                        : [{ label: 'Boards' }]),
-                    ]
-                  : [{ label: 'Reports' }]
+                : slug === 'usage'
+                  ? [{ label: 'Reports', href: '/admin/reports' }, { label: 'Usage' }]
+                  : slug === 'boards'
+                    ? [
+                        { label: 'Reports', href: '/admin/reports' },
+                        ...(board
+                          ? [
+                              { label: 'Boards', href: '/admin/reports/boards' },
+                              { label: boardTitle ?? 'Board' },
+                            ]
+                          : [{ label: 'Boards' }]),
+                      ]
+                    : [{ label: 'Reports' }]
         }
       />
       {!slug ? (
@@ -134,6 +137,10 @@ export function ReportsView({ slug, mode, board }: ReportsViewProps) {
               />
             ) : slug === 'subscriptions' ? (
               <SubscriptionsPage />
+            ) : slug === 'usage' ? (
+              isLoading ? null : (
+                <UsagePage canAuthor={canAuthor} />
+              )
             ) : slug === 'boards' ? (
               board ? (
                 <BoardView key={board} slug={board} />

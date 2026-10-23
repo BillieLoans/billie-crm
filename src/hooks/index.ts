@@ -171,6 +171,8 @@ export {
   useDeleteBoard,
   useAddBoardTile,
 } from './mutations/useReportBoardMutations'
+export { useReportUsage } from './queries/useReportUsage'
+export type { UsageSummary } from './queries/useReportUsage'
 export type { SubscriptionView, SubscriptionsResponse } from './queries/useReportSubscriptions'
 export type { HomeTile } from './queries/useReportsHome'
 export { useAskClaude, useSaveAskDraft, AskClaudeFailure } from './mutations/useAskClaude'

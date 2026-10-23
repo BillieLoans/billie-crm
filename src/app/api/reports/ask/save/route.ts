@@ -56,6 +56,17 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       )
     }
+    // Recorded here, not by the browser, so the usage page's save rate
+    // counts real saves only.
+    try {
+      await payload.create({
+        collection: 'report-events',
+        data: { kind: 'ask_save', reportSlug: saved.slug, user: String(user.id) },
+        overrideAccess: true,
+      })
+    } catch (error) {
+      console.error('[reports] could not record an Ask save:', error)
+    }
     return NextResponse.json(saved)
   } catch (error) {
     console.error('[reports] could not save an Ask draft:', error)

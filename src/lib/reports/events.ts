@@ -6,7 +6,6 @@ export type ReportEvent =
   | { kind: 'search'; query: string }
   | { kind: 'search_open'; query: string; reportSlug: string }
   | { kind: 'csv' | 'copy_link' | 'copy_table' | 'copy_chart'; reportSlug: string }
-  | { kind: 'ask_save'; reportSlug: string }
 
 export function logReportEvent(event: ReportEvent): void {
   try {

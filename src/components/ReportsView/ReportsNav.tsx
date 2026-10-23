@@ -98,6 +98,15 @@ export function ReportsNav({ reports, canAuthor, currentSlug, isLoading, error }
         >
           Boards
         </Link>
+        {canAuthor && (
+          <Link
+            className={styles.textLink}
+            href="/admin/reports/usage"
+            aria-current={currentSlug === 'usage' ? 'page' : undefined}
+          >
+            Usage
+          </Link>
+        )}
         <label htmlFor={`${id}-filter`} className={styles.visuallyHidden}>
           Find a report
         </label>

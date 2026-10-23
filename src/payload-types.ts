@@ -2386,6 +2386,10 @@ export interface ReportRun {
   durationMs?: number | null;
   rowCount?: number | null;
   truncated?: boolean | null;
+  /**
+   * The previous-period run made for a comparison.
+   */
+  comparison?: boolean | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -3811,6 +3815,7 @@ export interface ReportRunsSelect<T extends boolean = true> {
   durationMs?: T;
   rowCount?: T;
   truncated?: T;
+  comparison?: T;
   updatedAt?: T;
   createdAt?: T;
 }

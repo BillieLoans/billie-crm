@@ -1,6 +1,7 @@
 /**
  * POST /api/reports/events — record a search, a search result opened, a
- * download or a copy, for the Reports usage page. Fire and forget: the
+ * download or a copy, for the Reports usage page. Saves of Ask Claude
+ * drafts are recorded by the save route itself, not here. Fire and forget: the
  * view never waits on it, and a failure is only logged.
  *
  * Body: `{ "kind": "csv", "reportSlug": "decline-rate", "query": "..." }`.
@@ -19,7 +20,11 @@ export async function POST(request: NextRequest) {
   if ('error' in auth) return auth.error
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null
   const kind = body?.kind
-  if (typeof kind !== 'string' || !REPORT_EVENT_KINDS.includes(kind as ReportEventKind)) {
+  if (
+    typeof kind !== 'string' ||
+    kind === 'ask_save' ||
+    !REPORT_EVENT_KINDS.includes(kind as ReportEventKind)
+  ) {
     return errorResponse(400, 'BAD_KIND', 'Unknown event.')
   }
   const slug =
