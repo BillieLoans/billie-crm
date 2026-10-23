@@ -135,12 +135,11 @@ export function specOf(doc: ReportDoc): ReportSpec {
   }
 }
 
-/**
- * The reports the user may run, by title. Viewers see published reports.
- * Authors also see draft-only reports and, for published ones, the newer
- * draft's form, so they can try a change before publishing it.
- */
-export async function listReports(payload: Payload, user: unknown): Promise<ReportSummary[]> {
+/** The published reports the user may run, by title (no drafts). */
+export async function listPublishedReports(
+  payload: Payload,
+  user: unknown,
+): Promise<ReportSummary[]> {
   const published = await payload.find({
     collection: 'report-definitions',
     where: { _status: { equals: 'published' } },
@@ -149,9 +148,18 @@ export async function listReports(payload: Payload, user: unknown): Promise<Repo
     depth: 0,
     overrideAccess: true,
   })
-  const reports: ReportSummary[] = (published.docs as unknown as ReportDoc[])
+  return (published.docs as unknown as ReportDoc[])
     .filter((doc) => canRunReport(user, doc.roles))
     .map((doc) => ({ id: String(doc.id), slug: doc.slug, published: true, ...specOf(doc) }))
+}
+
+/**
+ * The reports the user may run, by title. Viewers see published reports.
+ * Authors also see draft-only reports and, for published ones, the newer
+ * draft's form, so they can try a change before publishing it.
+ */
+export async function listReports(payload: Payload, user: unknown): Promise<ReportSummary[]> {
+  const reports = await listPublishedReports(payload, user)
 
   if (isReportAuthor(user)) {
     // With `draft: true`, each document comes back as its latest version.

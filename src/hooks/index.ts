@@ -163,6 +163,14 @@ export {
   usePauseSubscription,
   useDeleteSubscription,
 } from './mutations/useReportSubscriptionMutations'
+export { useReportBoards, useReportBoard, BoardFailure } from './queries/useReportBoards'
+export type { BoardSummary, BoardView } from './queries/useReportBoards'
+export {
+  useCreateBoard,
+  useUpdateBoard,
+  useDeleteBoard,
+  useAddBoardTile,
+} from './mutations/useReportBoardMutations'
 export type { SubscriptionView, SubscriptionsResponse } from './queries/useReportSubscriptions'
 export type { HomeTile } from './queries/useReportsHome'
 export { useAskClaude, useSaveAskDraft, AskClaudeFailure } from './mutations/useAskClaude'

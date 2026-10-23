@@ -157,6 +157,9 @@ export function ReportsHome({ reports, canAuthor, canAsk, isLoading, error }: Re
         <h1 className={styles.title}>Reports</h1>
         <p className={styles.subtitle}>The business at a glance, and every report you can run.</p>
         <div className={styles.builderActions}>
+          <Link className={styles.textLink} href="/admin/reports/boards">
+            Boards
+          </Link>
           <Link className={styles.textLink} href="/admin/reports/subscriptions">
             Your emails and alerts
           </Link>

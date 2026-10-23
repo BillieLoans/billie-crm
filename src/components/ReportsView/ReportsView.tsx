@@ -7,12 +7,15 @@ import { useAuth } from '@payloadcms/ui'
 import { Breadcrumb } from '@/components/Breadcrumb'
 import { hasAnyRole } from '@/lib/access'
 import { useReports, type ReportSpec, type ReportSummary } from '@/hooks/queries/useReports'
+import { useReportBoard } from '@/hooks/queries/useReportBoards'
 import { DRAFT_KEY, ReportPanel, replaceQuery } from './ReportPanel'
 import { AskPanel } from './AskPanel'
 import { ReportsHome } from './ReportsHome'
 import { ReportsNav } from './ReportsNav'
 import { ReportEditor } from './ReportEditor'
 import { SubscriptionsPage } from './SubscriptionsPage'
+import { BoardsPage } from './BoardsPage'
+import { BoardView } from './BoardView'
 import styles from './styles.module.css'
 
 export interface ReportsViewProps {
@@ -20,6 +23,8 @@ export interface ReportsViewProps {
   slug: string
   /** `edit` at `/admin/reports/<slug>/edit`. */
   mode?: 'edit'
+  /** The board at `/admin/reports/boards/<board>`. */
+  board?: string
 }
 
 /**
@@ -27,11 +32,13 @@ export interface ReportsViewProps {
  * the table and a CSV. Authors also see drafts and can run them. Reports are definitions in the
  * `report-definitions` collection, so a new report needs no deploy.
  */
-export function ReportsView({ slug, mode }: ReportsViewProps) {
+export function ReportsView({ slug, mode, board }: ReportsViewProps) {
   const { user } = useAuth()
   const allowed = hasAnyRole(user)
   const { data, isLoading, error } = useReports()
   const searchParams = useSearchParams()
+  // Shared with the board page's own query: no second request.
+  const boardTitle = useReportBoard(board ?? '', allowed && Boolean(board)).data?.title
 
   if (!allowed) {
     return (
@@ -88,7 +95,17 @@ export function ReportsView({ slug, mode }: ReportsViewProps) {
               ? [{ label: 'Reports', href: '/admin/reports' }, { label: 'Ask Claude' }]
               : slug === 'subscriptions'
                 ? [{ label: 'Reports', href: '/admin/reports' }, { label: 'Emails and alerts' }]
-                : [{ label: 'Reports' }]
+                : slug === 'boards'
+                  ? [
+                      { label: 'Reports', href: '/admin/reports' },
+                      ...(board
+                        ? [
+                            { label: 'Boards', href: '/admin/reports/boards' },
+                            { label: boardTitle ?? 'Board' },
+                          ]
+                        : [{ label: 'Boards' }]),
+                    ]
+                  : [{ label: 'Reports' }]
         }
       />
       {!slug ? (
@@ -117,6 +134,12 @@ export function ReportsView({ slug, mode }: ReportsViewProps) {
               />
             ) : slug === 'subscriptions' ? (
               <SubscriptionsPage />
+            ) : slug === 'boards' ? (
+              board ? (
+                <BoardView key={board} slug={board} />
+              ) : (
+                <BoardsPage canAuthor={canAuthor} />
+              )
             ) : selected ? (
               <ReportEntry key={selected.slug} report={selected} canAuthor={canAuthor} />
             ) : !isLoading && !error ? (

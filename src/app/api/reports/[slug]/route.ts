@@ -3,8 +3,9 @@
  *
  * Body: `{ "parameters": { name: value }, "draft": false, "compare": false }`.
  * `draft: true` runs the latest draft and is for authors only. `compare:
- * true` also runs the period before, for reports with a date range. Every run, refused ones
- * included, is logged to `report-runs`.
+ * true` also runs the period before, for reports with a date range. `trigger: "board"`
+ * marks a run for a board tile. Every run, refused ones included, is logged
+ * to `report-runs`.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
@@ -36,7 +37,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     )
   }
 
-  let body: { parameters?: unknown; draft?: unknown; compare?: unknown }
+  let body: { parameters?: unknown; draft?: unknown; compare?: unknown; trigger?: unknown }
   try {
     body = (await request.json()) as typeof body
   } catch {
@@ -52,6 +53,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       parameters,
       draft: body.draft === true,
       compare: body.compare === true,
+      trigger: body.trigger === 'board' ? 'board' : 'view',
     })
     return NextResponse.json(outcome.body, { status: outcome.status })
   } catch (error) {

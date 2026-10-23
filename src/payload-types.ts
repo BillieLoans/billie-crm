@@ -96,6 +96,7 @@ export interface Config {
     'report-events': ReportEvent;
     'report-subscriptions': ReportSubscription;
     'report-deliveries': ReportDelivery;
+    'report-boards': ReportBoard;
     'mcp-oauth-clients': McpOauthClient;
     'mcp-oauth-grants': McpOauthGrant;
     'payload-mcp-api-keys': PayloadMcpApiKey;
@@ -135,6 +136,7 @@ export interface Config {
     'report-events': ReportEventsSelect<false> | ReportEventsSelect<true>;
     'report-subscriptions': ReportSubscriptionsSelect<false> | ReportSubscriptionsSelect<true>;
     'report-deliveries': ReportDeliveriesSelect<false> | ReportDeliveriesSelect<true>;
+    'report-boards': ReportBoardsSelect<false> | ReportBoardsSelect<true>;
     'mcp-oauth-clients': McpOauthClientsSelect<false> | McpOauthClientsSelect<true>;
     'mcp-oauth-grants': McpOauthGrantsSelect<false> | McpOauthGrantsSelect<true>;
     'payload-mcp-api-keys': PayloadMcpApiKeysSelect<false> | PayloadMcpApiKeysSelect<true>;
@@ -2531,6 +2533,34 @@ export interface ReportDelivery {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "report-boards".
+ */
+export interface ReportBoard {
+  id: string;
+  title: string;
+  /**
+   * Used in the board link: /admin/reports/boards/<slug>
+   */
+  slug: string;
+  description?: string | null;
+  /**
+   * A list of {id, report, parameters, show}.
+   */
+  tiles?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  author?: (string | null) | User;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "mcp-oauth-clients".
  */
 export interface McpOauthClient {
@@ -2798,6 +2828,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'report-deliveries';
         value: string | ReportDelivery;
+      } | null)
+    | ({
+        relationTo: 'report-boards';
+        value: string | ReportBoard;
       } | null)
     | ({
         relationTo: 'mcp-oauth-clients';
@@ -3868,6 +3902,19 @@ export interface ReportDeliveriesSelect<T extends boolean = true> {
   claimKey?: T;
   status?: T;
   detail?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "report-boards_select".
+ */
+export interface ReportBoardsSelect<T extends boolean = true> {
+  title?: T;
+  slug?: T;
+  description?: T;
+  tiles?: T;
+  author?: T;
   updatedAt?: T;
   createdAt?: T;
 }

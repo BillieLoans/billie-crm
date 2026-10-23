@@ -92,8 +92,17 @@ describe('POST /api/reports/:slug', () => {
       parameters: { from: '2026-10-01' },
       draft: true,
       compare: false,
+      trigger: 'view',
     })
     expect(res.status).toBe(504)
+  })
+
+  test('logs a board tile’s run as a board run, and anything else as a view', async () => {
+    auth.mockResolvedValue({ user: { id: 'x', role: 'operations' } })
+    await POST(post({ trigger: 'board' }), params('weekly'))
+    expect(runReport.mock.calls[0][3]).toMatchObject({ trigger: 'board' })
+    await POST(post({ trigger: 'schedule' }), params('weekly'))
+    expect(runReport.mock.calls[1][3]).toMatchObject({ trigger: 'view' })
   })
 
   test('passes a comparison request through only when it is exactly true', async () => {
@@ -104,12 +113,14 @@ describe('POST /api/reports/:slug', () => {
       parameters: {},
       draft: false,
       compare: true,
+      trigger: 'view',
     })
     await POST(post({ parameters: {}, compare: 'yes' }), params('weekly'))
     expect(runReport).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), 'weekly', {
       parameters: {},
       draft: false,
       compare: false,
+      trigger: 'view',
     })
   })
 
@@ -123,12 +134,14 @@ describe('POST /api/reports/:slug', () => {
       parameters: {},
       draft: false,
       compare: false,
+      trigger: 'view',
     })
     await POST(post({ parameters: ['not', 'an', 'object'], draft: 'yes' }), params('weekly'))
     expect(runReport).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), 'weekly', {
       parameters: {},
       draft: false,
       compare: false,
+      trigger: 'view',
     })
   })
 })

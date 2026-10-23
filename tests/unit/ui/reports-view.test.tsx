@@ -431,6 +431,14 @@ describe('ReportsView', () => {
     expect(screen.getByTestId('report-not-found')).toHaveTextContent('Report not found')
   })
 
+  it('opens the boards list and the emails and alerts page', async () => {
+    renderView('boards')
+    expect(screen.getByTestId('boards-page')).toBeInTheDocument()
+    cleanup()
+    renderView('subscriptions')
+    expect(screen.getByTestId('subscriptions-page')).toBeInTheDocument()
+  })
+
   it('opens the editor for authors at /new and /<slug>/edit, and explains it to others', () => {
     renderView('new')
     expect(screen.getByTestId('editor-denied')).toHaveTextContent('You cannot edit reports')

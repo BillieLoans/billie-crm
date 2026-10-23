@@ -4,14 +4,7 @@ import React, { useEffect, useId, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { formatNumber } from '@/lib/formatters'
-import { resolveColumns } from '@/lib/reports/columns'
-import { buildNarrative, computeHeadline } from '@/lib/reports/headline'
-import {
-  dateRangeParameters,
-  describeDataAsAt,
-  previousPeriodLabel,
-  sydneyToday,
-} from '@/lib/reports/periods'
+import { dateRangeParameters, describeDataAsAt, sydneyToday } from '@/lib/reports/periods'
 import { resultHints } from '@/lib/reports/quality'
 import { bindParameters, parameterDefault, type ReportParameter } from '@/lib/schemas/reports'
 import type { ReportSpec, ReportSummary } from '@/hooks/queries/useReports'
@@ -28,6 +21,8 @@ import { PinButton } from './PinButton'
 import { ParameterForm, parameterInputId, type ParameterValues } from './ParameterForm'
 import { RangePicker } from './RangePicker'
 import { SubscribePanel } from './SubscribePanel'
+import { AddToBoard } from './AddToBoard'
+import { useReportHeadline } from './useReportHeadline'
 import { ReportResults } from './ReportResults'
 import { csvFileName, downloadText, toCsv } from './csv'
 import styles from './styles.module.css'
@@ -218,26 +213,7 @@ export function ReportPanel({
     }))
   }
 
-  const views = useMemo(
-    () => (result ? resolveColumns(result.columns, spec.columns) : []),
-    [result, spec.columns],
-  )
-  const previousRows = result?.previous?.rows ?? null
-  const previousLabel = result?.previous
-    ? previousPeriodLabel(result.previous.from, result.previous.to)
-    : undefined
-  const tiles = useMemo(
-    () =>
-      result
-        ? computeHeadline(spec.headline, views, result.columns, result.rows, previousRows)
-        : [],
-    [result, spec.headline, views, previousRows],
-  )
-  const narrative = useMemo(
-    () =>
-      result ? buildNarrative(tiles, views, result.columns, result.rows, { previousLabel }) : '',
-    [tiles, views, result, previousLabel],
-  )
+  const { views, previousRows, previousLabel, tiles, narrative } = useReportHeadline(result, spec)
 
   let status = ''
   if (run.isFetching) status = 'Running the report…'
@@ -318,6 +294,9 @@ export function ReportPanel({
           <Link className={styles.textLink} href={`/admin/reports/ask?from=${report.slug}`}>
             Ask Claude to change it
           </Link>
+          {report.published && !draft && (
+            <AddToBoard slug={report.slug} parameters={request?.parameters ?? values} />
+          )}
         </div>
       )}
 

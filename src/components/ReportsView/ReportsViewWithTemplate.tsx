@@ -10,7 +10,8 @@ import { ReportsView } from './ReportsView'
  *
  * A catch-all route, like `IssueReportsViewWithTemplate`: Payload passes
  * `['reports', '<slug>']` as `segments`, or `['reports', '<slug>', 'edit']`
- * for the editor (`/admin/reports/new` for a new report). `/admin/reports`
+ * for the editor (`/admin/reports/new` for a new report), and
+ * `['reports', 'boards', '<board>']` for a board. `/admin/reports`
  * does not collide with Payload's reserved `/admin/collections/*`.
  *
  * Only the login guard lives here; the role gate is an explanatory panel in
@@ -28,7 +29,9 @@ export async function ReportsViewWithTemplate({
   const resolvedParams = await params
   const segments = resolvedParams?.segments as string[] | undefined
   const slug = segments?.[1] ?? ''
-  const mode = segments?.[2] === 'edit' ? 'edit' : undefined
+  // /admin/reports/boards/<board>, or /admin/reports/<slug>/edit.
+  const board = slug === 'boards' ? segments?.[2] : undefined
+  const mode = slug !== 'boards' && segments?.[2] === 'edit' ? 'edit' : undefined
 
   return (
     <DefaultTemplate
@@ -41,7 +44,7 @@ export async function ReportsViewWithTemplate({
       user={initPageResult.req.user}
       visibleEntities={initPageResult.visibleEntities}
     >
-      <ReportsView slug={slug} mode={mode} />
+      <ReportsView slug={slug} mode={mode} board={board} />
     </DefaultTemplate>
   )
 }
