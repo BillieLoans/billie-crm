@@ -35,6 +35,9 @@ const validateSlug: Validate = (value) => {
   return true
 }
 
+/** JSON edited as text: Payload's JSON editor loads from a CDN the admin's CSP blocks. */
+const JSON_TEXTAREA = '@/components/fields/JsonTextareaField#JsonTextareaField'
+
 const validateParameters: Validate = (value) => {
   const parsed = reportParametersSchema.safeParse(value ?? [])
   return parsed.success ? true : firstIssue(parsed.error)
@@ -156,11 +159,14 @@ export const ReportDefinitions: CollectionConfig = {
     {
       name: 'sql',
       label: 'SQL',
-      type: 'code',
+      // A plain textarea, not `code`: Payload's code editor loads from a CDN
+      // the admin's Content-Security-Policy blocks. Same column either way.
+      type: 'textarea',
       required: true,
       validate: validateSql,
       admin: {
-        language: 'sql',
+        rows: 12,
+        className: 'mono-textarea',
         description:
           'One SELECT or WITH statement over the reporting schema (docs/reporting.md). ' +
           'Read parameter 1 as $1, parameter 2 as $2, and so on.',
@@ -173,6 +179,7 @@ export const ReportDefinitions: CollectionConfig = {
       validate: validateParameters,
       hooks: { beforeChange: [normaliseParameters] },
       admin: {
+        components: { Field: JSON_TEXTAREA },
         description:
           'A list of {name, label, type, required, default, options, help}. Types: date, text, ' +
           'integer, number, select, boolean. Date defaults: today, today-N or YYYY-MM-DD.',
@@ -183,6 +190,7 @@ export const ReportDefinitions: CollectionConfig = {
       type: 'json',
       validate: validateChart,
       admin: {
+        components: { Field: JSON_TEXTAREA },
         description:
           'Optional: {type: line | bar | area, x: column, series: [{column, label}], stacked}.',
       },

@@ -50,9 +50,13 @@ export const McpOAuthGrants: CollectionConfig = {
     { name: 'codeUsed', type: 'checkbox', defaultValue: false, hidden: true },
     { name: 'accessIndex', type: 'text', unique: true, hidden: true },
     { name: 'accessExpiresAt', type: 'date', admin: { readOnly: true } },
+    // The access token a refresh replaced stays valid until it expires.
+    { name: 'previousAccessIndex', type: 'text', index: true, hidden: true },
+    { name: 'previousAccessExpiresAt', type: 'date', hidden: true },
     { name: 'refreshIndex', type: 'text', unique: true, hidden: true },
     { name: 'previousRefreshIndex', type: 'text', index: true, hidden: true },
     { name: 'refreshExpiresAt', type: 'date', admin: { readOnly: true } },
+    { name: 'refreshedAt', type: 'date', hidden: true },
     { name: 'lastUsedAt', type: 'date', admin: { readOnly: true } },
   ],
 }

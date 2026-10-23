@@ -11,7 +11,9 @@ export function safeReturnPath(value: unknown, appUrl: string): string | null {
   try {
     const base = new URL(appUrl)
     const url = new URL(value, base)
-    return url.origin === base.origin ? `${url.pathname}${url.search}` : null
+    const path = `${url.pathname}${url.search}`
+    // Dot segments can normalise to a protocol-relative path ('/.//x' -> '//x').
+    return url.origin === base.origin && !path.startsWith('//') ? path : null
   } catch {
     return null
   }

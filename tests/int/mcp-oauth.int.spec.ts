@@ -452,20 +452,45 @@ describe('tokens', () => {
     expect(await verifyAccessToken(payload, first.body.access_token)).toBeNull()
   })
 
-  it('refresh tokens rotate, and a replayed one revokes the connection', async () => {
+  it('refresh tokens rotate; a late replay revokes the connection, a quick one does not', async () => {
     const tokens = await connect(publicClient, 'readonly')
     const refresh = (refresh_token: string) =>
       tokenCall({ grant_type: 'refresh_token', client_id: publicClient, refresh_token })
     const next = await refresh(tokens.refresh_token)
     expect(next.status).toBe(200)
     expect(next.body.refresh_token).not.toBe(tokens.refresh_token)
-    expect(await verifyAccessToken(payload, tokens.access_token)).toBeNull()
+    // The replaced access token works until it expires, so a second session is not cut off.
+    expect(await verifyAccessToken(payload, tokens.access_token)).not.toBeNull()
     expect(await verifyAccessToken(payload, next.body.access_token)).not.toBeNull()
 
-    const replay = await refresh(tokens.refresh_token)
-    expect(replay.body.error).toBe('invalid_grant')
+    // A retry or a second session within the grace period: refused, nothing revoked.
+    expect((await refresh(tokens.refresh_token)).body.error).toBe('invalid_grant')
+    expect(await verifyAccessToken(payload, next.body.access_token)).not.toBeNull()
+
+    // The same replay later means someone else has the token: the connection goes.
+    await pool.query(
+      `UPDATE mcp_oauth_grants SET refreshed_at = now() - interval '5 minutes'
+        WHERE refresh_index IS NOT NULL AND user_id = $1`,
+      [users.readonly.id],
+    )
+    expect((await refresh(tokens.refresh_token)).body.error).toBe('invalid_grant')
     expect(await verifyAccessToken(payload, next.body.access_token)).toBeNull()
     expect((await refresh(next.body.refresh_token)).body.error).toBe('invalid_grant')
+  })
+
+  it('deleting a client ends its connections', async () => {
+    const own = await registerClient({
+      client_name: `${P} doomed`,
+      redirect_uris: [CLAUDE],
+      token_endpoint_auth_method: 'none',
+    })
+    const tokens = await connect(own.body.client_id, 'readonly')
+    await payload.delete({
+      collection: OAUTH_CLIENTS_SLUG,
+      where: { clientId: { equals: own.body.client_id } },
+      overrideAccess: true,
+    })
+    expect(await verifyAccessToken(payload, tokens.access_token)).toBeNull()
   })
 
   it('a confidential client must authenticate', async () => {

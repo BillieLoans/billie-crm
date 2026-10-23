@@ -19,8 +19,12 @@
  *   CRM login, shows who is asking and where the person will be sent back
  *   to, and records the approval as an MCP connection (`mcp-oauth-grants`).
  * - Opaque tokens, stored as HMACs: access tokens last an hour; refresh
- *   tokens rotate on every use and lapse after 30 days unused. A code or a
- *   refresh token used twice revokes the connection.
+ *   tokens rotate on every use and lapse after 30 days unused. A code used
+ *   twice revokes the connection. So does the refresh token before the
+ *   current one, unless it comes back within `REFRESH_REUSE_GRACE_S` of being
+ *   rotated (a retried refresh, or two sessions refreshing at once), when it
+ *   is only refused. The access token a refresh replaced stays valid until it
+ *   expires.
  *
  * What a token may do is decided on every request from the person's current
  * role (`authenticateMcp` in `mcp.ts`), not at sign-in.
@@ -39,6 +43,8 @@ export const OAUTH_SCOPE = 'reports'
 export const ACCESS_TOKEN_TTL_S = 60 * 60
 export const REFRESH_TOKEN_TTL_S = 30 * 24 * 60 * 60
 export const CODE_TTL_S = 5 * 60
+/** How long after a rotation the replaced refresh token is refused without revoking. */
+export const REFRESH_REUSE_GRACE_S = 60
 /** How long a sign-in page link stays valid: long enough to log in first. */
 export const AUTHORIZE_REQUEST_TTL_MS = 15 * 60_000
 
@@ -494,7 +500,10 @@ interface GrantDoc {
   resource: string
   codeChallenge?: string | null
   codeExpiresAt?: string | null
+  accessIndex?: string | null
   accessExpiresAt?: string | null
+  previousAccessIndex?: string | null
+  previousAccessExpiresAt?: string | null
   lastUsedAt?: string | null
 }
 
@@ -619,11 +628,15 @@ async function refreshTokens(
   const oldIndex = apiKeyIndex(payload.secret, old)
   const access = newSecret(ACCESS_TOKEN_PREFIX)
   const refresh = newSecret(REFRESH_TOKEN_PREFIX)
-  // Rotate atomically: only one use of a refresh token can succeed.
+  // Rotate atomically: only one use of a refresh token can succeed. The
+  // replaced access token stays valid until it expires (right-hand sides
+  // read the row as it was).
   const rotated = await sqlPool(payload).query(
     `UPDATE mcp_oauth_grants
-        SET refresh_index = $2, previous_refresh_index = $1, access_index = $3,
-            access_expires_at = $4, refresh_expires_at = $5, last_used_at = now(), updated_at = now()
+        SET previous_access_index = access_index, previous_access_expires_at = access_expires_at,
+            refresh_index = $2, previous_refresh_index = $1, access_index = $3,
+            access_expires_at = $4, refresh_expires_at = $5, refreshed_at = now(),
+            last_used_at = now(), updated_at = now()
       WHERE refresh_index = $1 AND client_id = $6 AND refresh_expires_at > now()
       RETURNING id, user_id`,
     [
@@ -636,12 +649,21 @@ async function refreshTokens(
     ],
   )
   if (rotated.rows.length === 0) {
-    // A token already rotated away is being replayed: someone else has a copy.
-    await payload.delete({
-      collection: OAUTH_GRANTS_SLUG,
-      where: { previousRefreshIndex: { equals: oldIndex } },
-      overrideAccess: true,
-    })
+    // The token before the current one. Soon after its rotation this is a
+    // retry or a second session; later, someone else has a copy: revoke.
+    const reused = await sqlPool(payload).query(
+      `SELECT id, refreshed_at > now() - make_interval(secs => $2) AS recent
+         FROM mcp_oauth_grants WHERE previous_refresh_index = $1`,
+      [oldIndex, REFRESH_REUSE_GRACE_S],
+    )
+    const late = reused.rows.filter((row) => row.recent !== true)
+    for (const row of late) {
+      await payload.delete({
+        collection: OAUTH_GRANTS_SLUG,
+        id: String(row.id),
+        overrideAccess: true,
+      })
+    }
     return invalidGrant('The refresh token is invalid, expired or was already used')
   }
   const { id, user_id: userId } = rotated.rows[0]
@@ -676,16 +698,20 @@ export async function verifyAccessToken(
   accessToken: string,
 ): Promise<{ grantId: string; user: Record<string, unknown> } | null> {
   if (!accessToken.startsWith(ACCESS_TOKEN_PREFIX) || accessToken.length > 200) return null
+  const index = apiKeyIndex(payload.secret, accessToken)
   const { docs } = await payload.find({
     collection: OAUTH_GRANTS_SLUG,
-    where: { accessIndex: { equals: apiKeyIndex(payload.secret, accessToken) } },
+    where: { or: [{ accessIndex: { equals: index } }, { previousAccessIndex: { equals: index } }] },
     depth: 0,
     limit: 1,
     pagination: false,
     overrideAccess: true,
+    showHiddenFields: true,
   })
   const grant = docs[0] as unknown as GrantDoc | undefined
-  if (!grant?.accessExpiresAt || Date.parse(grant.accessExpiresAt) <= Date.now()) return null
+  const expires =
+    grant?.accessIndex === index ? grant.accessExpiresAt : grant?.previousAccessExpiresAt
+  if (!grant || !expires || Date.parse(expires) <= Date.now()) return null
   if (grant.resource !== mcpResourceUri()) return null
   const user = await payload.findByID({
     collection: 'users',

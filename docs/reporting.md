@@ -188,6 +188,10 @@ edit them at `/admin/collections/report-definitions`.
 
 ### Writing a report
 
+In the admin, SQL, parameters and chart are plain monospace text boxes: SQL
+as typed, parameters and chart as JSON, checked as you type. (Payload's code
+editor loads from a CDN that the admin's Content-Security-Policy blocks.)
+
 - One `SELECT` or `WITH` statement. Unqualified names resolve in `reporting`.
 - Parameter N is `$N`, in the order the parameters are listed. Every
   parameter must be used and nothing beyond them. Cast where Postgres cannot
@@ -503,8 +507,12 @@ changes hands.
   be able to do. PKCE (S256) is required; tokens are only issued for this
   CRM's `/api/mcp`.
 - **Tokens** are opaque and stored as HMACs. Access tokens last an hour;
-  refresh tokens rotate on every use and lapse after 30 days unused. A code or
-  refresh token used twice revokes the connection.
+  refresh tokens rotate on every use and lapse after 30 days unused. A code
+  used twice revokes the connection. So does the refresh token before the
+  current one when it comes back more than a minute after it was rotated;
+  within the minute (a retried refresh, two sessions refreshing at once) it is
+  only refused. The access token a refresh replaced works until it expires.
+  Deleting a registered client (admins, via the API) ends its connections.
 - **Revoking.** Each approval is an MCP connection (Reporting → MCP
   connections, admins only). Delete one to cut it off at once. A person's
   connections are deleted when they are, or when they lose every staff role.

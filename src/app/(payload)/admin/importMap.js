@@ -1,4 +1,5 @@
 import { LoanAccountServicingRedirect as LoanAccountServicingRedirect_a26a66e8d88b18fecfb555f3364bc708 } from '@/components/LoanAccountServicingRedirect'
+import { JsonTextareaField as JsonTextareaField_04b7a20c73b9f19348ed091ea4b89c6f } from '@/components/fields/JsonTextareaField'
 import { LogoutButton as LogoutButton_81f5d08e777904dedf54cf0c6c30c1a5 } from '@/components/Auth/LogoutButton'
 import { BillieLogo as BillieLogo_06150f4bc6153791903834b4df8ef7c8 } from '@/components/graphics/BillieLogo'
 import { NotificationAction as NotificationAction_ff7594e27eaf34e7ce9acae213b05415 } from '@/components/Notifications/NotificationAction'
@@ -38,6 +39,7 @@ import { CollectionCards as CollectionCards_f9c02e79a4aed9a3924487c0cd4cafb1 } f
 /** @type import('payload').ImportMap */
 export const importMap = {
   "@/components/LoanAccountServicingRedirect#LoanAccountServicingRedirect": LoanAccountServicingRedirect_a26a66e8d88b18fecfb555f3364bc708,
+  "@/components/fields/JsonTextareaField#JsonTextareaField": JsonTextareaField_04b7a20c73b9f19348ed091ea4b89c6f,
   "@/components/Auth/LogoutButton#LogoutButton": LogoutButton_81f5d08e777904dedf54cf0c6c30c1a5,
   "@/components/graphics/BillieLogo#BillieLogo": BillieLogo_06150f4bc6153791903834b4df8ef7c8,
   "@/components/Notifications/NotificationAction#NotificationAction": NotificationAction_ff7594e27eaf34e7ce9acae213b05415,

@@ -1,5 +1,6 @@
 import type { CollectionConfig } from 'payload'
 import { isAdmin } from '@/lib/access'
+import { OAUTH_GRANTS_SLUG } from '@/server/reporting/mcp-keys'
 
 /**
  * OAuth clients of the reporting MCP connector: the apps (claude.ai, Claude
@@ -24,6 +25,26 @@ export const McpOAuthClients: CollectionConfig = {
     create: () => false,
     update: () => false,
     delete: ({ req }) => isAdmin(req.user),
+  },
+  hooks: {
+    // A deleted client's connections, and their tokens, go with it.
+    beforeDelete: [
+      async ({ id, req }) => {
+        const client = await req.payload.findByID({
+          collection: 'mcp-oauth-clients',
+          id,
+          depth: 0,
+          overrideAccess: true,
+          req,
+        })
+        await req.payload.delete({
+          collection: OAUTH_GRANTS_SLUG,
+          where: { clientId: { equals: client.clientId } },
+          overrideAccess: true,
+          req,
+        })
+      },
+    ],
   },
   fields: [
     { name: 'clientId', type: 'text', required: true, unique: true, index: true },

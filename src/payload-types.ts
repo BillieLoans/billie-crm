@@ -2433,9 +2433,12 @@ export interface McpOauthGrant {
   codeUsed?: boolean | null;
   accessIndex?: string | null;
   accessExpiresAt?: string | null;
+  previousAccessIndex?: string | null;
+  previousAccessExpiresAt?: string | null;
   refreshIndex?: string | null;
   previousRefreshIndex?: string | null;
   refreshExpiresAt?: string | null;
+  refreshedAt?: string | null;
   lastUsedAt?: string | null;
   updatedAt: string;
   createdAt: string;
@@ -3665,9 +3668,12 @@ export interface McpOauthGrantsSelect<T extends boolean = true> {
   codeUsed?: T;
   accessIndex?: T;
   accessExpiresAt?: T;
+  previousAccessIndex?: T;
+  previousAccessExpiresAt?: T;
   refreshIndex?: T;
   previousRefreshIndex?: T;
   refreshExpiresAt?: T;
+  refreshedAt?: T;
   lastUsedAt?: T;
   updatedAt?: T;
   createdAt?: T;

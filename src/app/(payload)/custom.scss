@@ -24,3 +24,16 @@
 :root[data-theme='light'] {
   --theme-elevation-500: #6a6a6a;
 }
+
+/* Report SQL and JSON fields, edited as text (ReportDefinitions, JsonTextareaField). */
+.mono-textarea textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.json-textarea__error {
+  margin: 4px 0 0;
+  color: var(--theme-error-500);
+  font-size: 13px;
+}

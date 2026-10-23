@@ -176,7 +176,10 @@ export async function GET(request: NextRequest) {
     const returnTo =
       safeReturnPath(request.cookies.get('google_oauth_redirect')?.value, APP_URL) ??
       '/admin/dashboard'
-    const dashboardUrl = new URL(returnTo, APP_URL).toString()
+    const target = new URL(returnTo, APP_URL)
+    const dashboardUrl = (
+      target.origin === new URL(APP_URL).origin ? target : new URL('/admin/dashboard', APP_URL)
+    ).toString()
     const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=${dashboardUrl.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"><title>Signing in…</title></head><body style="font-family:system-ui,sans-serif;padding:2rem">Signing you in…<script>window.location.replace(${JSON.stringify(dashboardUrl)})</script></body></html>`
 
     const response = new NextResponse(html, {

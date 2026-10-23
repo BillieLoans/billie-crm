@@ -45,6 +45,7 @@ import * as migration_20261026_090000_report_asks from './20261026_090000_report
 import * as migration_20261026_095000_reporting_mcp from './20261026_095000_reporting_mcp'
 import * as migration_20261026_100000_first_reports from './20261026_100000_first_reports';
 import * as migration_20261027_090000_mcp_oauth from './20261027_090000_mcp_oauth'
+import * as migration_20261027_100000_mcp_oauth_refresh_grace from './20261027_100000_mcp_oauth_refresh_grace'
 
 export const migrations = [
   {
@@ -281,5 +282,10 @@ export const migrations = [
     up: migration_20261027_090000_mcp_oauth.up,
     down: migration_20261027_090000_mcp_oauth.down,
     name: '20261027_090000_mcp_oauth',
+  },
+  {
+    up: migration_20261027_100000_mcp_oauth_refresh_grace.up,
+    down: migration_20261027_100000_mcp_oauth_refresh_grace.down,
+    name: '20261027_100000_mcp_oauth_refresh_grace',
   },
 ];

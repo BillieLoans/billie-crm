@@ -46,6 +46,9 @@ export async function GET(request: NextRequest) {
       sameSite: 'lax',
       maxAge: 600,
     })
+  } else {
+    // A plain sign-in must not pick up an abandoned attempt's return path.
+    response.cookies.delete('google_oauth_redirect')
   }
 
   return response
