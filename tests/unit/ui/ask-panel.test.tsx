@@ -349,7 +349,13 @@ describe('AskPanel', () => {
     fetchMock.mockClear()
     renderPanel()
     expect(await screen.findByText(/Your draft from earlier is back/)).toBeInTheDocument()
-    expect(posts()[0][1]).toMatchObject({ mode: 'check', question: 'Decisions by outcome?' })
+    // With the logged request it came from, so staff who are not authors
+    // can check it again too.
+    expect(posts()[0][1]).toMatchObject({
+      mode: 'check',
+      question: 'Decisions by outcome?',
+      askId: 'ask-1',
+    })
     fireEvent.click(screen.getByRole('button', { name: 'Start again' }))
     expect(window.sessionStorage.getItem('billie-ask-draft')).toBeNull()
   })

@@ -215,7 +215,8 @@ function BoardEditor({
       {board.hiddenTiles > 0 && (
         <p className={styles.hint}>
           {board.hiddenTiles} more {board.hiddenTiles === 1 ? 'tile is' : 'tiles are'} for reports
-          that are no longer published; saving removes them.
+          that are not published now; they stay on the board and come back when the report is
+          published again.
         </p>
       )}
       <ol className={styles.subscriptionList}>

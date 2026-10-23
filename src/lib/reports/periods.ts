@@ -60,8 +60,32 @@ export function dateRangeParameters(
   return null
 }
 
-/** The period of the same length that ends the day before `from`. */
+function monthIndex(date: string): number {
+  return Number(date.slice(0, 4)) * 12 + Number(date.slice(5, 7)) - 1
+}
+
+function monthStartOf(index: number): string {
+  return `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, '0')}-01`
+}
+
+/** Whole calendar months from the 1st to a month's last day: how many, or null. */
+export function wholeMonths(from: string, to: string): number | null {
+  if (!from.endsWith('-01') || from > to) return null
+  // The day after `to` is the 1st of the next month.
+  if (!addDays(to, 1).endsWith('-01')) return null
+  return monthIndex(to) - monthIndex(from) + 1
+}
+
+/**
+ * The period before: the same number of whole months when the period is
+ * whole calendar months (October against September, not the 31 days
+ * before), otherwise the same number of days ending the day before `from`.
+ */
 export function previousPeriod(from: string, to: string): { from: string; to: string } {
+  const months = wholeMonths(from, to)
+  if (months !== null) {
+    return { from: monthStartOf(monthIndex(from) - months), to: addDays(from, -1) }
+  }
   const length = daysInRange(from, to)
   const prevTo = addDays(from, -1)
   return { from: addDays(prevTo, -(length - 1)), to: prevTo }
@@ -133,6 +157,8 @@ export function sydneyToday(now: Date = new Date()): string {
 
 /** "the previous 30 days" or "the previous day", for sentences. */
 export function previousPeriodLabel(from: string, to: string): string {
+  const months = wholeMonths(from, to)
+  if (months !== null) return months === 1 ? 'the previous month' : `the previous ${months} months`
   const days = daysInRange(from, to)
   return days === 1 ? 'the previous day' : `the previous ${days} days`
 }

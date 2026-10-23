@@ -482,11 +482,9 @@ async function runPrevious(
 
 /** How long the freshness reading is reused before it is read again. */
 const FRESHNESS_TTL_MS = 60_000
-let freshness: { at: string | null; readAt: number } | undefined
+let freshness: { at: Promise<string | null>; readAt: number } | undefined
 
-/** The latest change in the reporting data (reporting.data_freshness), cached for a minute. */
-export async function dataAsAt(options: RunOptions = {}): Promise<string | null> {
-  if (freshness && Date.now() - freshness.readAt < FRESHNESS_TTL_MS) return freshness.at
+async function readFreshness(options: RunOptions): Promise<string | null> {
   try {
     const result = await runReportSql(
       'SELECT latest_change_at FROM reporting.data_freshness',
@@ -494,9 +492,20 @@ export async function dataAsAt(options: RunOptions = {}): Promise<string | null>
       options,
     )
     const at = result.rows[0]?.latest_change_at
-    freshness = { at: typeof at === 'string' ? at : null, readAt: Date.now() }
+    return typeof at === 'string' ? at : null
   } catch {
-    freshness = { at: null, readAt: Date.now() }
+    return null
+  }
+}
+
+/**
+ * The latest change in the reporting data (reporting.data_freshness), cached
+ * for a minute. Runs that arrive together share one reading, so they take
+ * one connection from the reporting pool, not one each.
+ */
+export function dataAsAt(options: RunOptions = {}): Promise<string | null> {
+  if (!freshness || Date.now() - freshness.readAt >= FRESHNESS_TTL_MS) {
+    freshness = { at: readFreshness(options), readAt: Date.now() }
   }
   return freshness.at
 }

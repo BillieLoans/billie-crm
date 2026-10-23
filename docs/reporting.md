@@ -254,7 +254,9 @@ blocks).
   `average`, `max`, `min`, `first`, `last` or `ratio` (with `numerator` and
   `denominator`). They lead the page with their change on the previous period
   and one or two sentences that read them, built in code from the result:
-  nothing about the results goes to Claude.
+  nothing about the results goes to Claude. The previous period is the same number of
+  days just before, or for whole calendar months the same number of months
+  (October against September).
 - Column settings (optional): `{name, label, format, base, minBase,
   description, better}`. Without them a column's format follows its name
   (`*_rate` a 0–1 share, `*_pct` 0–100, money names in dollars, then hours and
@@ -663,7 +665,9 @@ To rotate the key, create a new dashboard key, update the connector's header
 
 On a published report, "Email me this…" sends it to the person daily, on
 Monday mornings or on the 1st of the month, with the settings on screen and
-a period (a preset such as "Last 7 days") that moves forward each time. The
+a period that moves forward each time: the last 7 days, the last 30 days or
+last month (complete days only; "this month" would be one barely begun day
+on the 1st). The
 email leads with the headline numbers, their change and the sentence that
 reads them, then the first chart as an image and the data as a CSV. "Alert
 me…" watches one number (a row, or the headline figure) and emails when it
@@ -680,7 +684,9 @@ subscriber**, so someone who loses access to a report stops receiving it
 so repeated calls send nothing; a failed run or send releases the claim for
 the next call, and a claim left `sending` for 15 minutes by a call that died
 is taken over. Subscribers to the same report and settings share one run and
-one chart. A Resend 409 on the idempotency key counts as sent.
+one chart. A Resend 409 on the idempotency key counts as sent. Without
+`RESEND_API_KEY` the job still posts to Slack and checks alerts; each email
+fails on its own and the next call retries it.
 
 The chart is drawn as SVG (`src/server/reporting/chart-image.ts`) from the
 same prepared data as the page's chart and rasterised with sharp; the
@@ -696,7 +702,8 @@ the tiles for reports they can run; a board with none is not found for them,
 and the raw collection is readable by authors only. Authors make boards at
 `/admin/reports/boards`, put a report on one from its page ("Add to board",
 keeping its settings but not its period), and reorder, change or remove
-tiles. A change is written only if the board is still the version it was
+tiles. A tile for a report that is not published now is kept, hidden, and
+comes back when the report is published again. A change is written only if the board is still the version it was
 read at, in one conditional `UPDATE`, so an editor open on an old copy is
 asked to reload rather than undoing someone else's change. Tile runs are
 logged with trigger `board`.
@@ -716,8 +723,8 @@ A read is a run from a report page or a board that succeeded: not a
 scheduled email, an author's draft, or the previous-period run made for a
 comparison (`report-runs.comparison`). A search is the last query a person
 typed before a two-minute pause, so "chu", "churn" counts once. Saves are
-recorded by the save route, not the browser, and a report saved twice
-counts once.
+recorded by the save route, not the browser; a report saved twice counts
+once, and a change to an existing report through Ask is not counted.
 
 ## Scheduling
 

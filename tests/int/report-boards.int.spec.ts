@@ -311,4 +311,35 @@ describe('report boards', () => {
       }),
     ).rejects.toThrow()
   })
+
+  it('keep tiles for reports not published now when the board is changed', async () => {
+    const board = await createBoard(payload, users.supervisor, { title: `${PREFIX} keep` })
+    await addTile(payload, users.supervisor, board.slug, {
+      report: `${PREFIX}-ops`,
+      parameters: {},
+    })
+    // A tile for a report that is unpublished for now.
+    await pool.query(
+      `UPDATE report_boards
+          SET tiles = tiles || '[{"id": "gone", "report": "${PREFIX}-gone", "parameters": {}, "show": "both"}]'::jsonb
+        WHERE slug = $1`,
+      [board.slug],
+    )
+    const view = await getBoard(payload, users.supervisor, board.slug)
+    expect(view.hiddenTiles).toBe(1)
+    const visible = view.tiles.map((t) => ({
+      id: t.id,
+      report: t.report.slug,
+      parameters: t.parameters,
+      show: 'headline' as const,
+    }))
+    const changed = await updateBoard(payload, users.supervisor, board.slug, {
+      title: 'Kept',
+      tiles: visible,
+      version: view.version,
+    })
+    expect(changed.hiddenTiles).toBe(1)
+    const stored = await pool.query(`SELECT tiles FROM report_boards WHERE slug = $1`, [board.slug])
+    expect((stored.rows[0].tiles as Array<{ id: string }>).map((t) => t.id)).toContain('gone')
+  })
 })

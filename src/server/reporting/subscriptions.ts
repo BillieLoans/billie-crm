@@ -8,10 +8,11 @@ import type { Payload } from 'payload'
 import { bindParameters } from '@/lib/schemas/reports'
 import { sameJson } from '@/lib/reports/diff'
 import { formatValue, resolveColumns } from '@/lib/reports/columns'
-import { RANGE_PRESETS, dateRangeParameters, sydneyToday } from '@/lib/reports/periods'
+import { dateRangeParameters, sydneyToday } from '@/lib/reports/periods'
 import {
   DEFAULT_RANGE,
   MAX_SUBSCRIPTIONS_PER_USER,
+  SUBSCRIPTION_RANGES,
   deliveryParameters,
   describeAlert,
   rangeLabel,
@@ -148,7 +149,7 @@ export async function createSubscription(
   if (range) {
     rangeKey =
       request.range ?? (request.kind === 'digest' ? DEFAULT_RANGE[request.frequency] : 'last-7')
-    if (!RANGE_PRESETS.some((p) => p.key === rangeKey)) {
+    if (!(SUBSCRIPTION_RANGES as readonly string[]).includes(rangeKey)) {
       throw new SubscriptionError(400, 'BAD_RANGE', 'Choose a period from the list.')
     }
   }

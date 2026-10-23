@@ -36,6 +36,13 @@ export const FREQUENCY_PHRASES: Record<SubscriptionFrequency, string> = {
   monthly: 'on the 1st of each month',
 }
 
+/**
+ * The periods a delivery can cover: complete days only. "This month" and
+ * "quarter to date" run to today, which at 7am is barely begun (on the 1st,
+ * a monthly email would cover one empty day).
+ */
+export const SUBSCRIPTION_RANGES = ['last-7', 'last-30', 'last-month'] as const
+
 /** The period each email covers, by frequency, when the report has a date range. */
 export const DEFAULT_RANGE: Record<SubscriptionFrequency, string> = {
   daily: 'last-7',

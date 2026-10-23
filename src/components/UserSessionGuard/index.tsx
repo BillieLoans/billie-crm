@@ -12,6 +12,7 @@ import {
   RECENT_CUSTOMERS_STORAGE_KEY,
   RECENT_REPORTS_STORAGE_KEY,
   FAILED_ACTIONS_STORAGE_KEY,
+  ASK_DRAFT_STORAGE_KEY,
 } from '@/lib/constants'
 import { clearIssueDiagnostics } from '@/lib/issue-diagnostics'
 
@@ -35,6 +36,8 @@ function clearUserSessionData(): void {
     localStorage.removeItem(RECENT_CUSTOMERS_STORAGE_KEY)
     localStorage.removeItem(RECENT_REPORTS_STORAGE_KEY)
     localStorage.removeItem(FAILED_ACTIONS_STORAGE_KEY)
+    // The previous person's Ask Claude draft (question and SQL).
+    sessionStorage.removeItem(ASK_DRAFT_STORAGE_KEY)
     // Issue-reporter diagnostics buffers (interactions/routes/api calls/errors)
     // — User A's browsing trail must never end up on User B's report
     clearIssueDiagnostics()

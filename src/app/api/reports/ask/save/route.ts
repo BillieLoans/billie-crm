@@ -57,15 +57,18 @@ export async function POST(request: NextRequest) {
       )
     }
     // Recorded here, not by the browser, so the usage page's save rate
-    // counts real saves only.
-    try {
-      await payload.create({
-        collection: 'report-events',
-        data: { kind: 'ask_save', reportSlug: saved.slug, user: String(user.id) },
-        overrideAccess: true,
-      })
-    } catch (error) {
-      console.error('[reports] could not record an Ask save:', error)
+    // counts real saves only; a change to an existing report is not a new
+    // question answered.
+    if (!reportId) {
+      try {
+        await payload.create({
+          collection: 'report-events',
+          data: { kind: 'ask_save', reportSlug: saved.slug, user: String(user.id) },
+          overrideAccess: true,
+        })
+      } catch (error) {
+        console.error('[reports] could not record an Ask save:', error)
+      }
     }
     return NextResponse.json(saved)
   } catch (error) {

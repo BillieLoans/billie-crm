@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
 import { hasAnyRole } from '@/lib/access'
 import { errorResponse } from '@/server/reporting/route-auth'
+import { ASK_ID_RE } from '@/server/reporting/ask/draft'
 
 const RECENT = 15
 
@@ -17,6 +18,9 @@ export async function GET(request: NextRequest) {
   const id = request.nextUrl.searchParams.get('id')
   const mine = { user: { equals: auth.user.id } }
   if (id) {
+    if (!ASK_ID_RE.test(id)) {
+      return errorResponse(404, 'NOT_FOUND', 'That question is not yours or has no draft.')
+    }
     const found = await auth.payload.find({
       collection: 'report-asks',
       where: { and: [mine, { id: { equals: id } }] },

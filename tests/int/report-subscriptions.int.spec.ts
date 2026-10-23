@@ -176,6 +176,16 @@ describe('subscribing', () => {
         createSubscription(payload, ops, { ...digest, slug: `${PREFIX}-daily`, range: 'forever' }),
       ),
     ).toBe('BAD_RANGE')
+    // "This month" runs to today: barely begun when emails go at 7am.
+    expect(
+      await errorCode(
+        createSubscription(payload, ops, {
+          ...digest,
+          slug: `${PREFIX}-daily`,
+          range: 'this-month',
+        }),
+      ),
+    ).toBe('BAD_RANGE')
 
     const view = await createSubscription(payload, ops, {
       ...digest,

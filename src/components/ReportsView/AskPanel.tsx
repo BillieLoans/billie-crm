@@ -31,8 +31,10 @@ import {
 import { HeadlineStrip } from './HeadlineStrip'
 import { ReportResults } from './ReportResults'
 import styles from './styles.module.css'
+import { ASK_DRAFT_STORAGE_KEY } from '@/lib/constants'
 
-const STORAGE_KEY = 'billie-ask-draft'
+/** The Ask draft kept for the session; cleared when another person signs in. */
+const STORAGE_KEY = ASK_DRAFT_STORAGE_KEY
 
 const EXAMPLES = [
   'Approval rate by acquisition source for each week of the last quarter',
@@ -199,10 +201,14 @@ export function AskPanel({ initialQuestion = '', fromSlug, canAuthor = true }: A
         setPlan(stored.plan)
         setAssumptions(stored.assumptions)
         setRestored(true)
+        // The logged request it came from: staff who are not authors can
+        // only check a draft Claude gave them, named by this.
+        setAskId(stored.askId)
         void send({
           mode: 'check',
           question: stored.question,
           definition: { ...stored.definition, sql: stored.sql },
+          askId: stored.askId,
         })
       }
     }

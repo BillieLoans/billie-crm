@@ -1,4 +1,4 @@
-import { MigrateUpArgs, MigrateDownArgs } from '@payloadcms/db-postgres'
+import { MigrateUpArgs, MigrateDownArgs, sql } from '@payloadcms/db-postgres'
 import {
   CORE_REPORTS,
   createReports,
@@ -25,11 +25,16 @@ export async function up({ payload, req }: MigrateUpArgs): Promise<void> {
 }
 
 /** Removes the core reports. The first reports keep their presentation. */
-export async function down({ payload, req }: MigrateDownArgs): Promise<void> {
-  await payload.delete({
-    collection: 'report-definitions',
-    where: { slug: { in: CORE_REPORTS.map((r) => r.slug) } },
-    overrideAccess: true,
-    req,
-  })
+export async function down({ db }: MigrateDownArgs): Promise<void> {
+  // Plain SQL, not the Local API: a rollback runs after later migrations'
+  // down steps, and the Local API would query their dropped columns. Slugs
+  // are constants from code. Versions go first; roles and lock rows cascade.
+  const slugs = CORE_REPORTS.map((r) => `'${r.slug.replace(/'/g, "''")}'`).join(', ')
+  await db.execute(
+    sql.raw(`
+DELETE FROM _report_definitions_v
+ WHERE parent_id IN (SELECT id FROM report_definitions WHERE slug IN (${slugs}));
+DELETE FROM report_definitions WHERE slug IN (${slugs});
+`),
+  )
 }

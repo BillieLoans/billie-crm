@@ -9,6 +9,7 @@ import {
   FREQUENCY_LABELS,
   FREQUENCY_PHRASES,
   SUBSCRIPTION_FREQUENCIES,
+  SUBSCRIPTION_RANGES,
   alertRows,
   alertValue,
   type AlertOperator,
@@ -36,6 +37,11 @@ export interface SubscribePanelProps {
 
 type Mode = 'digest' | 'alert' | null
 type Setting = string | number | boolean
+
+/** The periods a subscription can cover (complete days only). */
+const PERIODS = RANGE_PRESETS.filter((p) =>
+  (SUBSCRIPTION_RANGES as readonly string[]).includes(p.key),
+)
 
 /**
  * "Email me this" and "Alert me": a report sent on a schedule with the
@@ -296,7 +302,7 @@ function DigestForm({
             value={period}
             onChange={(e) => setRangeKey(e.target.value)}
           >
-            {RANGE_PRESETS.map((p) => (
+            {PERIODS.map((p) => (
               <option key={p.key} value={p.key}>
                 {p.label}
               </option>
@@ -363,7 +369,9 @@ function AlertForm({
   )
   const [row, setRow] = useState('')
   // Checks read the period on screen when it is a preset, so "now" matches.
-  const [rangeKey, setRangeKey] = useState(shownPreset ?? 'last-7')
+  const [rangeKey, setRangeKey] = useState(
+    shownPreset && PERIODS.some((p) => p.key === shownPreset) ? shownPreset : 'last-7',
+  )
   const sameAsShown = !hasRange || rangeKey === shownPreset
   const [operator, setOperator] = useState<AlertOperator>('above')
   const [threshold, setThreshold] = useState('')
@@ -508,7 +516,7 @@ function AlertForm({
             value={rangeKey}
             onChange={(e) => setRangeKey(e.target.value)}
           >
-            {RANGE_PRESETS.map((p) => (
+            {PERIODS.map((p) => (
               <option key={p.key} value={p.key}>
                 {p.label}
               </option>

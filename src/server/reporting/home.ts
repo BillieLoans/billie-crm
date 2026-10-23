@@ -94,6 +94,25 @@ function sparkline(
   return points.length >= 2 ? points : null
 }
 
+/**
+ * Featured reports run this many at a time: each compared run takes up to
+ * three of the reporting pool's connections (the run, the previous period
+ * and the freshness reading), and staff opening reports need the rest.
+ */
+const HOME_CONCURRENCY = 2
+
+async function inBatches<T, R>(
+  items: readonly T[],
+  size: number,
+  run: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const out: R[] = []
+  for (let i = 0; i < items.length; i += size) {
+    out.push(...(await Promise.all(items.slice(i, i + size).map(run))))
+  }
+  return out
+}
+
 export async function homeTiles(
   payload: Payload,
   user: unknown,
@@ -102,8 +121,10 @@ export async function homeTiles(
   const featured = (await listReports(payload, user)).filter(
     (r) => r.published && r.featured && r.headline.length > 0,
   )
-  const results = await Promise.all(
-    featured.map(async (report): Promise<HomeTile | null> => {
+  const results = await inBatches(
+    featured,
+    HOME_CONCURRENCY,
+    async (report): Promise<HomeTile | null> => {
       try {
         const body = await runFeatured(payload, user, report, options)
         if (!body) return null
@@ -132,7 +153,7 @@ export async function homeTiles(
         console.error(`[reports] home tile for ${report.slug} failed:`, error)
         return null
       }
-    }),
+    },
   )
   return results.filter((t): t is HomeTile => t !== null)
 }

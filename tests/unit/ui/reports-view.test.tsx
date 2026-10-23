@@ -378,7 +378,7 @@ describe('ReportsView', () => {
     fetchMock.mockImplementation(() =>
       respond(200, {
         ...RANGED_RESULT,
-        previous: { from: '2026-09-01', to: '2026-09-30', rows: PREVIOUS_ROWS, rowCount: 1 },
+        previous: { from: '2026-09-02', to: '2026-10-01', rows: PREVIOUS_ROWS, rowCount: 1 },
         dataAsAt: new Date().toISOString(),
       }),
     )

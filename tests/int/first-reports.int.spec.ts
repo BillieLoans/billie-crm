@@ -381,7 +381,7 @@ describe('core reports', () => {
 })
 
 describe('comparing with the previous period', () => {
-  it('runs the period of the same length just before, and says how fresh the data is', async () => {
+  it('runs the period just before (a month for a whole month), and says how fresh the data is', async () => {
     resetDataAsAtCache()
     const outcome = await runReport(
       payload,
@@ -391,8 +391,9 @@ describe('comparing with the previous period', () => {
       { pool: reader },
     )
     if (outcome.status !== 200) throw new Error(JSON.stringify(outcome.body))
+    // March is a whole month, so it is set against February.
     expect(outcome.body.previous).toMatchObject({
-      from: '2001-01-29',
+      from: '2001-02-01',
       to: '2001-02-28',
       rows: [{ day: '2001-02-20', applications: 1 }],
     })
@@ -405,14 +406,14 @@ describe('comparing with the previous period', () => {
       overrideAccess: true,
     })
     expect(logged.docs.map((d) => (d.parameters as { from: string }).from).sort()).toEqual([
-      '2001-01-29',
+      '2001-02-01',
       '2001-03-01',
     ])
     // The previous period's run is marked, so usage does not count it as a read.
     expect(
       logged.docs.map((d) => [(d.parameters as { from: string }).from, d.comparison]).sort(),
     ).toEqual([
-      ['2001-01-29', true],
+      ['2001-02-01', true],
       ['2001-03-01', false],
     ])
   })

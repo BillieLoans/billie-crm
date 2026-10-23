@@ -47,6 +47,24 @@ describe('periods', () => {
     expect(addDays('2026-12-31', 1)).toBe('2027-01-01')
   })
 
+  it('sets a whole month against the month before, not the same number of days', () => {
+    expect(previousPeriod('2026-03-01', '2026-03-31')).toEqual({
+      from: '2026-02-01',
+      to: '2026-02-28',
+    })
+    expect(previousPeriod('2026-02-01', '2026-02-28')).toEqual({
+      from: '2026-01-01',
+      to: '2026-01-31',
+    })
+    // Two whole months, across a year.
+    expect(previousPeriod('2026-01-01', '2026-02-28')).toEqual({
+      from: '2025-11-01',
+      to: '2025-12-31',
+    })
+    expect(previousPeriodLabel('2026-02-01', '2026-02-28')).toBe('the previous month')
+    expect(previousPeriodLabel('2025-11-01', '2025-12-31')).toBe('the previous 2 months')
+  })
+
   it('has presets that end on complete days or today, and recognises them', () => {
     const today = '2026-10-23'
     const ranges = Object.fromEntries(RANGE_PRESETS.map((p) => [p.key, p.range(today)]))

@@ -207,11 +207,15 @@ async function logAsk(
  * row). Staff who are not report authors can only check or refine these,
  * never SQL of their own.
  */
+/** Ids of logged requests are uuids; anything else names no request. */
+export const ASK_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 export async function loadOwnAsk(
   payload: Payload,
   userId: string,
   askId: string,
 ): Promise<{ question: string; definition: DraftDefinition } | null> {
+  if (!ASK_ID_RE.test(askId)) return null
   const found = await payload.find({
     collection: 'report-asks',
     where: { and: [{ user: { equals: userId } }, { id: { equals: askId } }] },

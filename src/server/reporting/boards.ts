@@ -304,7 +304,19 @@ export async function updateBoard(
   if (update.title !== undefined) data.title = update.title
   if (update.description !== undefined) data.description = update.description.trim() || null
   if (update.tiles !== undefined) {
-    data.tiles = checkTiles(update.tiles, storedTiles(doc).tiles, reports)
+    const given = checkTiles(update.tiles, storedTiles(doc).tiles, reports)
+    // Tiles for reports not published now are not shown to the editor, so
+    // they are kept: they come back when the report is published again.
+    const ids = new Set(given.map((t) => t.id))
+    const kept = storedTiles(doc).tiles.filter((t) => !reports.has(t.report) && !ids.has(t.id))
+    data.tiles = [...given, ...kept]
+    if (data.tiles.length > MAX_BOARD_TILES) {
+      throw new BoardError(
+        400,
+        'TOO_MANY_TILES',
+        `A board holds up to ${MAX_BOARD_TILES} reports. Remove one first.`,
+      )
+    }
   }
   const written = await writeIfUnchanged(payload, doc, data)
   if (!written) throw changed()
