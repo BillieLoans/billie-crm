@@ -123,6 +123,10 @@ ENV NODE_ENV=production
 ENV PYTHONPATH=/pip-packages:/app/event-processor/src
 ENV PYTHONUNBUFFERED=1
 
+# Fonts for the charts drawn into report emails (sharp renders their SVG
+# text with fontconfig; alpine ships no fonts).
+RUN apk add --no-cache fontconfig ttf-dejavu
+
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs

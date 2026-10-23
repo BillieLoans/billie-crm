@@ -84,6 +84,13 @@ export function ReportsNav({ reports, canAuthor, currentSlug, isLoading, error }
         >
           Ask Claude for a report
         </Link>
+        <Link
+          className={styles.textLink}
+          href="/admin/reports/subscriptions"
+          aria-current={currentSlug === 'subscriptions' ? 'page' : undefined}
+        >
+          Your emails and alerts
+        </Link>
         <label htmlFor={`${id}-filter`} className={styles.visuallyHidden}>
           Find a report
         </label>

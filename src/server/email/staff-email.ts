@@ -13,7 +13,13 @@ export interface StaffEmail {
   to: string[]
   subject: string
   html: string
-  attachments?: Array<{ filename: string; contentBase64: string }>
+  attachments?: Array<{
+    filename: string
+    contentBase64: string
+    contentType?: string
+    /** Shown inline where the HTML refers to `cid:<contentId>`. */
+    contentId?: string
+  }>
 }
 
 export class StaffEmailError extends Error {
@@ -57,6 +63,8 @@ export async function sendStaffEmail(email: StaffEmail, idempotencyKey: string):
       attachments: email.attachments?.map((a) => ({
         filename: a.filename,
         content: a.contentBase64,
+        ...(a.contentType ? { content_type: a.contentType } : {}),
+        ...(a.contentId ? { content_id: a.contentId } : {}),
       })),
     }),
     signal: AbortSignal.timeout(30_000),

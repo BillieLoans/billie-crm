@@ -12,6 +12,7 @@ import { AskPanel } from './AskPanel'
 import { ReportsHome } from './ReportsHome'
 import { ReportsNav } from './ReportsNav'
 import { ReportEditor } from './ReportEditor'
+import { SubscriptionsPage } from './SubscriptionsPage'
 import styles from './styles.module.css'
 
 export interface ReportsViewProps {
@@ -85,7 +86,9 @@ export function ReportsView({ slug, mode }: ReportsViewProps) {
             ? [{ label: 'Reports', href: '/admin/reports' }, { label: selected.title }]
             : slug === 'ask'
               ? [{ label: 'Reports', href: '/admin/reports' }, { label: 'Ask Claude' }]
-              : [{ label: 'Reports' }]
+              : slug === 'subscriptions'
+                ? [{ label: 'Reports', href: '/admin/reports' }, { label: 'Emails and alerts' }]
+                : [{ label: 'Reports' }]
         }
       />
       {!slug ? (
@@ -112,6 +115,8 @@ export function ReportsView({ slug, mode }: ReportsViewProps) {
                 fromSlug={canAuthor ? (searchParams?.get('from') ?? undefined) : undefined}
                 canAuthor={canAuthor}
               />
+            ) : slug === 'subscriptions' ? (
+              <SubscriptionsPage />
             ) : selected ? (
               <ReportEntry key={selected.slug} report={selected} canAuthor={canAuthor} />
             ) : !isLoading && !error ? (

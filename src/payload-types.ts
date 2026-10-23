@@ -94,6 +94,8 @@ export interface Config {
     'report-asks': ReportAsk;
     'report-preferences': ReportPreference;
     'report-events': ReportEvent;
+    'report-subscriptions': ReportSubscription;
+    'report-deliveries': ReportDelivery;
     'mcp-oauth-clients': McpOauthClient;
     'mcp-oauth-grants': McpOauthGrant;
     'payload-mcp-api-keys': PayloadMcpApiKey;
@@ -131,6 +133,8 @@ export interface Config {
     'report-asks': ReportAsksSelect<false> | ReportAsksSelect<true>;
     'report-preferences': ReportPreferencesSelect<false> | ReportPreferencesSelect<true>;
     'report-events': ReportEventsSelect<false> | ReportEventsSelect<true>;
+    'report-subscriptions': ReportSubscriptionsSelect<false> | ReportSubscriptionsSelect<true>;
+    'report-deliveries': ReportDeliveriesSelect<false> | ReportDeliveriesSelect<true>;
     'mcp-oauth-clients': McpOauthClientsSelect<false> | McpOauthClientsSelect<true>;
     'mcp-oauth-grants': McpOauthGrantsSelect<false> | McpOauthGrantsSelect<true>;
     'payload-mcp-api-keys': PayloadMcpApiKeysSelect<false> | PayloadMcpApiKeysSelect<true>;
@@ -2465,6 +2469,68 @@ export interface ReportEvent {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "report-subscriptions".
+ */
+export interface ReportSubscription {
+  id: string;
+  user?: (string | null) | User;
+  report?: (string | null) | ReportDefinition;
+  kind: 'digest' | 'alert';
+  /**
+   * Digests only. Alerts are checked every morning.
+   */
+  frequency?: ('daily' | 'weekly' | 'monthly') | null;
+  /**
+   * The period preset each delivery covers, e.g. last-7.
+   */
+  range?: string | null;
+  parameters?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  channel: 'email' | 'slack';
+  alert?: {
+    column?: string | null;
+    row?: string | null;
+    value?: string | null;
+    operator?: ('above' | 'below') | null;
+    threshold?: number | null;
+    /**
+     * The condition held at the last check; alerts send on a change.
+     */
+    active?: boolean | null;
+    lastValue?: number | null;
+  };
+  paused?: boolean | null;
+  lastCheckedAt?: string | null;
+  lastSentAt?: string | null;
+  lastError?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "report-deliveries".
+ */
+export interface ReportDelivery {
+  id: string;
+  subscription?: (string | null) | ReportSubscription;
+  /**
+   * <subscription id>:<day, month or alert:day>
+   */
+  claimKey: string;
+  status: 'sending' | 'sent' | 'checked' | 'skipped';
+  detail?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "mcp-oauth-clients".
  */
 export interface McpOauthClient {
@@ -2724,6 +2790,14 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'report-events';
         value: string | ReportEvent;
+      } | null)
+    | ({
+        relationTo: 'report-subscriptions';
+        value: string | ReportSubscription;
+      } | null)
+    | ({
+        relationTo: 'report-deliveries';
+        value: string | ReportDelivery;
       } | null)
     | ({
         relationTo: 'mcp-oauth-clients';
@@ -3752,6 +3826,48 @@ export interface ReportEventsSelect<T extends boolean = true> {
   reportSlug?: T;
   query?: T;
   user?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "report-subscriptions_select".
+ */
+export interface ReportSubscriptionsSelect<T extends boolean = true> {
+  user?: T;
+  report?: T;
+  kind?: T;
+  frequency?: T;
+  range?: T;
+  parameters?: T;
+  channel?: T;
+  alert?:
+    | T
+    | {
+        column?: T;
+        row?: T;
+        value?: T;
+        operator?: T;
+        threshold?: T;
+        active?: T;
+        lastValue?: T;
+      };
+  paused?: T;
+  lastCheckedAt?: T;
+  lastSentAt?: T;
+  lastError?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "report-deliveries_select".
+ */
+export interface ReportDeliveriesSelect<T extends boolean = true> {
+  subscription?: T;
+  claimKey?: T;
+  status?: T;
+  detail?: T;
   updatedAt?: T;
   createdAt?: T;
 }

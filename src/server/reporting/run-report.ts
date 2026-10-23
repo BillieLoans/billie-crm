@@ -297,7 +297,7 @@ export async function runReport(
   input: {
     parameters?: Record<string, unknown>
     draft?: boolean
-    trigger?: 'view' | 'mcp' | 'home' | 'board'
+    trigger?: 'view' | 'mcp' | 'home' | 'board' | 'subscription' | 'alert'
     /** Also run the period before (reports with a date range only). */
     compare?: boolean
   },

@@ -27,6 +27,7 @@ import { HeadlineStrip } from './HeadlineStrip'
 import { PinButton } from './PinButton'
 import { ParameterForm, parameterInputId, type ParameterValues } from './ParameterForm'
 import { RangePicker } from './RangePicker'
+import { SubscribePanel } from './SubscribePanel'
 import { ReportResults } from './ReportResults'
 import { csvFileName, downloadText, toCsv } from './csv'
 import styles from './styles.module.css'
@@ -409,6 +410,16 @@ export function ReportPanel({
           </span>
         </div>
       </form>
+
+      {report.published && !draft && (
+        <SubscribePanel
+          slug={report.slug}
+          spec={spec}
+          // The values the results on screen were run with.
+          values={request?.parameters ?? values}
+          result={result}
+        />
+      )}
 
       <p className={styles.status} aria-live="polite" data-testid="report-status">
         {status}
