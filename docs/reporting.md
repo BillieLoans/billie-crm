@@ -263,6 +263,14 @@ in `infra/fly/env/.env.<env>` where it is set (prod: `neondb_owner`), else
    ALTER ROLE reporting_reader SET search_path = reporting;
    ```
 
+   `permission denied to alter role` on the `ALTER`s means the role was made
+   some other way, usually in the console. Check
+   `SELECT r.rolname FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.roleid WHERE m.member = 'reporting_reader'::regrole;`:
+   if it lists `neon_superuser`, delete the role in the console (Roles), then
+   run the four statements above in one SQL session. If the console refuses
+   because of existing grants, revoke them first as the owner:
+   `REVOKE ALL ON ALL TABLES IN SCHEMA reporting FROM reporting_reader; REVOKE USAGE ON SCHEMA reporting FROM reporting_reader;`.
+
 2. **Add a read replica** (prod; optional on demo, skip it to use the
    primary) in the Neon console: the CRM project → Branches → the branch the
    environment's `DATABASE_URI` points at → Add read replica (a read-only
