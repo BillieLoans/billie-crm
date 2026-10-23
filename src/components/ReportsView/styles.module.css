@@ -390,6 +390,82 @@
   --series-8: #e66767;
 }
 
+/* Results: charts, then the data behind a toggle */
+.resultsBody {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.resultsToolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.chartFooter {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 0.4rem;
+}
+
+.chartTooltip {
+  background: var(--theme-elevation-0, #fff);
+  border: 1px solid var(--theme-elevation-250, #ccc);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--theme-text, #111);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  max-width: 320px;
+}
+
+.chartTooltip ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.chartTooltipTitle {
+  margin: 0 0 4px;
+  font-weight: 600;
+}
+
+.chartTooltipHint {
+  margin: 4px 0 0;
+  color: var(--theme-elevation-650, #555);
+}
+
+.chartSwatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: 6px;
+  vertical-align: -1px;
+}
+
+.linkButton {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 13px;
+  color: var(--theme-text, #111);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.linkButton:focus-visible {
+  outline: 2px solid var(--theme-success-500, #0ea5e9);
+  outline-offset: 2px;
+}
+
 /* Table */
 .tableBlock {
   display: flex;
@@ -455,6 +531,77 @@
 
 .sortMark {
   font-size: 10px;
+  color: var(--theme-elevation-650, #555);
+}
+
+/* The first column stays in view on wide tables. */
+.table .stickyColumn {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--theme-elevation-0, #fff);
+  box-shadow: 1px 0 0 var(--theme-elevation-100, #eee);
+}
+
+.table thead th.stickyColumn {
+  z-index: 2;
+  background: var(--theme-elevation-50, #f5f5f5);
+}
+
+/* Totals: bold, above a rule, pinned under the other rows. */
+.table tfoot th,
+.table tfoot td {
+  font-weight: 700;
+  border-top: 2px solid var(--theme-elevation-500, #888);
+  border-bottom: 0;
+  position: sticky;
+  bottom: 0;
+  background: var(--theme-elevation-0, #fff);
+}
+
+.table tfoot .stickyColumn {
+  z-index: 2;
+  text-align: left;
+}
+
+/* "not recorded" and the like: missing data, not a category. */
+.gapLabel {
+  font-style: italic;
+  color: var(--theme-elevation-650, #555) !important;
+}
+
+/* A rate on fewer cases than its column allows. */
+.smallSample {
+  color: var(--theme-elevation-650, #555);
+}
+
+.smallMark {
+  margin-left: 2px;
+  font-size: 10px;
+}
+
+.footnote {
+  margin: 0;
+  font-size: 12px;
+  color: var(--theme-elevation-650, #555);
+}
+
+/* Change against the previous period, under the value. Arrow + text, never colour alone. */
+.cellChange {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.tone_good {
+  color: var(--theme-success-650, #1d6b41);
+}
+
+.tone_bad {
+  color: var(--theme-error-650, #b4232c);
+}
+
+.tone_neutral {
   color: var(--theme-elevation-650, #555);
 }
 

@@ -2274,6 +2274,14 @@ export interface ReportDefinition {
   slug: string;
   description?: string | null;
   /**
+   * Where the report sits in the catalogue.
+   */
+  category?: ('acquisition' | 'credit' | 'loan_book' | 'arrears' | 'operations' | 'finance' | 'other') | null;
+  /**
+   * Show its headline numbers on the Reports home.
+   */
+  featured?: boolean | null;
+  /**
    * One SELECT or WITH statement over the reporting schema (docs/reporting.md). Read parameter 1 as $1, parameter 2 as $2, and so on.
    */
   sql: string;
@@ -2290,9 +2298,33 @@ export interface ReportDefinition {
     | boolean
     | null;
   /**
-   * Optional: {type: line | bar | area, x: column, series: [{column, label}], stacked}.
+   * Optional: one chart or a list of two. {type: line | bar | area | bar-horizontal | stacked-100, x: column, series: [{column, label}], stacked, sort: value | none, rollingAverage: days, drill: {report, parameter}}.
    */
   chart?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Up to four headline numbers above the chart: [{column, label, value: total | sum | last | first | average | max | min, better: higher | lower}].
+   */
+  headline?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Optional per-column settings: [{name, label, format, description, base, minBase, better}]. Formats otherwise follow the name: *_rate and *_pct are percentages, amounts and balances are dollars.
+   */
+  columnSettings?:
     | {
         [k: string]: unknown;
       }
@@ -3581,9 +3613,13 @@ export interface ReportDefinitionsSelect<T extends boolean = true> {
   title?: T;
   slug?: T;
   description?: T;
+  category?: T;
+  featured?: T;
   sql?: T;
   parameters?: T;
   chart?: T;
+  headline?: T;
+  columnSettings?: T;
   roles?: T;
   author?: T;
   origin?: T;

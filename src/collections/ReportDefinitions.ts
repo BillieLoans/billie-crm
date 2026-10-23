@@ -11,8 +11,11 @@ import { hasApprovalAuthority, isAdmin } from '@/lib/access'
 import {
   REPORT_SLUG_RE,
   REPORT_VIEWER_ROLES,
+  REPORT_CATEGORIES,
   RESERVED_REPORT_SLUGS,
-  chartSpecSchema,
+  chartsSchema,
+  columnSpecsSchema,
+  headlineSpecsSchema,
   reportParametersSchema,
 } from '@/lib/schemas/reports'
 import { checkPlaceholders, checkReportSql } from '@/server/reporting/sql-guard'
@@ -45,7 +48,17 @@ const validateParameters: Validate = (value) => {
 
 const validateChart: Validate = (value) => {
   if (value === null || value === undefined) return true
-  const parsed = chartSpecSchema.safeParse(value)
+  const parsed = chartsSchema.safeParse(value)
+  return parsed.success ? true : firstIssue(parsed.error)
+}
+
+const validateColumns: Validate = (value) => {
+  const parsed = columnSpecsSchema.safeParse(value ?? [])
+  return parsed.success ? true : firstIssue(parsed.error)
+}
+
+const validateHeadline: Validate = (value) => {
+  const parsed = headlineSpecsSchema.safeParse(value ?? [])
   return parsed.success ? true : firstIssue(parsed.error)
 }
 
@@ -157,6 +170,22 @@ export const ReportDefinitions: CollectionConfig = {
     },
     { name: 'description', type: 'textarea', maxLength: 1000 },
     {
+      name: 'category',
+      type: 'select',
+      defaultValue: 'other',
+      options: REPORT_CATEGORIES.map((c) => ({ label: c.label, value: c.value })),
+      admin: { position: 'sidebar', description: 'Where the report sits in the catalogue.' },
+    },
+    {
+      name: 'featured',
+      type: 'checkbox',
+      defaultValue: false,
+      admin: {
+        position: 'sidebar',
+        description: 'Show its headline numbers on the Reports home.',
+      },
+    },
+    {
       name: 'sql',
       label: 'SQL',
       // A plain textarea, not `code`: Payload's code editor loads from a CDN
@@ -192,7 +221,35 @@ export const ReportDefinitions: CollectionConfig = {
       admin: {
         components: { Field: JSON_TEXTAREA },
         description:
-          'Optional: {type: line | bar | area, x: column, series: [{column, label}], stacked}.',
+          'Optional: one chart or a list of two. {type: line | bar | area | bar-horizontal | ' +
+          'stacked-100, x: column, series: [{column, label}], stacked, sort: value | none, ' +
+          'rollingAverage: days, drill: {report, parameter}}.',
+      },
+    },
+    {
+      name: 'headline',
+      type: 'json',
+      defaultValue: [],
+      validate: validateHeadline,
+      admin: {
+        components: { Field: JSON_TEXTAREA },
+        description:
+          'Up to four headline numbers above the chart: [{column, label, value: total | sum | ' +
+          'last | first | average | max | min, better: higher | lower}].',
+      },
+    },
+    {
+      name: 'columnSettings',
+      label: 'Columns',
+      type: 'json',
+      defaultValue: [],
+      validate: validateColumns,
+      admin: {
+        components: { Field: JSON_TEXTAREA },
+        description:
+          'Optional per-column settings: [{name, label, format, description, base, minBase, ' +
+          'better}]. Formats otherwise follow the name: *_rate and *_pct are percentages, ' +
+          'amounts and balances are dollars.',
       },
     },
     {

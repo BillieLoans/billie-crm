@@ -8,11 +8,16 @@ import { hasAnyRole } from '@/lib/access'
 import { formatNumber } from '@/lib/formatters'
 import { bindParameters, parameterDefault, type ReportParameter } from '@/lib/schemas/reports'
 import { useReports, type ReportSpec, type ReportSummary } from '@/hooks/queries/useReports'
-import { ReportRunFailure, useReportRun, type ReportRunRequest } from '@/hooks/queries/useReportRun'
+import {
+  ReportRunFailure,
+  useReportRun,
+  type ReportRunRequest,
+  type ReportRunResponse,
+} from '@/hooks/queries/useReportRun'
 import { ParameterForm, parameterInputId, type ParameterValues } from './ParameterForm'
 import { AskPanel } from './AskPanel'
-import { ReportChart } from './ReportChart'
-import { ReportTable } from './ReportTable'
+import { resultHints } from '@/lib/reports/quality'
+import { ReportResults } from './ReportResults'
 import { csvFileName, downloadText, toCsv } from './csv'
 import styles from './styles.module.css'
 
@@ -346,19 +351,40 @@ function ReportPanel({ report, spec, draft, draftOnly, canAuthor, onDraftChange 
             <p className={styles.note}>No rows match these parameters.</p>
           ) : (
             <>
-              {spec.chart && (
-                <ReportChart
-                  title={spec.title}
-                  spec={spec.chart}
-                  columns={result.columns}
-                  rows={result.rows}
-                />
-              )}
-              <ReportTable caption={spec.title} columns={result.columns} rows={result.rows} />
+              {canAuthor && <QualityHints columns={result.columns} rows={result.rows} />}
+              <ReportResults
+                title={spec.title}
+                charts={spec.charts}
+                columnSpecs={spec.columns}
+                columns={result.columns}
+                rows={result.rows}
+              />
             </>
           )}
         </div>
       )}
     </section>
+  )
+}
+
+/** Authors only: checks on the rows that usually mean a query mistake. */
+function QualityHints({
+  columns,
+  rows,
+}: {
+  columns: ReportRunResponse['columns']
+  rows: ReportRunResponse['rows']
+}) {
+  const hints = resultHints(columns, rows)
+  if (hints.length === 0) return null
+  return (
+    <div className={styles.warning} data-testid="report-quality-hints">
+      <strong>Check this report (shown to authors):</strong>
+      <ul className={styles.plainList}>
+        {hints.map((h) => (
+          <li key={h.code + h.message}>{h.message}</li>
+        ))}
+      </ul>
+    </div>
   )
 }

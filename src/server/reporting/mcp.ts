@@ -51,7 +51,7 @@ import type { CollectionConfig, Config, Payload, PayloadRequest, Plugin } from '
 import { APIError, Forbidden, UnauthorizedError, ValidationError } from 'payload'
 import { z } from 'zod/v3'
 import { hasAnyRole, hideFromNonAdmins, isAdmin } from '@/lib/access'
-import { REPORT_VIEWER_ROLES } from '@/lib/schemas/reports'
+import { REPORT_CATEGORY_VALUES, REPORT_VIEWER_ROLES } from '@/lib/schemas/reports'
 import { checkRateLimit, type RateLimitOptions } from '@/lib/utils/rateLimit'
 import { isReportAuthor, listReports, runReport } from './run-report'
 import { ReportRunError, getReportingPool, runReportSql } from './runner'
@@ -298,7 +298,29 @@ export const reportingTools: ReportingTool[] = [
         .describe(
           'The whole parameter list: {name, label, type, required, default, options, help}',
         ),
-      chart: z.record(z.string(), z.unknown()).nullable().optional(),
+      chart: z
+        .union([
+          z.record(z.string(), z.unknown()),
+          z.array(z.record(z.string(), z.unknown())).max(2),
+        ])
+        .nullable()
+        .optional()
+        .describe(
+          'One chart or a list of two: {type: line | bar | area | bar-horizontal | stacked-100, x, series: [{column, label}], stacked, sort, rollingAverage, drill}',
+        ),
+      headline: z
+        .array(z.record(z.string(), z.unknown()))
+        .max(4)
+        .optional()
+        .describe('Headline numbers: [{column, label, value: total | sum | last | …, better}]'),
+      columnSettings: z
+        .array(z.record(z.string(), z.unknown()))
+        .max(50)
+        .optional()
+        .describe(
+          'Per-column settings: [{name, label, format, description, base, minBase, better}]',
+        ),
+      category: z.enum(REPORT_CATEGORY_VALUES).optional(),
       roles: z.array(z.enum(REPORT_VIEWER_ROLES)).optional(),
       schedule: z.enum(['none', 'weekly_monday']).optional(),
     },
@@ -580,7 +602,7 @@ const mcp = mcpPlugin({
   collections: {
     'report-definitions': {
       description:
-        'Report definitions: title, description, SQL over the reporting schema, parameters and chart. Writes over MCP are always saved as drafts for a supervisor to publish.',
+        'Report definitions: title, description, category, SQL over the reporting schema, parameters, up to two charts, headline numbers and column settings. Writes over MCP are always saved as drafts for a supervisor to publish.',
       // No plugin update or delete: see update_report_draft.
       enabled: { find: true, create: true, update: false, delete: false },
     },

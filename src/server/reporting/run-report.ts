@@ -11,20 +11,34 @@ import { getUserRole } from '@/lib/access'
 import {
   REPORT_AUTHOR_ROLES,
   bindParameters,
-  chartSpecSchema,
+  columnSpecsSchema,
+  headlineSpecsSchema,
+  normaliseCharts,
   reportParametersSchema,
+  REPORT_CATEGORY_VALUES,
   type ChartSpec,
+  type ColumnSpec,
+  type HeadlineSpec,
+  type ReportCategory,
   type ReportColumn,
   type ReportParameter,
 } from '@/lib/schemas/reports'
 import { ReportRunError, runReportSql, type RunOptions } from './runner'
 
-/** What the form and chart of one version of a report need. Never the SQL. */
+/** What the form, charts and headline of one version of a report need. Never the SQL. */
 export interface ReportSpec {
   title: string
   description: string | null
+  category: ReportCategory
   parameters: ReportParameter[]
-  chart: ChartSpec | null
+  /** Zero, one or two charts. */
+  charts: ChartSpec[]
+  columns: ColumnSpec[]
+  headline: HeadlineSpec[]
+  /** Its headline numbers show on the Reports home. */
+  featured: boolean
+  /** The SQL filters out mock applications (`mock_origin`). */
+  excludesMock: boolean
 }
 
 export interface ReportSummary extends ReportSpec {
@@ -65,6 +79,10 @@ export interface ReportDoc {
   sql: string
   parameters?: unknown
   chart?: unknown
+  columnSettings?: unknown
+  headline?: unknown
+  category?: string | null
+  featured?: boolean | null
   roles?: string[] | null
   _status?: 'draft' | 'published' | null
   schedule?: string | null
@@ -82,14 +100,27 @@ export function canRunReport(user: unknown, roles: readonly string[] | null | un
   return isReportAuthor(user) || (roles ?? []).includes(role)
 }
 
-function specOf(doc: ReportDoc): ReportSpec {
+/** `NOT mock_origin`, `mock_origin = false` or `mock_origin IS NOT TRUE`, any alias. */
+const EXCLUDES_MOCK =
+  /\bnot\s+(?:\w+\.)?mock_origin\b|\bmock_origin\s*(?:=\s*false|is\s+(?:not\s+true|false))/i
+
+export function specOf(doc: ReportDoc): ReportSpec {
   const params = reportParametersSchema.safeParse(doc.parameters ?? [])
-  const chart = chartSpecSchema.safeParse(doc.chart)
+  const columns = columnSpecsSchema.safeParse(doc.columnSettings ?? [])
+  const headline = headlineSpecsSchema.safeParse(doc.headline ?? [])
+  const category = (REPORT_CATEGORY_VALUES as readonly string[]).includes(doc.category ?? '')
+    ? (doc.category as ReportCategory)
+    : 'other'
   return {
     title: doc.title,
     description: doc.description ?? null,
+    category,
     parameters: params.success ? params.data : [],
-    chart: chart.success ? chart.data : null,
+    charts: normaliseCharts(doc.chart),
+    columns: columns.success ? columns.data : [],
+    headline: headline.success ? headline.data : [],
+    featured: doc.featured === true,
+    excludesMock: EXCLUDES_MOCK.test(doc.sql ?? ''),
   }
 }
 

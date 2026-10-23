@@ -36,7 +36,12 @@ const WEEKLY = {
   description: 'Approvals by day',
   published: true,
   parameters: [{ name: 'from', label: 'From', type: 'date', required: true, default: 'today-7' }],
-  chart: { type: 'line', x: 'day', series: [{ column: 'approved' }] },
+  charts: [{ type: 'line', x: 'day', series: [{ column: 'approved' }] }],
+  columns: [],
+  headline: [],
+  category: 'credit',
+  featured: false,
+  excludesMock: true,
 }
 const BY_CODE = {
   id: 'r2',
@@ -48,7 +53,12 @@ const BY_CODE = {
     { name: 'code', label: 'Reason code', type: 'text', required: true },
     { name: 'limit', label: 'Limit', type: 'integer', required: false },
   ],
-  chart: null,
+  charts: [],
+  columns: [],
+  headline: [],
+  category: 'other',
+  featured: false,
+  excludesMock: false,
 }
 
 const RESULT = {
@@ -133,7 +143,7 @@ describe('ReportsView', () => {
     expect(screen.getByTestId('report-chart')).toBeInTheDocument()
     const table = screen.getByTestId('report-table')
     expect(within(table).getByText('1,234')).toBeInTheDocument()
-    expect(within(table).getByText('20 October 2026')).toBeInTheDocument()
+    expect(within(table).getByText('20/10/26')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Download CSV' })).toBeEnabled()
   })
 
@@ -221,7 +231,7 @@ describe('ReportsView', () => {
         title: 'Declines by code (v2)',
         description: null,
         parameters: [{ name: 'since', label: 'Since', type: 'date', required: true }],
-        chart: { type: 'bar', x: 'code', series: [{ column: 'n' }] },
+        charts: [{ type: 'bar', x: 'code', series: [{ column: 'n' }] }],
       },
     }
     reportsState.data = { reports: [WEEKLY, withDraft], canAuthor: true }

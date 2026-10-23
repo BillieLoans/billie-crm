@@ -10,12 +10,13 @@
  * returned. Neither sends anything to Claude.
  */
 import {
-  chartSpecSchema,
+  chartsSchema,
   reportParametersSchema,
   type ChartSpec,
   type ReportColumn,
   type ReportParameter,
 } from '@/lib/schemas/reports'
+import { resultHints } from '@/lib/reports/quality'
 import { checkPlaceholders, checkReportSql, stripLiterals } from '../sql-guard'
 
 export interface DraftDefinition {
@@ -31,7 +32,7 @@ export interface ValidDraft {
   description: string
   sql: string
   parameters: ReportParameter[]
-  chart: ChartSpec | null
+  chart: ChartSpec | ChartSpec[] | null
 }
 
 export interface ValidationIssue {
@@ -42,9 +43,6 @@ export interface ValidationIssue {
 
 /** Schemas other than `reporting` (and any `pg_*` one). */
 const OTHER_SCHEMAS = new Set(['public', 'information_schema', 'portal'])
-
-const TOTAL_LABELS = new Set(['all', 'all sources', 'total'])
-const NOT_ADDITIVE = /(rate|pct|percent|median|avg|average|mean|hours|days|share)/i
 
 /**
  * Check the definition without running it.
@@ -71,7 +69,7 @@ export function validateStatic(draft: DraftDefinition): {
   const chart =
     draft.chart === null || draft.chart === undefined
       ? { success: true as const, data: null }
-      : chartSpecSchema.safeParse(draft.chart)
+      : chartsSchema.safeParse(draft.chart)
   if (!chart.success) error('CHART', `Chart: ${chart.error.issues[0]?.message}`)
 
   const sql = checkReportSql(draft.sql)
@@ -154,54 +152,10 @@ export function validateStatic(draft: DraftDefinition): {
   }
 }
 
-/** Check the rows a definition returned. */
+/** Check the rows a definition returned (`lib/reports/quality.ts`). */
 export function validateResult(
   columns: readonly ReportColumn[],
   rows: ReadonlyArray<Record<string, unknown>>,
 ): ValidationIssue[] {
-  const issues: ValidationIssue[] = []
-
-  // Rates within [0, 1]; percentages within [0, 100].
-  for (const col of columns) {
-    if (col.kind !== 'number') continue
-    const isRate = /(^|_)rate$/i.test(col.name)
-    const isPct = /(_pct|_percent)$/i.test(col.name)
-    if (!isRate && !isPct) continue
-    const max = isRate ? 1 : 100
-    const bad = rows.find((r) => {
-      const v = r[col.name]
-      return typeof v === 'number' && (v < 0 || v > max)
-    })
-    if (bad) {
-      issues.push({
-        level: 'error',
-        code: 'RATE_RANGE',
-        message: `${col.name} must be between 0 and ${max}; got ${String(bad[col.name])}`,
-      })
-    }
-  }
-
-  // A total row must equal the sum of the other rows for additive columns.
-  const label = columns.find((c) => c.kind === 'text')
-  if (label) {
-    const totals = rows.filter((r) => TOTAL_LABELS.has(String(r[label.name] ?? '').toLowerCase()))
-    const parts = rows.filter((r) => !totals.includes(r))
-    if (totals.length === 1 && parts.length > 0) {
-      for (const col of columns) {
-        if (col.kind !== 'number' || NOT_ADDITIVE.test(col.name)) continue
-        const values = parts.map((r) => r[col.name])
-        if (!values.every((v) => typeof v === 'number' && Number.isInteger(v))) continue
-        const sum = (values as number[]).reduce((a, b) => a + b, 0)
-        const total = totals[0][col.name]
-        if (typeof total === 'number' && total !== sum) {
-          issues.push({
-            level: 'warning',
-            code: 'TOTAL',
-            message: `The ${String(totals[0][label.name])} row has ${col.name} ${total}, but the other rows add up to ${sum}`,
-          })
-        }
-      }
-    }
-  }
-  return issues
+  return resultHints(columns, rows)
 }

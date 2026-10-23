@@ -3,7 +3,7 @@
 import React, { useEffect, useId, useRef, useState } from 'react'
 import Link from 'next/link'
 import { formatNumber } from '@/lib/formatters'
-import { chartSpecSchema } from '@/lib/schemas/reports'
+import { normaliseCharts } from '@/lib/schemas/reports'
 import {
   AskClaudeFailure,
   useAskClaude,
@@ -11,8 +11,7 @@ import {
   type DraftDefinition,
   type DraftOutcome,
 } from '@/hooks/mutations/useAskClaude'
-import { ReportChart } from './ReportChart'
-import { ReportTable } from './ReportTable'
+import { ReportResults } from './ReportResults'
 import styles from './styles.module.css'
 
 /**
@@ -147,7 +146,7 @@ export function AskPanel() {
     Object.keys(fieldErrors).length > 0 ||
     errors.length > 0 ||
     (outcome !== null && outcome.status !== 'ok')
-  const chart = definition?.chart != null ? chartSpecSchema.safeParse(definition.chart) : null
+  const charts = normaliseCharts(definition?.chart)
 
   return (
     <section aria-labelledby={`${id}-title`} data-testid="ask-panel">
@@ -359,18 +358,12 @@ export function AskPanel() {
           {outcome?.preview && outcome.preview.rowCount > 0 && (
             <>
               <h3 className={styles.subheading}>Preview on the default parameters</h3>
-              {chart?.success && (
-                <ReportChart
-                  title={definition.title}
-                  spec={chart.data}
-                  columns={outcome.preview.columns}
-                  rows={outcome.preview.rows}
-                />
-              )}
-              <ReportTable
-                caption={`${definition.title} (preview)`}
+              <ReportResults
+                title={`${definition.title} (preview)`}
+                charts={charts}
                 columns={outcome.preview.columns}
                 rows={outcome.preview.rows}
+                tableOpen
               />
             </>
           )}
