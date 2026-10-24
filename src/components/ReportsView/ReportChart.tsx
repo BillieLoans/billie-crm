@@ -37,7 +37,7 @@ import {
   type PreparedSeries,
 } from '@/lib/reports/chart-data'
 import { logReportEvent } from '@/lib/reports/events'
-import { copySvgAsPng } from './chart-image'
+import { chartSvgOf, copySvgAsPng, type LegendItem } from './chart-image'
 import styles from './styles.module.css'
 
 export { CHART_POINT_LIMIT }
@@ -144,7 +144,8 @@ export function ReportChart({
   // Tick spacing: every category up to 12, else about ten labels. Horizontal
   // bars grow with their categories, so every bar keeps its name.
   const interval = horizontal || data.length <= 12 ? 0 : Math.ceil(data.length / 10) - 1
-  const chartHeight = height ?? (horizontal ? Math.max(160, data.length * 30 + 48) : 320)
+  const chartHeight =
+    height ?? (horizontal ? Math.max(160, data.length * 30 + 48 + (reference ? 16 : 0)) : 320)
   const negative = data.some((row) => series.some((s) => (toNumber(row[s.key]) ?? 0) < 0))
 
   const onBarClick = (row: Row | undefined) => {
@@ -215,10 +216,33 @@ export function ReportChart({
     interval,
   }
 
+  // Shown under the chart, and drawn into a copied image with it.
+  const footnotes = [
+    anySmall && smallView
+      ? `Hatched: fewer than ${formatNumber(smallView.minBase)} ${(
+          viewOf(smallView.base as string)?.label ?? 'cases'
+        ).toLowerCase()}.`
+      : null,
+    prepared.averageDays
+      ? `Faint line: each day. Solid line: ${prepared.averageDays}-day average.`
+      : null,
+  ].filter((note): note is string => note !== null)
+
   const copyChart = async () => {
-    const svg = plotRef.current?.querySelector('svg.recharts-surface')
-    if (!svg) return
-    const { copied, message } = await copySvgAsPng(svg as SVGSVGElement, title)
+    const plot = plotRef.current
+    const svg = chartSvgOf(plot)
+    if (!plot || !svg) return
+    const computed = window.getComputedStyle(plot)
+    // The legend is HTML beside the SVG, so it is drawn into the image apart.
+    const legend: LegendItem[] = showLegend
+      ? series.map((s) => ({
+          label: s.label,
+          colour: computed.getPropertyValue(`--series-${s.colour}`).trim() || '#2a78d6',
+          opacity: s.role === 'raw' || s.role === 'previous' ? 0.4 : 1,
+          dashed: s.role === 'previous' && !isBar,
+        }))
+      : []
+    const { copied, message } = await copySvgAsPng(svg, title, legend, footnotes)
     setCopyStatus(message)
     if (reportSlug && copied) {
       logReportEvent({ kind: 'copy_chart', reportSlug })
@@ -248,7 +272,13 @@ export function ReportChart({
           layout={horizontal ? 'vertical' : 'horizontal'}
           stackOffset={spec.type === 'stacked-100' ? 'expand' : undefined}
           style={{ width: '100%', height: chartHeight }}
-          margin={{ top: 8, right: horizontal ? 96 : 16, bottom: 8, left: 8 }}
+          // A reference line's label sits above the plot on horizontal bars.
+          margin={{
+            top: horizontal && reference ? 24 : 8,
+            right: horizontal ? 96 : 16,
+            bottom: 8,
+            left: 8,
+          }}
           barGap={2}
           barCategoryGap={horizontal ? '24%' : '18%'}
         >
@@ -394,17 +424,11 @@ export function ReportChart({
         </ComposedChart>
       </div>
       <div className={styles.chartFooter}>
-        {anySmall && smallView && (
-          <span className={styles.footnote}>
-            Hatched: fewer than {formatNumber(smallView.minBase)}{' '}
-            {(viewOf(smallView.base as string)?.label ?? 'cases').toLowerCase()}.
+        {footnotes.map((note) => (
+          <span key={note} className={styles.footnote}>
+            {note}
           </span>
-        )}
-        {prepared.averageDays && (
-          <span className={styles.footnote}>
-            Faint line: each day. Solid line: {prepared.averageDays}-day average.
-          </span>
-        )}
+        ))}
         <button type="button" className={styles.linkButton} onClick={copyChart}>
           Copy chart as image
         </button>
