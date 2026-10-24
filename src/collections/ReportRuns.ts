@@ -35,6 +35,18 @@ export const ReportRuns: CollectionConfig = {
       admin: { description: 'Published version id, or "draft"' },
     },
     { name: 'user', type: 'relationship', relationTo: 'users', index: true },
+    {
+      // Over the MCP connector: which key or connection made the call, so a
+      // run by a shared dashboard key is not mistaken for its owner's own.
+      name: 'actor',
+      type: 'group',
+      admin: { description: 'Set for runs over the MCP connector.' },
+      fields: [
+        { name: 'scope', type: 'text', admin: { description: 'personal, dashboard or oauth' } },
+        { name: 'key', type: 'text', admin: { description: 'MCP API key id' } },
+        { name: 'grant', type: 'text', admin: { description: 'MCP connection id' } },
+      ],
+    },
     { name: 'parameters', type: 'json' },
     {
       name: 'outcome',

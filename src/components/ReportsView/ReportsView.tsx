@@ -14,6 +14,7 @@ import { ReportsHome } from './ReportsHome'
 import { ReportsNav } from './ReportsNav'
 import { ReportEditor } from './ReportEditor'
 import { SubscriptionsPage } from './SubscriptionsPage'
+import { ConnectionsPage } from './ConnectionsPage'
 import { BoardsPage } from './BoardsPage'
 import { BoardView } from './BoardView'
 import { UsagePage } from './UsagePage'
@@ -96,19 +97,21 @@ export function ReportsView({ slug, mode, board }: ReportsViewProps) {
               ? [{ label: 'Reports', href: '/admin/reports' }, { label: 'Ask Claude' }]
               : slug === 'subscriptions'
                 ? [{ label: 'Reports', href: '/admin/reports' }, { label: 'Emails and alerts' }]
-                : slug === 'usage'
-                  ? [{ label: 'Reports', href: '/admin/reports' }, { label: 'Usage' }]
-                  : slug === 'boards'
-                    ? [
-                        { label: 'Reports', href: '/admin/reports' },
-                        ...(board
-                          ? [
-                              { label: 'Boards', href: '/admin/reports/boards' },
-                              { label: boardTitle ?? 'Board' },
-                            ]
-                          : [{ label: 'Boards' }]),
-                      ]
-                    : [{ label: 'Reports' }]
+                : slug === 'connections'
+                  ? [{ label: 'Reports', href: '/admin/reports' }, { label: 'Connected apps' }]
+                  : slug === 'usage'
+                    ? [{ label: 'Reports', href: '/admin/reports' }, { label: 'Usage' }]
+                    : slug === 'boards'
+                      ? [
+                          { label: 'Reports', href: '/admin/reports' },
+                          ...(board
+                            ? [
+                                { label: 'Boards', href: '/admin/reports/boards' },
+                                { label: boardTitle ?? 'Board' },
+                              ]
+                            : [{ label: 'Boards' }]),
+                        ]
+                      : [{ label: 'Reports' }]
         }
       />
       {!slug ? (
@@ -137,6 +140,8 @@ export function ReportsView({ slug, mode, board }: ReportsViewProps) {
               />
             ) : slug === 'subscriptions' ? (
               <SubscriptionsPage />
+            ) : slug === 'connections' ? (
+              <ConnectionsPage />
             ) : slug === 'usage' ? (
               isLoading ? null : (
                 <UsagePage canAuthor={canAuthor} />

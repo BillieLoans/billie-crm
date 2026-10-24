@@ -192,3 +192,6 @@ export type {
   LoanAccountSearchResult,
   LoanAccountSearchResponse,
 } from '@/types/search'
+export { useReportConnections } from './queries/useReportConnections'
+export type { ConnectionView, ConnectionsResponse } from './queries/useReportConnections'
+export { useDeleteConnection } from './mutations/useReportConnectionMutations'

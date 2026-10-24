@@ -23,6 +23,7 @@ export const RESERVED_REPORT_SLUGS: readonly string[] = [
   'new',
   'boards',
   'usage',
+  'connections',
   'subscriptions',
   'preferences',
   'preview',

@@ -165,6 +165,14 @@ export const REPORTING_SCHEMA_STATEMENTS: readonly string[] = [
    EXCEPTION WHEN others THEN RETURN NULL;
    END $$`,
 
+  // Attribution text (utm_* values) is set by whoever writes a link to the
+  // public site, so it is untrusted: keep printable ASCII that a campaign
+  // name needs, drop the rest, cut at 80. Reports and the MCP connector show
+  // these values to staff and to a model.
+  `CREATE OR REPLACE FUNCTION reporting.attribution_text(value text)
+   RETURNS text LANGUAGE sql IMMUTABLE PARALLEL SAFE
+   AS $$ SELECT NULLIF(left(trim(regexp_replace(value, '[^A-Za-z0-9 ._/()+&:=|-]', '', 'g')), 80), '') $$`,
+
   // Category of a free-text loan purpose; see LOAN_PURPOSE_CATEGORIES.
   `CREATE OR REPLACE FUNCTION reporting.loan_purpose_category(purpose text)
    RETURNS text LANGUAGE sql IMMUTABLE PARALLEL SAFE
@@ -242,9 +250,9 @@ export const REPORTING_SCHEMA_STATEMENTS: readonly string[] = [
      c.customer_id_string                             AS customer_id,
      c.started_at,
      reporting.sydney_date(c.started_at)              AS started_on,
-     c.attribution->>'utm_source'                     AS source,
-     c.attribution->>'utm_medium'                     AS medium,
-     c.attribution->>'utm_campaign'                   AS campaign,
+     reporting.attribution_text(c.attribution->>'utm_source')   AS source,
+     reporting.attribution_text(c.attribution->>'utm_medium')   AS medium,
+     reporting.attribution_text(c.attribution->>'utm_campaign') AS campaign,
      reporting.acquisition_channel(c.attribution)     AS channel,
      -- channel, except that a conversation from before attribution capture
      -- reads 'not recorded' rather than 'direct'. Reports group by this.
@@ -295,9 +303,9 @@ export const REPORTING_SCHEMA_STATEMENTS: readonly string[] = [
      date_part('year', age(reporting.sydney_date(c.started_at),
                            reporting.sydney_date(cu.date_of_birth)))::integer
                                                       AS age_at_application,
-     c.attribution->>'utm_content'                    AS content,
-     c.attribution->>'matchtype'                      AS match_type,
-     c.attribution->>'utm_term'                       AS keyword,
+     reporting.attribution_text(c.attribution->>'utm_content')  AS content,
+     reporting.attribution_text(c.attribution->>'matchtype')    AS match_type,
+     reporting.attribution_text(c.attribution->>'utm_term')     AS keyword,
      -- Which ad click id the visit carried. The id itself is left out: it
      -- links the application to one person's click in the ad platform.
      CASE WHEN c.attribution->>'gclid' IS NOT NULL THEN 'gclid'

@@ -143,7 +143,12 @@ function verifyCsrfOrigin(request: NextRequest): NextResponse | null {
  * form (`/api/oauth/authorize`) uses the session cookie and stays checked.
  */
 const CSRF_EXEMPT_PREFIXES = ['/api/intake/', '/api/webhooks/', '/api/reports/jobs/']
-const CSRF_EXEMPT_PATHS = ['/api/mcp', '/api/oauth/token', '/api/oauth/register']
+const CSRF_EXEMPT_PATHS = [
+  '/api/mcp',
+  '/api/oauth/token',
+  '/api/oauth/register',
+  '/api/oauth/revoke',
+]
 
 export function isCsrfExemptPath(pathname: string): boolean {
   return (
@@ -152,16 +157,32 @@ export function isCsrfExemptPath(pathname: string): boolean {
   )
 }
 
-function setSecurityHeaders(response: NextResponse): NextResponse {
+/**
+ * The OAuth consent page (`/oauth/authorize`) is where a person decides to
+ * connect Claude to their CRM access, and the page a phishing attempt would
+ * copy, so it gets a stricter policy than the admin: no inline or eval'd
+ * script (it is a server-rendered form that works without hydration) and
+ * forms may post to this origin only.
+ */
+const CONSENT_CSP =
+  "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'; font-src 'self'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
+
+const ADMIN_CSP =
+  "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://www.gravatar.com; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'"
+
+export function contentSecurityPolicyFor(pathname: string): string {
+  return pathname === '/oauth/authorize' || pathname.startsWith('/oauth/authorize/')
+    ? CONSENT_CSP
+    : ADMIN_CSP
+}
+
+function setSecurityHeaders(response: NextResponse, pathname = ''): NextResponse {
   response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload')
   response.headers.set('X-Frame-Options', 'DENY')
   response.headers.set('X-Content-Type-Options', 'nosniff')
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
   response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
-  response.headers.set(
-    'Content-Security-Policy',
-    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://www.gravatar.com; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'",
-  )
+  response.headers.set('Content-Security-Policy', contentSecurityPolicyFor(pathname))
   return response
 }
 
@@ -242,7 +263,7 @@ export async function proxy(request: NextRequest) {
     // /admin/login without a valid token → fall through and render the login page.
   }
 
-  return setSecurityHeaders(NextResponse.next())
+  return setSecurityHeaders(NextResponse.next(), pathname)
 }
 
 // Match all routes so Cloudflare origin check applies globally.

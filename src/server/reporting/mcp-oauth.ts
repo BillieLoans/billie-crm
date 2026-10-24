@@ -28,6 +28,19 @@
  *
  * What a token may do is decided on every request from the person's current
  * role (`authenticateMcp` in `mcp.ts`), not at sign-in.
+ *
+ * Hardening from the October 2026 security review:
+ * - The sign-in request is bound to the browser that started it: the
+ *   authorize endpoint sets a nonce cookie and seals its hash into the
+ *   request, and the consent form only acts when the cookie matches
+ *   (`bindAuthorizationRequest`, `requestMatchesBrowser`). Each sealed
+ *   request carries a `jti` and is approved at most once (`requestId` on
+ *   the connection, unique).
+ * - A connection lasts at most `GRANT_MAX_AGE_S` from consent, however
+ *   often it is refreshed; after that the client signs in again.
+ * - Clients can revoke their tokens (RFC 7009, `/api/oauth/revoke`), and
+ *   people can see and cut their own connections under Reports.
+ * - Registered clients that never got a connection are dropped after a day.
  */
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import type { Payload } from 'payload'
@@ -47,6 +60,12 @@ export const CODE_TTL_S = 5 * 60
 export const REFRESH_REUSE_GRACE_S = 60
 /** How long a sign-in page link stays valid: long enough to log in first. */
 export const AUTHORIZE_REQUEST_TTL_MS = 15 * 60_000
+/** A connection's absolute lifetime from consent, refreshes notwithstanding. */
+export const GRANT_MAX_AGE_S = 90 * 24 * 60 * 60
+/** Registered clients with no connection are dropped after this long. */
+export const UNUSED_CLIENT_TTL_MS = 24 * 60 * 60_000
+/** The cookie that ties a sign-in request to the browser that started it. */
+export const AUTHZ_COOKIE = 'mcp_authz'
 
 export const ACCESS_TOKEN_PREFIX = 'bcrmat_'
 const REFRESH_TOKEN_PREFIX = 'bcrmrt_'
@@ -66,6 +85,12 @@ const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
 
 /** A PKCE verifier or S256 challenge (RFC 7636). */
 const PKCE_VALUE = /^[A-Za-z0-9._~-]{43,128}$/
+
+/** Control, format and bidirectional-override characters, which must not reach the consent page. */
+const UNPRINTABLE = new RegExp(
+  '[\\p{C}\\p{Zl}\\p{Zp}\\u200B-\\u200F\\u202A-\\u202E\\u2066-\\u2069]',
+  'gu',
+)
 
 const newSecret = (prefix: string) => `${prefix}${randomBytes(32).toString('base64url')}`
 const sha256 = (value: string) => createHash('sha256').update(value).digest('base64url')
@@ -113,6 +138,8 @@ export function authorizationServerMetadata(): Record<string, unknown> {
     scopes_supported: [OAUTH_SCOPE],
     response_types_supported: ['code'],
     grant_types_supported: ['authorization_code', 'refresh_token'],
+    revocation_endpoint: `${origin}/api/oauth/revoke`,
+    revocation_endpoint_auth_methods_supported: [...AUTH_METHODS],
     token_endpoint_auth_methods_supported: [...AUTH_METHODS],
     code_challenge_methods_supported: ['S256'],
     authorization_response_iss_parameter_supported: true,
@@ -232,8 +259,11 @@ export async function registerClient(payload: Payload, input: unknown): Promise<
       'Only the authorization_code and refresh_token grants, and response type code, are supported',
     )
   }
+  // Shown on the consent page as the app's own claim: printable text only.
   const clientName =
-    typeof body.client_name === 'string' ? body.client_name.trim().slice(0, 100) : ''
+    typeof body.client_name === 'string'
+      ? body.client_name.replace(UNPRINTABLE, '').replace(/\s+/g, ' ').trim().slice(0, 100)
+      : ''
   const clientId = `${CLIENT_ID_PREFIX}${randomBytes(16).toString('base64url')}`
   const secret = method === 'none' ? undefined : newSecret(CLIENT_SECRET_PREFIX)
   await payload.create({
@@ -270,6 +300,27 @@ export interface AuthorizationRequest {
   state: string | null
   codeChallenge: string
   resource: string
+  /** One per sign-in request; a connection records it, so a request is approved once. */
+  jti?: string
+  /** `sha256` of the nonce in the browser's `AUTHZ_COOKIE`. */
+  browser?: string
+}
+
+/** A fresh nonce for the browser cookie. */
+export const newBrowserNonce = (): string => randomBytes(32).toString('base64url')
+
+/** Tie a checked request to the browser holding `nonce`, and give it its id. */
+export function bindAuthorizationRequest(
+  request: AuthorizationRequest,
+  nonce: string,
+): AuthorizationRequest {
+  return { ...request, jti: randomBytes(16).toString('base64url'), browser: sha256(nonce) }
+}
+
+/** Whether the browser presenting `nonce` is the one the request was bound to. */
+export function requestMatchesBrowser(request: AuthorizationRequest, nonce: unknown): boolean {
+  if (typeof nonce !== 'string' || !nonce || typeof request.browser !== 'string') return false
+  return sameText(sha256(nonce), request.browser)
 }
 
 export type AuthorizationCheck =
@@ -384,8 +435,12 @@ export function openAuthorizationRequest(
   }
 }
 
-/** Drop codes never exchanged and connections whose refresh token has lapsed. */
-async function deleteStaleGrants(payload: Payload): Promise<void> {
+/**
+ * Drop codes never exchanged, connections whose refresh token has lapsed or
+ * that have reached their absolute lifetime, and registered clients that
+ * never got a connection within `UNUSED_CLIENT_TTL_MS`.
+ */
+export async function deleteStaleGrants(payload: Payload): Promise<void> {
   const now = new Date().toISOString()
   await payload.delete({
     collection: OAUTH_GRANTS_SLUG,
@@ -398,17 +453,38 @@ async function deleteStaleGrants(payload: Payload): Promise<void> {
           ],
         },
         { refreshExpiresAt: { less_than: now } },
+        { createdAt: { less_than: new Date(Date.now() - GRANT_MAX_AGE_S * 1000).toISOString() } },
       ],
     },
     overrideAccess: true,
   })
+  const old = await payload.find({
+    collection: OAUTH_CLIENTS_SLUG,
+    where: { createdAt: { less_than: new Date(Date.now() - UNUSED_CLIENT_TTL_MS).toISOString() } },
+    sort: 'createdAt',
+    limit: 200,
+    depth: 0,
+    pagination: false,
+    overrideAccess: true,
+  })
+  for (const client of old.docs as unknown as ClientDoc[]) {
+    const used = await payload.count({
+      collection: OAUTH_GRANTS_SLUG,
+      where: { clientId: { equals: client.clientId } },
+      overrideAccess: true,
+    })
+    if (used.totalDocs === 0) {
+      await payload.delete({ collection: OAUTH_CLIENTS_SLUG, id: client.id, overrideAccess: true })
+    }
+  }
 }
 
 /**
  * The person approved: record the connection with a one-time code and
  * return the client's redirect URI to send them to. Null when the client
- * or its redirect URI has gone since the page was shown, or the person may
- * not use reporting.
+ * or its redirect URI has gone since the page was shown, the person may
+ * not use reporting, or this sign-in request was approved before (its
+ * `jti` is already on a connection).
  */
 export async function approveAuthorization(
   payload: Payload,
@@ -417,26 +493,43 @@ export async function approveAuthorization(
 ): Promise<string | null> {
   const client = await findClient(payload, request.clientId)
   if (!client || !client.redirectUris.includes(request.redirectUri)) return null
+  if (!isAllowedRedirectUri(request.redirectUri)) return null
   if (!hasAnyRole(user)) return null
   await deleteStaleGrants(payload)
+  if (request.jti) {
+    const seen = await payload.count({
+      collection: OAUTH_GRANTS_SLUG,
+      where: { requestId: { equals: request.jti } },
+      overrideAccess: true,
+    })
+    if (seen.totalDocs > 0) return null
+  }
   const code = newSecret(CODE_PREFIX)
-  await payload.create({
-    collection: OAUTH_GRANTS_SLUG,
-    data: {
-      user: (user as { id: string }).id,
-      clientId: client.clientId,
-      clientName: client.clientName ?? null,
-      redirectUri: request.redirectUri,
-      redirectHost: new URL(request.redirectUri).host,
-      scope: OAUTH_SCOPE,
-      resource: request.resource,
-      codeIndex: apiKeyIndex(payload.secret, code),
-      codeChallenge: request.codeChallenge,
-      codeExpiresAt: iso(CODE_TTL_S * 1000),
-      codeUsed: false,
-    },
-    overrideAccess: true,
-  })
+  try {
+    await payload.create({
+      collection: OAUTH_GRANTS_SLUG,
+      data: {
+        user: (user as { id: string }).id,
+        clientId: client.clientId,
+        clientName: client.clientName ?? null,
+        redirectUri: request.redirectUri,
+        redirectHost: new URL(request.redirectUri).host,
+        scope: OAUTH_SCOPE,
+        resource: request.resource,
+        requestId: request.jti ?? null,
+        codeIndex: apiKeyIndex(payload.secret, code),
+        codeChallenge: request.codeChallenge,
+        codeExpiresAt: iso(CODE_TTL_S * 1000),
+        codeUsed: false,
+      },
+      overrideAccess: true,
+    })
+  } catch (error) {
+    // Two approvals of the same request at once: the unique requestId
+    // index lets only one through.
+    console.warn('[mcp-oauth] connection not recorded:', (error as Error).message)
+    return null
+  }
   const url = new URL(request.redirectUri)
   url.searchParams.set('code', code)
   if (request.state) url.searchParams.set('state', request.state)
@@ -496,8 +589,11 @@ interface GrantDoc {
   id: string
   user: string
   clientId: string
+  clientName?: string | null
   redirectUri: string
+  redirectHost?: string | null
   resource: string
+  createdAt?: string
   codeChallenge?: string | null
   codeExpiresAt?: string | null
   accessIndex?: string | null
@@ -638,6 +734,7 @@ async function refreshTokens(
             access_expires_at = $4, refresh_expires_at = $5, refreshed_at = now(),
             last_used_at = now(), updated_at = now()
       WHERE refresh_index = $1 AND client_id = $6 AND refresh_expires_at > now()
+        AND created_at > now() - make_interval(secs => $7)
       RETURNING id, user_id`,
     [
       oldIndex,
@@ -646,6 +743,7 @@ async function refreshTokens(
       iso(ACCESS_TOKEN_TTL_S * 1000),
       iso(REFRESH_TOKEN_TTL_S * 1000),
       client.clientId,
+      GRANT_MAX_AGE_S,
     ],
   )
   if (rotated.rows.length === 0) {
@@ -672,6 +770,113 @@ async function refreshTokens(
     return invalidGrant('The person can no longer use reporting')
   }
   return tokenResponse(access, refresh)
+}
+
+/**
+ * `POST /api/oauth/revoke` (RFC 7009): the client gives back an access or
+ * refresh token and the connection it belongs to is deleted. Always 200 for
+ * a well-formed request, whether or not the token was known (the RFC says
+ * not to tell), but only a token issued to the authenticated client counts.
+ */
+export async function revokeRequest(
+  payload: Payload,
+  form: URLSearchParams,
+  authorization: string | null,
+): Promise<OAuthResult> {
+  const auth = await authenticateClient(payload, form, authorization)
+  if ('error' in auth) return auth.error
+  const token = form.get('token') ?? ''
+  if (!token) return oauthError(400, 'invalid_request', 'token is required')
+  if (
+    token.length <= 200 &&
+    (token.startsWith(ACCESS_TOKEN_PREFIX) || token.startsWith(REFRESH_TOKEN_PREFIX))
+  ) {
+    const index = apiKeyIndex(payload.secret, token)
+    await payload.delete({
+      collection: OAUTH_GRANTS_SLUG,
+      where: {
+        and: [
+          { clientId: { equals: auth.client.clientId } },
+          {
+            or: [
+              { accessIndex: { equals: index } },
+              { previousAccessIndex: { equals: index } },
+              { refreshIndex: { equals: index } },
+              { previousRefreshIndex: { equals: index } },
+            ],
+          },
+        ],
+      },
+      overrideAccess: true,
+    })
+  }
+  return { status: 200, body: {} }
+}
+
+/** What a person sees of one of their own connections. */
+export interface ConnectionView {
+  id: string
+  clientName: string
+  redirectHost: string
+  createdAt: string | null
+  lastUsedAt: string | null
+  /** When the connection ends unless refreshed, or for good. */
+  expiresAt: string | null
+}
+
+/** The signed-in person's own connections, newest first. */
+export async function listOwnConnections(
+  payload: Payload,
+  userId: string,
+): Promise<ConnectionView[]> {
+  const { docs } = await payload.find({
+    collection: OAUTH_GRANTS_SLUG,
+    where: { and: [{ user: { equals: userId } }, { accessIndex: { exists: true } }] },
+    sort: '-createdAt',
+    limit: 100,
+    depth: 0,
+    pagination: false,
+    overrideAccess: true,
+  })
+  return (docs as unknown as Array<GrantDoc & { refreshExpiresAt?: string | null }>).map((g) => {
+    const absolute = g.createdAt
+      ? new Date(Date.parse(g.createdAt) + GRANT_MAX_AGE_S * 1000).toISOString()
+      : null
+    const sliding = g.refreshExpiresAt ?? null
+    const expiresAt =
+      absolute && sliding ? (absolute < sliding ? absolute : sliding) : (absolute ?? sliding)
+    return {
+      id: String(g.id),
+      clientName: g.clientName || 'An unnamed app',
+      redirectHost: g.redirectHost || new URL(g.redirectUri).host,
+      createdAt: g.createdAt ?? null,
+      lastUsedAt: g.lastUsedAt ?? null,
+      expiresAt,
+    }
+  })
+}
+
+/** Cut one of the person's own connections. False when it is not theirs. */
+export async function deleteOwnConnection(
+  payload: Payload,
+  userId: string,
+  id: string,
+): Promise<boolean> {
+  const { docs } = await payload.find({
+    collection: OAUTH_GRANTS_SLUG,
+    where: { and: [{ id: { equals: id } }, { user: { equals: userId } }] },
+    limit: 1,
+    depth: 0,
+    pagination: false,
+    overrideAccess: true,
+  })
+  if (!docs[0]) return false
+  await payload.delete({
+    collection: OAUTH_GRANTS_SLUG,
+    id: String(docs[0].id),
+    overrideAccess: true,
+  })
+  return true
 }
 
 /** `POST /api/oauth/token`: the authorization_code and refresh_token grants. */
@@ -713,6 +918,9 @@ export async function verifyAccessToken(
     grant?.accessIndex === index ? grant.accessExpiresAt : grant?.previousAccessExpiresAt
   if (!grant || !expires || Date.parse(expires) <= Date.now()) return null
   if (grant.resource !== mcpResourceUri()) return null
+  if (grant.createdAt && Date.now() - Date.parse(grant.createdAt) > GRANT_MAX_AGE_S * 1000) {
+    return null
+  }
   const user = await payload.findByID({
     collection: 'users',
     id: grant.user,
