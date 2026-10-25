@@ -40,6 +40,17 @@ export const ReportAsks: CollectionConfig = {
   fields: [
     { name: 'user', type: 'relationship', relationTo: 'users', index: true },
     {
+      // MCP queries: which key or connection made the call.
+      name: 'actor',
+      type: 'group',
+      admin: { description: 'Set for queries over the MCP connector.' },
+      fields: [
+        { name: 'scope', type: 'text', admin: { description: 'personal, dashboard or oauth' } },
+        { name: 'key', type: 'text', admin: { description: 'MCP API key id' } },
+        { name: 'grant', type: 'text', admin: { description: 'MCP connection id' } },
+      ],
+    },
+    {
       name: 'kind',
       type: 'select',
       required: true,

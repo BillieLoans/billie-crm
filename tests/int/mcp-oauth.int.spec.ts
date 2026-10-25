@@ -16,10 +16,17 @@ import type { Pool } from 'pg'
 import { getDashboardPool } from '@/lib/dashboard-aggregates'
 import { getReportingPool } from '@/server/reporting/runner'
 import {
+  AUTHZ_COOKIE,
+  GRANT_MAX_AGE_S,
   OAUTH_CLIENTS_SLUG,
   OAUTH_GRANTS_SLUG,
   approveAuthorization,
+  bindAuthorizationRequest,
   checkAuthorizationRequest,
+  deleteOwnConnection,
+  deleteStaleGrants,
+  listOwnConnections,
+  newBrowserNonce,
   openAuthorizationRequest,
   sealAuthorizationRequest,
   verifyAccessToken,
@@ -28,6 +35,7 @@ import { GET as protectedResource } from '@/app/api/oauth/protected-resource/rou
 import { GET as authorizationServer } from '@/app/api/oauth/authorization-server/route'
 import { POST as register } from '@/app/api/oauth/register/route'
 import { POST as token } from '@/app/api/oauth/token/route'
+import { POST as revoke } from '@/app/api/oauth/revoke/route'
 import { GET as authorize, POST as decide } from '@/app/api/oauth/authorize/route'
 import { reportingReaderPool, reportingReaderUri } from '../utils/reportingReader'
 
@@ -241,6 +249,7 @@ describe('discovery', () => {
       authorization_endpoint: `${ORIGIN}/api/oauth/authorize`,
       token_endpoint: `${ORIGIN}/api/oauth/token`,
       registration_endpoint: `${ORIGIN}/api/oauth/register`,
+      revocation_endpoint: `${ORIGIN}/api/oauth/revoke`,
       code_challenge_methods_supported: ['S256'],
     })
   })
@@ -277,6 +286,13 @@ describe('client registration', () => {
       overrideAccess: true,
     })
     expect(JSON.stringify(stored.docs[0])).not.toContain(conf.body.client_secret)
+    // The name is the app's own claim: control and override characters are dropped.
+    const odd = await registerClient({
+      client_name: `${P} Billie\u202E CRM\u0000 (official)`,
+      redirect_uris: [CLAUDE],
+      token_endpoint_auth_method: 'none',
+    })
+    expect(odd.body.client_name).toBe(`${P} Billie CRM (official)`)
   })
 
   it('refuses any other redirect URI', async () => {
@@ -334,11 +350,21 @@ describe('sign-in request', () => {
     expect(res.status).toBe(200)
     const html = await res.text()
     const sealed = /\/oauth\/authorize\?req=([A-Za-z0-9_.-]+)/.exec(html)?.[1]
-    expect(openAuthorizationRequest(payload.secret, sealed)).toMatchObject({
+    const opened = openAuthorizationRequest(payload.secret, sealed)
+    expect(opened).toMatchObject({
       clientId: publicClient,
       redirectUri: CLAUDE,
       state: 'state-1',
     })
+    // Bound to this browser: a nonce cookie, whose hash (not the nonce) is sealed in.
+    const cookie = res.headers.get('set-cookie') ?? ''
+    expect(cookie).toMatch(new RegExp(`^${AUTHZ_COOKIE}=[A-Za-z0-9_-]{40,};`))
+    expect(cookie).toMatch(/HttpOnly/i)
+    expect(cookie).toMatch(/SameSite=lax/i)
+    const nonce = new RegExp(`${AUTHZ_COOKIE}=([A-Za-z0-9_-]+)`).exec(cookie)![1]
+    expect(opened?.browser).toBeDefined()
+    expect(opened?.browser).not.toBe(nonce)
+    expect(opened?.jti).toMatch(/^[A-Za-z0-9_-]{20,}$/)
     const unknown = await authorize(
       new Request(`${ORIGIN}/api/oauth/authorize?${authorizeParams('bcrmcl_unknown', verifier)}`),
     )
@@ -374,17 +400,75 @@ describe('sign-in request', () => {
   it('the consent form sends a signed-out person to the login, and back', async () => {
     const check = await checkAuthorizationRequest(payload, authorizeParams(publicClient, verifier))
     if (!check.ok) throw new Error(check.message)
-    const sealed = sealAuthorizationRequest(payload.secret, check.request)
+    const nonce = newBrowserNonce()
+    const sealed = sealAuthorizationRequest(
+      payload.secret,
+      bindAuthorizationRequest(check.request, nonce),
+    )
     const form = new FormData()
     form.set('request', sealed)
     form.set('decision', 'allow')
     const res = await decide(
-      new Request(`${ORIGIN}/api/oauth/authorize`, { method: 'POST', body: form }),
+      new Request(`${ORIGIN}/api/oauth/authorize`, {
+        method: 'POST',
+        body: form,
+        headers: { cookie: `${AUTHZ_COOKIE}=${nonce}` },
+      }),
     )
     expect(res.status).toBe(303)
     const login = new URL(String(res.headers.get('location')))
     expect(login.pathname).toBe('/admin/login')
     expect(login.searchParams.get('redirect')).toBe(`/oauth/authorize?req=${sealed}`)
+  })
+
+  it('the consent form acts only in the browser that started the request', async () => {
+    const check = await checkAuthorizationRequest(payload, authorizeParams(publicClient, verifier))
+    if (!check.ok) throw new Error(check.message)
+    const sealed = sealAuthorizationRequest(
+      payload.secret,
+      bindAuthorizationRequest(check.request, newBrowserNonce()),
+    )
+    const { token: session } = await payload.login({
+      collection: 'users',
+      data: { email: users.readonly.email, password: 'Test1234!' },
+    })
+    for (const cookie of [
+      `payload-token=${session}`,
+      `payload-token=${session}; ${AUTHZ_COOKIE}=${newBrowserNonce()}`,
+    ]) {
+      const form = new FormData()
+      form.set('request', sealed)
+      form.set('decision', 'allow')
+      const res = await decide(
+        new Request(`${ORIGIN}/api/oauth/authorize`, {
+          method: 'POST',
+          body: form,
+          headers: { cookie, origin: payload.config.csrf[0] },
+        }),
+      )
+      expect(res.headers.get('location')).toBe(`${ORIGIN}/oauth/authorize?problem=browser`)
+    }
+    // An unbound request (no browser hash) is never approved either.
+    const form = new FormData()
+    form.set('request', sealAuthorizationRequest(payload.secret, check.request))
+    form.set('decision', 'allow')
+    const res = await decide(
+      new Request(`${ORIGIN}/api/oauth/authorize`, {
+        method: 'POST',
+        body: form,
+        headers: { cookie: `payload-token=${session}`, origin: payload.config.csrf[0] },
+      }),
+    )
+    expect(res.headers.get('location')).toBe(`${ORIGIN}/oauth/authorize?problem=browser`)
+    expect(
+      (
+        await payload.find({
+          collection: OAUTH_GRANTS_SLUG,
+          where: { user: { equals: users.readonly.id } },
+          overrideAccess: true,
+        })
+      ).docs,
+    ).toHaveLength(0)
   })
 
   it('the consent form approves or declines for the signed-in person', async () => {
@@ -394,19 +478,29 @@ describe('sign-in request', () => {
       collection: 'users',
       data: { email: users.readonly.email, password: 'Test1234!' },
     })
+    const nonce = newBrowserNonce()
+    const sealed = sealAuthorizationRequest(
+      payload.secret,
+      bindAuthorizationRequest(check.request, nonce),
+    )
     const post = async (decision: string) => {
       const form = new FormData()
-      form.set('request', sealAuthorizationRequest(payload.secret, check.request))
+      form.set('request', sealed)
       form.set('decision', decision)
       const res = await decide(
         new Request(`${ORIGIN}/api/oauth/authorize`, {
           method: 'POST',
           body: form,
           // A browser's same-origin form post: Payload reads the cookie for allowed origins.
-          headers: { cookie: `payload-token=${session}`, origin: payload.config.csrf[0] },
+          headers: {
+            cookie: `payload-token=${session}; ${AUTHZ_COOKIE}=${nonce}`,
+            origin: payload.config.csrf[0],
+          },
         }),
       )
       expect(res.status).toBe(303)
+      // The decision spends the browser's nonce.
+      expect(res.headers.get('set-cookie')).toMatch(new RegExp(`^${AUTHZ_COOKIE}=;`))
       return new URL(String(res.headers.get('location')))
     }
     const denied = await post('deny')
@@ -416,6 +510,9 @@ describe('sign-in request', () => {
     expect(allowed.searchParams.get('code')).toMatch(/^bcrmac_/)
     expect(allowed.searchParams.get('state')).toBe('state-1')
     expect(allowed.searchParams.get('iss')).toBe(ORIGIN)
+    // The same sign-in request cannot be approved twice.
+    const again = await post('allow')
+    expect(again.href).toBe(`${ORIGIN}/oauth/authorize?problem=expired`)
   })
 })
 
@@ -522,6 +619,90 @@ describe('tokens', () => {
     const r = await rpc('tools/list', {}, tokens.access_token)
     expect(r.status).toBe(401)
     expect(r.headers.get('www-authenticate')).toMatch(/invalid_token/)
+  })
+
+  it('a connection ends at its absolute lifetime, however often it is refreshed', async () => {
+    const tokens = await connect(publicClient, 'readonly')
+    const found = await verifyAccessToken(payload, tokens.access_token)
+    await pool.query(
+      `UPDATE mcp_oauth_grants SET created_at = now() - make_interval(secs => $2) WHERE id = $1`,
+      [found?.grantId, GRANT_MAX_AGE_S + 60],
+    )
+    expect(await verifyAccessToken(payload, tokens.access_token)).toBeNull()
+    const refreshed = await tokenCall({
+      grant_type: 'refresh_token',
+      client_id: publicClient,
+      refresh_token: tokens.refresh_token,
+    })
+    expect(refreshed.body.error).toBe('invalid_grant')
+    // Housekeeping drops it.
+    await deleteStaleGrants(payload)
+    const left = await payload.find({
+      collection: OAUTH_GRANTS_SLUG,
+      where: { id: { equals: found?.grantId } },
+      overrideAccess: true,
+    })
+    expect(left.docs).toHaveLength(0)
+  })
+
+  it('a client can give its tokens back (RFC 7009), and only its own', async () => {
+    const tokens = await connect(publicClient, 'readonly')
+    const other = await registerClient({
+      client_name: `${P} other`,
+      redirect_uris: [CLAUDE],
+      token_endpoint_auth_method: 'none',
+    })
+    const call = (form: Record<string, string>) =>
+      revoke(
+        new Request(`${ORIGIN}/api/oauth/revoke`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams(form).toString(),
+        }),
+      )
+    // Another client cannot revoke it, and is told nothing.
+    const foreign = await call({ client_id: other.body.client_id, token: tokens.refresh_token })
+    expect(foreign.status).toBe(200)
+    expect(await verifyAccessToken(payload, tokens.access_token)).not.toBeNull()
+    const own = await call({ client_id: publicClient, token: tokens.refresh_token })
+    expect(own.status).toBe(200)
+    expect(await verifyAccessToken(payload, tokens.access_token)).toBeNull()
+    expect((await call({ client_id: publicClient })).status).toBe(400)
+  })
+
+  it('unused registered clients are dropped after a day; used ones stay', async () => {
+    const unused = await registerClient({
+      client_name: `${P} unused`,
+      redirect_uris: [CLAUDE],
+      token_endpoint_auth_method: 'none',
+    })
+    await pool.query(
+      `UPDATE mcp_oauth_clients SET created_at = now() - interval '2 days' WHERE client_id IN ($1, $2)`,
+      [unused.body.client_id, publicClient],
+    )
+    await deleteStaleGrants(payload)
+    const clients = await payload.find({
+      collection: OAUTH_CLIENTS_SLUG,
+      where: { clientId: { in: [unused.body.client_id, publicClient] } },
+      overrideAccess: true,
+    })
+    expect(clients.docs.map((c) => c.clientId)).toEqual([publicClient])
+  })
+})
+
+describe('a person and their own connections', () => {
+  it('sees them and can cut one; another person cannot', async () => {
+    const tokens = await connect(publicClient, 'operations')
+    const mine = await listOwnConnections(payload, users.operations.id)
+    expect(mine.length).toBeGreaterThan(0)
+    const latest = mine[0]
+    expect(latest).toMatchObject({ redirectHost: 'claude.ai', clientName: `${P} public` })
+    expect(latest.expiresAt).toBeTruthy()
+    expect(JSON.stringify(latest)).not.toMatch(/bcrm/)
+    expect(await deleteOwnConnection(payload, users.readonly.id, latest.id)).toBe(false)
+    expect(await verifyAccessToken(payload, tokens.access_token)).not.toBeNull()
+    expect(await deleteOwnConnection(payload, users.operations.id, latest.id)).toBe(true)
+    expect(await verifyAccessToken(payload, tokens.access_token)).toBeNull()
   })
 })
 

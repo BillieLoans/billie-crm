@@ -1,50 +1,50 @@
-import * as migration_20260515_061818 from './20260515_061818';
-import * as migration_20260518_232948_drop_loan_account_customer_name from './20260518_232948_drop_loan_account_customer_name';
-import * as migration_20260607_132326 from './20260607_132326';
-import * as migration_20260610_114936_reapplication_block_identity_verification from './20260610_114936_reapplication_block_identity_verification';
-import * as migration_20260618_065013_reapplication_block_recognition from './20260618_065013_reapplication_block_recognition';
-import * as migration_20260619_011621 from './20260619_011621';
-import * as migration_20260619_061320_payload_385_upgrade from './20260619_061320_payload_385_upgrade';
-import * as migration_20260624_094132 from './20260624_094132';
-import * as migration_20260628_120000_reapplication_block_clear_requests from './20260628_120000_reapplication_block_clear_requests';
-import * as migration_20260702_052932 from './20260702_052932';
-import * as migration_20260702_223751_marketing_module from './20260702_223751_marketing_module';
-import * as migration_20260704_043533_marketing_phase2 from './20260704_043533_marketing_phase2';
-import * as migration_20260707_121002 from './20260707_121002';
-import * as migration_20260707_141505 from './20260707_141505';
-import * as migration_20260708_020322 from './20260708_020322';
-import * as migration_20260708_121539_contact_merged_into from './20260708_121539_contact_merged_into';
-import * as migration_20260709_120104_fraud_risk from './20260709_120104_fraud_risk';
-import * as migration_20260714_053341_word_of_mouth_source from './20260714_053341_word_of_mouth_source';
-import * as migration_20260802_164058_applicant_release from './20260802_164058_applicant_release';
-import * as migration_20260804_051712_applicant_release_customer_link from './20260804_051712_applicant_release_customer_link';
-import * as migration_20260804_060425_gate_mode_closed from './20260804_060425_gate_mode_closed';
-import * as migration_20260818_001906_issues_collection from './20260818_001906_issues_collection';
-import * as migration_20260820_063404_statement_account_holders from './20260820_063404_statement_account_holders';
-import * as migration_20260822_121203_reapplication_block_state_version from './20260822_121203_reapplication_block_state_version';
-import * as migration_20260822_121938_reapplication_block_state_changed_at from './20260822_121938_reapplication_block_state_changed_at';
-import * as migration_20260824_112358_conversation_kill_record from './20260824_112358_conversation_kill_record';
-import * as migration_20260827_131500_llm_costs from './20260827_131500_llm_costs';
-import * as migration_20260827_214500_llm_costs_has_usage from './20260827_214500_llm_costs_has_usage';
-import * as migration_20260827_224500_llm_costs_system_rels from './20260827_224500_llm_costs_system_rels';
-import * as migration_20260827_230000_llm_costs_uuid_id from './20260827_230000_llm_costs_uuid_id';
-import * as migration_20260828_124500_conversations_llm_rollup_columns from './20260828_124500_conversations_llm_rollup_columns';
-import * as migration_20260828_150000_loan_accounts_disbursement_account from './20260828_150000_loan_accounts_disbursement_account';
-import * as migration_20260901_090000_conversation_cancellation from './20260901_090000_conversation_cancellation';
-import * as migration_20260911_090000_lab_api_v1_identity_columns from './20260911_090000_lab_api_v1_identity_columns';
-import * as migration_20260915_090000_identity_verification_attempts from './20260915_090000_identity_verification_attempts';
-import * as migration_20260925_090000_customer_identity_provenance from './20260925_090000_customer_identity_provenance';
-import * as migration_20260929_090000_customer_login_email_rebound from './20260929_090000_customer_login_email_rebound';
-import * as migration_20261005_090000_conversation_attribution from './20261005_090000_conversation_attribution';
-import * as migration_20261006_090000_conversation_network from './20261006_090000_conversation_network';
-import * as migration_20261020_090000_conversation_decision_metadata from './20261020_090000_conversation_decision_metadata';
-import * as migration_20261023_090000_reporting_schema from './20261023_090000_reporting_schema';
-import * as migration_20261024_090000_report_definitions from './20261024_090000_report_definitions';
-import * as migration_20261025_090000_report_delivery from './20261025_090000_report_delivery';
-import * as migration_20261026_090000_report_asks from './20261026_090000_report_asks';
+import * as migration_20260515_061818 from './20260515_061818'
+import * as migration_20260518_232948_drop_loan_account_customer_name from './20260518_232948_drop_loan_account_customer_name'
+import * as migration_20260607_132326 from './20260607_132326'
+import * as migration_20260610_114936_reapplication_block_identity_verification from './20260610_114936_reapplication_block_identity_verification'
+import * as migration_20260618_065013_reapplication_block_recognition from './20260618_065013_reapplication_block_recognition'
+import * as migration_20260619_011621 from './20260619_011621'
+import * as migration_20260619_061320_payload_385_upgrade from './20260619_061320_payload_385_upgrade'
+import * as migration_20260624_094132 from './20260624_094132'
+import * as migration_20260628_120000_reapplication_block_clear_requests from './20260628_120000_reapplication_block_clear_requests'
+import * as migration_20260702_052932 from './20260702_052932'
+import * as migration_20260702_223751_marketing_module from './20260702_223751_marketing_module'
+import * as migration_20260704_043533_marketing_phase2 from './20260704_043533_marketing_phase2'
+import * as migration_20260707_121002 from './20260707_121002'
+import * as migration_20260707_141505 from './20260707_141505'
+import * as migration_20260708_020322 from './20260708_020322'
+import * as migration_20260708_121539_contact_merged_into from './20260708_121539_contact_merged_into'
+import * as migration_20260709_120104_fraud_risk from './20260709_120104_fraud_risk'
+import * as migration_20260714_053341_word_of_mouth_source from './20260714_053341_word_of_mouth_source'
+import * as migration_20260802_164058_applicant_release from './20260802_164058_applicant_release'
+import * as migration_20260804_051712_applicant_release_customer_link from './20260804_051712_applicant_release_customer_link'
+import * as migration_20260804_060425_gate_mode_closed from './20260804_060425_gate_mode_closed'
+import * as migration_20260818_001906_issues_collection from './20260818_001906_issues_collection'
+import * as migration_20260820_063404_statement_account_holders from './20260820_063404_statement_account_holders'
+import * as migration_20260822_121203_reapplication_block_state_version from './20260822_121203_reapplication_block_state_version'
+import * as migration_20260822_121938_reapplication_block_state_changed_at from './20260822_121938_reapplication_block_state_changed_at'
+import * as migration_20260824_112358_conversation_kill_record from './20260824_112358_conversation_kill_record'
+import * as migration_20260827_131500_llm_costs from './20260827_131500_llm_costs'
+import * as migration_20260827_214500_llm_costs_has_usage from './20260827_214500_llm_costs_has_usage'
+import * as migration_20260827_224500_llm_costs_system_rels from './20260827_224500_llm_costs_system_rels'
+import * as migration_20260827_230000_llm_costs_uuid_id from './20260827_230000_llm_costs_uuid_id'
+import * as migration_20260828_124500_conversations_llm_rollup_columns from './20260828_124500_conversations_llm_rollup_columns'
+import * as migration_20260828_150000_loan_accounts_disbursement_account from './20260828_150000_loan_accounts_disbursement_account'
+import * as migration_20260901_090000_conversation_cancellation from './20260901_090000_conversation_cancellation'
+import * as migration_20260911_090000_lab_api_v1_identity_columns from './20260911_090000_lab_api_v1_identity_columns'
+import * as migration_20260915_090000_identity_verification_attempts from './20260915_090000_identity_verification_attempts'
+import * as migration_20260925_090000_customer_identity_provenance from './20260925_090000_customer_identity_provenance'
+import * as migration_20260929_090000_customer_login_email_rebound from './20260929_090000_customer_login_email_rebound'
+import * as migration_20261005_090000_conversation_attribution from './20261005_090000_conversation_attribution'
+import * as migration_20261006_090000_conversation_network from './20261006_090000_conversation_network'
+import * as migration_20261020_090000_conversation_decision_metadata from './20261020_090000_conversation_decision_metadata'
+import * as migration_20261023_090000_reporting_schema from './20261023_090000_reporting_schema'
+import * as migration_20261024_090000_report_definitions from './20261024_090000_report_definitions'
+import * as migration_20261025_090000_report_delivery from './20261025_090000_report_delivery'
+import * as migration_20261026_090000_report_asks from './20261026_090000_report_asks'
 import * as migration_20261026_095000_reporting_mcp from './20261026_095000_reporting_mcp'
 import * as migration_20261026_095500_report_presentation from './20261026_095500_report_presentation'
-import * as migration_20261026_100000_first_reports from './20261026_100000_first_reports';
+import * as migration_20261026_100000_first_reports from './20261026_100000_first_reports'
 import * as migration_20261027_090000_mcp_oauth from './20261027_090000_mcp_oauth'
 import * as migration_20261027_100000_mcp_oauth_refresh_grace from './20261027_100000_mcp_oauth_refresh_grace'
 import * as migration_20261028_090000_reporting_all_data from './20261028_090000_reporting_all_data'
@@ -60,6 +60,7 @@ import * as migration_20261030_140000_report_boards from './20261030_140000_repo
 import * as migration_20261030_150000_report_runs_comparison from './20261030_150000_report_runs_comparison'
 import * as migration_20261030_160000_report_ask_pending from './20261030_160000_report_ask_pending'
 import * as migration_20261030_170000_core_reports from './20261030_170000_core_reports'
+import * as migration_20261031_090000_reporting_security_review from './20261031_090000_reporting_security_review'
 
 export const migrations = [
   {
@@ -190,7 +191,7 @@ export const migrations = [
   {
     up: migration_20260824_112358_conversation_kill_record.up,
     down: migration_20260824_112358_conversation_kill_record.down,
-    name: '20260824_112358_conversation_kill_record'
+    name: '20260824_112358_conversation_kill_record',
   },
   {
     up: migration_20260827_131500_llm_costs.up,
@@ -372,4 +373,9 @@ export const migrations = [
     down: migration_20261030_170000_core_reports.down,
     name: '20261030_170000_core_reports',
   },
-];
+  {
+    up: migration_20261031_090000_reporting_security_review.up,
+    down: migration_20261031_090000_reporting_security_review.down,
+    name: '20261031_090000_reporting_security_review',
+  },
+]

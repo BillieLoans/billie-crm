@@ -13,7 +13,13 @@ import { describe, it, beforeAll, afterAll, expect } from 'vitest'
 import type { Pool } from 'pg'
 import { getDashboardPool } from '@/lib/dashboard-aggregates'
 import { getReportingPool } from '@/server/reporting/runner'
-import { MCP_API_KEYS_SLUG, MCP_KEY_VISIBLE_MS, MCP_RATE_LIMITS } from '@/server/reporting/mcp'
+import {
+  MCP_API_KEYS_SLUG,
+  MCP_KEY_VISIBLE_MS,
+  MCP_PERSONAL_KEY_TTL_MS,
+  MCP_RATE_LIMITS,
+} from '@/server/reporting/mcp'
+import { MCP_IDENTIFIER_ROW_CAP } from '@/server/reporting/mcp-guard'
 import { reportingReaderPool, reportingReaderUri } from '../utils/reportingReader'
 
 const P = 'TEST-BTB509'
@@ -169,6 +175,35 @@ describe('MCP API keys', () => {
     expect(later.apiKey ?? null).toBeNull()
     // The key still works: only reading it back is closed.
     expect((await rpc('tools/list', {}, key)).status).toBe(200)
+    // That use wiped the stored copy and recorded the time.
+    const { rows } = await pool.query(
+      `SELECT api_key, last_used_at FROM payload_mcp_api_keys WHERE id = $1`,
+      [doc.id],
+    )
+    expect(rows[0].api_key).toBeNull()
+    expect(rows[0].last_used_at).not.toBeNull()
+  })
+
+  it('expire: 90 days for a personal key, and not a request later', async () => {
+    const created = await payload.create({
+      collection: MCP_API_KEYS_SLUG,
+      data: { label: `${P} expiring`, user: users.supervisor.id } as never,
+      overrideAccess: false,
+      user: { ...users.admin, collection: 'users' } as never,
+    })
+    const { id, apiKey, expiresAt } = created as unknown as {
+      id: string
+      apiKey: string
+      expiresAt: string
+    }
+    const ttl = Date.parse(expiresAt) - Date.parse(String(created.createdAt))
+    expect(Math.abs(ttl - MCP_PERSONAL_KEY_TTL_MS)).toBeLessThan(60_000)
+    expect((await rpc('tools/list', {}, apiKey)).status).toBe(200)
+    await pool.query(
+      `UPDATE payload_mcp_api_keys SET expires_at = now() - interval '1 second' WHERE id = $1`,
+      [id],
+    )
+    expect((await rpc('tools/list', {}, apiKey)).status).toBe(401)
   })
 
   it('are managed by admins only, and issued to report authors only', async () => {
@@ -347,6 +382,47 @@ describe('MCP tools', () => {
       overrideAccess: true,
     })
     expect(asks.docs.map((d) => d.outcome)).toEqual(['error', 'ok'])
+    // The log says which key ran it, not just whose it is.
+    expect((asks.docs[0] as { actor?: { scope?: string; key?: string } }).actor).toMatchObject({
+      scope: 'personal',
+    })
+    expect((asks.docs[0] as { actor?: { key?: string } }).actor?.key).toBeTruthy()
+    expect(result.note).toMatch(/not instructions/)
+  })
+
+  it('refuses sensitive columns per identifier and caps identifier-bearing results (ADR 0001)', async () => {
+    const refused = await callText('run_report_query', {
+      sql: `SELECT conversation_id, age_at_application FROM application WHERE conversation_id LIKE $1`,
+      parameters: [`${P}%`],
+    })
+    expect(refused).toMatch(/^Error: ROW_LEVEL/)
+    expect(refused).toContain('age_at_application')
+    // Even when it returns nothing, the shape itself is refused.
+    const counted = JSON.parse(
+      await callText('run_report_query', {
+        sql: `SELECT count(*) AS n, count(*) FILTER (WHERE age_at_application < 25) AS under_25 FROM application WHERE conversation_id LIKE $1`,
+        parameters: [`${P}%`],
+      }),
+    )
+    expect(counted.rows).toHaveLength(1)
+    const capped = JSON.parse(
+      await callText('run_report_query', {
+        sql: `SELECT g AS conversation_id FROM generate_series(1, ${MCP_IDENTIFIER_ROW_CAP + 10}) g`,
+      }),
+    )
+    expect(capped.rows).toHaveLength(MCP_IDENTIFIER_ROW_CAP)
+    expect(capped.truncated).toBe(true)
+    expect(capped.truncatedBecause).toMatch(/identifies/)
+    const logged = await payload.find({
+      collection: 'report-asks',
+      where: { kind: { equals: 'mcp_query' }, user: { equals: users.supervisor.id } },
+      sort: '-createdAt',
+      limit: 3,
+      overrideAccess: true,
+    })
+    expect(
+      logged.docs.map((d) => (d.definition as { errorCode?: string })?.errorCode ?? 'ok'),
+    ).toEqual(['ok', 'ok', 'ROW_LEVEL'])
   })
 
   it('saves a new report as a draft, whatever status is asked for', async () => {

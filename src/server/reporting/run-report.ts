@@ -99,6 +99,27 @@ export interface ReportDoc {
   schedule?: string | null
 }
 
+/**
+ * Who is calling over the MCP connector, carried on the user object as
+ * `_mcp` by `authenticateMcp`, so the run and ask logs can tell a person's
+ * own run from one by their key, a shared dashboard key or a connection.
+ */
+export interface McpActor {
+  scope: 'personal' | 'dashboard' | 'oauth'
+  keyId?: string
+  grantId?: string
+}
+
+/** The log's actor fields for a user, when the call came over MCP. */
+export function actorOf(
+  user: unknown,
+): { scope: string; key: string | null; grant: string | null } | undefined {
+  const actor = (user as { _mcp?: McpActor } | null | undefined)?._mcp
+  return actor
+    ? { scope: actor.scope, key: actor.keyId ?? null, grant: actor.grantId ?? null }
+    : undefined
+}
+
 export function isReportAuthor(user: unknown): boolean {
   const role = getUserRole(user)
   return role !== undefined && REPORT_AUTHOR_ROLES.includes(role)
@@ -277,6 +298,7 @@ export async function logRun(payload: Payload, user: unknown, entry: RunLogEntry
         ...entry,
         parameters: entry.parameters as ReportRun['parameters'],
         user: (user as { id?: string } | null)?.id ?? null,
+        actor: actorOf(user),
       },
       overrideAccess: true,
     })

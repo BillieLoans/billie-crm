@@ -3,20 +3,26 @@
  * OAuth server (`src/server/reporting/mcp-oauth.ts`).
  *
  * Reached from `/api/oauth/authorize` with the checked request, signed
- * (`?req=`). Sends a signed-out person through the CRM login and back, then
- * asks them to approve the connection. It shows who is asking (a name the
- * app chose, so marked as such), where they will be sent back to, the
- * environment, and what Claude will be able to do with their role. The
- * decision posts to `/api/oauth/authorize`.
+ * (`?req=`) and bound to this browser by a cookie. Sends a signed-out
+ * person through the CRM login and back, then asks them to approve the
+ * connection. It leads with where they will be sent back to (checked
+ * against the allow-list), then the name the app chose for itself (marked
+ * as unverified), the environment and what Claude will be able to do with
+ * their role. The decision posts to `/api/oauth/authorize`.
  */
 import React from 'react'
-import { headers as getHeaders } from 'next/headers'
+import { cookies as getCookies, headers as getHeaders } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
 import { hasAnyRole } from '@/lib/access'
 import { isReportAuthor } from '@/server/reporting/run-report'
-import { appOrigin, openAuthorizationRequest } from '@/server/reporting/mcp-oauth'
+import {
+  AUTHZ_COOKIE,
+  appOrigin,
+  openAuthorizationRequest,
+  requestMatchesBrowser,
+} from '@/server/reporting/mcp-oauth'
 import styles from '../../oauth.module.css'
 
 export const dynamic = 'force-dynamic'
@@ -24,6 +30,15 @@ export const dynamic = 'force-dynamic'
 type SearchParams = Promise<Record<string, string | string[] | undefined>>
 
 const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]'])
+
+const PROBLEMS: Record<string, string> = {
+  client:
+    'The app is not registered with the CRM, or asked to send you back to an address it did not register. Go back to Claude and connect again.',
+  expired:
+    'This sign-in link has expired or was already used. Go back to Claude and connect again.',
+  browser:
+    'This sign-in link was opened in a different browser from the one that started connecting, so it cannot be used. Go back to Claude and connect again from there.',
+}
 
 function Problem({ message }: { message: string }) {
   return (
@@ -43,16 +58,14 @@ export default async function AuthorizePage({ searchParams }: { searchParams: Se
     if (typeof value === 'string') params.set(name, value)
   }
   const payload = await getPayload({ config: configPromise })
-  if (params.get('problem') === 'client') {
-    return (
-      <Problem message="The app is not registered with the CRM, or asked to send you back to an address it did not register. Go back to Claude and connect again." />
-    )
-  }
+  const problem = params.get('problem')
+  if (problem && PROBLEMS[problem]) return <Problem message={PROBLEMS[problem]} />
+
   const sealed = params.get('req')
   const request = openAuthorizationRequest(payload.secret, sealed)
-  if (!sealed || !request) {
-    return <Problem message="This sign-in link has expired. Go back to Claude and connect again." />
-  }
+  if (!sealed || !request) return <Problem message={PROBLEMS.expired} />
+  const nonce = (await getCookies()).get(AUTHZ_COOKIE)?.value
+  if (!requestMatchesBrowser(request, nonce)) return <Problem message={PROBLEMS.browser} />
 
   const { user } = await payload.auth({ headers: await getHeaders() })
   if (!user) {
@@ -66,6 +79,7 @@ export default async function AuthorizePage({ searchParams }: { searchParams: Se
 
   const author = isReportAuthor(user)
   const back = new URL(request.redirectUri)
+  const loopback = LOOPBACK.has(back.hostname)
   const label = process.env.REPORTS_EMAIL_LABEL?.trim()
   return (
     <main className={styles.page}>
@@ -74,22 +88,27 @@ export default async function AuthorizePage({ searchParams }: { searchParams: Se
           Billie CRM reporting
           {label ? <span className={styles.badge}>{label}</span> : null}
         </p>
-        <h1>Connect {request.clientName} to CRM reporting?</h1>
+        <h1>Connect Claude at {loopback ? 'this computer' : back.host} to CRM reporting?</h1>
         <dl className={styles.facts}>
+          <dt>Sends you back to</dt>
+          <dd>
+            <strong>{back.host}</strong>
+            {loopback ? (
+              <span className={styles.muted}> (a program on this computer)</span>
+            ) : (
+              <span className={styles.muted}> (an allowed Claude address)</span>
+            )}
+          </dd>
           <dt>Signed in as</dt>
           <dd>{String((user as { email?: string }).email ?? '')}</dd>
           <dt>CRM</dt>
           <dd>{new URL(appOrigin()).host}</dd>
-          <dt>App</dt>
+          <dt>App calls itself</dt>
           <dd>
-            {request.clientName} <span className={styles.muted}>(the name the app gave)</span>
-          </dd>
-          <dt>Sends you back to</dt>
-          <dd>
-            <strong>{back.host}</strong>
+            {request.clientName} <span className={styles.muted}>(not verified by the CRM)</span>
           </dd>
         </dl>
-        {LOOPBACK.has(back.hostname) ? (
+        {loopback ? (
           <p className={styles.warning} role="note">
             This sends you back to a program on this computer. Only continue if you have just
             started connecting from Claude Code.
@@ -100,14 +119,18 @@ export default async function AuthorizePage({ searchParams }: { searchParams: Se
           <li>list the reports your role can run, and run them</li>
           {author ? (
             <>
-              <li>read the reporting schema and run read-only queries on it (up to 1,000 rows)</li>
+              <li>
+                read the reporting schema and run read-only, aggregate queries on it (up to 1,000
+                rows; 50 when a result identifies people or accounts)
+              </li>
               <li>save report drafts, which a supervisor publishes</li>
             </>
           ) : null}
         </ul>
         <p className={styles.muted}>
           Claude sees the results of everything it runs. The connection lasts until it goes unused
-          for 30 days or an admin removes it under Reporting, MCP connections.
+          for 30 days, 90 days at most, or until you or an admin remove it under Reports, Connected
+          apps.
         </p>
         <form method="post" action="/api/oauth/authorize" className={styles.actions}>
           <input type="hidden" name="request" value={sealed} />

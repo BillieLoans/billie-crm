@@ -132,6 +132,13 @@ export function ReportsNav({ reports, canAuthor, currentSlug, isLoading, error }
         </Link>
         <Link
           className={styles.textLink}
+          href="/admin/reports/connections"
+          aria-current={currentSlug === 'connections' ? 'page' : undefined}
+        >
+          Your connected apps
+        </Link>
+        <Link
+          className={styles.textLink}
           href="/admin/reports/boards"
           aria-current={currentSlug === 'boards' ? 'page' : undefined}
         >

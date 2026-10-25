@@ -289,6 +289,12 @@ run:
    error;
 6. rolls back.
 
+Over the MCP connector an ad-hoc query also passes the row-level guard in
+`mcp-guard.ts` (ADR 0001): a result that lists a screening, vulnerability,
+fraud, age or postcode column per identifier is refused, and any result with
+an identifier column is cut to 50 rows. Published reports are reviewed before
+they are published and are not guarded.
+
 Every run, refused and not-found ones included, is logged to `report-runs`:
 report, published version id (or `draft`), user, outcome, duration, rows and
 the report's declared parameters as bound (text cut to 100 characters). Only
@@ -536,7 +542,7 @@ through the runner as `reporting_reader`.
 |---|---|
 | `list_reports` | Lists the published reports the key can run, with their parameters |
 | `describe_reporting_schema` | Returns the schema description and business rules Ask Claude uses |
-| `run_report_query` | Runs one SELECT through the runner, `$n` parameters bound, at most 1,000 rows (and 200,000 characters). The whole statement is logged in Report asks as `mcp_query` |
+| `run_report_query` | Runs one SELECT through the runner, `$n` parameters bound, at most 1,000 rows (and 200,000 characters; 50 rows when a column identifies a customer, application, loan or case), with a 5 second timeout and one query in flight per key. A result that puts screening, vulnerability, fraud, age or postcode beside an identifier is refused (`ROW_LEVEL`; ADR 0001). The whole statement is logged in Report asks as `mcp_query`, with the key or connection that ran it |
 | `run_report` | Runs a published report by slug on its parameters, with the same caps. Logged in Report runs with trigger `mcp`. Dashboards use this, so they show reviewed, aggregate reports |
 | `findReportDefinitions`, `createReportDefinitions` | The plugin's tools for `report-definitions`. Reads are always depth 0, so no user record reaches Claude. A new report is a draft with `origin: mcp` and the key's person as author |
 | `update_report_draft` | Changes a report by id and saves a new draft version; the published report is unchanged until a supervisor publishes. Never overrides an editor's lock. (The plugin's own update tool is off: it takes a server file path that it reads before any hook runs) |
@@ -551,8 +557,13 @@ Keys:
 
 - An admin creates one per person in **Reporting → MCP API keys**, for report
   authors (admin, supervisor) only. The key is generated on save and can be
-  read on the key's page for 15 minutes: copy it to the person then. If it
-  is lost, delete the key and create another. Delete a key to revoke it.
+  read on the key's page for 15 minutes: copy it to the person then. After
+  that the stored copy is wiped (the HMAC index is all authentication
+  needs). If it is lost, delete the key and create another. Delete a key to
+  revoke it.
+- Keys expire: 90 days after creation for a personal key, a year for a
+  dashboard key (`expiresAt`, which an admin can shorten). Create a new key
+  to rotate. Each key records when it was last used.
 - The plugin's report tools (find, create) are off on a new key; tick the
   ones the person needs. The custom tools are on; untick any a key should
   not have (for example, a dashboard key needs only `run_report`).
@@ -566,11 +577,22 @@ Keys:
   by an HMAC of it.
 
 Over MCP, Claude sees query results. That is why only the `reporting` schema
-is reachable and rows are capped. Ask for aggregates; never pull
-customer-level rows you do not need.
+is reachable, rows are capped, and the row-level guard refuses sensitive
+columns per identifier (ADR 0001, `docs/adr/`). Every result carries a note
+that rows are data, not instructions, and attribution text (utm_* values,
+which anyone can put in a link) is reduced to printable characters by
+`reporting.attribution_text` before it reaches a report. Ask for aggregates;
+never pull customer-level rows you do not need.
 
-Every key is rate-limited per server process: 120 requests a minute for a
-personal key, 300 for a dashboard key, 120 per person over OAuth.
+Every key is rate-limited: 120 requests a minute for a personal key, 300 for
+a dashboard key, 120 per person over OAuth. The count is kept in Redis
+(`REDIS_URL`) so it holds across machines, and in the process's memory when
+Redis is not configured. The OAuth token, registration, revocation and
+authorize endpoints are limited per source address too.
+
+Report runs and Report asks record who called over MCP (`actor`: the scope
+and the key or connection id), so a run by a shared dashboard key is told
+from its owner's own.
 
 ### Signing in with OAuth (claude.ai and Claude Code)
 
@@ -594,22 +616,32 @@ changes hands.
   claude.ai and claude.com callbacks, loopback addresses (Claude Code) and
   any exact URI in `MCP_OAUTH_REDIRECT_URIS` (comma-separated). Registering
   grants nothing.
-- **Sign-in.** `/api/oauth/authorize` checks the request and hands it, signed,
-  to the sign-in page `/oauth/authorize`, which goes through the CRM login
-  (password or Google; both return to the page) and shows the app's name,
-  where the person will be sent back to, the environment and what Claude will
-  be able to do. PKCE (S256) is required; tokens are only issued for this
-  CRM's `/api/mcp`.
+- **Sign-in.** `/api/oauth/authorize` checks the request, binds it to the
+  browser with a nonce cookie (`mcp_authz`, 15 minutes) and hands it,
+  signed, to the sign-in page `/oauth/authorize`, which goes through the CRM
+  login (password or Google; both return to the page) and shows where the
+  person will be sent back to, the name the app chose for itself (marked as
+  unverified), the environment and what Claude will be able to do. The
+  consent form acts only in the browser that started the request, and each
+  request is approved at most once: a sign-in link sent to someone else does
+  nothing. PKCE (S256) is required; tokens are only issued for this CRM's
+  `/api/mcp`. The page is served with a strict Content-Security-Policy (no
+  inline script, forms post to this origin only).
 - **Tokens** are opaque and stored as HMACs. Access tokens last an hour;
-  refresh tokens rotate on every use and lapse after 30 days unused. A code
-  used twice revokes the connection. So does the refresh token before the
+  refresh tokens rotate on every use and lapse after 30 days unused, and a
+  connection ends 90 days after consent however often it is refreshed (the
+  client signs in again). A client can give tokens back at
+  `/api/oauth/revoke` (RFC 7009). A code used twice revokes the connection. So does the refresh token before the
   current one when it comes back more than a minute after it was rotated;
   within the minute (a retried refresh, two sessions refreshing at once) it is
   only refused. The access token a refresh replaced works until it expires.
   Deleting a registered client (admins, via the API) ends its connections.
-- **Revoking.** Each approval is an MCP connection (Reporting → MCP
-  connections, admins only). Delete one to cut it off at once. A person's
-  connections are deleted when they are, or when they lose every staff role.
+- **Revoking.** Each approval is an MCP connection. People see and cut their
+  own under **Reports → Your connected apps** (`/admin/reports/connections`);
+  admins see everyone's under Reporting → MCP connections. Deleting one cuts
+  it off at once. A person's connections are deleted when they are, or when
+  they lose every staff role. Registered clients that never got a connection
+  are dropped after a day.
 
 claude.ai, per person or for the organisation: Settings → Connectors → Add
 custom connector, with the URL `https://<crm host>/api/mcp` and no OAuth
@@ -772,3 +804,4 @@ workflow does not hold `CF_SECRET`.
 | `REPORTS_SLACK_WEBHOOK_URL` | report emails and alerts | Slack incoming webhook for the shared channel; unset = Slack not offered |
 | `REPORTING_DATABASE_URI` | report runner | Logged in as `reporting_reader`; the Neon read replica in deployed environments. Required everywhere |
 | `ANTHROPIC_API_KEY` | Ask Claude | Fly secret on the CRM app; Ask is unavailable without it |
+| `REDIS_URL` | rate limits | Already set for event publishing; the MCP and OAuth rate limits count there, and in process memory without it |

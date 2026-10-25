@@ -13,7 +13,9 @@ import { hideFromNonAdmins, isAdmin } from '@/lib/access'
  * deleted with them, and when they lose every staff role.
  *
  * Written only by the OAuth endpoints with `overrideAccess`. Admins read and
- * delete.
+ * delete here; people see and cut their own under Reports, Connected apps
+ * (`/api/reports/connections`). A connection lasts at most `GRANT_MAX_AGE_S`
+ * from consent.
  */
 export const McpOAuthGrants: CollectionConfig = {
   slug: 'mcp-oauth-grants',
@@ -44,6 +46,8 @@ export const McpOAuthGrants: CollectionConfig = {
     },
     { name: 'scope', type: 'text' },
     { name: 'resource', type: 'text', required: true },
+    // The sign-in request this connection answered: one approval per request.
+    { name: 'requestId', type: 'text', unique: true, hidden: true },
     { name: 'codeIndex', type: 'text', unique: true, hidden: true },
     { name: 'codeChallenge', type: 'text', hidden: true },
     { name: 'codeExpiresAt', type: 'date', hidden: true },
