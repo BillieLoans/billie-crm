@@ -3,7 +3,8 @@
  * or null when `value` could lead anywhere else: an absolute or
  * protocol-relative URL, a backslash trick, or anything that resolves to
  * another origin. Used to carry the OAuth sign-in page through the Google
- * login (`/api/auth/google`).
+ * login (`/api/auth/google`) and to send a signed-in visit to /admin/login on
+ * to the screen it came from (`src/proxy.ts`).
  */
 export function safeReturnPath(value: unknown, appUrl: string): string | null {
   if (typeof value !== 'string' || value.length > 4000) return null

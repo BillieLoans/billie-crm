@@ -3,8 +3,9 @@
 // the default jsdom environment (cross-realm Uint8Array). This logic is pure
 // server/edge crypto with no DOM, so run it in the node environment.
 import { describe, test, expect } from 'vitest'
+import { createHash } from 'node:crypto'
 import { SignJWT } from 'jose'
-import { verifyAuthToken } from '@/lib/verifyAuthToken'
+import { payloadSigningKey, verifyAuthToken } from '@/lib/verifyAuthToken'
 
 /**
  * Tests for src/lib/verifyAuthToken.ts — the signature-verifying token validator
@@ -21,7 +22,14 @@ import { verifyAuthToken } from '@/lib/verifyAuthToken'
 
 const SECRET = 'test-secret-value-1234567890-abcdef'
 
-/** Sign a payload-token JWT exactly like src/app/(payload)/api/auth/google/callback. */
+/** Payload's `payload.secret`: the first 32 hex chars of SHA-256(config.secret). */
+const payloadSecret = (secret: string) =>
+  createHash('sha256').update(secret).digest('hex').slice(0, 32)
+
+/**
+ * Sign a payload-token JWT exactly like src/app/(payload)/api/auth/google/callback
+ * and Payload's own login: with `payload.secret`, not the configured secret.
+ */
 async function signToken(
   opts: { secret?: string; expiresInSeconds?: number } = {},
 ): Promise<string> {
@@ -32,13 +40,28 @@ async function signToken(
     .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
     .setIssuedAt(now)
     .setExpirationTime(now + ttl)
-    .sign(new TextEncoder().encode(secret))
+    .sign(new TextEncoder().encode(payloadSecret(secret)))
 }
 
 describe('verifyAuthToken', () => {
   test('accepts a correctly-signed, unexpired token', async () => {
     const token = await signToken()
     expect(await verifyAuthToken(token, SECRET)).toBe(true)
+  })
+
+  test('derives the same key as payload.secret', async () => {
+    expect(new TextDecoder().decode(await payloadSigningKey(SECRET))).toBe(payloadSecret(SECRET))
+  })
+
+  test('rejects a token signed with the raw configured secret', async () => {
+    // Nothing issues these; accepting them would mean the proxy checks a
+    // different key from payload.auth(), which rejected every real session.
+    const now = Math.floor(Date.now() / 1000)
+    const token = await new SignJWT({ id: 'user-1', collection: 'users' })
+      .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+      .setExpirationTime(now + 3600)
+      .sign(new TextEncoder().encode(SECRET))
+    expect(await verifyAuthToken(token, SECRET)).toBe(false)
   })
 
   test('rejects a token signed with a different secret (stale/rotated/tampered)', async () => {
