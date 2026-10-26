@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { safeReturnPath } from '@/lib/safeReturnPath'
 import { verifyAuthToken } from '@/lib/verifyAuthToken'
 
 /**
@@ -186,6 +187,57 @@ function setSecurityHeaders(response: NextResponse, pathname = ''): NextResponse
   return response
 }
 
+/**
+ * Admin screens Payload serves to signed-out people (its `publicAdminRoutes`
+ * plus email verification). Every other /admin path needs a session.
+ */
+const PUBLIC_ADMIN_PREFIXES = [
+  '/admin/login',
+  '/admin/logout',
+  '/admin/forgot',
+  '/admin/reset',
+  '/admin/create-first-user',
+  '/admin/unauthorized',
+]
+
+function isAdminLoginPath(pathname: string): boolean {
+  return pathname === '/admin/login' || pathname === '/admin/login/'
+}
+
+/**
+ * An /admin path that needs a session and is worth coming back to after
+ * signing in (a deep link). The bare /admin root is handled separately and
+ * always lands on the dashboard.
+ */
+export function isDeepLinkAdminPath(pathname: string): boolean {
+  if (!pathname.startsWith('/admin/') || pathname === '/admin/') return false
+  if (pathname.includes('/verify/')) return false
+  // Prefix match, as Payload's isPublicAdminRoute does (covers /logout-inactivity).
+  return !PUBLIC_ADMIN_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+}
+
+/**
+ * Where a signed-in person on /admin/login goes: the `?redirect=` path they
+ * came from when it is a safe same-origin path, otherwise the dashboard.
+ * Payload's login form makes the same choice after a password sign-in, and
+ * the Google callback after an SSO one.
+ */
+export function postLoginPath(redirectParam: string | null, appUrl: string): string {
+  const target = safeReturnPath(redirectParam, appUrl)
+  if (!target) return '/admin/dashboard'
+  const { pathname } = new URL(target, appUrl)
+  return pathname === '/admin' || pathname === '/admin/' || isAdminLoginPath(pathname)
+    ? '/admin/dashboard'
+    : target
+}
+
+/** The login page, remembering `returnTo` (a path + query) for after sign-in. */
+function loginUrlFor(request: NextRequest, returnTo: string | null): URL {
+  const loginUrl = new URL('/admin/login', request.url)
+  if (returnTo) loginUrl.searchParams.set('redirect', returnTo)
+  return loginUrl
+}
+
 const hasPayloadSecret =
   !!process.env.PAYLOAD_SECRET &&
   process.env.PAYLOAD_SECRET !== 'build-placeholder-not-for-production'
@@ -237,16 +289,15 @@ export async function proxy(request: NextRequest) {
   // "logged in" here, which is what previously bounced such sessions to the
   // dashboard while every view 403'd.
   const isAdminRoot = pathname === '/admin' || pathname === '/admin/'
-  const isAdminLogin = pathname === '/admin/login' || pathname === '/admin/login/'
+  const isAdminLogin = isAdminLoginPath(pathname)
+  const redirectParam = request.nextUrl.searchParams.get('redirect')
 
   if (isAdminRoot || isAdminLogin) {
     // If a protected view rejected the token, it redirects here with ?invalidate.
     // Clear the stale cookie to break the login ↔ dashboard redirect loop —
-    // independent of token validity.
+    // independent of token validity. Any return path rides along.
     if (isAdminLogin && request.nextUrl.searchParams.has('invalidate')) {
-      const loginUrl = new URL('/admin/login', request.url)
-      loginUrl.searchParams.delete('invalidate')
-      const response = NextResponse.redirect(loginUrl)
+      const response = NextResponse.redirect(loginUrlFor(request, redirectParam))
       response.cookies.delete('payload-token')
       return setSecurityHeaders(response)
     }
@@ -255,12 +306,28 @@ export async function proxy(request: NextRequest) {
     const hasValidToken = await verifyAuthToken(payloadToken?.value, process.env.PAYLOAD_SECRET)
 
     if (hasValidToken) {
-      return setSecurityHeaders(NextResponse.redirect(new URL('/admin/dashboard', request.url)))
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
+      const target = isAdminLogin ? postLoginPath(redirectParam, appUrl) : '/admin/dashboard'
+      return setSecurityHeaders(NextResponse.redirect(new URL(target, request.url)))
     }
     if (isAdminRoot) {
       return setSecurityHeaders(NextResponse.redirect(new URL('/admin/login', request.url)))
     }
     // /admin/login without a valid token → fall through and render the login page.
+  }
+
+  // --- Deep links ---
+  // A signed-out visit to any other admin screen goes to the login page with
+  // the screen as ?redirect=, which Payload's login form and the Google sign-in
+  // both honour. Without this the custom views send people to a bare
+  // /admin/login and they land on the dashboard. An unsafe or unusable return
+  // path falls back to the dashboard (postLoginPath, getSafeRedirect).
+  if (isDeepLinkAdminPath(pathname)) {
+    const payloadToken = request.cookies.get('payload-token')
+    if (!(await verifyAuthToken(payloadToken?.value, process.env.PAYLOAD_SECRET))) {
+      const returnTo = `${pathname}${request.nextUrl.search}`
+      return setSecurityHeaders(NextResponse.redirect(loginUrlFor(request, returnTo)))
+    }
   }
 
   return setSecurityHeaders(NextResponse.next(), pathname)
