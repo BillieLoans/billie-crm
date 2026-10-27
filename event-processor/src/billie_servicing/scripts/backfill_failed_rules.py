@@ -30,10 +30,12 @@ import argparse
 import asyncio
 import json
 import os
+import re
 from collections import Counter
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
+from urllib.parse import unquote
 
 from ..db import merge_jsonb
 
@@ -71,15 +73,45 @@ class Summary:
     no_location: int = 0
     written: int = 0
     rules: Counter = field(default_factory=Counter)
+    errors: Counter = field(default_factory=Counter)
+    """Why files could not be read, by exception class."""
+    samples: list[str] = field(default_factory=list)
+    """The first few failures in full: location, class and message."""
+
+    def failed(self, uri: str, exc: BaseException) -> None:
+        """Count an unreadable file and keep the first five for the report."""
+        self.unreadable += 1
+        self.errors[type(exc).__name__] += 1
+        if len(self.samples) < 5:
+            self.samples.append(f"{uri}: {type(exc).__name__}: {exc}")
+
+
+_S3_HOST = re.compile(r"^(?:(?P<bucket>[^.]+)\.)?s3[.-](?:[a-z0-9-]+\.)?amazonaws\.com$")
 
 
 def parse_s3_uri(uri: str) -> tuple[str, str]:
-    """Split ``s3://bucket/key`` into bucket and key."""
-    if not uri.startswith("s3://"):
-        raise ValueError(f"not an s3:// URI: {uri}")
-    bucket, _, key = uri[5:].partition("/")
+    """Split an S3 location into bucket and key.
+
+    Accepts ``s3://bucket/key`` (what billieChat records today), the
+    virtual-hosted ``https://bucket.s3.region.amazonaws.com/key`` and the
+    path-style ``https://s3.region.amazonaws.com/bucket/key`` forms.
+    """
+    uri = uri.strip()
+    if uri.startswith("s3://"):
+        bucket, _, key = uri[5:].partition("/")
+    elif uri.startswith("https://"):
+        host, _, path = uri[8:].partition("/")
+        match = _S3_HOST.match(host)
+        if not match:
+            raise ValueError(f"not an S3 URL: {uri}")
+        key = unquote(path)
+        bucket = match.group("bucket") or ""
+        if not bucket:
+            bucket, _, key = key.partition("/")
+    else:
+        raise ValueError(f"not an S3 location: {uri}")
     if not bucket or not key or ".." in key:
-        raise ValueError(f"malformed S3 URI: {uri}")
+        raise ValueError(f"malformed S3 location: {uri}")
     return bucket, key
 
 
@@ -102,13 +134,23 @@ def failed_rule_ids(rule_results: object) -> list[str]:
 
 
 def rule_results_of(component: str, document: object) -> object | None:
-    """Where each assessment file keeps its rule results."""
+    """Where an assessment file keeps its rule results.
+
+    Today the account conduct file nests them under ``account_conduct`` and
+    the serviceability file keeps them at the top; older files may differ, so
+    the top level is tried first, then every object one level down.
+    """
     if not isinstance(document, dict):
         return None
-    if component == "account_conduct":
-        inner = document.get("account_conduct")
-        return inner.get("rule_results") if isinstance(inner, dict) else None
-    return document.get("rule_results")
+    preferred = document.get("account_conduct") if component == "account_conduct" else document
+    if isinstance(preferred, dict) and isinstance(preferred.get("rule_results"), list):
+        return preferred["rule_results"]
+    if isinstance(document.get("rule_results"), list):
+        return document["rule_results"]
+    for value in document.values():
+        if isinstance(value, dict) and isinstance(value.get("rule_results"), list):
+            return value["rule_results"]
+    return None
 
 
 def _as_dict(value: object) -> dict[str, Any] | None:
@@ -176,8 +218,8 @@ async def run(
                 rule_results = rule_results_of(component, document)
                 if rule_results is None:
                     raise ValueError("no rule_results in the assessment file")
-            except Exception:  # noqa: BLE001 — one bad file must not stop the run
-                summary.unreadable += 1
+            except Exception as exc:  # noqa: BLE001 — one bad file must not stop the run
+                summary.failed(uri, exc)
                 continue
             summary.fetched += 1
             ids = failed_rule_ids(rule_results)
@@ -209,6 +251,10 @@ def report(summary: Summary, *, applied: bool) -> str:
         f"results with no location:{summary.no_location:>2}",
         f"rules found (top 10):    {top}",
     ]
+    if summary.errors:
+        why = ", ".join(f"{k} {v}" for k, v in summary.errors.most_common())
+        lines.append(f"why unreadable:          {why}")
+        lines.extend(f"  e.g. {sample}" for sample in summary.samples)
     if applied:
         lines.append(f"results written:         {summary.written}")
     else:

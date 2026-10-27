@@ -81,7 +81,17 @@ def candidates(mock_pool: MockPool) -> MockPool:
 
 def test_parse_s3_uri() -> None:
     assert bf.parse_s3_uri("s3://bucket/a/b.json") == ("bucket", "a/b.json")
-    for bad in ("bucket/a", "s3://bucket", "s3://bucket/../x"):
+    # The forms older events carried: virtual-hosted and path-style URLs.
+    assert bf.parse_s3_uri("https://bucket.s3.ap-southeast-2.amazonaws.com/a/b%20c.json") == (
+        "bucket",
+        "a/b c.json",
+    )
+    assert bf.parse_s3_uri("https://s3.ap-southeast-2.amazonaws.com/bucket/a/b.json") == (
+        "bucket",
+        "a/b.json",
+    )
+    assert bf.parse_s3_uri("https://bucket.s3.amazonaws.com/a.json") == ("bucket", "a.json")
+    for bad in ("bucket/a", "s3://bucket", "s3://bucket/../x", "https://example.com/a.json"):
         with pytest.raises(ValueError):
             bf.parse_s3_uri(bad)
 
@@ -100,7 +110,10 @@ def test_failed_rule_ids_match_the_live_rule() -> None:
 def test_rule_results_live_in_different_places_per_component() -> None:
     assert bf.rule_results_of("account_conduct", FILES[CONDUCT_URI]) is not None
     assert bf.rule_results_of("serviceability", FILES[SVC_URI]) is not None
-    assert bf.rule_results_of("account_conduct", FILES[SVC_URI]) is None
+    # An older layout is found wherever the list sits, one level down at most.
+    assert bf.rule_results_of("account_conduct", FILES[SVC_URI]) == FILES[SVC_URI]["rule_results"]
+    assert bf.rule_results_of("serviceability", {"assessment": {"rule_results": []}}) == []
+    assert bf.rule_results_of("serviceability", {"rule_results": "not a list"}) is None
     assert bf.rule_results_of("serviceability", "junk") is None
 
 
@@ -119,9 +132,14 @@ async def test_dry_run_reads_files_and_writes_nothing(candidates: MockPool) -> N
         "SERVICEABILITY_RULE_001": 1,
     }
     assert candidates.jsonb_merges("conversations", "assessments_account_conduct") == []
+    # The report says why a file could not be read, with the location.
+    assert summary.errors == {"ValueError": 1}
+    assert summary.samples == [f"{SVC_URI_2}: ValueError: no rule_results in the assessment file"]
     text = bf.report(summary, applied=False)
     assert "dry run" in text
     assert "ACCOUNT_CONDUCT_RULE_006 1" in text
+    assert "why unreadable:          ValueError 1" in text
+    assert f"e.g. {SVC_URI_2}: ValueError" in text
 
 
 async def test_apply_merges_the_ids_only(candidates: MockPool) -> None:
