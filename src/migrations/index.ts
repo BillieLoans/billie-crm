@@ -61,6 +61,7 @@ import * as migration_20261030_150000_report_runs_comparison from './20261030_15
 import * as migration_20261030_160000_report_ask_pending from './20261030_160000_report_ask_pending'
 import * as migration_20261030_170000_core_reports from './20261030_170000_core_reports'
 import * as migration_20261031_090000_reporting_security_review from './20261031_090000_reporting_security_review'
+import * as migration_20261101_090000_decline_reasons from './20261101_090000_decline_reasons'
 
 export const migrations = [
   {
@@ -377,5 +378,10 @@ export const migrations = [
     up: migration_20261031_090000_reporting_security_review.up,
     down: migration_20261031_090000_reporting_security_review.down,
     name: '20261031_090000_reporting_security_review',
+  },
+  {
+    up: migration_20261101_090000_decline_reasons.up,
+    down: migration_20261101_090000_decline_reasons.down,
+    name: '20261101_090000_decline_reasons',
   },
 ]

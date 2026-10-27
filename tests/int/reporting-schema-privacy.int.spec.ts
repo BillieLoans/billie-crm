@@ -189,6 +189,35 @@ beforeAll(async () => {
       JSON.stringify({ 'lab-1': { attempt_number: 1 }, 'lab-2': { attempt_number: 2 } }),
     ],
   )
+  // The credit assessment results and decision evidence: only the rule ids
+  // and component names may reach the schema.
+  await pool.query(
+    `UPDATE conversations
+        SET assessments_account_conduct = $2::jsonb,
+            assessments_serviceability = $3::jsonb,
+            decision_metadata = $4::jsonb
+      WHERE conversation_id = $1`,
+    [
+      `${P}-CONV`,
+      JSON.stringify({
+        decision: 'DECLINED',
+        failed_rules: ['ACCOUNT_CONDUCT_RULE_006'],
+        file_location: `s3://assessments/${PERSONAL.first}/account_conduct.json`,
+        notes: PERSONAL.note,
+      }),
+      JSON.stringify({
+        decision: 'DECLINED',
+        failed_rules: ['SERVICEABILITY_RULE_001'],
+        file_location: `s3://assessments/${PERSONAL.first}/serviceability.json`,
+      }),
+      JSON.stringify({
+        component: 'account_conduct',
+        declined_components: ['account_conduct', 'serviceability'],
+        detail_location: `s3://assessments/${PERSONAL.first}/decision.json`,
+        account_names: [PERSONAL.holder],
+      }),
+    ],
+  )
   const { rows: loan } = await pool.query(
     `INSERT INTO loan_accounts
        (loan_account_id, account_number, customer_id_string, account_status, application_number,
@@ -277,6 +306,10 @@ describe('reporting schema privacy', () => {
       identity_risk_decision: 'APPROVED',
       pep_hit: false,
       identity_attempts: 2,
+      account_conduct_failed_rules: ['ACCOUNT_CONDUCT_RULE_006'],
+      serviceability_failed_rules: ['SERVICEABILITY_RULE_001'],
+      decision_component: 'account_conduct',
+      declined_components: ['account_conduct', 'serviceability'],
       fraud_score: '72',
       fraud_severity: 'HIGH',
       fraud_categories: ['PROMPT_INJECTION'],

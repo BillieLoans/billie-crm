@@ -91,6 +91,7 @@ Defined in `src/server/reporting/schema.ts`. Every statement is idempotent.
 | `decision_event` | table | `final_credit_decision` event, revisions included | event processor, S3 back-fill |
 | `snap_portfolio` | table | Sydney business day | ledger `GetPortfolioSummary` |
 | `decline_reason_category` | table | reason-code prefix | seeded from BTB-462 comment 11579 |
+| `credit_rule` | table | credit rule id: family and short label | seeded from billieChat's `businessRules/*.json` (`CREDIT_RULES` in `schema.ts`) |
 
 Functions:
 
@@ -110,6 +111,18 @@ Functions:
   `decline_reason_category`. Unmapped reasons are `other`. Change the mapping by
   editing the seed in `schema.ts`; it applies to history because categories are
   computed on read.
+- `decline_reason_label(reason text, rule_id text)`: how a decline reads in a
+  report. With a rule id, the rule's family and label from `credit_rule`
+  ("Account conduct: Data quality gate G4, leakage ratio"; an unlisted id is
+  shown as is); without one, the reason code in words ("Re-application block:
+  active loan", "Account conduct (rule not recorded)"). The rule ids come from
+  billieChat's `credit_assessment_accountConduct_result` and
+  `credit_assessment_serviceability_result` events (`failed_rules`, ids only),
+  which the event processor stores whole on the conversation; the `application`
+  view reads them as `account_conduct_failed_rules` and
+  `serviceability_failed_rules`, and `declined_components` from the decision's
+  metadata. Decisions from before billieChat sent `failed_rules` have NULL
+  there and report as "(rule not recorded)".
 
 Why views over the projection and not fact tables written from events: the
 projection already encodes the domain rules (a loan counts as disbursed on the
@@ -411,9 +424,18 @@ and are checked against TEST data in `tests/int/first-reports.int.spec.ts`.
 
 | Report | Slug | Roles | For |
 |---|---|---|---|
-| Decline rate and reasons | `decline-rate` | admin, supervisor | BTB-462: by source or ruleset version, with reason categories and a total. Emailed Monday |
+| Decline rate and reasons | `decline-rate` | admin, supervisor | BTB-462: by source or ruleset version, with reason categories and a total. Emailed Monday. Its reasons chart drills into `decline-reasons` |
 | Application funnel by source | `application-funnel` | admin, supervisor, operations | BTB-500's split in the CRM: started, submitted, decided, approved, funded |
 | Go-to-market numbers | `gtm-numbers` | admin, supervisor | BTB-460: share of starts, pass rate, funded rate, median hours to money, repayment health, with an All sources row |
+| Decline reasons in detail | `decline-reasons` | admin, supervisor | Declines ranked by the finest reason held: each failed credit rule (via `decline_reason_label`), else the reason code in words. Parameters `segment` (what `decline-rate` drills with) and `category`. Its chart drills into `decline-reasons-trend` |
+| Decline reasons by week | `decline-reasons-trend` | admin, supervisor | Decisions by ISO week: declined, those matching one `reason` (a row name from `decline-reasons`), and the category mix |
+
+The two decline detail reports are created by the `20261101_090000_decline_reasons`
+migration, which also adds the drill-down to `decline-rate` where its SQL and
+chart are still as seeded (`upgradeDeclineRateDrill`). An application that
+failed more than one rule counts under each rule in the detail report, so its
+rows add up to more than the declines; the share column is always of all
+declines in the period and segment.
 
 "Submitted" means bank statements were shared, or the application was decided
 (a block-decline is decided without statements). Declines with no recorded

@@ -42,7 +42,9 @@ const declineRate: ReportDefinitionSeed = {
   slug: 'decline-rate',
   description:
     'Decisions made in the period (Sydney dates), split by acquisition source or by credit ' +
-    'ruleset version, with declines by reason category and an "All" total. Declines with no ' +
+    'ruleset version, with declines by reason category and an "All" total. Click a segment ' +
+    'in the reasons chart, or its name in the table, to see the reasons behind its declines ' +
+    'rule by rule. Declines with no ' +
     'recorded reason count as "other". Mock decisions are excluded. Decisions made before ' +
     'ruleset versions were recorded show as "(not recorded)"; applications from before ' +
     'attribution capture (6 October 2026) show as "not recorded".',
@@ -106,6 +108,9 @@ HAVING count(*) > 0
         { column: 'eligibility', label: 'Eligibility' },
         { column: 'other', label: 'Other' },
       ],
+      // A segment opens the detail report filtered to it; the All row
+      // opens it unfiltered.
+      drill: { report: 'decline-reasons', parameter: 'segment' },
     },
   ],
   headline: [
@@ -287,6 +292,304 @@ SELECT source,
 }
 
 export const FIRST_REPORTS: readonly ReportDefinitionSeed[] = [declineRate, funnel, gtm]
+
+/**
+ * The decline reasons chart as it shipped before the drill-down: what
+ * `upgradeDeclineRateDrill` looks for to know an author has not changed it.
+ */
+export const DECLINE_RATE_CHART_BEFORE_DRILL: unknown = (declineRate.chart as unknown[]).map(
+  (chart) => {
+    const { drill: _drill, ...rest } = chart as { drill?: unknown }
+    return rest
+  },
+)
+
+/**
+ * Declines in a period, exploded to the finest reason the CRM holds. For a
+ * decline the credit assessment made, that is each rule that failed
+ * (billieChat's `failed_rules`, labelled through `credit_rule`); for every
+ * other decline, or one made before the rules were recorded, the reason
+ * code in words. The `segment` parameter is what the decline rate report's
+ * drill-down passes: an acquisition source or a ruleset version.
+ */
+const DECLINE_DETAIL_SQL = `WITH declined AS (
+  SELECT dec.conversation_id,
+         dec.reason,
+         COALESCE(dec.decline_category, 'other') AS category,
+         dec.retry_eligible,
+         CASE WHEN dec.reason LIKE 'CREDIT_ASSESSMENT:%'
+              THEN COALESCE(a.account_conduct_failed_rules, '{}')
+                   || COALESCE(a.serviceability_failed_rules, '{}')
+              ELSE '{}'::text[] END AS failed_rules
+    FROM decision AS dec
+    JOIN application AS a USING (conversation_id)
+   WHERE dec.decided_on BETWEEN $1::date AND $2::date
+     AND NOT dec.mock_origin
+     AND dec.decision = 'DECLINED'
+     AND ($3::text IS NULL OR $3::text = 'All'
+          OR a.acquisition = $3::text
+          OR COALESCE(dec.ruleset_version, '(not recorded)') = $3::text)
+),
+detail AS (
+  -- One row per failed rule where the rules are known; the reason itself
+  -- where they are not, and always for a reason outside those two
+  -- components (a block, an identity decline).
+  SELECT d.conversation_id,
+         d.retry_eligible,
+         decline_reason_label(d.reason, r.rule_id) AS reason,
+         COALESCE(decline_category('CREDIT_ASSESSMENT:' || upper(cr.family)), d.category)
+           AS category
+    FROM declined AS d
+    LEFT JOIN LATERAL (
+      SELECT rule_id FROM unnest(d.failed_rules) AS rule_id
+      UNION ALL
+      SELECT NULL::text
+       WHERE cardinality(d.failed_rules) = 0
+          OR d.reason NOT IN ('CREDIT_ASSESSMENT:ACCOUNT_CONDUCT',
+                              'CREDIT_ASSESSMENT:SERVICEABILITY')
+    ) AS r ON true
+    LEFT JOIN credit_rule AS cr ON cr.rule_id = r.rule_id
+)
+SELECT reason,
+       category,
+       count(DISTINCT conversation_id) AS declines,
+       round(100.0 * count(DISTINCT conversation_id)
+             / NULLIF((SELECT count(*) FROM declined), 0), 1) AS share_of_declines_pct,
+       count(DISTINCT conversation_id) FILTER (WHERE retry_eligible) AS retry_eligible,
+       (SELECT count(*) FROM declined) AS all_declines
+  FROM detail
+ WHERE $4::text = 'all' OR category = $4::text
+ GROUP BY reason, category
+ ORDER BY declines DESC, reason`
+
+const CATEGORY_OPTIONS = [
+  { value: 'all', label: 'All categories' },
+  { value: 'capacity', label: 'Capacity' },
+  { value: 'character', label: 'Character' },
+  { value: 'identity', label: 'Identity' },
+  { value: 'eligibility', label: 'Eligibility' },
+  { value: 'other', label: 'Other' },
+]
+
+/** Why applications were declined, reason by reason and rule by rule. */
+const declineReasons: ReportDefinitionSeed = {
+  title: 'Decline reasons in detail',
+  slug: 'decline-reasons',
+  description:
+    'Every reason applications were declined in the period (Sydney dates), ranked. A decline ' +
+    'the credit assessment made is shown by each rule that failed, for example "Account ' +
+    'conduct: Data quality gate G4, leakage ratio"; a block, an identity decline or a ' +
+    'decision made before billieChat recorded the failed rules is shown by its reason code ' +
+    'in words. An application that failed more than one rule counts under each, so the rows ' +
+    'add up to more than the declines. Share is of all declines in the period and segment, ' +
+    'whatever the category filter. Click a reason to see it week by week. Segment is an ' +
+    'acquisition source or a credit ruleset version, as the decline rate report names them; ' +
+    'leave it empty for all. Mock decisions are excluded.',
+  sql: DECLINE_DETAIL_SQL,
+  parameters: [
+    { name: 'from', label: 'From', type: 'date', required: true, default: 'today-30' },
+    { name: 'to', label: 'To', type: 'date', required: true, default: 'today-1' },
+    {
+      name: 'segment',
+      label: 'Segment',
+      type: 'text',
+      required: false,
+      help: 'An acquisition source (paid, organic, ...) or a ruleset version. Empty for all.',
+    },
+    {
+      name: 'category',
+      label: 'Category',
+      type: 'select',
+      required: true,
+      default: 'all',
+      options: CATEGORY_OPTIONS,
+    },
+  ],
+  category: 'credit',
+  featured: false,
+  chart: {
+    type: 'bar-horizontal',
+    x: 'reason',
+    series: [{ column: 'declines', label: 'Declines' }],
+    drill: { report: 'decline-reasons-trend', parameter: 'reason' },
+  },
+  headline: [{ column: 'all_declines', label: 'Declined', value: 'first', better: 'lower' }],
+  columnSettings: [
+    {
+      name: 'declines',
+      description:
+        'Declined applications with this reason. One that failed more than one rule counts under each rule.',
+    },
+    {
+      name: 'share_of_declines_pct',
+      label: 'Share of declines',
+      base: 'all_declines',
+      description:
+        'Declines with this reason as a share of all declines in the period and segment, whatever the category filter.',
+    },
+    { name: 'retry_eligible', label: 'May retry' },
+    {
+      name: 'all_declines',
+      label: 'All declines',
+      description: 'Every decline in the period and segment: the denominator of the share.',
+    },
+  ],
+  roles: ['admin', 'supervisor'],
+  schedule: 'none',
+}
+
+/**
+ * Decisions by ISO week, with the declines that match one reason (as the
+ * detail report names it) beside all declines, and the category mix. Weeks
+ * start on Monday; the first and last weeks may be partial.
+ */
+const DECLINE_TREND_SQL = `WITH weeks AS (
+  SELECT w::date AS week
+    FROM generate_series(date_trunc('week', $1::date), date_trunc('week', $2::date),
+                         interval '1 week') AS w
+),
+decided AS (
+  SELECT dec.conversation_id,
+         date_trunc('week', dec.decided_on)::date AS week,
+         dec.decision,
+         dec.reason,
+         COALESCE(dec.decline_category, 'other') AS category,
+         CASE WHEN dec.reason LIKE 'CREDIT_ASSESSMENT:%'
+              THEN COALESCE(a.account_conduct_failed_rules, '{}')
+                   || COALESCE(a.serviceability_failed_rules, '{}')
+              ELSE '{}'::text[] END AS failed_rules
+    FROM decision AS dec
+    JOIN application AS a USING (conversation_id)
+   WHERE dec.decided_on BETWEEN $1::date AND $2::date
+     AND NOT dec.mock_origin
+),
+matching AS (
+  SELECT DISTINCT d.conversation_id, d.week
+    FROM decided AS d
+    LEFT JOIN LATERAL (
+      SELECT rule_id FROM unnest(d.failed_rules) AS rule_id
+      UNION ALL
+      SELECT NULL::text
+       WHERE cardinality(d.failed_rules) = 0
+          OR d.reason NOT IN ('CREDIT_ASSESSMENT:ACCOUNT_CONDUCT',
+                              'CREDIT_ASSESSMENT:SERVICEABILITY')
+    ) AS r ON true
+   WHERE d.decision = 'DECLINED'
+     AND ($3::text IS NULL OR decline_reason_label(d.reason, r.rule_id) = $3::text)
+),
+by_week AS (
+  SELECT w.week,
+         count(d.conversation_id) AS decided,
+         count(*) FILTER (WHERE d.decision = 'DECLINED') AS declined,
+         count(*) FILTER (WHERE d.decision = 'DECLINED' AND d.category = 'capacity') AS capacity,
+         count(*) FILTER (WHERE d.decision = 'DECLINED' AND d.category = 'character') AS character,
+         count(*) FILTER (WHERE d.decision = 'DECLINED' AND d.category = 'identity') AS identity,
+         count(*) FILTER (WHERE d.decision = 'DECLINED' AND d.category = 'eligibility') AS eligibility,
+         count(*) FILTER (WHERE d.decision = 'DECLINED' AND d.category = 'other') AS other,
+         (SELECT count(*) FROM matching AS m WHERE m.week = w.week) AS matching
+    FROM weeks AS w
+    LEFT JOIN decided AS d ON d.week = w.week
+   GROUP BY w.week
+)
+SELECT week,
+       decided,
+       declined,
+       round(100.0 * declined / NULLIF(decided, 0), 1) AS decline_rate_pct,
+       matching,
+       round(100.0 * matching / NULLIF(declined, 0), 1) AS matching_share_pct,
+       capacity, character, identity, eligibility, other
+  FROM by_week
+ ORDER BY week`
+
+/** One reason over time: is it growing, and what share of declines is it? */
+const declineReasonsTrend: ReportDefinitionSeed = {
+  title: 'Decline reasons by week',
+  slug: 'decline-reasons-trend',
+  description:
+    'Decisions by week (Monday to Sunday, Sydney dates): how many were declined, how many of ' +
+    'those match one reason, and the mix of reason categories. Reason is a row name from ' +
+    '"Decline reasons in detail", for example "Account conduct: Data quality gate G4, leakage ' +
+    'ratio"; leave it empty to see all declines. The first and last weeks cover only the days ' +
+    'inside the period. Mock decisions are excluded.',
+  sql: DECLINE_TREND_SQL,
+  parameters: [
+    { name: 'from', label: 'From', type: 'date', required: true, default: 'today-91' },
+    { name: 'to', label: 'To', type: 'date', required: true, default: 'today-1' },
+    {
+      name: 'reason',
+      label: 'Reason',
+      type: 'text',
+      required: false,
+      help: 'A reason as "Decline reasons in detail" names it. Empty for all declines.',
+    },
+  ],
+  category: 'credit',
+  featured: false,
+  chart: [
+    {
+      type: 'line',
+      x: 'week',
+      series: [
+        { column: 'matching', label: 'With this reason' },
+        { column: 'declined', label: 'All declines' },
+      ],
+      rollingAverage: 0,
+    },
+    {
+      type: 'bar',
+      x: 'week',
+      stacked: true,
+      series: [
+        { column: 'capacity', label: 'Capacity' },
+        { column: 'character', label: 'Character' },
+        { column: 'identity', label: 'Identity' },
+        { column: 'eligibility', label: 'Eligibility' },
+        { column: 'other', label: 'Other' },
+      ],
+    },
+  ],
+  headline: [
+    { column: 'matching', label: 'With this reason', value: 'sum', better: 'lower' },
+    { column: 'declined', label: 'Declined', value: 'sum', better: 'lower' },
+    {
+      column: 'decline_rate_pct',
+      label: 'Decline rate',
+      value: 'ratio',
+      numerator: 'declined',
+      denominator: 'decided',
+      better: 'lower',
+    },
+  ],
+  columnSettings: [
+    { name: 'decided', description: 'Applications with a final credit decision in the week.' },
+    {
+      name: 'decline_rate_pct',
+      label: 'Decline rate',
+      base: 'decided',
+      better: 'lower',
+      description: 'Declined as a share of decided.',
+    },
+    {
+      name: 'matching',
+      label: 'With this reason',
+      description: 'Declines whose reason matches the filter; all declines when none is chosen.',
+    },
+    {
+      name: 'matching_share_pct',
+      label: 'Share of declines',
+      base: 'declined',
+      description: 'Declines with this reason as a share of the week’s declines.',
+    },
+  ],
+  roles: ['admin', 'supervisor'],
+  schedule: 'none',
+}
+
+/** The decline drill-down reports, created by the `decline_reasons` migration. */
+export const DECLINE_DETAIL_REPORTS: readonly ReportDefinitionSeed[] = [
+  declineReasons,
+  declineReasonsTrend,
+]
 
 const LAST_30_DAYS: ReportParameter[] = [
   { name: 'from', label: 'From', type: 'date', required: true, default: 'today-30' },
@@ -584,4 +887,46 @@ export async function upgradeFirstReports(
     updated.push(seed.slug)
   }
   return updated
+}
+
+/**
+ * Give the decline rate report its drill-down into "Decline reasons in
+ * detail", only where its SQL and chart are exactly as seeded and it has no
+ * unpublished draft. A report an author has changed keeps its own chart.
+ *
+ * @returns the slugs updated.
+ */
+export async function upgradeDeclineRateDrill(
+  payload: Payload,
+  req?: PayloadRequest,
+): Promise<string[]> {
+  const seed = declineRate
+  const latest = await payload.find({
+    collection: 'report-definitions',
+    where: { slug: { equals: seed.slug } },
+    draft: true,
+    limit: 1,
+    depth: 0,
+    overrideAccess: true,
+    req,
+  })
+  const doc = latest.docs[0] as
+    | { id: string; _status?: string | null; sql?: string; chart?: unknown }
+    | undefined
+  if (
+    !doc ||
+    doc._status !== 'published' ||
+    doc.sql !== seed.sql ||
+    !sameJson(doc.chart ?? null, DECLINE_RATE_CHART_BEFORE_DRILL)
+  ) {
+    return []
+  }
+  await payload.update({
+    collection: 'report-definitions',
+    id: doc.id,
+    data: { chart: seed.chart, description: seed.description, _status: 'published' } as never,
+    overrideAccess: true,
+    req,
+  })
+  return [seed.slug]
 }

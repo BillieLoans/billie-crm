@@ -10,7 +10,7 @@
  * and logged requests say which description they used.
  */
 
-export const SCHEMA_DESCRIPTION_VERSION = 'reporting-desc-v5'
+export const SCHEMA_DESCRIPTION_VERSION = 'reporting-desc-v6'
 
 export interface ColumnDescription {
   name: string
@@ -263,9 +263,19 @@ export const REPORTING_TABLES: readonly TableDescription[] = [
         'Account conduct assessment decision (APPROVED or DECLINED), or NULL.',
       ),
       col(
+        'account_conduct_failed_rules',
+        'text[]',
+        'Ids of the account conduct rules that failed (e.g. ACCOUNT_CONDUCT_RULE_006, the G4 leakage gate), or NULL when the assessment did not record them. Label them with decline_reason_label(reason, rule_id) or join credit_rule; use unnest() to count by rule.',
+      ),
+      col(
         'serviceability_decision',
         'text',
         'Serviceability assessment decision (APPROVED or DECLINED), or NULL. The figures behind it are not in this schema.',
+      ),
+      col(
+        'serviceability_failed_rules',
+        'text[]',
+        'Ids of the serviceability rules that failed, or NULL when the assessment did not record them. Label with decline_reason_label or credit_rule.',
       ),
       col('fraud_score', 'numeric', 'Latest fraud risk score (0 to 100), or NULL if not assessed.'),
       col(
@@ -291,6 +301,11 @@ export const REPORTING_TABLES: readonly TableDescription[] = [
         'decision_component',
         'text',
         'Credit component the latest decision came from (e.g. final_decision_rule, reapplication_block, g5_timeout_guard), or NULL.',
+      ),
+      col(
+        'declined_components',
+        'text[]',
+        'Every credit component that declined (e.g. account_conduct, serviceability), not only the one the reason names, or NULL when not recorded. Use unnest() to count.',
       ),
       col('retry_eligible', 'boolean', 'The customer may reapply after this decision, if stated.'),
       col('block_reason', 'text', 'Why the attempt hit a re-application block, or NULL.'),
@@ -895,6 +910,30 @@ export const REPORTING_TABLES: readonly TableDescription[] = [
       },
     ],
   },
+  {
+    name: 'credit_rule',
+    kind: 'table',
+    grain:
+      'One row per credit rule billieChat can fail an application on: its family and a short label. Join to the ids in application.account_conduct_failed_rules and serviceability_failed_rules, or call decline_reason_label.',
+    columns: [
+      {
+        name: 'rule_id',
+        type: 'text',
+        meaning: 'Rule id as billieChat records it, e.g. ACCOUNT_CONDUCT_RULE_006.',
+      },
+      {
+        name: 'family',
+        type: 'text',
+        meaning:
+          'account_conduct, serviceability, statement_check, post_identity_risk or final_decision.',
+      },
+      {
+        name: 'label',
+        type: 'text',
+        meaning: 'Short label, e.g. "Data quality gate G4, leakage ratio".',
+      },
+    ],
+  },
 ]
 
 export const REPORTING_FUNCTIONS: readonly string[] = [
@@ -904,6 +943,8 @@ export const REPORTING_FUNCTIONS: readonly string[] = [
   'reporting.as_numeric(text), as_boolean(text), as_timestamptz(text): read a JSON value, NULL when it is malformed (already applied in the views).',
   'reporting.loan_purpose_category(text) -> text: the category of a loan purpose (already applied in the views).',
   'reporting.attribution_text(text) -> text: an attribution (utm_*) value with only printable characters, cut at 80 (already applied in the views).',
+  "reporting.decline_reason_label(reason text, rule_id text) -> text: how a decline reads in a report. With a rule id, the rule's family and label from credit_rule (e.g. 'Account conduct: Data quality gate G4, leakage ratio'); without one, the reason code in words (e.g. 'Re-application block: active loan'). Use it so every report names a reason the same way.",
+  "reporting.reason_words(text) -> text: a reason code's tail as lower-case words (used by decline_reason_label).",
 ]
 
 export const BUSINESS_RULES: readonly string[] = [

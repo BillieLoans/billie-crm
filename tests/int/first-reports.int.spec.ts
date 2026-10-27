@@ -16,7 +16,10 @@ import {
   CORE_REPORTS,
   createFirstReports,
   createReports,
+  DECLINE_DETAIL_REPORTS,
+  DECLINE_RATE_CHART_BEFORE_DRILL,
   FIRST_REPORTS,
+  upgradeDeclineRateDrill,
   upgradeFirstReports,
 } from '@/server/reporting/definitions/first-reports'
 import { resetDataAsAtCache, runReport } from '@/server/reporting/run-report'
@@ -36,7 +39,11 @@ const P = 'TEST-BTB507'
 const RANGE = { from: '2001-03-01', to: '2001-03-31' }
 const MARCH_5 = '2001-03-05T01:00:00Z' // 12:00 Sydney
 let admin: { id: string; role: string }
-const SEEDED = [...FIRST_REPORTS, ...CORE_REPORTS]
+const SEEDED = [...FIRST_REPORTS, ...CORE_REPORTS, ...DECLINE_DETAIL_REPORTS]
+// The decline detail fixtures sit in April, so the March expectations above
+// never see them.
+const APRIL = { from: '2001-04-01', to: '2001-04-30' }
+const APRIL_1 = '2001-04-01T01:00:00Z'
 let supervisorEmail: string
 
 async function cleanup() {
@@ -90,13 +97,96 @@ async function decided(
   reason: string | null,
   ruleset: string,
   mock = false,
+  decidedAt = '2001-03-05T03:00:00Z',
 ) {
   await pool.query(
     `INSERT INTO reporting.decision_event
        (decision_key, conversation_id, decision, reason, ruleset_version, mock_origin, decided_at)
-     VALUES ($1, $2, $3, $4, $5, $6, '2001-03-05T03:00:00Z')`,
-    [`${P}-${suffix}-key`, `${P}-${suffix}`, decision, reason, ruleset, mock],
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [`${P}-${suffix}-key`, `${P}-${suffix}`, decision, reason, ruleset, mock, decidedAt],
   )
+}
+
+/** What billieChat's assessment and decision events leave on the conversation. */
+async function assessed(
+  suffix: string,
+  opts: { conduct?: string[]; serviceability?: string[]; components?: string[] },
+) {
+  const result = (rules: string[] | undefined) =>
+    rules
+      ? JSON.stringify({ decision: 'DECLINED', failed_rules: rules, file_location: 's3://x' })
+      : null
+  await pool.query(
+    `UPDATE conversations
+        SET assessments_account_conduct = $2::jsonb,
+            assessments_serviceability = $3::jsonb,
+            decision_metadata = $4::jsonb
+      WHERE conversation_id = $1`,
+    [
+      `${P}-${suffix}`,
+      result(opts.conduct),
+      result(opts.serviceability),
+      opts.components ? JSON.stringify({ declined_components: opts.components }) : null,
+    ],
+  )
+}
+
+/**
+ * April: declines with the rules behind them. D1 and D2 failed the G4
+ * leakage gate (D1 also dishonours; D2 also serviceability, in both
+ * components); D3 failed serviceability on a known and an unknown rule; D4
+ * is a block whose earlier assessment also failed a rule, which a block
+ * decline never shows; D5 is an account conduct decline from before the
+ * rules were recorded; D6 is approved; D7 is a mock decline.
+ */
+async function aprilDeclines() {
+  const paid = { utm_source: 'google', utm_medium: 'cpc' }
+  const organic = { utm_source: 'google', utm_medium: 'organic' }
+  const conduct = 'CREDIT_ASSESSMENT:ACCOUNT_CONDUCT'
+  const serviceability = 'CREDIT_ASSESSMENT:SERVICEABILITY'
+  const at = (day: string) => `2001-04-${day}T03:00:00Z` // 13:00 Sydney
+  const G4 = 'ACCOUNT_CONDUCT_RULE_006'
+  const DISHONOURS = 'ACCOUNT_CONDUCT_RULE_004'
+  const SURPLUS = 'SERVICEABILITY_RULE_001'
+
+  const declines: Array<[string, Record<string, string>, string, string, string]> = [
+    ['D1', paid, conduct, 'r2', at('03')],
+    ['D2', paid, conduct, 'r2', at('10')],
+    ['D3', organic, serviceability, 'r2', at('10')],
+    ['D4', organic, 'REAPPLICATION_BLOCK:linked_open_review', 'r2', at('11')],
+    ['D5', paid, conduct, 'r1', at('17')],
+  ]
+  for (const [suffix, attribution, reason, ruleset, decidedAt] of declines) {
+    await conversation(suffix, {
+      attribution,
+      decisionStatus: 'declined',
+      reason,
+      ruleset,
+      startedAt: APRIL_1,
+    })
+    await decided(suffix, 'DECLINED', reason, ruleset, false, decidedAt)
+  }
+  await assessed('D1', { conduct: [G4, DISHONOURS], components: ['account_conduct'] })
+  await assessed('D2', {
+    conduct: [G4],
+    serviceability: [SURPLUS],
+    components: ['account_conduct', 'serviceability'],
+  })
+  await assessed('D3', {
+    serviceability: [SURPLUS, 'SERVICEABILITY_RULE_999'],
+    components: ['serviceability'],
+  })
+  await assessed('D4', { conduct: [DISHONOURS] })
+  await conversation('D6', {
+    attribution: paid,
+    decisionStatus: 'approved',
+    ruleset: 'r2',
+    startedAt: APRIL_1,
+  })
+  await decided('D6', 'APPROVED', null, 'r2', false, at('17'))
+  await conversation('D7', { decisionStatus: 'declined', reason: conduct, startedAt: APRIL_1 })
+  await decided('D7', 'DECLINED', conduct, 'r2', true, at('17'))
+  await assessed('D7', { conduct: [G4] })
 }
 
 async function loan(suffix: string, appNumber: string, disbursedAt: string) {
@@ -166,8 +256,11 @@ beforeAll(async () => {
   })
   await loan('L9', `${P}-APP9`, '2001-03-02T03:00:00Z')
 
+  await aprilDeclines()
+
   await createFirstReports(payload)
   await createReports(payload, CORE_REPORTS)
+  await createReports(payload, DECLINE_DETAIL_REPORTS)
   const a = await payload.create({
     collection: 'users',
     data: {
@@ -248,6 +341,147 @@ describe('first reports', () => {
       ['r2', 2, 2],
       ['All', 4, 3],
     ])
+  })
+
+  it('drills from the decline rate reasons chart into the detail report', async () => {
+    const doc = (
+      await payload.find({
+        collection: 'report-definitions',
+        where: { slug: { equals: 'decline-rate' } },
+        limit: 1,
+        overrideAccess: true,
+      })
+    ).docs[0]
+    const charts = doc.chart as Array<{ type: string; drill?: unknown }>
+    expect(charts[1]).toMatchObject({
+      type: 'stacked-100',
+      drill: { report: 'decline-reasons', parameter: 'segment' },
+    })
+  })
+})
+
+describe('decline reasons in detail', () => {
+  const G4 = 'Account conduct: Data quality gate G4, leakage ratio'
+  const SURPLUS = 'Serviceability: Net income surplus negative'
+  const byReason = (list: Array<Record<string, unknown>>) =>
+    [...list].sort((a, b) => String(a.reason).localeCompare(String(b.reason)))
+
+  it('ranks every reason, rule by rule, with the share of all declines', async () => {
+    const result = await rows('decline-reasons', { ...APRIL, category: 'all' })
+    // Five declines (the mock one excluded); the rows add up to more.
+    expect(result.every((r) => r.all_declines === 5)).toBe(true)
+    expect(result.slice(0, 2)).toEqual([
+      {
+        reason: G4,
+        category: 'character',
+        declines: 2,
+        share_of_declines_pct: 40,
+        retry_eligible: 0,
+        all_declines: 5,
+      },
+      {
+        reason: SURPLUS,
+        category: 'capacity',
+        declines: 2,
+        share_of_declines_pct: 40,
+        retry_eligible: 0,
+        all_declines: 5,
+      },
+    ])
+    expect(byReason(result.slice(2)).map((r) => [r.reason, r.category, r.declines])).toEqual(
+      byReason([
+        { reason: 'Account conduct (rule not recorded)', category: 'character', declines: 1 },
+        { reason: 'Account conduct: Financial dishonours', category: 'character', declines: 1 },
+        {
+          reason: 'Re-application block: linked open review',
+          category: 'eligibility',
+          declines: 1,
+        },
+        // An unlisted rule shows by its id, in the category of the decline.
+        { reason: 'SERVICEABILITY_RULE_999', category: 'capacity', declines: 1 },
+      ]).map((r) => [r.reason, r.category, r.declines]),
+    )
+  })
+
+  it('filters by segment, as the drill-down passes it, and "All" means everything', async () => {
+    const paid = await rows('decline-reasons', { ...APRIL, segment: 'paid', category: 'all' })
+    expect(paid.map((r) => [r.reason, r.declines, r.share_of_declines_pct])).toEqual([
+      [G4, 2, 66.7],
+      ['Account conduct (rule not recorded)', 1, 33.3],
+      ['Account conduct: Financial dishonours', 1, 33.3],
+      [SURPLUS, 1, 33.3],
+    ])
+    const r1 = await rows('decline-reasons', { ...APRIL, segment: 'r1', category: 'all' })
+    expect(r1.map((r) => [r.reason, r.declines])).toEqual([
+      ['Account conduct (rule not recorded)', 1],
+    ])
+    const all = await rows('decline-reasons', { ...APRIL, segment: 'All', category: 'all' })
+    expect(all.length).toBe(6)
+  })
+
+  it('keeps the share of all declines when a category is chosen', async () => {
+    const capacity = await rows('decline-reasons', { ...APRIL, category: 'capacity' })
+    expect(capacity.map((r) => [r.reason, r.declines, r.share_of_declines_pct])).toEqual([
+      [SURPLUS, 2, 40],
+      ['SERVICEABILITY_RULE_999', 1, 20],
+    ])
+  })
+
+  it('shows decisions by week, and one reason against all declines', async () => {
+    const week = (r: Record<string, unknown>) => String(r.week).slice(0, 10)
+    const all = await rows('decline-reasons-trend', APRIL)
+    expect(
+      all.map((r) => [week(r), r.decided, r.declined, r.decline_rate_pct, r.matching]),
+    ).toEqual([
+      ['2001-03-26', 0, 0, null, 0],
+      ['2001-04-02', 1, 1, 100, 1],
+      ['2001-04-09', 3, 3, 100, 3],
+      ['2001-04-16', 2, 1, 50, 1],
+      ['2001-04-23', 0, 0, null, 0],
+      ['2001-04-30', 0, 0, null, 0],
+    ])
+    expect(all[2]).toMatchObject({
+      capacity: 1,
+      character: 1,
+      identity: 0,
+      eligibility: 1,
+      other: 0,
+      matching_share_pct: 100,
+    })
+
+    const g4 = await rows('decline-reasons-trend', { ...APRIL, reason: G4 })
+    expect(g4.map((r) => [week(r), r.declined, r.matching, r.matching_share_pct])).toEqual([
+      ['2001-03-26', 0, 0, null],
+      ['2001-04-02', 1, 1, 100],
+      ['2001-04-09', 3, 1, 33.3],
+      ['2001-04-16', 1, 0, 0],
+      ['2001-04-23', 0, 0, null],
+      ['2001-04-30', 0, 0, null],
+    ])
+  })
+
+  it('adds the drill-down to a decline rate report an author has not changed', async () => {
+    const find = async () =>
+      (
+        await payload.find({
+          collection: 'report-definitions',
+          where: { slug: { equals: 'decline-rate' } },
+          limit: 1,
+          overrideAccess: true,
+        })
+      ).docs[0]
+    const before = await find()
+    await payload.update({
+      collection: 'report-definitions',
+      id: before.id,
+      data: { chart: DECLINE_RATE_CHART_BEFORE_DRILL as never, _status: 'published' },
+      overrideAccess: true,
+    })
+    expect(await upgradeDeclineRateDrill(payload)).toEqual(['decline-rate'])
+    const charts = (await find()).chart as Array<{ drill?: unknown }>
+    expect(charts[1].drill).toEqual({ report: 'decline-reasons', parameter: 'segment' })
+    // Already upgraded: nothing to do.
+    expect(await upgradeDeclineRateDrill(payload)).toEqual([])
   })
 
   it('application funnel by source and medium', async () => {

@@ -20,6 +20,11 @@
  *   - `decline_reason_category`: reason-code prefix to the five BTB-462
  *     categories, read through `decline_category()` so a mapping change
  *     applies to history.
+ *   - `credit_rule`: credit rule id to its family and a short label, read
+ *     through `decline_reason_label()` so a decline can be reported by the
+ *     rule that failed (for example "Data quality gate G4"), not only by the
+ *     component that declined. The rule ids come from billieChat's
+ *     `credit_assessment_*_result` events (`failed_rules`).
  *
  * Rule: ids, categories, amounts and dates only. No names, contact details,
  * addresses, free text or conversation content.
@@ -56,6 +61,47 @@ export const DECLINE_REASON_CATEGORIES: ReadonlyArray<readonly [string, DeclineC
   ['PERSONAL_CHECK_FAILED', 'other'],
   ['SYSTEM_FAILURE:', 'other'],
   ['G5_TIMEOUT:', 'other'],
+]
+
+/** Families of credit rules, as billieChat names their rule files. */
+export type CreditRuleFamily =
+  | 'account_conduct'
+  | 'serviceability'
+  | 'statement_check'
+  | 'post_identity_risk'
+  | 'final_decision'
+
+/**
+ * Credit rule ids (billieChat `businessRules/*.json`) to their family and a
+ * short label. billieChat's `credit_assessment_accountConduct_result` and
+ * `credit_assessment_serviceability_result` events list the ids of the rules
+ * that failed (`failed_rules`); the labels here are how reports show them.
+ * A rule not listed is shown by its id, so a new rule never hides a decline.
+ * Edit here; the schema script rewrites the table to match.
+ */
+export const CREDIT_RULES: ReadonlyArray<readonly [string, CreditRuleFamily, string]> = [
+  ['ACCOUNT_CONDUCT_RULE_001', 'account_conduct', 'No pay income source'],
+  ['ACCOUNT_CONDUCT_RULE_002', 'account_conduct', 'Pay income not in every month'],
+  ['ACCOUNT_CONDUCT_RULE_003', 'account_conduct', 'Too many concurrent SACC lenders'],
+  ['ACCOUNT_CONDUCT_RULE_004', 'account_conduct', 'Financial dishonours'],
+  ['ACCOUNT_CONDUCT_RULE_005', 'account_conduct', 'Gambling spend too high'],
+  ['ACCOUNT_CONDUCT_RULE_006', 'account_conduct', 'Data quality gate G4, leakage ratio'],
+  ['ACCOUNT_CONDUCT_RULE_007', 'account_conduct', 'Salary not stable for 4 months'],
+  ['ACCOUNT_CONDUCT_RULE_008', 'account_conduct', 'Collection agency activity'],
+  ['ACCOUNT_CONDUCT_RULE_009', 'account_conduct', 'Data quality gate G3, living expenses'],
+  ['ACCOUNT_CONDUCT_RULE_010', 'account_conduct', 'Payments to insolvency firms'],
+  ['ACCOUNT_CONDUCT_RULE_011', 'account_conduct', 'Government benefits too high a share of income'],
+  ['ACCOUNT_CONDUCT_RULE_012', 'account_conduct', 'Salary under half of regular income'],
+  ['ACCOUNT_CONDUCT_RULE_013', 'account_conduct', 'NILS activity'],
+  ['ACCOUNT_CONDUCT_RULE_020', 'account_conduct', 'SACC repayment burden too high'],
+  ['ACCOUNT_CONDUCT_RULE_023', 'account_conduct', 'Payments to debt management firms'],
+  ['ACCOUNT_CONDUCT_RULE_024', 'account_conduct', 'Garnishee pattern'],
+  ['ACCOUNT_CONDUCT_RULE_025', 'account_conduct', 'Court fine patterns'],
+  ['ACCOUNT_CONDUCT_RULE_026', 'account_conduct', 'Categoriser coverage'],
+  ['SERVICEABILITY_RULE_001', 'serviceability', 'Net income surplus negative'],
+  ['STATEMENT_CHECK_RULE_001', 'statement_check', 'No transaction account'],
+  ['POST_ID_RISK_CHECK_RULE_002', 'post_identity_risk', 'Statement name does not match identity'],
+  ['FINAL_DECISION_RULE_001', 'final_decision', 'Final decision rule (G5)'],
 ]
 
 /** A single-quoted SQL literal. Only used for the constants above. */
@@ -203,6 +249,49 @@ export const REPORTING_SCHEMA_STATEMENTS: readonly string[] = [
        ORDER BY length(prefix) DESC LIMIT 1),
      'other') END $$`,
 
+  // ── Credit rules: id to family and label ─────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS reporting.credit_rule (
+     rule_id text PRIMARY KEY,
+     family  text NOT NULL
+       CHECK (family IN ('account_conduct', 'serviceability', 'statement_check',
+                         'post_identity_risk', 'final_decision')),
+     label   text NOT NULL
+   )`,
+  // The seed is authoritative, as for decline_reason_category.
+  `DELETE FROM reporting.credit_rule
+    WHERE rule_id NOT IN (${CREDIT_RULES.map(([id]) => sqlString(id)).join(', ')})`,
+  `INSERT INTO reporting.credit_rule (rule_id, family, label) VALUES
+     ${CREDIT_RULES.map(([id, f, l]) => `(${sqlString(id)}, ${sqlString(f)}, ${sqlString(l)})`).join(',\n     ')}
+   ON CONFLICT (rule_id) DO UPDATE SET family = EXCLUDED.family, label = EXCLUDED.label`,
+  // A reason code's tail as words: 'review:proof_conflict' -> 'review, proof conflict'.
+  `CREATE OR REPLACE FUNCTION reporting.reason_words(code text)
+   RETURNS text LANGUAGE sql IMMUTABLE PARALLEL SAFE
+   AS $$ SELECT lower(replace(replace(code, '_', ' '), ':', ', ')) $$`,
+  // How a decline reads in a report: by the rule that failed when one is
+  // given (its family and label, or the bare id for an unlisted rule),
+  // otherwise by the reason code in words. One definition, so the detail
+  // report and the trend report name a reason the same way.
+  `CREATE OR REPLACE FUNCTION reporting.decline_reason_label(p_reason text, p_rule text)
+   RETURNS text LANGUAGE sql STABLE PARALLEL SAFE
+   AS $$ SELECT CASE
+     WHEN p_rule IS NOT NULL THEN COALESCE(
+       (SELECT upper(left(r.family, 1)) || substr(replace(r.family, '_', ' '), 2) || ': ' || r.label
+          FROM reporting.credit_rule r WHERE r.rule_id = p_rule),
+       p_rule)
+     WHEN p_reason IS NULL OR p_reason = '' THEN '(no reason recorded)'
+     WHEN p_reason = 'CREDIT_ASSESSMENT:ACCOUNT_CONDUCT' THEN 'Account conduct (rule not recorded)'
+     WHEN p_reason = 'CREDIT_ASSESSMENT:SERVICEABILITY' THEN 'Serviceability (rule not recorded)'
+     WHEN starts_with(p_reason, 'CREDIT_ASSESSMENT:')
+       THEN 'Credit assessment: ' || reporting.reason_words(substr(p_reason, 19))
+     WHEN starts_with(p_reason, 'REAPPLICATION_BLOCK:')
+       THEN 'Re-application block: ' || reporting.reason_words(substr(p_reason, 21))
+     WHEN starts_with(p_reason, 'SYSTEM_FAILURE:')
+       THEN 'System failure: ' || reporting.reason_words(substr(p_reason, 16))
+     WHEN starts_with(p_reason, 'G5_TIMEOUT:')
+       THEN 'Timed out: ' || reporting.reason_words(substr(p_reason, 12))
+     ELSE upper(left(reporting.reason_words(p_reason), 1)) || substr(reporting.reason_words(p_reason), 2)
+   END $$`,
+
   // ── Decision events (append-only) ────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS reporting.decision_event (
      decision_key       text PRIMARY KEY,
@@ -340,7 +429,14 @@ export const REPORTING_SCHEMA_STATEMENTS: readonly string[] = [
                                                       AS identity_attempts,
      c.assessments_post_identity_risk->>'decision'    AS post_identity_risk_decision,
      c.assessments_account_conduct->>'decision'       AS account_conduct_decision,
+     -- Rule ids only (billieChat's failed_rules); the figures stay in S3.
+     CASE WHEN jsonb_typeof(c.assessments_account_conduct->'failed_rules') = 'array'
+          THEN ARRAY(SELECT jsonb_array_elements_text(c.assessments_account_conduct->'failed_rules'))
+     END                                              AS account_conduct_failed_rules,
      c.assessments_serviceability->>'decision'        AS serviceability_decision,
+     CASE WHEN jsonb_typeof(c.assessments_serviceability->'failed_rules') = 'array'
+          THEN ARRAY(SELECT jsonb_array_elements_text(c.assessments_serviceability->'failed_rules'))
+     END                                              AS serviceability_failed_rules,
      reporting.as_numeric(c.assessments_fraud_check #>> '{latest,final_score}') AS fraud_score,
      c.assessments_fraud_check #>> '{latest,severity}' AS fraud_severity,
      CASE WHEN jsonb_typeof(c.assessments_fraud_check #> '{latest,categories}') = 'array'
@@ -352,6 +448,9 @@ export const REPORTING_SCHEMA_STATEMENTS: readonly string[] = [
      reporting.as_numeric(c.assessments_fraud_check->>'flagged_count')::integer AS fraud_flagged_turns,
      reporting.as_boolean(c.assessments_fraud_check #>> '{latest,would_halt}') AS fraud_would_halt,
      c.decision_metadata->>'component'                AS decision_component,
+     CASE WHEN jsonb_typeof(c.decision_metadata->'declined_components') = 'array'
+          THEN ARRAY(SELECT jsonb_array_elements_text(c.decision_metadata->'declined_components'))
+     END                                              AS declined_components,
      c.decision_detail_retry_eligible                 AS retry_eligible,
      -- Re-application block (the stop message and justification are free text).
      c.reapplication_block_reason                     AS block_reason,

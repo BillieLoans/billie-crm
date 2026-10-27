@@ -166,6 +166,93 @@ describe('reporting schema', () => {
     }
   })
 
+  it('names a decline by its failed rule, or by its reason code in words', async () => {
+    const cases: Array<[string | null, string | null, string]> = [
+      [
+        'CREDIT_ASSESSMENT:ACCOUNT_CONDUCT',
+        'ACCOUNT_CONDUCT_RULE_006',
+        'Account conduct: Data quality gate G4, leakage ratio',
+      ],
+      [
+        'CREDIT_ASSESSMENT:SERVICEABILITY',
+        'SERVICEABILITY_RULE_001',
+        'Serviceability: Net income surplus negative',
+      ],
+      // An unlisted rule keeps its id rather than hiding the decline.
+      ['CREDIT_ASSESSMENT:ACCOUNT_CONDUCT', 'ACCOUNT_CONDUCT_RULE_999', 'ACCOUNT_CONDUCT_RULE_999'],
+      ['CREDIT_ASSESSMENT:ACCOUNT_CONDUCT', null, 'Account conduct (rule not recorded)'],
+      ['CREDIT_ASSESSMENT:SERVICEABILITY', null, 'Serviceability (rule not recorded)'],
+      [
+        'CREDIT_ASSESSMENT:IDENTITYRISK_ASSESSMENT',
+        null,
+        'Credit assessment: identityrisk assessment',
+      ],
+      [
+        'REAPPLICATION_BLOCK:review:proof_conflict',
+        null,
+        'Re-application block: review, proof conflict',
+      ],
+      ['SYSTEM_FAILURE:serviceability', null, 'System failure: serviceability'],
+      ['G5_TIMEOUT:account_conduct', null, 'Timed out: account conduct'],
+      ['BUSINESS_ACCOUNT', null, 'Business account'],
+      [null, null, '(no reason recorded)'],
+      ['', null, '(no reason recorded)'],
+    ]
+    for (const [reason, rule, label] of cases) {
+      const { rows } = await pool.query('SELECT reporting.decline_reason_label($1, $2) AS label', [
+        reason,
+        rule,
+      ])
+      expect(rows[0].label, `${reason} / ${rule}`).toBe(label)
+    }
+    const { rows: seeded } = await pool.query(
+      `SELECT family, count(*)::int AS n FROM reporting.credit_rule GROUP BY 1 ORDER BY 1`,
+    )
+    expect(seeded).toEqual([
+      { family: 'account_conduct', n: 18 },
+      { family: 'final_decision', n: 1 },
+      { family: 'post_identity_risk', n: 1 },
+      { family: 'serviceability', n: 1 },
+      { family: 'statement_check', n: 1 },
+    ])
+  })
+
+  it('reads the failed rules and declined components the events leave behind', async () => {
+    const id = await insertConversation({
+      suffix: 'RULES',
+      startedAt: '2001-02-01T01:00:00Z',
+      decisionStatus: 'declined',
+      reason: 'CREDIT_ASSESSMENT:ACCOUNT_CONDUCT',
+    })
+    await pool.query(
+      `UPDATE conversations
+          SET assessments_account_conduct = $2::jsonb,
+              assessments_serviceability = $3::jsonb,
+              decision_metadata = $4::jsonb
+        WHERE conversation_id = $1`,
+      [
+        id,
+        JSON.stringify({ decision: 'DECLINED', failed_rules: ['ACCOUNT_CONDUCT_RULE_006'] }),
+        // No failed_rules key: an event from before billieChat recorded them.
+        JSON.stringify({ decision: 'APPROVED' }),
+        JSON.stringify({
+          component: 'account_conduct',
+          declined_components: ['account_conduct'],
+        }),
+      ],
+    )
+    const { rows } = await pool.query(
+      `SELECT account_conduct_failed_rules, serviceability_failed_rules, declined_components
+         FROM reporting.application WHERE conversation_id = $1`,
+      [id],
+    )
+    expect(rows[0]).toEqual({
+      account_conduct_failed_rules: ['ACCOUNT_CONDUCT_RULE_006'],
+      serviceability_failed_rules: null,
+      declined_components: ['account_conduct'],
+    })
+  })
+
   it('maps a loan purpose to its category, first match wins', async () => {
     const cases: Array<[string | null, string | null]> = [
       ['Pay a bill', 'bills_and_utilities'],
