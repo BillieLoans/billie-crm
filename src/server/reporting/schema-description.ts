@@ -945,6 +945,7 @@ export const REPORTING_FUNCTIONS: readonly string[] = [
   'reporting.attribution_text(text) -> text: an attribution (utm_*) value with only printable characters, cut at 80 (already applied in the views).',
   "reporting.decline_reason_label(reason text, rule_id text) -> text: how a decline reads in a report. With a rule id, the rule's family and label from credit_rule (e.g. 'Account conduct: Data quality gate G4, leakage ratio'); without one, the reason code in words (e.g. 'Re-application block: active loan'). Use it so every report names a reason the same way.",
   "reporting.reason_words(text) -> text: a reason code's tail as lower-case words (used by decline_reason_label).",
+  'reporting.effective_decline_reason(reason, account_conduct_decision, serviceability_decision, identity_risk_decision, post_identity_risk_decision) -> text: the decline reason, or for a decline with none recorded (before October 2026) the first assessment that declined as a CREDIT_ASSESSMENT:* code, in the order billieChat checks them. Pass decision.reason and the application columns of the same names; feed the result to decline_category or decline_reason_label.',
 ]
 
 export const BUSINESS_RULES: readonly string[] = [

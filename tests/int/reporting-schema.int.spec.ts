@@ -217,6 +217,54 @@ describe('reporting schema', () => {
     ])
   })
 
+  it('falls back to the first assessment that declined when no reason was recorded', async () => {
+    const cases: Array<
+      [string | null, string | null, string | null, string | null, string | null, string | null]
+    > = [
+      [
+        'REAPPLICATION_BLOCK:ACTIVE_LOAN',
+        'DECLINED',
+        null,
+        null,
+        null,
+        'REAPPLICATION_BLOCK:ACTIVE_LOAN',
+      ],
+      [null, 'DECLINED', 'DECLINED', null, null, 'CREDIT_ASSESSMENT:ACCOUNT_CONDUCT'],
+      ['', 'APPROVED', 'DECLINED', null, null, 'CREDIT_ASSESSMENT:SERVICEABILITY'],
+      [
+        null,
+        'APPROVED',
+        'APPROVED',
+        'DECLINED',
+        'APPROVED',
+        'CREDIT_ASSESSMENT:IDENTITYRISK_ASSESSMENT',
+      ],
+      [
+        null,
+        'APPROVED',
+        'APPROVED',
+        'APPROVED',
+        'DECLINED',
+        'CREDIT_ASSESSMENT:POST_IDENTITY_RISK_CHECKS',
+      ],
+      [null, 'APPROVED', 'APPROVED', null, null, null],
+      [null, null, null, null, null, null],
+    ]
+    for (const [reason, ac, sv, ir, pir, expected] of cases) {
+      const { rows } = await pool.query(
+        'SELECT reporting.effective_decline_reason($1, $2, $3, $4, $5) AS r, ' +
+          'reporting.decline_category(reporting.effective_decline_reason($1, $2, $3, $4, $5)) AS c',
+        [reason, ac, sv, ir, pir],
+      )
+      expect(rows[0].r, `${reason}/${ac}/${sv}/${ir}/${pir}`).toBe(expected)
+    }
+    const { rows: identity } = await pool.query(
+      `SELECT reporting.decline_category('CREDIT_ASSESSMENT:IDENTITYRISK_ASSESSMENT') AS a,
+              reporting.decline_category('CREDIT_ASSESSMENT:POST_IDENTITY_RISK_CHECKS') AS b`,
+    )
+    expect(identity[0]).toEqual({ a: 'identity', b: 'identity' })
+  })
+
   it('reads the failed rules and declined components the events leave behind', async () => {
     const id = await insertConversation({
       suffix: 'RULES',

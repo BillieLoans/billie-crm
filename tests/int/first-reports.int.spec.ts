@@ -18,6 +18,7 @@ import {
   createReports,
   DECLINE_DETAIL_REPORTS,
   DECLINE_RATE_CHART_BEFORE_DRILL,
+  DECLINE_RATE_SQL_BEFORE_DRILL,
   FIRST_REPORTS,
   upgradeDeclineRateDrill,
   upgradeFirstReports,
@@ -187,6 +188,16 @@ async function aprilDeclines() {
   await conversation('D7', { decisionStatus: 'declined', reason: conduct, startedAt: APRIL_1 })
   await decided('D7', 'DECLINED', conduct, 'r2', true, at('17'))
   await assessed('D7', { conduct: [G4] })
+  // D8: declined before reasons were recorded (reason NULL), but the account
+  // conduct result says DECLINED and, once back-filled, names G4.
+  await conversation('D8', {
+    attribution: paid,
+    decisionStatus: 'declined',
+    ruleset: 'r2',
+    startedAt: APRIL_1,
+  })
+  await decided('D8', 'DECLINED', null, 'r2', false, at('24'))
+  await assessed('D8', { conduct: [G4] })
 }
 
 async function loan(suffix: string, appNumber: string, disbursedAt: string) {
@@ -368,24 +379,24 @@ describe('decline reasons in detail', () => {
 
   it('ranks every reason, rule by rule, with the share of all declines', async () => {
     const result = await rows('decline-reasons', { ...APRIL, category: 'all' })
-    // Five declines (the mock one excluded); the rows add up to more.
-    expect(result.every((r) => r.all_declines === 5)).toBe(true)
+    // Six declines (the mock one excluded); the rows add up to more.
+    expect(result.every((r) => r.all_declines === 6)).toBe(true)
     expect(result.slice(0, 2)).toEqual([
       {
         reason: G4,
         category: 'character',
-        declines: 2,
-        share_of_declines_pct: 40,
+        declines: 3,
+        share_of_declines_pct: 50,
         retry_eligible: 0,
-        all_declines: 5,
+        all_declines: 6,
       },
       {
         reason: SURPLUS,
         category: 'capacity',
         declines: 2,
-        share_of_declines_pct: 40,
+        share_of_declines_pct: 33.3,
         retry_eligible: 0,
-        all_declines: 5,
+        all_declines: 6,
       },
     ])
     expect(byReason(result.slice(2)).map((r) => [r.reason, r.category, r.declines])).toEqual(
@@ -406,10 +417,10 @@ describe('decline reasons in detail', () => {
   it('filters by segment, as the drill-down passes it, and "All" means everything', async () => {
     const paid = await rows('decline-reasons', { ...APRIL, segment: 'paid', category: 'all' })
     expect(paid.map((r) => [r.reason, r.declines, r.share_of_declines_pct])).toEqual([
-      [G4, 2, 66.7],
-      ['Account conduct (rule not recorded)', 1, 33.3],
-      ['Account conduct: Financial dishonours', 1, 33.3],
-      [SURPLUS, 1, 33.3],
+      [G4, 3, 75],
+      ['Account conduct (rule not recorded)', 1, 25],
+      ['Account conduct: Financial dishonours', 1, 25],
+      [SURPLUS, 1, 25],
     ])
     const r1 = await rows('decline-reasons', { ...APRIL, segment: 'r1', category: 'all' })
     expect(r1.map((r) => [r.reason, r.declines])).toEqual([
@@ -422,8 +433,8 @@ describe('decline reasons in detail', () => {
   it('keeps the share of all declines when a category is chosen', async () => {
     const capacity = await rows('decline-reasons', { ...APRIL, category: 'capacity' })
     expect(capacity.map((r) => [r.reason, r.declines, r.share_of_declines_pct])).toEqual([
-      [SURPLUS, 2, 40],
-      ['SERVICEABILITY_RULE_999', 1, 20],
+      [SURPLUS, 2, 33.3],
+      ['SERVICEABILITY_RULE_999', 1, 16.7],
     ])
   })
 
@@ -437,7 +448,7 @@ describe('decline reasons in detail', () => {
       ['2001-04-02', 1, 1, 100, 1],
       ['2001-04-09', 3, 3, 100, 3],
       ['2001-04-16', 2, 1, 50, 1],
-      ['2001-04-23', 0, 0, null, 0],
+      ['2001-04-23', 1, 1, 100, 1],
       ['2001-04-30', 0, 0, null, 0],
     ])
     expect(all[2]).toMatchObject({
@@ -455,7 +466,7 @@ describe('decline reasons in detail', () => {
       ['2001-04-02', 1, 1, 100],
       ['2001-04-09', 3, 1, 33.3],
       ['2001-04-16', 1, 0, 0],
-      ['2001-04-23', 0, 0, null],
+      ['2001-04-23', 1, 1, 100],
       ['2001-04-30', 0, 0, null],
     ])
   })
@@ -474,12 +485,18 @@ describe('decline reasons in detail', () => {
     await payload.update({
       collection: 'report-definitions',
       id: before.id,
-      data: { chart: DECLINE_RATE_CHART_BEFORE_DRILL as never, _status: 'published' },
+      data: {
+        sql: DECLINE_RATE_SQL_BEFORE_DRILL,
+        chart: DECLINE_RATE_CHART_BEFORE_DRILL as never,
+        _status: 'published',
+      },
       overrideAccess: true,
     })
     expect(await upgradeDeclineRateDrill(payload)).toEqual(['decline-rate'])
-    const charts = (await find()).chart as Array<{ drill?: unknown }>
+    const after = await find()
+    const charts = after.chart as Array<{ drill?: unknown }>
     expect(charts[1].drill).toEqual({ report: 'decline-reasons', parameter: 'segment' })
+    expect(after.sql).toBe(FIRST_REPORTS[0].sql)
     // Already upgraded: nothing to do.
     expect(await upgradeDeclineRateDrill(payload)).toEqual([])
   })

@@ -5,7 +5,7 @@ Date: 2026-10-27. Follows BTB-462 (decline rate and reasons).
 ## Intent
 
 "Decline rate and reasons" shows declines in five categories. Staff want to
-know *which rule* declined an application, because one rule (the account
+know _which rule_ declined an application, because one rule (the account
 conduct "Data quality gate G4", leakage ratio) is believed to drive many
 declines and the category "character" hides it. This design reports a decline
 by the rule that failed, and gives the existing report a path down to it.
@@ -56,12 +56,12 @@ by the rule that failed, and gives the existing report a path down to it.
 
 ## Metric definitions
 
-| measure | formula | grain | source | inclusions / exclusions | unit |
-|---|---|---|---|---|---|
-| declines (detail) | count distinct conversations with this reason | reason label | decision, application | DECLINED, not mock, decided_on in range, segment match; a rule row only for `CREDIT_ASSESSMENT:*` declines | count |
-| share_of_declines_pct | declines / all declines in period and segment | reason label | same | denominator ignores the category filter | % |
-| decided / declined (trend) | count of latest decisions / of DECLINED | ISO week | decision | not mock | count |
-| matching (trend) | declines whose label equals the reason filter; all declines when empty | ISO week | same | same | count |
+| measure                    | formula                                                                | grain        | source                | inclusions / exclusions                                                                                    | unit  |
+| -------------------------- | ---------------------------------------------------------------------- | ------------ | --------------------- | ---------------------------------------------------------------------------------------------------------- | ----- |
+| declines (detail)          | count distinct conversations with this reason                          | reason label | decision, application | DECLINED, not mock, decided_on in range, segment match; a rule row only for `CREDIT_ASSESSMENT:*` declines | count |
+| share_of_declines_pct      | declines / all declines in period and segment                          | reason label | same                  | denominator ignores the category filter                                                                    | %     |
+| decided / declined (trend) | count of latest decisions / of DECLINED                                | ISO week     | decision              | not mock                                                                                                   | count |
+| matching (trend)           | declines whose label equals the reason filter; all declines when empty | ISO week     | same                  | same                                                                                                       | count |
 
 ## Validation
 
@@ -80,3 +80,19 @@ by the rule that failed, and gives the existing report a path down to it.
 - Weeks are Monday to Sunday by `date_trunc('week')`; the first and last
   rows may be partial and the description says so. A week label in the
   chart could carry "(partial)" later.
+
+## Addendum, same day: history
+
+The full assessment files in S3 have always held the rule results, and the
+application view already fetches them for "View full details". Two additions
+use that:
+
+- `effective_decline_reason()` in the schema: a decline from before reasons
+  were recorded takes the first assessment component that declined, in
+  billieChat's precedence, so it gets a real category and its rule rows
+  instead of "other" or "(no reason recorded)". The decline rate report uses
+  it too, so the three reports agree on a segment's categories.
+- `backfill_failed_rules`, an event-processor script: reads each DECLINED
+  result without `failed_rules`, fetches its file with a read-only AWS
+  profile, and merges the failing rule ids (ids only) through the
+  processor's own jsonb merge. Dry run by default; idempotent.

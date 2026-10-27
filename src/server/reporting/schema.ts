@@ -291,6 +291,20 @@ export const REPORTING_SCHEMA_STATEMENTS: readonly string[] = [
        THEN 'Timed out: ' || reporting.reason_words(substr(p_reason, 12))
      ELSE upper(left(reporting.reason_words(p_reason), 1)) || substr(reporting.reason_words(p_reason), 2)
    END $$`,
+  // A decline's reason, or when none was recorded (decisions from before
+  // BTB-462), the first assessment component that declined, in the order
+  // billieChat's final decision rule inspects them. The same precedence
+  // billieChat uses to derive the reason it now records.
+  `CREATE OR REPLACE FUNCTION reporting.effective_decline_reason(
+     p_reason text, p_account_conduct text, p_serviceability text,
+     p_identity_risk text, p_post_identity_risk text)
+   RETURNS text LANGUAGE sql IMMUTABLE PARALLEL SAFE
+   AS $$ SELECT COALESCE(NULLIF(p_reason, ''), CASE
+     WHEN p_account_conduct = 'DECLINED' THEN 'CREDIT_ASSESSMENT:ACCOUNT_CONDUCT'
+     WHEN p_serviceability = 'DECLINED' THEN 'CREDIT_ASSESSMENT:SERVICEABILITY'
+     WHEN p_identity_risk = 'DECLINED' THEN 'CREDIT_ASSESSMENT:IDENTITYRISK_ASSESSMENT'
+     WHEN p_post_identity_risk = 'DECLINED' THEN 'CREDIT_ASSESSMENT:POST_IDENTITY_RISK_CHECKS'
+   END) $$`,
 
   // ── Decision events (append-only) ────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS reporting.decision_event (

@@ -122,7 +122,34 @@ Functions:
   view reads them as `account_conduct_failed_rules` and
   `serviceability_failed_rules`, and `declined_components` from the decision's
   metadata. Decisions from before billieChat sent `failed_rules` have NULL
-  there and report as "(rule not recorded)".
+  there and report as "(rule not recorded)" until back-filled (below).
+- `effective_decline_reason(reason, account_conduct_decision,
+  serviceability_decision, identity_risk_decision, post_identity_risk_decision)`:
+  the recorded reason, or for a decline from before reasons were recorded
+  (BTB-462, October 2026) the first assessment component that declined, as a
+  `CREDIT_ASSESSMENT:*` code, in the order billieChat's final decision rule
+  checks them. The decline reports use it so older declines take a real
+  category instead of "other".
+
+### Back-filling the failed rules from S3
+
+The full assessment (rule by rule) has always been written to S3, and the
+CRM's application view fetches it for "View full details". For results
+recorded before billieChat sent `failed_rules`, this script reads the same
+files and merges the failing rule ids (ids only) into the stored result,
+through the event processor's own jsonb merge, so the processor stays the
+projection's only writer:
+
+```bash
+# from event-processor/, with PYTHONPATH=src; needs boto3 and a read-only AWS profile
+python3 -m billie_servicing.scripts.backfill_failed_rules --profile billie-prod-ro
+python3 -m billie_servicing.scripts.backfill_failed_rules --profile billie-prod-ro --apply
+```
+
+The dry run lists how many results lack rules, how many files it could read
+and the rules it found. A result that already has `failed_rules` is never a
+candidate, so the script is safe to re-run; an unreadable file is counted and
+skipped, never written as empty.
 
 Why views over the projection and not fact tables written from events: the
 projection already encodes the domain rules (a loan counts as disbursed on the

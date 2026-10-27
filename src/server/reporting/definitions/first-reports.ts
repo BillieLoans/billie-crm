@@ -44,13 +44,17 @@ const declineRate: ReportDefinitionSeed = {
     'Decisions made in the period (Sydney dates), split by acquisition source or by credit ' +
     'ruleset version, with declines by reason category and an "All" total. Click a segment ' +
     'in the reasons chart, or its name in the table, to see the reasons behind its declines ' +
-    'rule by rule. Declines with no ' +
-    'recorded reason count as "other". Mock decisions are excluded. Decisions made before ' +
+    'rule by rule. A decline with no recorded reason takes the category of the first ' +
+    'assessment that declined it, else counts as "other". Mock decisions are excluded. ' +
+    'Decisions made before ' +
     'ruleset versions were recorded show as "(not recorded)"; applications from before ' +
     'attribution capture (6 October 2026) show as "not recorded".',
   sql: `WITH d AS (
   SELECT dec.decision,
-         COALESCE(dec.decline_category, 'other') AS category,
+         COALESCE(decline_category(effective_decline_reason(dec.reason,
+                    a.account_conduct_decision, a.serviceability_decision,
+                    a.identity_risk_decision, a.post_identity_risk_decision)), 'other')
+           AS category,
          CASE $3::text
            WHEN 'ruleset' THEN COALESCE(dec.ruleset_version, '(not recorded)')
            ELSE a.acquisition
@@ -304,6 +308,34 @@ export const DECLINE_RATE_CHART_BEFORE_DRILL: unknown = (declineRate.chart as un
   },
 )
 
+/** The decline rate SQL as first seeded (BTB-507), before `effective_decline_reason`. */
+export const DECLINE_RATE_SQL_BEFORE_DRILL = `WITH d AS (
+  SELECT dec.decision,
+         COALESCE(dec.decline_category, 'other') AS category,
+         CASE $3::text
+           WHEN 'ruleset' THEN COALESCE(dec.ruleset_version, '(not recorded)')
+           ELSE a.acquisition
+         END AS seg
+    FROM decision AS dec
+    JOIN application AS a USING (conversation_id)
+   WHERE dec.decided_on BETWEEN $1::date AND $2::date
+     AND NOT dec.mock_origin
+)
+SELECT CASE WHEN GROUPING(seg) = 1 THEN 'All' ELSE seg END AS segment,
+       count(*) AS decided,
+       count(*) FILTER (WHERE decision = 'DECLINED') AS declined,
+       round(100.0 * count(*) FILTER (WHERE decision = 'DECLINED') / NULLIF(count(*), 0), 1)
+         AS decline_rate_pct,
+       count(*) FILTER (WHERE decision = 'DECLINED' AND category = 'capacity') AS capacity,
+       count(*) FILTER (WHERE decision = 'DECLINED' AND category = 'character') AS character,
+       count(*) FILTER (WHERE decision = 'DECLINED' AND category = 'identity') AS identity,
+       count(*) FILTER (WHERE decision = 'DECLINED' AND category = 'eligibility') AS eligibility,
+       count(*) FILTER (WHERE decision = 'DECLINED' AND category = 'other') AS other
+  FROM d
+ GROUP BY GROUPING SETS ((seg), ())
+HAVING count(*) > 0
+ ORDER BY GROUPING(seg), decided DESC, segment`
+
 /**
  * Declines in a period, exploded to the finest reason the CRM holds. For a
  * decline the credit assessment made, that is each rule that failed
@@ -314,15 +346,22 @@ export const DECLINE_RATE_CHART_BEFORE_DRILL: unknown = (declineRate.chart as un
  */
 const DECLINE_DETAIL_SQL = `WITH declined AS (
   SELECT dec.conversation_id,
-         dec.reason,
-         COALESCE(dec.decline_category, 'other') AS category,
+         r.reason,
+         COALESCE(decline_category(r.reason), 'other') AS category,
          dec.retry_eligible,
-         CASE WHEN dec.reason LIKE 'CREDIT_ASSESSMENT:%'
+         CASE WHEN r.reason LIKE 'CREDIT_ASSESSMENT:%'
               THEN COALESCE(a.account_conduct_failed_rules, '{}')
                    || COALESCE(a.serviceability_failed_rules, '{}')
               ELSE '{}'::text[] END AS failed_rules
     FROM decision AS dec
     JOIN application AS a USING (conversation_id)
+    -- The recorded reason, or for an older decline the first assessment
+    -- that declined it.
+    CROSS JOIN LATERAL (
+      SELECT effective_decline_reason(dec.reason, a.account_conduct_decision,
+               a.serviceability_decision, a.identity_risk_decision,
+               a.post_identity_risk_decision) AS reason
+    ) AS r
    WHERE dec.decided_on BETWEEN $1::date AND $2::date
      AND NOT dec.mock_origin
      AND dec.decision = 'DECLINED'
@@ -452,14 +491,19 @@ decided AS (
   SELECT dec.conversation_id,
          date_trunc('week', dec.decided_on)::date AS week,
          dec.decision,
-         dec.reason,
-         COALESCE(dec.decline_category, 'other') AS category,
-         CASE WHEN dec.reason LIKE 'CREDIT_ASSESSMENT:%'
+         r.reason,
+         COALESCE(decline_category(r.reason), 'other') AS category,
+         CASE WHEN r.reason LIKE 'CREDIT_ASSESSMENT:%'
               THEN COALESCE(a.account_conduct_failed_rules, '{}')
                    || COALESCE(a.serviceability_failed_rules, '{}')
               ELSE '{}'::text[] END AS failed_rules
     FROM decision AS dec
     JOIN application AS a USING (conversation_id)
+    CROSS JOIN LATERAL (
+      SELECT effective_decline_reason(dec.reason, a.account_conduct_decision,
+               a.serviceability_decision, a.identity_risk_decision,
+               a.post_identity_risk_decision) AS reason
+    ) AS r
    WHERE dec.decided_on BETWEEN $1::date AND $2::date
      AND NOT dec.mock_origin
 ),
@@ -891,8 +935,9 @@ export async function upgradeFirstReports(
 
 /**
  * Give the decline rate report its drill-down into "Decline reasons in
- * detail", only where its SQL and chart are exactly as seeded and it has no
- * unpublished draft. A report an author has changed keeps its own chart.
+ * detail" and the `effective_decline_reason` category for older declines,
+ * only where its SQL and chart are exactly as first seeded and it has no
+ * unpublished draft. A report an author has changed keeps its own.
  *
  * @returns the slugs updated.
  */
@@ -916,7 +961,7 @@ export async function upgradeDeclineRateDrill(
   if (
     !doc ||
     doc._status !== 'published' ||
-    doc.sql !== seed.sql ||
+    doc.sql !== DECLINE_RATE_SQL_BEFORE_DRILL ||
     !sameJson(doc.chart ?? null, DECLINE_RATE_CHART_BEFORE_DRILL)
   ) {
     return []
@@ -924,7 +969,12 @@ export async function upgradeDeclineRateDrill(
   await payload.update({
     collection: 'report-definitions',
     id: doc.id,
-    data: { chart: seed.chart, description: seed.description, _status: 'published' } as never,
+    data: {
+      sql: seed.sql,
+      chart: seed.chart,
+      description: seed.description,
+      _status: 'published',
+    } as never,
     overrideAccess: true,
     req,
   })
