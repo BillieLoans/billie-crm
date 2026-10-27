@@ -112,7 +112,10 @@ export async function POST(request: Request) {
     form.get('decision') === 'allow'
       ? await approveAuthorization(payload, user, authorization)
       : denyAuthorization(authorization)
-  const response = see(target ?? `${page}?problem=expired`)
+  // Back to the app by a page, not a redirect: the sign-in page's CSP has
+  // `form-action 'self'`, which browsers also apply to where the post
+  // redirects, so a 303 to Claude's callback (another origin) is blocked.
+  const response = target ? continueTo(target) : see(`${page}?problem=expired`)
   // The decision is made: the request cannot be used again from this browser either.
   response.cookies.set(AUTHZ_COOKIE, '', { ...cookieOptions(), maxAge: 0 })
   return response

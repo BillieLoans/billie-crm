@@ -498,20 +498,28 @@ describe('sign-in request', () => {
           },
         }),
       )
-      expect(res.status).toBe(303)
       // The decision spends the browser's nonce.
       expect(res.headers.get('set-cookie')).toMatch(new RegExp(`^${AUTHZ_COOKIE}=;`))
-      return new URL(String(res.headers.get('location')))
+      if (res.status === 303)
+        return { status: 303, url: new URL(String(res.headers.get('location'))) }
+      const html = await res.text()
+      const href = /http-equiv="refresh" content="0;url=([^"]+)"/.exec(html)?.[1]
+      return { status: res.status, url: new URL(String(href).replace(/&amp;/g, '&')) }
     }
-    const denied = await post('deny')
+    // Back to the app by a page, not a redirect: the consent page's CSP
+    // (form-action 'self') blocks a form post redirected to another origin.
+    const { status: deniedStatus, url: denied } = await post('deny')
+    expect(deniedStatus).toBe(200)
     expect(`${denied.origin}${denied.pathname}`).toBe(CLAUDE)
     expect(denied.searchParams.get('error')).toBe('access_denied')
-    const allowed = await post('allow')
+    const { status: allowedStatus, url: allowed } = await post('allow')
+    expect(allowedStatus).toBe(200)
     expect(allowed.searchParams.get('code')).toMatch(/^bcrmac_/)
     expect(allowed.searchParams.get('state')).toBe('state-1')
     expect(allowed.searchParams.get('iss')).toBe(ORIGIN)
     // The same sign-in request cannot be approved twice.
-    const again = await post('allow')
+    const { status: againStatus, url: again } = await post('allow')
+    expect(againStatus).toBe(303)
     expect(again.href).toBe(`${ORIGIN}/oauth/authorize?problem=expired`)
   })
 })
