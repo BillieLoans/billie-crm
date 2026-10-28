@@ -62,6 +62,7 @@ import * as migration_20261030_160000_report_ask_pending from './20261030_160000
 import * as migration_20261030_170000_core_reports from './20261030_170000_core_reports'
 import * as migration_20261031_090000_reporting_security_review from './20261031_090000_reporting_security_review'
 import * as migration_20261101_090000_decline_reasons from './20261101_090000_decline_reasons'
+import * as migration_20261102_090000_mcp_restricted_columns from './20261102_090000_mcp_restricted_columns'
 
 export const migrations = [
   {
@@ -383,5 +384,10 @@ export const migrations = [
     up: migration_20261101_090000_decline_reasons.up,
     down: migration_20261101_090000_decline_reasons.down,
     name: '20261101_090000_decline_reasons',
+  },
+  {
+    up: migration_20261102_090000_mcp_restricted_columns.up,
+    down: migration_20261102_090000_mcp_restricted_columns.down,
+    name: '20261102_090000_mcp_restricted_columns',
   },
 ]

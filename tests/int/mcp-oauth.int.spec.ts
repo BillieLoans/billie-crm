@@ -37,7 +37,12 @@ import { POST as register } from '@/app/api/oauth/register/route'
 import { POST as token } from '@/app/api/oauth/token/route'
 import { POST as revoke } from '@/app/api/oauth/revoke/route'
 import { GET as authorize, POST as decide } from '@/app/api/oauth/authorize/route'
-import { reportingReaderPool, reportingReaderUri } from '../utils/reportingReader'
+import {
+  reportingMcpReaderPool,
+  reportingMcpReaderUri,
+  reportingReaderPool,
+  reportingReaderUri,
+} from '../utils/reportingReader'
 
 const P = 'TEST-OAUTH'
 const ORIGIN = 'https://crm.test'
@@ -47,8 +52,10 @@ const POST = REST_POST(config)
 let payload: Payload
 let pool: Pool
 let reader: Pool
+let mcpReader: Pool
 let previousAppUrl: string | undefined
 let previousReportingUri: string | undefined
+let previousMcpUri: string | undefined
 const users: Record<string, { id: string; email: string }> = {}
 
 const s256 = (verifier: string) => createHash('sha256').update(verifier).digest('base64url')
@@ -175,11 +182,15 @@ beforeAll(async () => {
   process.env.NEXT_PUBLIC_APP_URL = ORIGIN
   previousReportingUri = process.env.REPORTING_DATABASE_URI
   process.env.REPORTING_DATABASE_URI = reportingReaderUri()
+  previousMcpUri = process.env.REPORTING_MCP_DATABASE_URI
+  process.env.REPORTING_MCP_DATABASE_URI = reportingMcpReaderUri()
   payload = await getPayload({ config })
   pool = getDashboardPool(payload) as unknown as Pool
   // Creates reporting_reader with its password and grants: a fresh database
   // (CI) has none until some suite does.
   reader = await reportingReaderPool(pool)
+  // And reporting_mcp_reader, which published reports run as over MCP (ADR 0002).
+  mcpReader = await reportingMcpReaderPool(pool)
   await cleanup()
   for (const role of ['supervisor', 'readonly', 'operations']) {
     const email = `test-oauth-${role}-${Date.now()}@billie.loans`
@@ -225,10 +236,12 @@ afterAll(async () => {
   // later files (report-mcp closes it).
   await cleanup()
   await reader?.end()
+  await mcpReader?.end()
   // Assigning undefined would store the string "undefined".
   for (const [name, value] of [
     ['NEXT_PUBLIC_APP_URL', previousAppUrl],
     ['REPORTING_DATABASE_URI', previousReportingUri],
+    ['REPORTING_MCP_DATABASE_URI', previousMcpUri],
   ] as const) {
     if (value === undefined) delete process.env[name]
     else process.env[name] = value
@@ -737,6 +750,7 @@ describe('what a connection can do', () => {
   it('other staff list and run the reports their role may run, and nothing else', async () => {
     // A closed pool (another suite's teardown, or a shutdown) is replaced on next use.
     await (await getReportingPool('mcp')).end()
+    await (await getReportingPool('mcp-query')).end()
     const { access_token } = await connect(publicClient, 'readonly')
     expect(await toolNames(access_token)).toEqual(['list_reports', 'run_report'])
     const listed = JSON.parse(await callText('list_reports', {}, access_token))

@@ -20,15 +20,22 @@ import {
   MCP_RATE_LIMITS,
 } from '@/server/reporting/mcp'
 import { MCP_IDENTIFIER_ROW_CAP } from '@/server/reporting/mcp-guard'
-import { reportingReaderPool, reportingReaderUri } from '../utils/reportingReader'
+import {
+  reportingMcpReaderPool,
+  reportingMcpReaderUri,
+  reportingReaderPool,
+  reportingReaderUri,
+} from '../utils/reportingReader'
 
 const P = 'TEST-BTB509'
 let payload: Payload
 let pool: Pool
 let reader: Pool
+let mcpReader: Pool
 const users: Record<string, { id: string; role: string }> = {}
 let key = ''
 let previousReportingUri: string | undefined
+let previousMcpUri: string | undefined
 const POST = REST_POST(config)
 
 type RpcResult = {
@@ -94,8 +101,11 @@ beforeAll(async () => {
   payload = await getPayload({ config })
   pool = getDashboardPool(payload) as unknown as Pool
   reader = await reportingReaderPool(pool)
+  mcpReader = await reportingMcpReaderPool(pool)
   previousReportingUri = process.env.REPORTING_DATABASE_URI
   process.env.REPORTING_DATABASE_URI = reportingReaderUri()
+  previousMcpUri = process.env.REPORTING_MCP_DATABASE_URI
+  process.env.REPORTING_MCP_DATABASE_URI = reportingMcpReaderUri()
   await cleanup()
   for (const [suffix, decision] of [
     ['1', 'APPROVED'],
@@ -137,10 +147,14 @@ beforeAll(async () => {
 afterAll(async () => {
   await cleanup()
   await reader?.end()
+  await mcpReader?.end()
   await (await getReportingPool('mcp')).end()
+  await (await getReportingPool('mcp-query')).end()
   // Assigning undefined would store the string "undefined".
   if (previousReportingUri === undefined) delete process.env.REPORTING_DATABASE_URI
   else process.env.REPORTING_DATABASE_URI = previousReportingUri
+  if (previousMcpUri === undefined) delete process.env.REPORTING_MCP_DATABASE_URI
+  else process.env.REPORTING_MCP_DATABASE_URI = previousMcpUri
 })
 
 describe('MCP API keys', () => {
@@ -358,11 +372,15 @@ describe('MCP tools', () => {
     expect(names.some((n) => /delete/i.test(n))).toBe(false)
   })
 
-  it('describes the reporting schema', async () => {
-    expect(await callText('describe_reporting_schema', {})).toContain('## decision (view)')
+  it('describes the reporting schema, without the restricted columns', async () => {
+    const described = await callText('describe_reporting_schema', {})
+    expect(described).toContain('## decision (view)')
+    expect(described).toContain('## restricted_finding_summary (view)')
+    expect(described).toContain('## Restricted over this connector')
+    expect(described).not.toMatch(/^- (pep_hit|vulnerable_flag|fraud_score|kill_reason) /m)
   })
 
-  it('runs a read-only query as reporting_reader, and logs it', async () => {
+  it('runs a read-only query as reporting_mcp_reader, and logs it', async () => {
     const text = await callText('run_report_query', {
       sql: `SELECT decision, count(*) AS n FROM decision WHERE conversation_id LIKE $1 GROUP BY 1 ORDER BY 1`,
       parameters: [`${P}%`],
@@ -373,7 +391,7 @@ describe('MCP tools', () => {
       { decision: 'DECLINED', n: 1 },
     ])
     expect(await callText('run_report_query', { sql: 'SELECT email FROM public.users' })).toMatch(
-      /^Error: (PERMISSION|INVALID_SQL)/,
+      /^Error: (PERMISSION: The query reads something outside the reporting schema|INVALID_SQL)/,
     )
     const asks = await payload.find({
       collection: 'report-asks',
@@ -390,21 +408,36 @@ describe('MCP tools', () => {
     expect(result.note).toMatch(/not instructions/)
   })
 
-  it('refuses sensitive columns per identifier and caps identifier-bearing results (ADR 0001)', async () => {
-    const refused = await callText('run_report_query', {
-      sql: `SELECT conversation_id, age_at_application FROM application WHERE conversation_id LIKE $1`,
-      parameters: [`${P}%`],
-    })
-    expect(refused).toMatch(/^Error: ROW_LEVEL/)
-    expect(refused).toContain('age_at_application')
-    // Even when it returns nothing, the shape itself is refused.
-    const counted = JSON.parse(
+  it('cannot read a restricted column by any route, and caps identifier-bearing results (ADR 0002)', async () => {
+    for (const sql of [
+      `SELECT conversation_id, pep_hit FROM application WHERE conversation_id LIKE $1`,
+      `SELECT conversation_id AS c, fraud_score AS s FROM application WHERE conversation_id LIKE $1`,
+      `SELECT conversation_id FROM application WHERE conversation_id LIKE $1 AND pep_hit`,
+      `SELECT conversation_id FROM application WHERE conversation_id LIKE $1 ORDER BY fraud_score`,
+    ]) {
+      const refused = await callText('run_report_query', { sql, parameters: [`${P}%`] })
+      expect(refused, sql).toMatch(
+        /^Error: PERMISSION: The query names a column this connector cannot read/,
+      )
+    }
+    // Age and identifiers are open (ADR 0002 widens ADR 0001 here).
+    const open = JSON.parse(
       await callText('run_report_query', {
-        sql: `SELECT count(*) AS n, count(*) FILTER (WHERE age_at_application < 25) AS under_25 FROM application WHERE conversation_id LIKE $1`,
+        sql: `SELECT conversation_id, age_at_application FROM application WHERE conversation_id LIKE $1`,
         parameters: [`${P}%`],
       }),
     )
-    expect(counted.rows).toHaveLength(1)
+    expect(open.columns.map((c: { name: string }) => c.name)).toEqual([
+      'conversation_id',
+      'age_at_application',
+    ])
+    // Restricted findings are counted through the summary views.
+    const summary = JSON.parse(
+      await callText('run_report_query', {
+        sql: `SELECT sum(applications) AS n, sum(pep_hits) AS pep FROM restricted_finding_summary`,
+      }),
+    )
+    expect(summary.rows).toHaveLength(1)
     const capped = JSON.parse(
       await callText('run_report_query', {
         sql: `SELECT g AS conversation_id FROM generate_series(1, ${MCP_IDENTIFIER_ROW_CAP + 10}) g`,
@@ -417,12 +450,163 @@ describe('MCP tools', () => {
       collection: 'report-asks',
       where: { kind: { equals: 'mcp_query' }, user: { equals: users.supervisor.id } },
       sort: '-createdAt',
-      limit: 3,
+      limit: 4,
       overrideAccess: true,
     })
     expect(
       logged.docs.map((d) => (d.definition as { errorCode?: string })?.errorCode ?? 'ok'),
-    ).toEqual(['ok', 'ok', 'ROW_LEVEL'])
+    ).toEqual(['ok', 'ok', 'ok', 'PERMISSION'])
+  })
+
+  it('runs a published report that reads restricted columns only when an admin has allowed it', async () => {
+    const report = await payload.create({
+      collection: 'report-definitions',
+      data: {
+        title: `${P} PEP count`,
+        slug: 'test-btb509-pep-count',
+        sql: 'SELECT count(*) FILTER (WHERE pep_hit) AS n FROM application',
+        parameters: [],
+        roles: ['admin', 'supervisor'],
+        _status: 'published',
+      } as never,
+      overrideAccess: true,
+    })
+    expect(await callText('run_report', { slug: 'test-btb509-pep-count' })).toMatch(
+      /^Error: PERMISSION: .*An admin can allow/,
+    )
+    await payload.update({
+      collection: 'report-definitions',
+      id: report.id,
+      data: { mcpRestrictedAccess: true, _status: 'published' } as never,
+      overrideAccess: true,
+    })
+    const run = JSON.parse(await callText('run_report', { slug: 'test-btb509-pep-count' }))
+    expect(run.rows).toHaveLength(1)
+  })
+
+  it('only an admin can allow restricted columns, and a SQL change by anyone else withdraws it', async () => {
+    const asUser = (role: string) => ({ ...users[role], collection: 'users' }) as never
+    const base = {
+      sql: 'SELECT 1 AS n',
+      parameters: [],
+      roles: ['admin', 'supervisor'],
+      _status: 'published',
+    }
+    // A supervisor cannot create a report with the flag set.
+    const bySupervisor = await payload.create({
+      collection: 'report-definitions',
+      data: {
+        ...base,
+        title: `${P} by supervisor`,
+        slug: 'test-btb509-sup',
+        mcpRestrictedAccess: true,
+      } as never,
+      overrideAccess: false,
+      user: asUser('supervisor'),
+    })
+    expect((bySupervisor as { mcpRestrictedAccess?: boolean }).mcpRestrictedAccess).toBe(false)
+    // An admin can.
+    const byAdmin = await payload.create({
+      collection: 'report-definitions',
+      data: {
+        ...base,
+        title: `${P} by admin`,
+        slug: 'test-btb509-adm',
+        mcpRestrictedAccess: true,
+      } as never,
+      overrideAccess: false,
+      user: asUser('admin'),
+    })
+    expect((byAdmin as { mcpRestrictedAccess?: boolean }).mcpRestrictedAccess).toBe(true)
+    // A supervisor's title change keeps the approval; a SQL change withdraws it.
+    const retitled = await payload.update({
+      collection: 'report-definitions',
+      id: byAdmin.id,
+      data: { title: `${P} by admin, retitled` } as never,
+      overrideAccess: false,
+      user: asUser('supervisor'),
+    })
+    expect((retitled as { mcpRestrictedAccess?: boolean }).mcpRestrictedAccess).toBe(true)
+    const rewritten = await payload.update({
+      collection: 'report-definitions',
+      id: byAdmin.id,
+      data: { sql: 'SELECT 2 AS n' } as never,
+      overrideAccess: false,
+      user: asUser('supervisor'),
+    })
+    expect((rewritten as { mcpRestrictedAccess?: boolean }).mcpRestrictedAccess).toBe(false)
+  })
+
+  it("withdraws the approval when SQL changes over MCP, even in an admin's session", async () => {
+    const report = await payload.create({
+      collection: 'report-definitions',
+      data: {
+        title: `${P} approved`,
+        slug: 'test-btb509-approved',
+        sql: 'SELECT 1 AS n',
+        parameters: [],
+        roles: ['admin'],
+        mcpRestrictedAccess: true,
+        _status: 'published',
+      } as never,
+      overrideAccess: true,
+    })
+    const adminKey = (
+      (await payload.create({
+        collection: MCP_API_KEYS_SLUG,
+        data: {
+          label: `${P} admin editor`,
+          user: users.admin.id,
+          reportDefinitions: { find: true, create: true },
+        } as never,
+        overrideAccess: false,
+        user: { ...users.admin, collection: 'users' } as never,
+      })) as unknown as { apiKey: string }
+    ).apiKey
+    await callText('update_report_draft', { id: report.id, sql: 'SELECT 2 AS n' }, adminKey)
+    const draft = await payload.findByID({
+      collection: 'report-definitions',
+      id: report.id,
+      draft: true,
+      overrideAccess: true,
+    })
+    expect(draft.sql).toBe('SELECT 2 AS n')
+    expect((draft as { mcpRestrictedAccess?: boolean }).mcpRestrictedAccess).toBe(false)
+  })
+
+  it('cannot allow restricted columns itself, even for an admin', async () => {
+    const adminKey = (
+      (await payload.create({
+        collection: MCP_API_KEYS_SLUG,
+        data: {
+          label: `${P} admin`,
+          user: users.admin.id,
+          reportDefinitions: { find: true, create: true },
+        } as never,
+        overrideAccess: false,
+        user: { ...users.admin, collection: 'users' } as never,
+      })) as unknown as { apiKey: string }
+    ).apiKey
+    await callText(
+      'createReportDefinitions',
+      {
+        title: `${P} self-allowed`,
+        slug: 'test-btb509-self-allowed',
+        sql: 'SELECT count(*) FILTER (WHERE pep_hit) AS n FROM application',
+        parameters: [],
+        roles: ['admin'],
+        mcpRestrictedAccess: true,
+      },
+      adminKey,
+    )
+    const { docs } = await payload.find({
+      collection: 'report-definitions',
+      where: { slug: { equals: 'test-btb509-self-allowed' } },
+      draft: true,
+      overrideAccess: true,
+    })
+    expect(docs).toHaveLength(1)
+    expect((docs[0] as { mcpRestrictedAccess?: boolean }).mcpRestrictedAccess).toBe(false)
   })
 
   it('saves a new report as a draft, whatever status is asked for', async () => {

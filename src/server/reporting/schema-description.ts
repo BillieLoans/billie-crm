@@ -10,7 +10,7 @@
  * and logged requests say which description they used.
  */
 
-export const SCHEMA_DESCRIPTION_VERSION = 'reporting-desc-v6'
+export const SCHEMA_DESCRIPTION_VERSION = 'reporting-desc-v8'
 
 export interface ColumnDescription {
   name: string
@@ -35,6 +35,16 @@ const col = (name: string, type: string, meaning: string): ColumnDescription => 
 
 const STAFF =
   'Staff user id (not a name), or NULL. Count or group by it; never resolve it to a person in a report.'
+
+/**
+ * Over the MCP connector, values that would disclose a restricted finding are
+ * generalised in the views (ADR 0002): see `reporting.reason_for_session`.
+ */
+const GENERALISED_REASON =
+  'Over the Claude connector, every identity-category reason (ID verification, identity risk, PEP) reads CREDIT_ASSESSMENT:IDENTITY and an identity re-application block reads REAPPLICATION_BLOCK:IDENTITY.'
+
+const GENERALISED_BLOCK =
+  'Over the Claude connector, PEP, ID_VERIFICATION and IDENTITY_CONFLICT all read IDENTITY.'
 
 const ACQUISITION =
   "Acquisition group: paid, organic, llm, social, referral (another website, not the referral programme), email, sms, other, direct (no attribution), or 'not recorded' (started before attribution capture on 6 Oct 2026). Group by this."
@@ -61,7 +71,7 @@ export const REPORTING_TABLES: readonly TableDescription[] = [
         name: 'customer_id',
         type: 'text',
         meaning:
-          'Customer id, or NULL before identity was established. Never select it into a report shown to staff; use it only to count distinct customers.',
+          'Customer id, or NULL before identity was established. Count distinct customers with it; select it only into a list staff will act on.',
       },
       {
         name: 'started_at',
@@ -119,8 +129,7 @@ export const REPORTING_TABLES: readonly TableDescription[] = [
       {
         name: 'decline_reason',
         type: 'text',
-        meaning:
-          'Reason code of a decline, e.g. CREDIT_ASSESSMENT:SERVICEABILITY. NULL unless declined; can be NULL for an old decline.',
+        meaning: `Reason code of a decline, e.g. CREDIT_ASSESSMENT:SERVICEABILITY. NULL unless declined; can be NULL for an old decline. ${GENERALISED_REASON}`,
       },
       {
         name: 'decline_category',
@@ -308,8 +317,16 @@ export const REPORTING_TABLES: readonly TableDescription[] = [
         'Every credit component that declined (e.g. account_conduct, serviceability), not only the one the reason names, or NULL when not recorded. Use unnest() to count.',
       ),
       col('retry_eligible', 'boolean', 'The customer may reapply after this decision, if stated.'),
-      col('block_reason', 'text', 'Why the attempt hit a re-application block, or NULL.'),
-      col('block_message_variant', 'text', 'Which block message the customer was shown.'),
+      col(
+        'block_reason',
+        'text',
+        `Why the attempt hit a re-application block, or NULL. ${GENERALISED_BLOCK}`,
+      ),
+      col(
+        'block_message_variant',
+        'text',
+        `Which block message the customer was shown. ${GENERALISED_BLOCK}`,
+      ),
       col('block_disposition', 'text', 'How the block was resolved or classified, or NULL.'),
       col('block_manual_review', 'boolean', 'The block was flagged for manual review, or NULL.'),
       col('blocked_at', 'timestamptz', 'When the block was applied, or NULL.'),
@@ -390,7 +407,11 @@ export const REPORTING_TABLES: readonly TableDescription[] = [
         meaning: 'Application number, if the event carried one.',
       },
       { name: 'decision', type: 'text', meaning: 'APPROVED, DECLINED or REFERRED (upper case).' },
-      { name: 'reason', type: 'text', meaning: 'Reason code; set on declines.' },
+      {
+        name: 'reason',
+        type: 'text',
+        meaning: `Reason code; set on declines. ${GENERALISED_REASON}`,
+      },
       {
         name: 'decline_category',
         type: 'text',
@@ -474,7 +495,8 @@ export const REPORTING_TABLES: readonly TableDescription[] = [
       {
         name: 'customer_id',
         type: 'text',
-        meaning: 'Customer id. Only for counting distinct customers.',
+        meaning:
+          'Customer id: count distinct customers with it, or select it into a list staff will act on.',
       },
       { name: 'loan_amount', type: 'numeric', meaning: 'Principal in AUD.' },
       { name: 'loan_fee', type: 'numeric', meaning: 'Fee in AUD.' },
@@ -590,7 +612,7 @@ export const REPORTING_TABLES: readonly TableDescription[] = [
       col(
         'customer_id',
         'text',
-        'Customer id. Join key to application, loan and the other views; never select it into a report.',
+        'Customer id. Join key to application, loan and the other views; select it only into a list staff will act on.',
       ),
       col(
         'canonical_id',
@@ -648,7 +670,11 @@ export const REPORTING_TABLES: readonly TableDescription[] = [
         'Fraud risk categories; use unnest() to count by category.',
       ),
       col('fraud_risk_flagged_at', 'timestamptz', 'When fraud risk was flagged.'),
-      col('block_reason', 'text', 'Reason the customer is blocked from reapplying, or NULL.'),
+      col(
+        'block_reason',
+        'text',
+        `Reason the customer is blocked from reapplying, or NULL. ${GENERALISED_BLOCK}`,
+      ),
       col('blocked_at', 'timestamptz', 'When the re-application block started.'),
       col('blocked_until', 'timestamptz', 'When the re-application block ends, or NULL.'),
       col('block_clear_status', 'text', 'Status of clearing the block, or NULL.'),
@@ -671,7 +697,11 @@ export const REPORTING_TABLES: readonly TableDescription[] = [
     grain: 'One row per collections case on a loan.',
     columns: [
       col('loan_account_id', 'text', 'The loan in collections. Join to loan.'),
-      col('customer_id', 'text', 'Customer id; only for counting distinct customers.'),
+      col(
+        'customer_id',
+        'text',
+        'Customer id: count distinct customers with it, or select it into a list staff will act on.',
+      ),
       col('state', 'text', 'open, awaiting_human or cured.'),
       col('hardship_paused', 'boolean', 'Collections paused for hardship.'),
       col('stopped_contact', 'boolean', 'The customer asked collections to stop contacting them.'),
@@ -700,7 +730,11 @@ export const REPORTING_TABLES: readonly TableDescription[] = [
       col('request_id', 'text', 'Unique id of the request.'),
       col('request_number', 'text', 'Human-readable request number.'),
       col('loan_account_id', 'text', 'Loan to write off. Join to loan.'),
-      col('customer_id', 'text', 'Customer id; only for counting distinct customers.'),
+      col(
+        'customer_id',
+        'text',
+        'Customer id: count distinct customers with it, or select it into a list staff will act on.',
+      ),
       col('amount', 'numeric', 'Amount requested to write off, AUD.'),
       col('original_balance', 'numeric', 'Balance when the request was made, AUD.'),
       col(
@@ -736,7 +770,11 @@ export const REPORTING_TABLES: readonly TableDescription[] = [
     columns: [
       col('request_id', 'text', 'Unique id of the request.'),
       col('request_number', 'text', 'Human-readable request number.'),
-      col('customer_id', 'text', 'Canonical customer id; only for counting distinct customers.'),
+      col(
+        'customer_id',
+        'text',
+        'Canonical customer id: count distinct customers with it, or select it into a list staff will act on.',
+      ),
       col(
         'conversation_id',
         'text',
@@ -745,7 +783,7 @@ export const REPORTING_TABLES: readonly TableDescription[] = [
       col(
         'reasons',
         'text[]',
-        'Block reasons the request clears (e.g. SERVICEABILITY); use unnest() to count.',
+        `Block reasons the request clears (e.g. SERVICEABILITY); use unnest() to count. ${GENERALISED_BLOCK}`,
       ),
       col('status', 'text', 'pending, approved, rejected or cancelled.'),
       col('requested_by', 'text', STAFF),
@@ -766,7 +804,11 @@ export const REPORTING_TABLES: readonly TableDescription[] = [
       'One row per notification event to a customer (email or SMS): sends, failures, blocks, statements and suppression changes. No recipient or content.',
     columns: [
       col('notification_id', 'text', 'Unique id of the notification.'),
-      col('customer_id', 'text', 'Customer id; only for counting distinct customers.'),
+      col(
+        'customer_id',
+        'text',
+        'Customer id: count distinct customers with it, or select it into a list staff will act on.',
+      ),
       col(
         'status',
         'text',
@@ -837,7 +879,11 @@ export const REPORTING_TABLES: readonly TableDescription[] = [
     grain: 'One row per staff contact note: the kind of contact, never its subject or text.',
     columns: [
       col('note_id', 'text', 'Unique id of the note.'),
-      col('customer_id', 'text', 'Customer id; only for counting distinct customers.'),
+      col(
+        'customer_id',
+        'text',
+        'Customer id: count distinct customers with it, or select it into a list staff will act on.',
+      ),
       col('loan_account_id', 'text', 'Loan the note is about, or NULL.'),
       col('conversation_id', 'text', 'Application attempt the note is about, or NULL.'),
       col('channel', 'text', 'phone, email, sms, internal or system.'),
@@ -934,7 +980,101 @@ export const REPORTING_TABLES: readonly TableDescription[] = [
       },
     ],
   },
+  {
+    name: 'restricted_finding_summary',
+    kind: 'view',
+    grain:
+      'One row per Sydney month, acquisition group and decision outcome of the applications started in it: counts of PEP, fraud and kill findings. Mock decisions are excluded. A finding count reads NULL (hidden) when the group has fewer than 5, when the count is 1 to 4, or when the rest of the group is 0 to 4, so a narrow group cannot single out a person. A hidden count is unknown, not zero: sum() skips it, so never add hidden counts up as if they were 0; say how many are hidden instead.',
+    columns: [
+      col('started_month', 'date', 'First day of the Sydney month the applications started in.'),
+      col('acquisition', 'text', 'Acquisition group, as application.acquisition.'),
+      col(
+        'outcome',
+        'text',
+        'Latest credit decision: approved, declined, referred or no_decision.',
+      ),
+      col('applications', 'bigint', 'Applications in the group (never hidden).'),
+      col('pep_hits', 'bigint', 'Applications whose identity screening found a PEP match.'),
+      col('pep_declines', 'bigint', 'Applications declined for a PEP match.'),
+      col('pep_blocks', 'bigint', 'Applications stopped by a PEP re-application block.'),
+      col(
+        'fraud_high_or_critical',
+        'bigint',
+        'Applications whose latest fraud severity is HIGH or CRITICAL.',
+      ),
+      col('fraud_would_halt', 'bigint', 'Applications the latest fraud assessment would halt.'),
+      col('fraud_kills', 'bigint', 'Applications the system or staff ended for fraud or abuse.'),
+    ],
+  },
+  {
+    name: 'customer_risk_summary',
+    kind: 'view',
+    grain:
+      'One row per Sydney month a customer was first recorded and residential state: counts of screening, vulnerability and fraud flags. Merged customer records are excluded. A finding count reads NULL (hidden) when the group has fewer than 5, when the count is 1 to 4, or when the rest of the group is 0 to 4. A hidden count is unknown, not zero: sum() skips it, so never add hidden counts up as if they were 0; say how many are hidden instead.',
+    columns: [
+      col(
+        'created_month',
+        'date',
+        'First day of the Sydney month the customers were first recorded.',
+      ),
+      col('state', 'text', 'Residential state, or NULL.'),
+      col('customers', 'bigint', 'Customers in the group (never hidden).'),
+      col('pep_matches', 'bigint', 'Customers whose PEP screening found a match.'),
+      col('sanctions_matches', 'bigint', 'Customers whose sanctions screening found a match.'),
+      col(
+        'screening_not_passed',
+        'bigint',
+        'Customers whose watch-list screening outcome is recorded and is not a pass.',
+      ),
+      col('vulnerable', 'bigint', 'Customers flagged as vulnerable.'),
+      col('fraud_risk_active', 'bigint', 'Customers with an active fraud risk flag.'),
+      col(
+        'fraud_risk_high_or_critical',
+        'bigint',
+        'Customers whose fraud risk severity is HIGH or CRITICAL.',
+      ),
+    ],
+  },
 ]
+
+/**
+ * Columns the MCP connector's role cannot read (ADR 0002): they state, or
+ * by one of their values reveal, that a person is politically exposed, on a
+ * sanctions list, vulnerable or suspected of fraud. The schema script grants
+ * `reporting_mcp_reader` every described column except these, and the MCP
+ * description leaves them out. Adding a column that could disclose one of
+ * those findings means adding it here.
+ */
+export const RESTRICTED_COLUMNS: Readonly<Record<string, readonly string[]>> = {
+  application: [
+    'pep_hit',
+    'fraud_score',
+    'fraud_severity',
+    'fraud_categories',
+    'fraud_peak_score',
+    'fraud_peak_severity',
+    'fraud_flagged_turns',
+    'fraud_would_halt',
+    'kill_reason',
+    'killed_by',
+  ],
+  customer: [
+    'pep_result',
+    'sanctions_result',
+    'screening_outcome',
+    'vulnerable_flag',
+    'fraud_risk_active',
+    'fraud_risk_severity',
+    'fraud_risk_score',
+    'fraud_risk_categories',
+    'fraud_risk_flagged_at',
+  ],
+  // The decision view carries the same reason, generalised for the connector.
+  decision_event: ['reason'],
+}
+
+export const isRestrictedColumn = (table: string, column: string): boolean =>
+  RESTRICTED_COLUMNS[table]?.includes(column) ?? false
 
 export const REPORTING_FUNCTIONS: readonly string[] = [
   'reporting.sydney_date(timestamptz) -> date: the Sydney calendar day of an instant.',
@@ -955,13 +1095,18 @@ export const BUSINESS_RULES: readonly string[] = [
   'Funded means disbursed (application.funded / loan.disbursed_on), not approved.',
   'A rate is a fraction of a stated denominator. Name rate columns *_rate (0 to 1) or *_pct (0 to 100), and guard division with NULLIF(denominator, 0).',
   'Money of record comes from snap_portfolio. Sums of loan.total_outstanding are operational estimates; say so in the description if you use them.',
-  'Never select names, contact details, customer_id, application_number, staff user ids or storage locations into a result; count or group them instead. Sensitive flags (vulnerable_flag, pep_hit, fraud) are reported as counts, never per customer.',
+  'Select identifiers (customer_id, application_number, conversation_id, loan_account_id) only into a list staff will act on; otherwise count them. Never select staff user ids or storage locations into a result. Names, contact details, dates of birth and street addresses are not in this schema.',
+  'Politically exposed person and sanctions screening, the vulnerability flag and fraud findings are reported as counts, never per person. The restricted_finding_summary and customer_risk_summary views count them with small numbers hidden.',
   'Acquisition: group by the acquisition column. referral means another website referred the visitor; the referral programme is not in this schema.',
   'When grouping, add a total row only if every listed column can be summed or recomputed for the total; label it All.',
 ]
 
-/** The description as text, for the prompt. */
-export function renderSchemaDescription(): string {
+/**
+ * The description as text, for the prompt. For the MCP connector
+ * (`audience: 'mcp'`), the restricted columns are left out: its role cannot
+ * read them.
+ */
+export function renderSchemaDescription(audience: 'reports' | 'mcp' = 'reports'): string {
   const lines: string[] = [
     `# The reporting schema (${SCHEMA_DESCRIPTION_VERSION})`,
     '',
@@ -974,9 +1119,19 @@ export function renderSchemaDescription(): string {
     ...REPORTING_FUNCTIONS.map((f) => `- ${f}`),
     '',
   ]
+  if (audience === 'mcp') {
+    lines.push(
+      '## Restricted over this connector',
+      'PEP and sanctions screening, the vulnerability flag, fraud findings and kill reasons are not readable here, in any part of a query: a query that names one fails with a permission error. Count them with restricted_finding_summary and customer_risk_summary. To act on the people behind a count, run the matching published report in the CRM.',
+      '',
+    )
+  }
   for (const table of REPORTING_TABLES) {
     lines.push(`## ${table.name} (${table.kind})`, table.grain, '')
-    for (const c of table.columns) lines.push(`- ${c.name} ${c.type}: ${c.meaning}`)
+    for (const c of table.columns) {
+      if (audience === 'mcp' && isRestrictedColumn(table.name, c.name)) continue
+      lines.push(`- ${c.name} ${c.type}: ${c.meaning}`)
+    }
     for (const n of table.notes ?? []) lines.push(`- Note: ${n}`)
     lines.push('')
   }
