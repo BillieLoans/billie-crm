@@ -44,6 +44,18 @@ const validateSlug: Validate = (value) => {
  * save, and a draft at a reserved link (`new`, `ask`, ...) could never be
  * opened from Reports. The unique index still applies to drafts.
  */
+/**
+ * An admin's "Claude may read restricted columns" approves the SQL they saw
+ * (ADR 0002). When anyone else changes the SQL or the parameters, the
+ * approval lapses and an admin has to give it again.
+ */
+export const approvalFollowsSql: CollectionBeforeChangeHook = ({ data, originalDoc, req }) => {
+  if (!originalDoc?.mcpRestrictedAccess || isAdmin(req.user)) return data
+  const changed = (field: 'sql' | 'parameters') =>
+    field in data && JSON.stringify(data[field]) !== JSON.stringify(originalDoc[field])
+  return changed('sql') || changed('parameters') ? { ...data, mcpRestrictedAccess: false } : data
+}
+
 const slugEvenForDrafts: CollectionBeforeChangeHook = ({ data, collection }) => {
   if (data.slug === undefined) return data
   const result = validateSlug(data.slug, {} as never)
@@ -220,7 +232,7 @@ export const ReportDefinitions: CollectionConfig = {
   },
   hooks: {
     beforeOperation: [mcpDraftsOnly],
-    beforeChange: [slugEvenForDrafts, checksBeforePublish, setOrigin],
+    beforeChange: [slugEvenForDrafts, checksBeforePublish, setOrigin, approvalFollowsSql],
   },
   fields: [
     { name: 'title', type: 'text', required: true, maxLength: 120 },
@@ -259,7 +271,10 @@ export const ReportDefinitions: CollectionConfig = {
       label: 'Claude may read restricted columns',
       type: 'checkbox',
       defaultValue: false,
-      access: { update: ({ req }) => isAdmin(req.user) },
+      access: {
+        create: ({ req }) => isAdmin(req.user),
+        update: ({ req }) => isAdmin(req.user),
+      },
       admin: {
         position: 'sidebar',
         description:

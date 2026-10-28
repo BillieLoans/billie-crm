@@ -123,8 +123,10 @@ fraud severity, fraud halts, fraud kills) and `customer_risk_summary`
 (customers by the month they were first recorded and state: PEP, sanctions
 and screening matches, vulnerability, fraud risk). The views read the restricted columns with their owner's
 privileges; `reporting_mcp_reader` can read the views, not the columns
-behind them. A count below 5 is shown as suppressed, so a narrow filter
-cannot single out one person. The views fix the grouping, so nobody can
+behind them. A finding count reads NULL when its group has fewer than 5
+members (even a 0 says something about each of them), when the count is 1
+to 4, or when the rest of the group is 1 to 4 (6 of 7 says each member
+probably has the finding), so a narrow filter cannot single out one person. The views fix the grouping, so nobody can
 group by an identifier. Counts that, subtracted from an open total, would
 reveal a hidden one (such as the low fraud severities) are left out.
 
@@ -152,8 +154,10 @@ run.
 too, so a report that reads a restricted column fails over the connector.
 An admin can allow a report restricted columns (`mcpRestrictedAccess`,
 "Claude may read restricted columns"); it then runs as `reporting_reader`.
-Admins only, because supervisors write reports, and the person who wrote a
-report should not also approve it. Claude cannot set it: writes over MCP
+Admins only, on create as well as update, because supervisors write
+reports, and the person who wrote a report should not also approve it. The
+approval is for the SQL the admin saw: when anyone else changes the
+report's SQL or parameters, it lapses. Claude cannot set it: writes over MCP
 drop the field, whoever is signed in. The Reports view in the CRM is
 unaffected.
 

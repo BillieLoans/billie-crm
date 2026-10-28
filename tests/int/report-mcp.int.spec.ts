@@ -484,6 +484,59 @@ describe('MCP tools', () => {
     expect(run.rows).toHaveLength(1)
   })
 
+  it('only an admin can allow restricted columns, and a SQL change by anyone else withdraws it', async () => {
+    const asUser = (role: string) => ({ ...users[role], collection: 'users' }) as never
+    const base = {
+      sql: 'SELECT 1 AS n',
+      parameters: [],
+      roles: ['admin', 'supervisor'],
+      _status: 'published',
+    }
+    // A supervisor cannot create a report with the flag set.
+    const bySupervisor = await payload.create({
+      collection: 'report-definitions',
+      data: {
+        ...base,
+        title: `${P} by supervisor`,
+        slug: 'test-btb509-sup',
+        mcpRestrictedAccess: true,
+      } as never,
+      overrideAccess: false,
+      user: asUser('supervisor'),
+    })
+    expect((bySupervisor as { mcpRestrictedAccess?: boolean }).mcpRestrictedAccess).toBe(false)
+    // An admin can.
+    const byAdmin = await payload.create({
+      collection: 'report-definitions',
+      data: {
+        ...base,
+        title: `${P} by admin`,
+        slug: 'test-btb509-adm',
+        mcpRestrictedAccess: true,
+      } as never,
+      overrideAccess: false,
+      user: asUser('admin'),
+    })
+    expect((byAdmin as { mcpRestrictedAccess?: boolean }).mcpRestrictedAccess).toBe(true)
+    // A supervisor's title change keeps the approval; a SQL change withdraws it.
+    const retitled = await payload.update({
+      collection: 'report-definitions',
+      id: byAdmin.id,
+      data: { title: `${P} by admin, retitled` } as never,
+      overrideAccess: false,
+      user: asUser('supervisor'),
+    })
+    expect((retitled as { mcpRestrictedAccess?: boolean }).mcpRestrictedAccess).toBe(true)
+    const rewritten = await payload.update({
+      collection: 'report-definitions',
+      id: byAdmin.id,
+      data: { sql: 'SELECT 2 AS n' } as never,
+      overrideAccess: false,
+      user: asUser('supervisor'),
+    })
+    expect((rewritten as { mcpRestrictedAccess?: boolean }).mcpRestrictedAccess).toBe(false)
+  })
+
   it('cannot allow restricted columns itself, even for an admin', async () => {
     const adminKey = (
       (await payload.create({

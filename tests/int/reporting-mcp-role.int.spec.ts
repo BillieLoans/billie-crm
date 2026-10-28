@@ -195,12 +195,24 @@ describe('decline and block reasons', () => {
 })
 
 describe('the summary views', () => {
-  it('hide a count from 1 to 4', async () => {
+  it('hide a count that could single out a person', async () => {
     const { rows } = await asMcp(
-      `SELECT reporting.suppress_small(0) AS zero, reporting.suppress_small(1) AS one,
-              reporting.suppress_small(4) AS four, reporting.suppress_small(5) AS five`,
+      `SELECT reporting.suppress_small(0, 20) AS none_of_many,
+              reporting.suppress_small(3, 20) AS few,
+              reporting.suppress_small(10, 20) AS half,
+              reporting.suppress_small(17, 20) AS all_but_few,
+              reporting.suppress_small(20, 20) AS all_of_them,
+              reporting.suppress_small(0, 3) AS none_of_few`,
     )
-    expect(rows[0]).toEqual({ zero: 0, one: null, four: null, five: 5 })
+    expect(rows[0]).toEqual({
+      none_of_many: 0,
+      few: null,
+      half: 10,
+      all_but_few: null,
+      all_of_them: 20,
+      // In a group under 5, even a zero says something about each member.
+      none_of_few: null,
+    })
   })
 
   it('can be read by the connector', async () => {

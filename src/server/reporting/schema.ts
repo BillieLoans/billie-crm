@@ -361,11 +361,18 @@ export const REPORTING_SCHEMA_STATEMENTS: readonly string[] = [
       AND p_reason IN (${IDENTITY_BLOCK_REASONS.map(sqlString).join(', ')}) THEN 'IDENTITY'
      ELSE p_reason
    END $$`,
-  // A count of a restricted finding, with 1 to 4 hidden, so a narrow group
-  // in a summary view cannot single out a person.
-  `CREATE OR REPLACE FUNCTION reporting.suppress_small(n bigint)
+  // A count of a restricted finding in a group of total, hidden (NULL) when
+  // it could single out a person: the group is small (even a 0 says something
+  // about each member), the count is 1 to 4, or so is the rest of the group
+  // (6 of 7 says each member probably has the finding).
+  `CREATE OR REPLACE FUNCTION reporting.suppress_small(n bigint, total bigint)
    RETURNS bigint LANGUAGE sql IMMUTABLE PARALLEL SAFE
-   AS $$ SELECT CASE WHEN n BETWEEN 1 AND ${SUPPRESS_BELOW - 1} THEN NULL ELSE n END $$`,
+   AS $$ SELECT CASE
+     WHEN total < ${SUPPRESS_BELOW} THEN NULL
+     WHEN n BETWEEN 1 AND ${SUPPRESS_BELOW - 1} THEN NULL
+     WHEN total - n BETWEEN 1 AND ${SUPPRESS_BELOW - 1} THEN NULL
+     ELSE n
+   END $$`,
 
   // ── Decision events (append-only) ────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS reporting.decision_event (
@@ -870,17 +877,17 @@ export const REPORTING_SCHEMA_STATEMENTS: readonly string[] = [
      a.acquisition,
      a.decision_status AS outcome,
      count(*) AS applications,
-     reporting.suppress_small(count(*) FILTER (WHERE a.pep_hit)) AS pep_hits,
+     reporting.suppress_small(count(*) FILTER (WHERE a.pep_hit), count(*)) AS pep_hits,
      reporting.suppress_small(count(*) FILTER (
        WHERE a.decision_status = 'declined' AND d.mock_origin IS NOT TRUE
-         AND c.decision_detail_reason LIKE '%:PEP')) AS pep_declines,
-     reporting.suppress_small(count(*) FILTER (WHERE c.reapplication_block_reason = 'PEP'))
+         AND c.decision_detail_reason LIKE '%:PEP'), count(*)) AS pep_declines,
+     reporting.suppress_small(count(*) FILTER (WHERE c.reapplication_block_reason = 'PEP'), count(*))
                                                      AS pep_blocks,
-     reporting.suppress_small(count(*) FILTER (WHERE a.fraud_severity IN ('HIGH', 'CRITICAL')))
+     reporting.suppress_small(count(*) FILTER (WHERE a.fraud_severity IN ('HIGH', 'CRITICAL')), count(*))
                                                      AS fraud_high_or_critical,
-     reporting.suppress_small(count(*) FILTER (WHERE a.fraud_would_halt))
+     reporting.suppress_small(count(*) FILTER (WHERE a.fraud_would_halt), count(*))
                                                      AS fraud_would_halt,
-     reporting.suppress_small(count(*) FILTER (WHERE a.kill_reason = 'fraud_abuse'))
+     reporting.suppress_small(count(*) FILTER (WHERE a.kill_reason = 'fraud_abuse'), count(*))
                                                      AS fraud_kills
    FROM reporting.application a
    JOIN public.conversations c ON c.conversation_id = a.conversation_id
@@ -894,17 +901,17 @@ export const REPORTING_SCHEMA_STATEMENTS: readonly string[] = [
      c.state,
      count(*) AS customers,
      reporting.suppress_small(count(*) FILTER (
-       WHERE c.pep_result IS NOT NULL AND c.pep_result <> 'no_match')) AS pep_matches,
+       WHERE c.pep_result IS NOT NULL AND c.pep_result <> 'no_match'), count(*)) AS pep_matches,
      reporting.suppress_small(count(*) FILTER (
-       WHERE c.sanctions_result IS NOT NULL AND c.sanctions_result <> 'no_match'))
+       WHERE c.sanctions_result IS NOT NULL AND c.sanctions_result <> 'no_match'), count(*))
                                                      AS sanctions_matches,
      reporting.suppress_small(count(*) FILTER (
-       WHERE c.screening_outcome IS NOT NULL AND c.screening_outcome <> 'pass'))
+       WHERE c.screening_outcome IS NOT NULL AND c.screening_outcome <> 'pass'), count(*))
                                                      AS screening_not_passed,
-     reporting.suppress_small(count(*) FILTER (WHERE c.vulnerable_flag)) AS vulnerable,
-     reporting.suppress_small(count(*) FILTER (WHERE c.fraud_risk_active)) AS fraud_risk_active,
+     reporting.suppress_small(count(*) FILTER (WHERE c.vulnerable_flag), count(*)) AS vulnerable,
+     reporting.suppress_small(count(*) FILTER (WHERE c.fraud_risk_active), count(*)) AS fraud_risk_active,
      reporting.suppress_small(count(*) FILTER (
-       WHERE c.fraud_risk_severity IN ('HIGH', 'CRITICAL'))) AS fraud_risk_high_or_critical
+       WHERE c.fraud_risk_severity IN ('HIGH', 'CRITICAL')), count(*)) AS fraud_risk_high_or_critical
    FROM reporting.customer c
    WHERE c.merged_into IS NULL
    GROUP BY 1, 2`,
