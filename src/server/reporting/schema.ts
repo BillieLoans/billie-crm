@@ -20,6 +20,9 @@
  *   - `decline_reason_category`: reason-code prefix to the five BTB-462
  *     categories, read through `decline_category()` so a mapping change
  *     applies to history.
+ *   - `restricted_finding_summary`, `customer_risk_summary`: counts of the
+ *     restricted findings (PEP, sanctions, vulnerability, fraud), with small
+ *     counts hidden, for the MCP connector's role (ADR 0002).
  *   - `credit_rule`: credit rule id to its family and a short label, read
  *     through `decline_reason_label()` so a decline can be reported by the
  *     rule that failed (for example "Data quality gate G4"), not only by the
@@ -38,6 +41,35 @@
  * depends on. A migration that changes a column used below must drop the
  * dependent view first and re-run `REPORTING_SCHEMA_SQL` afterwards.
  */
+
+import { MCP_READER_ROLE } from './runner'
+import { REPORTING_TABLES, isRestrictedColumn } from './schema-description'
+
+/**
+ * Re-application block reasons that read `IDENTITY` for the MCP connector's
+ * login (ADR 0002): a PEP block must not be told apart from the others.
+ */
+const IDENTITY_BLOCK_REASONS = ['PEP', 'ID_VERIFICATION', 'IDENTITY_CONFLICT'] as const
+
+/** Counts of a restricted finding below this read NULL in the summary views. */
+export const SUPPRESS_BELOW = 5
+
+/**
+ * `GRANT SELECT (columns)` on every described table and view, leaving out
+ * the restricted columns (ADR 0002). Postgres checks column privileges
+ * wherever a column is named, so the connector's role cannot select, filter,
+ * join, group or sort on a restricted column. A column the description does
+ * not list is not granted (and the description test fails), so a new column
+ * is closed until someone describes it.
+ */
+export function mcpReaderGrants(role: string = MCP_READER_ROLE): string[] {
+  return REPORTING_TABLES.map((table) => {
+    const open = table.columns
+      .filter((c) => !isRestrictedColumn(table.name, c.name))
+      .map((c) => `"${c.name}"`)
+    return `GRANT SELECT (${open.join(', ')}) ON reporting.${table.name} TO ${role}`
+  })
+}
 
 /** BTB-462 decline categories. */
 export type DeclineCategory = 'capacity' | 'character' | 'identity' | 'eligibility' | 'other'
@@ -179,6 +211,8 @@ const VIEW_NAMES = [
   'llm_cost',
   'contact_note',
   'data_freshness',
+  'restricted_finding_summary',
+  'customer_risk_summary',
 ] as const
 
 /** Statements, in order. Each is safe to re-run. */
@@ -306,6 +340,33 @@ export const REPORTING_SCHEMA_STATEMENTS: readonly string[] = [
      WHEN p_post_identity_risk = 'DECLINED' THEN 'CREDIT_ASSESSMENT:POST_IDENTITY_RISK_CHECKS'
    END) $$`,
 
+  // ── Restricted findings over the MCP connector (ADR 0002) ───────────────
+  // A decline or block reason can name a PEP match. For the connector's
+  // login, every identity-category reason reads as one generic code, so a
+  // PEP decline cannot be told from an ID-verification one, by value or by
+  // filter. Every other login sees the reason as recorded.
+  `CREATE OR REPLACE FUNCTION reporting.reason_for_session(p_reason text)
+   RETURNS text LANGUAGE sql STABLE PARALLEL SAFE
+   AS $$ SELECT CASE
+     WHEN session_user <> ${sqlString(MCP_READER_ROLE)} THEN p_reason
+     WHEN reporting.decline_category(p_reason) = 'identity' THEN 'CREDIT_ASSESSMENT:IDENTITY'
+     WHEN p_reason IN (${IDENTITY_BLOCK_REASONS.map((r) => sqlString(`REAPPLICATION_BLOCK:${r}`)).join(', ')})
+       THEN 'REAPPLICATION_BLOCK:IDENTITY'
+     ELSE p_reason
+   END $$`,
+  `CREATE OR REPLACE FUNCTION reporting.block_reason_for_session(p_reason text)
+   RETURNS text LANGUAGE sql STABLE PARALLEL SAFE
+   AS $$ SELECT CASE
+     WHEN session_user = ${sqlString(MCP_READER_ROLE)}
+      AND p_reason IN (${IDENTITY_BLOCK_REASONS.map(sqlString).join(', ')}) THEN 'IDENTITY'
+     ELSE p_reason
+   END $$`,
+  // A count of a restricted finding, with 1 to 4 hidden, so a narrow group
+  // in a summary view cannot single out a person.
+  `CREATE OR REPLACE FUNCTION reporting.suppress_small(n bigint)
+   RETURNS bigint LANGUAGE sql IMMUTABLE PARALLEL SAFE
+   AS $$ SELECT CASE WHEN n BETWEEN 1 AND ${SUPPRESS_BELOW - 1} THEN NULL ELSE n END $$`,
+
   // ── Decision events (append-only) ────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS reporting.decision_event (
      decision_key       text PRIMARY KEY,
@@ -375,7 +436,7 @@ export const REPORTING_SCHEMA_STATEMENTS: readonly string[] = [
                                                       AS decided,
      COALESCE(c.decision_status::text = 'approved', false) AS approved,
      CASE WHEN c.decision_status::text = 'declined'
-          THEN c.decision_detail_reason END           AS decline_reason,
+          THEN reporting.reason_for_session(c.decision_detail_reason) END AS decline_reason,
      CASE WHEN c.decision_status::text = 'declined'
           THEN reporting.decline_category(c.decision_detail_reason) END
                                                       AS decline_category,
@@ -467,8 +528,9 @@ export const REPORTING_SCHEMA_STATEMENTS: readonly string[] = [
      END                                              AS declined_components,
      c.decision_detail_retry_eligible                 AS retry_eligible,
      -- Re-application block (the stop message and justification are free text).
-     c.reapplication_block_reason                     AS block_reason,
-     c.reapplication_block_message_variant            AS block_message_variant,
+     reporting.block_reason_for_session(c.reapplication_block_reason) AS block_reason,
+     reporting.block_reason_for_session(c.reapplication_block_message_variant)
+                                                      AS block_message_variant,
      c.reapplication_block_disposition_kind           AS block_disposition,
      c.reapplication_block_manual_review_candidate    AS block_manual_review,
      c.reapplication_block_blocked_at                 AS blocked_at,
@@ -513,7 +575,7 @@ export const REPORTING_SCHEMA_STATEMENTS: readonly string[] = [
      d.conversation_id,
      d.application_number,
      d.decision,
-     d.reason,
+     reporting.reason_for_session(d.reason) AS reason,
      reporting.decline_category(CASE WHEN d.decision = 'DECLINED' THEN d.reason END)
                          AS decline_category,
      d.retry_eligible,
@@ -629,7 +691,7 @@ export const REPORTING_SCHEMA_STATEMENTS: readonly string[] = [
           THEN ARRAY(SELECT jsonb_array_elements_text(cu.fraud_risk_categories)) END
                                                               AS fraud_risk_categories,
      cu.fraud_risk_flagged_at,
-     cu.reapplication_block_reason                            AS block_reason,
+     reporting.block_reason_for_session(cu.reapplication_block_reason) AS block_reason,
      cu.reapplication_block_blocked_at                        AS blocked_at,
      cu.reapplication_block_blocked_until                     AS blocked_until,
      cu.reapplication_block_clear_status                      AS block_clear_status,
@@ -702,7 +764,8 @@ export const REPORTING_SCHEMA_STATEMENTS: readonly string[] = [
      r.canonical_customer_id                             AS customer_id,
      r.conversation_id,
      CASE WHEN jsonb_typeof(r.reasons) = 'array'
-          THEN ARRAY(SELECT jsonb_array_elements_text(r.reasons)) END AS reasons,
+          THEN ARRAY(SELECT reporting.block_reason_for_session(x)
+                       FROM jsonb_array_elements_text(r.reasons) AS x) END AS reasons,
      r.status::text                                      AS status,
      r.requested_by_id::text                             AS requested_by,
      r.requested_at,
@@ -797,6 +860,55 @@ export const REPORTING_SCHEMA_STATEMENTS: readonly string[] = [
      (SELECT max(updated_at) FROM public.loan_accounts)
    ) AS latest_change_at`,
 
+  // ── Counts of restricted findings (ADR 0002) ─────────────────────────────
+  // The connector's role cannot read the restricted columns; these views
+  // count them for it, at a fixed grain, with small counts hidden. They read
+  // the raw reason columns of the underlying tables, not the generalised ones.
+  `CREATE VIEW reporting.restricted_finding_summary AS
+   SELECT
+     date_trunc('month', a.started_on)::date AS started_month,
+     a.acquisition,
+     a.decision_status AS outcome,
+     count(*) AS applications,
+     reporting.suppress_small(count(*) FILTER (WHERE a.pep_hit)) AS pep_hits,
+     reporting.suppress_small(count(*) FILTER (
+       WHERE a.decision_status = 'declined' AND d.mock_origin IS NOT TRUE
+         AND c.decision_detail_reason LIKE '%:PEP')) AS pep_declines,
+     reporting.suppress_small(count(*) FILTER (WHERE c.reapplication_block_reason = 'PEP'))
+                                                     AS pep_blocks,
+     reporting.suppress_small(count(*) FILTER (WHERE a.fraud_severity IN ('HIGH', 'CRITICAL')))
+                                                     AS fraud_high_or_critical,
+     reporting.suppress_small(count(*) FILTER (WHERE a.fraud_would_halt))
+                                                     AS fraud_would_halt,
+     reporting.suppress_small(count(*) FILTER (WHERE a.kill_reason = 'fraud_abuse'))
+                                                     AS fraud_kills
+   FROM reporting.application a
+   JOIN public.conversations c ON c.conversation_id = a.conversation_id
+   LEFT JOIN reporting.decision d ON d.conversation_id = a.conversation_id
+   WHERE d.mock_origin IS NOT TRUE
+   GROUP BY 1, 2, 3`,
+
+  `CREATE VIEW reporting.customer_risk_summary AS
+   SELECT
+     date_trunc('month', c.created_on)::date AS created_month,
+     c.state,
+     count(*) AS customers,
+     reporting.suppress_small(count(*) FILTER (
+       WHERE c.pep_result IS NOT NULL AND c.pep_result <> 'no_match')) AS pep_matches,
+     reporting.suppress_small(count(*) FILTER (
+       WHERE c.sanctions_result IS NOT NULL AND c.sanctions_result <> 'no_match'))
+                                                     AS sanctions_matches,
+     reporting.suppress_small(count(*) FILTER (
+       WHERE c.screening_outcome IS NOT NULL AND c.screening_outcome <> 'pass'))
+                                                     AS screening_not_passed,
+     reporting.suppress_small(count(*) FILTER (WHERE c.vulnerable_flag)) AS vulnerable,
+     reporting.suppress_small(count(*) FILTER (WHERE c.fraud_risk_active)) AS fraud_risk_active,
+     reporting.suppress_small(count(*) FILTER (
+       WHERE c.fraud_risk_severity IN ('HIGH', 'CRITICAL'))) AS fraud_risk_high_or_critical
+   FROM reporting.customer c
+   WHERE c.merged_into IS NULL
+   GROUP BY 1, 2`,
+
   // ── Grants ───────────────────────────────────────────────────────────────
   // The runtime role is DML-only and named outside this repo, so grant the
   // reporting schema to every role that can already write conversations.
@@ -821,6 +933,17 @@ export const REPORTING_SCHEMA_STATEMENTS: readonly string[] = [
      IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'reporting_reader') THEN
        GRANT USAGE ON SCHEMA reporting TO reporting_reader;
        GRANT SELECT ON ALL TABLES IN SCHEMA reporting TO reporting_reader;
+     END IF;
+   END $$`,
+  // The MCP connector's role (ADR 0002): column by column, never the
+  // restricted columns. Revoked first, so a column that became restricted
+  // loses its grant.
+  `DO $$
+   BEGIN
+     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = ${sqlString(MCP_READER_ROLE)}) THEN
+       REVOKE ALL ON ALL TABLES IN SCHEMA reporting FROM ${MCP_READER_ROLE};
+       GRANT USAGE ON SCHEMA reporting TO ${MCP_READER_ROLE};
+       ${mcpReaderGrants().join(';\n       ')};
      END IF;
    END $$`,
 ]

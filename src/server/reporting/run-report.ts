@@ -97,6 +97,8 @@ export interface ReportDoc {
   roles?: string[] | null
   _status?: 'draft' | 'published' | null
   schedule?: string | null
+  /** A supervisor allowed this report restricted columns over MCP (ADR 0002). */
+  mcpRestrictedAccess?: boolean | null
 }
 
 /**
@@ -321,6 +323,8 @@ const STATUS_BY_CODE: Record<ReportRunError['code'], 422 | 500 | 503 | 504> = {
  *
  * @param draft run the latest draft rather than the published version
  *   (authors only).
+ * @param options how to run it, or a function of the report that says how
+ *   (the MCP connector picks the database role by the report's settings).
  */
 export async function runReport(
   payload: Payload,
@@ -333,7 +337,7 @@ export async function runReport(
     /** Also run the period before (reports with a date range only). */
     compare?: boolean
   },
-  options: RunOptions = {},
+  runOptions: RunOptions | ((doc: ReportDoc) => Promise<RunOptions>) = {},
 ): Promise<RunOutcome> {
   const log = (entry: RunLogEntry) =>
     logRun(payload, user, { ...entry, trigger: input.trigger ?? 'view' })
@@ -357,6 +361,7 @@ export async function runReport(
     }
   }
   const base = { reportSlug: doc.slug, report: String(doc.id) }
+  const options = typeof runOptions === 'function' ? await runOptions(doc) : runOptions
 
   if (!canRunReport(user, doc.roles)) {
     await log({ ...base, outcome: 'refused', errorCode: 'FORBIDDEN' })

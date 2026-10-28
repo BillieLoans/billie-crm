@@ -68,36 +68,65 @@ form of query can read them.
 Restricted columns are those that state, or directly reveal, one of the four
 findings:
 
-| Finding | Columns |
-|---|---|
-| Politically exposed person, sanctions | `application.pep_hit`; `customer.pep_result`, `sanctions_result`, `screening_outcome` |
-| Vulnerability | `customer.vulnerable_flag` |
-| Fraud | `application.fraud_score`, `fraud_severity`, `fraud_categories`, `fraud_peak_score`, `fraud_peak_severity`, `fraud_flagged_turns`, `fraud_would_halt`; `customer.fraud_risk_active`, `fraud_risk_severity`, `fraud_risk_score`, `fraud_risk_categories`, `fraud_risk_flagged_at` |
-| Columns that reveal the above by value | `application.kill_reason`, `killed_by` (`fraud_abuse`, `system:fraudRiskAgent`); `application.block_reason`, `block_disposition`, `customer.block_reason` (a block can be for fraud) |
+| Finding                                 | Columns                                                                                                                                                                                                                                                                          |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Politically exposed person, sanctions   | `application.pep_hit`; `customer.pep_result`, `sanctions_result`, `screening_outcome`                                                                                                                                                                                            |
+| Vulnerability                           | `customer.vulnerable_flag`                                                                                                                                                                                                                                                       |
+| Fraud                                   | `application.fraud_score`, `fraud_severity`, `fraud_categories`, `fraud_peak_score`, `fraud_peak_severity`, `fraud_flagged_turns`, `fraud_would_halt`; `customer.fraud_risk_active`, `fraud_risk_severity`, `fraud_risk_score`, `fraud_risk_categories`, `fraud_risk_flagged_at` |
+| Kill reasons, which name fraud by value | `application.kill_reason` (`fraud_abuse`), `killed_by` (`system:fraudRiskAgent`)                                                                                                                                                                                                 |
+| The raw decision history                | `decision_event.reason` (the `decision` view carries the same reason, generalised as below)                                                                                                                                                                                      |
 
-The last row is the part most easily missed: a column is restricted if one
-of its values discloses a finding, even when most of its values do not.
-`fraud_turns_assessed` (how many messages were assessed) is open; it says
-nothing about the result.
+The list lives in code (`RESTRICTED_COLUMNS` in
+`src/server/reporting/schema-description.ts`). `fraud_turns_assessed` (how
+many messages were assessed) is open: it says nothing about the result.
 
-**Fail closed.** Every column in the reporting schema is classified in code
-as open or restricted, and the schema build fails on a column with no
-classification. A new view column is therefore never readable over MCP
-until someone has decided which it is. Grants are re-applied from that
-classification whenever the schema is rebuilt, because recreating a view
-drops its column grants.
+**Fail closed.** The grants are generated from the schema description, the
+same file that documents every column for report authors, and an existing
+test fails when a database column is not described. A column that is not
+described is never granted, so a new view column is unreadable over MCP
+until someone describes it. A second test fails when a described column's
+name points at a restricted finding (`pep`, `sanction`, `screening`,
+`vulnerab`, `fraud`, `kill_reason`, `killed_by`) and it is neither
+restricted nor on a short reviewed list. Grants are revoked and re-applied
+whenever the schema is rebuilt, because recreating a view drops its
+column grants.
+
+### Values that name a finding in open columns
+
+Restricting columns is not enough on its own: billieChat records a PEP
+match as a decline reason (`CREDIT_ASSESSMENT:PEP`) and as a re-application
+block reason (`PEP`), in columns that are central to everyday reporting and
+open by design. For the connector's login only, the views generalise those
+values (`reporting.reason_for_session` and `block_reason_for_session`, which
+read `session_user`):
+
+- every identity-category decline reason (ID verification, identity risk,
+  post-identity risk, PEP) reads `CREDIT_ASSESSMENT:IDENTITY`, and an
+  identity re-application block reads `REAPPLICATION_BLOCK:IDENTITY`;
+- the block reasons `PEP`, `ID_VERIFICATION` and `IDENTITY_CONFLICT` read
+  `IDENTITY` in `application.block_reason`, `block_message_variant`,
+  `customer.block_reason` and `block_clear_request.reasons`.
+
+Because the view computes the generalised value, a filter on the raw code
+(`WHERE reason LIKE '%PEP%'`) finds nothing. The decline category is
+unchanged (`identity` either way). Every other login, including the
+Reports view, sees reasons as recorded.
 
 ### Counts of restricted findings: aggregate views
 
 Counting restricted findings is legitimate and was needed in the first real
 analysis over the connector (share of declines with a PEP hit or a fraud
 score). A small set of aggregate views exposes them as counts only, for
-example screening and fraud-severity counts by Sydney day, acquisition and
-decision outcome. The views read the restricted columns with their owner's
+`restricted_finding_summary` (applications by Sydney month, acquisition
+and decision outcome: PEP hits, PEP declines and blocks, high or critical
+fraud severity, fraud halts, fraud kills) and `customer_risk_summary`
+(customers by the month they were first recorded and state: PEP, sanctions
+and screening matches, vulnerability, fraud risk). The views read the restricted columns with their owner's
 privileges; `reporting_mcp_reader` can read the views, not the columns
 behind them. A count below 5 is shown as suppressed, so a narrow filter
 cannot single out one person. The views fix the grouping, so nobody can
-group by an identifier.
+group by an identifier. Counts that, subtracted from an open total, would
+reveal a hidden one (such as the low fraud severities) are left out.
 
 ### Everything else: open, with the existing limits
 
@@ -119,16 +148,21 @@ and staff run it in the Reports view, where the rows stay in the CRM beside
 the actions. Over MCP, Claude can report the count and name the report to
 run.
 
-`run_report` over MCP runs published reports as the existing
-`reporting_reader`, unguarded, because review is the control there. A report
-that selects a restricted column is therefore marked not runnable over MCP
-by default; a supervisor can allow it when publishing.
+`run_report` over MCP runs a published report as `reporting_mcp_reader`
+too, so a report that reads a restricted column fails over the connector.
+An admin can allow a report restricted columns (`mcpRestrictedAccess`,
+"Claude may read restricted columns"); it then runs as `reporting_reader`.
+Admins only, because supervisors write reports, and the person who wrote a
+report should not also approve it. Claude cannot set it: writes over MCP
+drop the field, whoever is signed in. The Reports view in the CRM is
+unaffected.
 
 ### The name-based guard
 
-`mcp-guard.ts` keeps its identifier-plus-sensitive check, narrowed to the
-restricted columns, only to return a clear "aggregate instead" message before
-Postgres's "permission denied". It is no longer the control.
+`mcp-guard.ts` loses its identifier-plus-sensitive check: the database
+refuses the query before any result exists. A permission error over the
+connector returns a message naming the restricted columns and the summary
+views. The guard keeps the identifier row cap.
 
 ## Consequences
 
@@ -144,10 +178,20 @@ Postgres's "permission denied". It is no longer the control.
 - Age, postcode and identifiers become readable over MCP where ADR 0001
   refused them beside sensitive columns. That is a deliberate widening and
   is the main thing the privacy register owner is signing off.
-- Tests run against the test Postgres (`tests/utils/globalSetup.ts`):
-  for each restricted column, `reporting_mcp_reader` gets a permission
-  error whether the column is selected, filtered, joined, grouped or
-  sorted on; the aggregate views suppress small counts; and the build fails
-  on an unclassified column.
+- Tests run against the test Postgres (`tests/utils/globalSetup.ts`,
+  `tests/int/reporting-mcp-role.int.spec.ts`): for each restricted column,
+  `reporting_mcp_reader` gets a permission error whether the column is
+  selected, aliased, counted, filtered, sorted, grouped, joined or read
+  through a CTE; every other described column can be selected; identity
+  reasons are generalised for that login and not for `reporting_reader`;
+  and the summary views hide small counts.
+- Inference from open columns is reduced, not removed. For example, a
+  decline in the identity category whose `identity_verification_failed`
+  is false and whose identity risk checks passed is more likely a PEP
+  match. The generalised reasons and the restricted `pep_hit` make that a
+  guess rather than a lookup; it is accepted as residual risk.
+- Until `reporting_mcp_reader` and `REPORTING_MCP_DATABASE_URI` exist in an
+  environment, ad-hoc queries over the connector and published reports run
+  over it answer "not set up". Create the role before deploying.
 - The Anthropic terms covering the claude.ai organisation still need
   recording in the privacy register, as ADR 0001 noted.

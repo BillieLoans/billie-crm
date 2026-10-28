@@ -155,7 +155,7 @@ const setOrigin: CollectionBeforeChangeHook = ({ data, operation, context }) => 
 /**
  * Over the MCP connector (BTB-509) every write is a draft, so nothing Claude
  * saves is published without a person: creates and single updates are forced
- * to drafts (an update writes a new draft version and leaves the published
+ * to drafts, never set `mcpRestrictedAccess` (an update writes a new draft version and leaves the published
  * one alone) and never override another editor's lock; bulk updates and
  * deletes are refused. Every read has depth 0, so the author's user record
  * never reaches Claude.
@@ -166,9 +166,12 @@ export const mcpDraftsOnly: CollectionBeforeOperationHook = ({ args, context, op
   // single one carries an id.
   if (operation === 'create' || (operation === 'update' && 'id' in args && !!args.id)) {
     if (operation === 'create') context.reportOrigin = 'mcp'
+    // Only an admin, in the CRM, can allow a report restricted columns over
+    // the connector (ADR 0002): Claude cannot set it, even signed in as one.
+    const { mcpRestrictedAccess: _ignored, ...data } = (args.data ?? {}) as Record<string, unknown>
     return {
       ...args,
-      data: { ...(args.data ?? {}), _status: 'draft' },
+      data: { ...data, _status: 'draft' },
       draft: true,
       depth: 0,
       ...(operation === 'update' ? { overrideLock: false } : {}),
@@ -245,6 +248,22 @@ export const ReportDefinitions: CollectionConfig = {
       admin: {
         position: 'sidebar',
         description: 'Show its headline numbers on the Reports home.',
+      },
+    },
+    {
+      // ADR 0002: over the Claude connector, a published report runs as the
+      // connector's role, which cannot read PEP, sanctions, vulnerability,
+      // fraud or kill-reason columns, unless an admin allows it here. Admins
+      // only, so the supervisor who wrote a report does not also approve it.
+      name: 'mcpRestrictedAccess',
+      label: 'Claude may read restricted columns',
+      type: 'checkbox',
+      defaultValue: false,
+      access: { update: ({ req }) => isAdmin(req.user) },
+      admin: {
+        position: 'sidebar',
+        description:
+          'Lets Claude run this report over the connector even though it reads PEP, sanctions, vulnerability, fraud or kill-reason columns. Leave off for worklists of people: run those in the CRM.',
       },
     },
     {

@@ -1,16 +1,15 @@
 /**
- * Unit tests for the MCP result guard (ADR 0001): identifier plus sensitive
- * columns are refused, identifier-bearing results are capped, and the
- * in-flight slot admits one query per actor.
+ * Unit tests for the MCP result guard (ADR 0002): identifier-bearing results
+ * are capped, and the in-flight slot admits one query per actor. The
+ * restricted columns are kept out by the database role, not here: see
+ * tests/int/reporting-mcp-role.int.spec.ts.
  */
 import { describe, test, expect } from 'vitest'
 import {
   MCP_IDENTIFIER_ROW_CAP,
-  SENSITIVE_COLUMNS,
   acquireQuerySlot,
   checkMcpResult,
   isIdentifierColumn,
-  isSensitiveColumn,
   releaseQuerySlot,
 } from '@/server/reporting/mcp-guard'
 
@@ -34,44 +33,17 @@ describe('column classes', () => {
       expect([name, isIdentifierColumn(name)]).toEqual([name, false])
     }
   })
-
-  test('sensitive: every screening, vulnerability, fraud, age and postcode column in the views', () => {
-    for (const name of [
-      'pep_result',
-      'sanctions_result',
-      'vulnerable_flag',
-      'fraud_risk_score',
-      'age',
-      'age_at_application',
-      'postcode',
-      'fraud_would_halt',
-    ]) {
-      expect(SENSITIVE_COLUMNS.has(name)).toBe(true)
-      expect(isSensitiveColumn(name.toUpperCase())).toBe(true)
-    }
-    expect(isSensitiveColumn('state')).toBe(false)
-    expect(isSensitiveColumn('decline_category')).toBe(false)
-  })
 })
 
 describe('checkMcpResult', () => {
   test('passes an aggregate through untouched', () => {
     const result = checkMcpResult(cols('decided_on', 'pep_hits', 'n'), rows(3))
-    expect(result).toMatchObject({ ok: true, cut: false, identifiers: [] })
+    expect(result).toMatchObject({ cut: false, identifiers: [] })
   })
 
-  test('refuses a sensitive column per identifier, naming both', () => {
-    const result = checkMcpResult(cols('customer_id', 'postcode', 'vulnerable_flag'), rows(1))
-    expect(result.ok).toBe(false)
-    if (!result.ok) {
-      expect(result.code).toBe('ROW_LEVEL')
-      expect(result.message).toContain('postcode, vulnerable_flag')
-      expect(result.message).toContain('customer_id')
-    }
-  })
-
-  test('refuses even an empty result, so the shape is never confirmed', () => {
-    expect(checkMcpResult(cols('conversation_id', 'age_at_application'), []).ok).toBe(false)
+  test('passes identifiers beside any other column (ADR 0002)', () => {
+    const result = checkMcpResult(cols('customer_id', 'postcode', 'age_at_application'), rows(1))
+    expect(result).toMatchObject({ cut: false, identifiers: ['customer_id'] })
   })
 
   test('caps an identifier-bearing result and says so', () => {
@@ -79,14 +51,11 @@ describe('checkMcpResult', () => {
       cols('conversation_id', 'decided'),
       rows(MCP_IDENTIFIER_ROW_CAP + 5),
     )
-    expect(result.ok).toBe(true)
-    if (result.ok) {
-      expect(result.rows).toHaveLength(MCP_IDENTIFIER_ROW_CAP)
-      expect(result.cut).toBe(true)
-      expect(result.identifiers).toEqual(['conversation_id'])
-    }
+    expect(result.rows).toHaveLength(MCP_IDENTIFIER_ROW_CAP)
+    expect(result.cut).toBe(true)
+    expect(result.identifiers).toEqual(['conversation_id'])
     const small = checkMcpResult(cols('conversation_id'), rows(MCP_IDENTIFIER_ROW_CAP))
-    expect(small.ok && !small.cut).toBe(true)
+    expect(small.cut).toBe(false)
   })
 })
 

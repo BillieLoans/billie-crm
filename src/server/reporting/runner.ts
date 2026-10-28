@@ -5,9 +5,11 @@
  * Each run:
  *  - passes the static check in `sql-guard.ts` (for a clear message only);
  *  - checks it is logged in as `reporting_reader`, which can read the
- *    `reporting` schema and nothing else (granted by `schema.ts`). The login
- *    role is the control: a session that could `SET ROLE` back to a stronger
- *    role would let one SELECT undo the isolation;
+ *    `reporting` schema and nothing else (granted by `schema.ts`), or for
+ *    the MCP connector's ad-hoc queries as `reporting_mcp_reader`, which
+ *    also cannot read the restricted columns (ADR 0002). The login role is
+ *    the control: a session that could `SET ROLE` back to a stronger role
+ *    would let one SELECT undo the isolation;
  *  - opens a READ ONLY transaction with a statement timeout and
  *    `search_path = reporting`;
  *  - sends the query with the extended protocol, so Postgres refuses a
@@ -16,8 +18,9 @@
  *    data-modifying CTE an error;
  *  - always rolls back.
  *
- * It connects with `REPORTING_DATABASE_URI`, in every environment: in
- * deployed ones the Neon read replica. See docs/reporting.md for the role.
+ * It connects with `REPORTING_DATABASE_URI` (`REPORTING_MCP_DATABASE_URI`
+ * for the connector's ad-hoc queries), in every environment: in deployed
+ * ones the Neon read replica. See docs/reporting.md for the roles.
  */
 import type { Pool, PoolClient, QueryConfig, QueryResult } from 'pg'
 import type { ReportColumn } from '@/lib/schemas/reports'
@@ -26,6 +29,8 @@ import { checkReportSql } from './sql-guard'
 export const ROW_CAP = 50_000
 export const STATEMENT_TIMEOUT_MS = 15_000
 export const READER_ROLE = 'reporting_reader'
+/** The MCP connector's ad-hoc query role: no restricted columns (ADR 0002). */
+export const MCP_READER_ROLE = 'reporting_mcp_reader'
 
 export type ReportRunErrorCode =
   | 'INVALID_SQL'
@@ -57,9 +62,25 @@ export interface ReportRunResult {
 
 export interface RunOptions {
   pool?: Pick<Pool, 'connect'>
+  /** The login the pool must be connected as. Default `reporting_reader`. */
+  role?: string
   timeoutMs?: number
   rowCap?: number
 }
+
+/** Pools by purpose: which connection string, which login, how many connections. */
+const POOL_SETUP = {
+  reports: { env: 'REPORTING_DATABASE_URI', role: READER_ROLE, max: 4 },
+  // Published reports run over MCP: the reader, in a smaller pool.
+  mcp: { env: 'REPORTING_DATABASE_URI', role: READER_ROLE, max: 2 },
+  // Ad-hoc queries over MCP, and published reports not allowed restricted columns.
+  'mcp-query': { env: 'REPORTING_MCP_DATABASE_URI', role: MCP_READER_ROLE, max: 2 },
+} as const
+
+export type PoolPurpose = keyof typeof POOL_SETUP
+
+/** The login a purpose's pool connects as, for `RunOptions.role`. */
+export const roleFor = (purpose: PoolPurpose): string => POOL_SETUP[purpose].role
 
 // Postgres type OIDs the view formats specially.
 const OID = {
@@ -141,20 +162,26 @@ const pools = new Map<string, Promise<Pool>>()
 /**
  * The pool for the reporting connection, created once per purpose on first
  * use, and again if it has been closed. The MCP connector (BTB-509) has its
- * own, smaller pool, so an agent running queries cannot hold every
+ * own, smaller pools, so an agent running queries cannot hold every
  * connection the Reports view and the scheduled jobs need.
  */
-export async function getReportingPool(purpose: 'reports' | 'mcp' = 'reports'): Promise<Pool> {
-  const connectionString = process.env.REPORTING_DATABASE_URI
+export async function getReportingPool(purpose: PoolPurpose = 'reports'): Promise<Pool> {
+  const setup = POOL_SETUP[purpose]
+  const connectionString = process.env[setup.env]
   if (!connectionString) {
-    throw new ReportRunError('UNAVAILABLE', 'Reporting is not configured in this environment')
+    throw new ReportRunError(
+      'UNAVAILABLE',
+      purpose === 'mcp-query'
+        ? 'Queries over the Claude connector are not set up in this environment.'
+        : 'Reporting is not configured in this environment',
+    )
   }
   const existing = pools.get(purpose)
   if (existing && !(await existing).ended) return existing
   const pool = import('pg').then(({ Pool: PgPool }) => {
     const created = new PgPool({
       connectionString,
-      max: purpose === 'mcp' ? 2 : 4,
+      max: setup.max,
       idleTimeoutMillis: 30_000,
     })
     // An idle client dropped by the server (a replica restart, a network
@@ -219,16 +246,17 @@ export async function runReportSql(
   try {
     client = (await pool.connect()) as PoolClient
     try {
+      const role = options.role ?? READER_ROLE
       const login = await client.query<{ u: string }>('SELECT session_user AS u')
-      if (login.rows[0]?.u !== READER_ROLE) {
-        throw new Error(`connected as ${login.rows[0]?.u ?? 'unknown'}, not ${READER_ROLE}`)
+      if (login.rows[0]?.u !== role) {
+        throw new Error(`connected as ${login.rows[0]?.u ?? 'unknown'}, not ${role}`)
       }
       await client.query('BEGIN READ ONLY')
       await client.query(`SET LOCAL statement_timeout = ${timeoutMs}`)
       await client.query('SET LOCAL search_path = reporting')
     } catch (error) {
-      // Usually: REPORTING_DATABASE_URI logs in as another role. See
-      // docs/reporting.md, "Roles and grants".
+      // Usually: REPORTING_DATABASE_URI (or REPORTING_MCP_DATABASE_URI) logs
+      // in as another role. See docs/reporting.md, "Roles and grants".
       throw new ReportRunError(
         'UNAVAILABLE',
         'Reporting access is not set up in this environment.',
