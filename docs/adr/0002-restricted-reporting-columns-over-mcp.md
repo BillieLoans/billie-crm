@@ -1,7 +1,7 @@
 # ADR 0002: Restricted reporting columns over the MCP connector
 
-Date: 2026-10-28. Status: proposed (needs sign-off from the privacy register
-owner). Supersedes: ADR 0001. Context: BTB-509, the reporting connector live
+Date: 2026-10-28. Status: accepted (28 October 2026; live in demo and prod).
+Supersedes: ADR 0001. Context: BTB-509, the reporting connector live
 in prod since 28 October 2026.
 
 ## Context
