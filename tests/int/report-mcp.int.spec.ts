@@ -391,7 +391,7 @@ describe('MCP tools', () => {
       { decision: 'DECLINED', n: 1 },
     ])
     expect(await callText('run_report_query', { sql: 'SELECT email FROM public.users' })).toMatch(
-      /^Error: (PERMISSION|INVALID_SQL)/,
+      /^Error: (PERMISSION: The query reads something outside the reporting schema|INVALID_SQL)/,
     )
     const asks = await payload.find({
       collection: 'report-asks',

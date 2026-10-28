@@ -10,7 +10,7 @@
  * and logged requests say which description they used.
  */
 
-export const SCHEMA_DESCRIPTION_VERSION = 'reporting-desc-v7'
+export const SCHEMA_DESCRIPTION_VERSION = 'reporting-desc-v8'
 
 export interface ColumnDescription {
   name: string
@@ -495,7 +495,8 @@ export const REPORTING_TABLES: readonly TableDescription[] = [
       {
         name: 'customer_id',
         type: 'text',
-        meaning: 'Customer id. Only for counting distinct customers.',
+        meaning:
+          'Customer id: count distinct customers with it, or select it into a list staff will act on.',
       },
       { name: 'loan_amount', type: 'numeric', meaning: 'Principal in AUD.' },
       { name: 'loan_fee', type: 'numeric', meaning: 'Fee in AUD.' },
@@ -983,7 +984,7 @@ export const REPORTING_TABLES: readonly TableDescription[] = [
     name: 'restricted_finding_summary',
     kind: 'view',
     grain:
-      'One row per Sydney month, acquisition group and decision outcome of the applications started in it: counts of PEP, fraud and kill findings. Mock decisions are excluded. A finding count reads NULL (hidden) when the group has fewer than 5, when the count is 1 to 4, or when the rest of the group is 0 to 4, so a narrow group cannot single out a person.',
+      'One row per Sydney month, acquisition group and decision outcome of the applications started in it: counts of PEP, fraud and kill findings. Mock decisions are excluded. A finding count reads NULL (hidden) when the group has fewer than 5, when the count is 1 to 4, or when the rest of the group is 0 to 4, so a narrow group cannot single out a person. A hidden count is unknown, not zero: sum() skips it, so never add hidden counts up as if they were 0; say how many are hidden instead.',
     columns: [
       col('started_month', 'date', 'First day of the Sydney month the applications started in.'),
       col('acquisition', 'text', 'Acquisition group, as application.acquisition.'),
@@ -1009,7 +1010,7 @@ export const REPORTING_TABLES: readonly TableDescription[] = [
     name: 'customer_risk_summary',
     kind: 'view',
     grain:
-      'One row per Sydney month a customer was first recorded and residential state: counts of screening, vulnerability and fraud flags. Merged customer records are excluded. A finding count reads NULL (hidden) when the group has fewer than 5, when the count is 1 to 4, or when the rest of the group is 0 to 4.',
+      'One row per Sydney month a customer was first recorded and residential state: counts of screening, vulnerability and fraud flags. Merged customer records are excluded. A finding count reads NULL (hidden) when the group has fewer than 5, when the count is 1 to 4, or when the rest of the group is 0 to 4. A hidden count is unknown, not zero: sum() skips it, so never add hidden counts up as if they were 0; say how many are hidden instead.',
     columns: [
       col(
         'created_month',
