@@ -47,10 +47,13 @@ const validateSlug: Validate = (value) => {
 /**
  * An admin's "Claude may read restricted columns" approves the SQL they saw
  * (ADR 0002). When anyone else changes the SQL or the parameters, the
- * approval lapses and an admin has to give it again.
+ * approval lapses and an admin has to give it again. A change over the MCP
+ * connector counts as someone else, even in an admin's session: Claude made
+ * it, not the admin looking at the report.
  */
 export const approvalFollowsSql: CollectionBeforeChangeHook = ({ data, originalDoc, req }) => {
-  if (!originalDoc?.mcpRestrictedAccess || isAdmin(req.user)) return data
+  const byAdminInCrm = isAdmin(req.user) && (req.payloadAPI as string) !== 'MCP'
+  if (!originalDoc?.mcpRestrictedAccess || byAdminInCrm) return data
   const changed = (field: 'sql' | 'parameters') =>
     field in data && JSON.stringify(data[field]) !== JSON.stringify(originalDoc[field])
   return changed('sql') || changed('parameters') ? { ...data, mcpRestrictedAccess: false } : data

@@ -209,7 +209,8 @@ describe('the summary views', () => {
       few: null,
       half: 10,
       all_but_few: null,
-      all_of_them: 20,
+      // Every member has it: as identifying as 1 of 1.
+      all_of_them: null,
       // In a group under 5, even a zero says something about each member.
       none_of_few: null,
     })

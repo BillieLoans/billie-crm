@@ -537,6 +537,43 @@ describe('MCP tools', () => {
     expect((rewritten as { mcpRestrictedAccess?: boolean }).mcpRestrictedAccess).toBe(false)
   })
 
+  it("withdraws the approval when SQL changes over MCP, even in an admin's session", async () => {
+    const report = await payload.create({
+      collection: 'report-definitions',
+      data: {
+        title: `${P} approved`,
+        slug: 'test-btb509-approved',
+        sql: 'SELECT 1 AS n',
+        parameters: [],
+        roles: ['admin'],
+        mcpRestrictedAccess: true,
+        _status: 'published',
+      } as never,
+      overrideAccess: true,
+    })
+    const adminKey = (
+      (await payload.create({
+        collection: MCP_API_KEYS_SLUG,
+        data: {
+          label: `${P} admin editor`,
+          user: users.admin.id,
+          reportDefinitions: { find: true, create: true },
+        } as never,
+        overrideAccess: false,
+        user: { ...users.admin, collection: 'users' } as never,
+      })) as unknown as { apiKey: string }
+    ).apiKey
+    await callText('update_report_draft', { id: report.id, sql: 'SELECT 2 AS n' }, adminKey)
+    const draft = await payload.findByID({
+      collection: 'report-definitions',
+      id: report.id,
+      draft: true,
+      overrideAccess: true,
+    })
+    expect(draft.sql).toBe('SELECT 2 AS n')
+    expect((draft as { mcpRestrictedAccess?: boolean }).mcpRestrictedAccess).toBe(false)
+  })
+
   it('cannot allow restricted columns itself, even for an admin', async () => {
     const adminKey = (
       (await payload.create({

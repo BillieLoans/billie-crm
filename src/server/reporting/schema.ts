@@ -363,14 +363,15 @@ export const REPORTING_SCHEMA_STATEMENTS: readonly string[] = [
    END $$`,
   // A count of a restricted finding in a group of total, hidden (NULL) when
   // it could single out a person: the group is small (even a 0 says something
-  // about each member), the count is 1 to 4, or so is the rest of the group
-  // (6 of 7 says each member probably has the finding).
+  // about each member), the count is 1 to 4, or the rest of the group is 0
+  // to 4 (all of them, or 6 of 7, says each member has or probably has the
+  // finding). A 0 in a group of 5 or more stays: nobody has it.
   `CREATE OR REPLACE FUNCTION reporting.suppress_small(n bigint, total bigint)
    RETURNS bigint LANGUAGE sql IMMUTABLE PARALLEL SAFE
    AS $$ SELECT CASE
      WHEN total < ${SUPPRESS_BELOW} THEN NULL
      WHEN n BETWEEN 1 AND ${SUPPRESS_BELOW - 1} THEN NULL
-     WHEN total - n BETWEEN 1 AND ${SUPPRESS_BELOW - 1} THEN NULL
+     WHEN total - n BETWEEN 0 AND ${SUPPRESS_BELOW - 1} THEN NULL
      ELSE n
    END $$`,
 

@@ -983,7 +983,7 @@ export const REPORTING_TABLES: readonly TableDescription[] = [
     name: 'restricted_finding_summary',
     kind: 'view',
     grain:
-      'One row per Sydney month, acquisition group and decision outcome of the applications started in it: counts of PEP, fraud and kill findings. Mock decisions are excluded. A finding count reads NULL (hidden) when the group has fewer than 5, or when the count or the rest of the group is 1 to 4, so a narrow group cannot single out a person.',
+      'One row per Sydney month, acquisition group and decision outcome of the applications started in it: counts of PEP, fraud and kill findings. Mock decisions are excluded. A finding count reads NULL (hidden) when the group has fewer than 5, when the count is 1 to 4, or when the rest of the group is 0 to 4, so a narrow group cannot single out a person.',
     columns: [
       col('started_month', 'date', 'First day of the Sydney month the applications started in.'),
       col('acquisition', 'text', 'Acquisition group, as application.acquisition.'),
@@ -1009,7 +1009,7 @@ export const REPORTING_TABLES: readonly TableDescription[] = [
     name: 'customer_risk_summary',
     kind: 'view',
     grain:
-      'One row per Sydney month a customer was first recorded and residential state: counts of screening, vulnerability and fraud flags. Merged customer records are excluded. A finding count reads NULL (hidden) when the group has fewer than 5, or when the count or the rest of the group is 1 to 4.',
+      'One row per Sydney month a customer was first recorded and residential state: counts of screening, vulnerability and fraud flags. Merged customer records are excluded. A finding count reads NULL (hidden) when the group has fewer than 5, when the count is 1 to 4, or when the rest of the group is 0 to 4.',
     columns: [
       col(
         'created_month',
