@@ -201,8 +201,23 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
   const sc = statementCapture as Record<string, unknown> | undefined
   const consentStatus = sc?.consentStatus as string | undefined
   const retrievalComplete = sc?.retrievalComplete as boolean | undefined
+  const statementProvider = sc?.provider as string | undefined
+  const providerReference = sc?.providerReference as
+    | { vendor_specific_id?: string; talefin_application_id?: number | string }
+    | undefined
+  const providerProfiles = sc?.providerProfiles as
+    | Record<string, { bank_name?: string; seed_expiry?: string }>
+    | undefined
+  const providerBanks =
+    providerProfiles && typeof providerProfiles === 'object'
+      ? Object.values(providerProfiles)
+          .map((p) => p?.bank_name)
+          .filter((name): name is string => typeof name === 'string' && name.length > 0)
+      : []
   const statementSummary = consentStatus
-    ? `Consent: ${consentStatus}${retrievalComplete ? ' · Retrieved' : ''}`
+    ? `Consent: ${consentStatus}${retrievalComplete ? ' · Retrieved' : ''}${
+        statementProvider ? ` · ${statementProvider}` : ''
+      }`
     : 'No data'
 
   const statementFiles = sc?.fileLocations as Partial<Record<StatementSlot, string>> | undefined
@@ -351,10 +366,7 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
         title="Network"
         summary={networkSummary(conversation.network ?? null, conversation.networkIp ?? null)}
       >
-        <NetworkDetail
-          network={conversation.network ?? null}
-          ip={conversation.networkIp ?? null}
-        />
+        <NetworkDetail network={conversation.network ?? null} ip={conversation.networkIp ?? null} />
       </AssessmentSection>
 
       {/* Credit: Account Conduct */}
@@ -492,6 +504,29 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
                 {retrievalComplete ? 'Complete' : 'Pending'}
               </span>
             </div>
+            {statementProvider && (
+              <div className={styles.statementRow}>
+                <span className={styles.statementLabel}>Provider</span>
+                <span className={styles.statementValue}>{statementProvider}</span>
+              </div>
+            )}
+            {providerReference?.vendor_specific_id && (
+              <div className={styles.statementRow}>
+                <span className={styles.statementLabel}>Partner reference</span>
+                <span className={styles.statementValue}>
+                  {providerReference.vendor_specific_id}
+                  {providerReference.talefin_application_id != null
+                    ? ` (application ${providerReference.talefin_application_id})`
+                    : ''}
+                </span>
+              </div>
+            )}
+            {providerBanks.length > 0 && (
+              <div className={styles.statementRow}>
+                <span className={styles.statementLabel}>Banks connected</span>
+                <span className={styles.statementValue}>{providerBanks.join(', ')}</span>
+              </div>
+            )}
             <div className={styles.statementRow}>
               <span className={styles.statementLabel}>Checks</span>
               <span className={styles.statementValue}>
