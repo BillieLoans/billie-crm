@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, cleanup } from '@testing-library/react'
+import { render, screen, cleanup, fireEvent } from '@testing-library/react'
 import React from 'react'
 import { formatDateOnly } from '@/lib/formatters'
 import type { ConversationDetail } from '@/lib/schemas/conversations'
@@ -22,7 +22,7 @@ vi.mock('next/link', () => ({
 }))
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn(), back: vi.fn() }),
+  useRouter: () => ({ push: pushMock, back: vi.fn() }),
   usePathname: () => '/admin/applications',
 }))
 
@@ -44,7 +44,10 @@ vi.mock('@/components/ConversationDetailView/AssessmentPanel', () => ({
   AssessmentPanel: () => <div data-testid="assessment-panel" />,
 }))
 
-const { useConversationMock } = vi.hoisted(() => ({ useConversationMock: vi.fn() }))
+const { useConversationMock, pushMock } = vi.hoisted(() => ({
+  useConversationMock: vi.fn(),
+  pushMock: vi.fn(),
+}))
 vi.mock('@/hooks/queries/useConversation', () => ({
   useConversation: useConversationMock,
 }))
@@ -105,5 +108,42 @@ describe('ConversationDetailView header — application date', () => {
     const link = screen.getByText('86E8925E').closest('a')
     expect(link).toBeTruthy()
     expect(link!.getAttribute('href')).toBe('/admin/servicing/86E8925E')
+  })
+})
+
+describe('ConversationDetailView — maximise application details', () => {
+  afterEach(() => {
+    cleanup()
+    useConversationMock.mockReset()
+    pushMock.mockReset()
+  })
+
+  it('hides the transcript while the details are maximised and restores it on toggle', () => {
+    mockConversation({ startedAt: null })
+    render(<ConversationDetailView conversationId="conv-1" />)
+    const toggle = screen.getByRole('button', { name: 'Maximise details' })
+    expect(toggle.getAttribute('aria-controls')).toBe('application-details-panel')
+    expect(screen.getByTestId('message-panel').parentElement!.hidden).toBe(false)
+
+    fireEvent.click(toggle)
+    const restore = screen.getByRole('button', { name: 'Show transcript' })
+    expect(screen.getByTestId('message-panel').parentElement!.hidden).toBe(true)
+    expect(screen.getByTestId('assessment-panel')).toBeTruthy()
+
+    fireEvent.click(restore)
+    expect(screen.getByTestId('message-panel').parentElement!.hidden).toBe(false)
+  })
+
+  it('Escape restores the split instead of leaving the page while maximised', () => {
+    mockConversation({ startedAt: null })
+    render(<ConversationDetailView conversationId="conv-1" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Maximise details' }))
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(pushMock).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Maximise details' })).toBeTruthy()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(pushMock).toHaveBeenCalledWith('/admin/applications')
   })
 })
