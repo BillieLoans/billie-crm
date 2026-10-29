@@ -37,23 +37,36 @@ jobs:
       # requirements.txt pulls the private Billie Event SDKs from
       # github.com/BillieLoans/billie-event-sdks and expands ${GITHUB_TOKEN}
       # in the git+https URLs. The workflow's automatic GITHUB_TOKEN is scoped
-      # to THIS repo and cannot clone that one, so a separate token is required
-      # (a PAT or GitHub App token with read access to the SDK repo, stored as
-      # the repo/org secret SDK_GITHUB_TOKEN — see event-processor/README).
-      - name: Check SDK token is configured
+      # to THIS repo and cannot clone that one, so mint a one-hour, read-only
+      # token for it from the org's SDK GitHub App (org variable SDK_APP_ID,
+      # org secret SDK_APP_PRIVATE_KEY — see event-processor/README). The
+      # legacy SDK_GITHUB_TOKEN secret is the fallback until the App is set up.
+      - name: Mint a read-only token for billie-event-sdks
+        id: app
+        if: vars.SDK_APP_ID != ''
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.SDK_APP_ID }}
+          private-key: ${{ secrets.SDK_APP_PRIVATE_KEY }}
+          owner: BillieLoans
+          repositories: billie-event-sdks
+          permission-contents: read
+
+      - name: Check an SDK token is available
         env:
-          SDK_GITHUB_TOKEN: ${{ secrets.SDK_GITHUB_TOKEN }}
+          SDK_TOKEN: ${{ steps.app.outputs.token || secrets.SDK_GITHUB_TOKEN }}
         run: |
-          if [ -z "$SDK_GITHUB_TOKEN" ]; then
-            echo "::error::secrets.SDK_GITHUB_TOKEN is not set. Add a token with read"
-            echo "::error::access to BillieLoans/billie-event-sdks (repo or org secret)."
+          if [ -z "$SDK_TOKEN" ]; then
+            echo "::error::No SDK credential. Set the org variable SDK_APP_ID and the org"
+            echo "::error::secret SDK_APP_PRIVATE_KEY (the SDK GitHub App, read access to"
+            echo "::error::BillieLoans/billie-event-sdks)."
             exit 1
           fi
 
       - name: Install dependencies
         env:
-          # requirements.txt expands ${GITHUB_TOKEN}; feed it from our SDK secret.
-          GITHUB_TOKEN: ${{ secrets.SDK_GITHUB_TOKEN }}
+          # requirements.txt expands ${GITHUB_TOKEN}; feed it the SDK token.
+          GITHUB_TOKEN: ${{ steps.app.outputs.token || secrets.SDK_GITHUB_TOKEN }}
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
