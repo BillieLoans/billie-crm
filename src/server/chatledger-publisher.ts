@@ -39,6 +39,46 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * XADD one LedgerMessage to chatLedger, retrying transient failures.
+ *
+ * The client is lazyConnect + enableOfflineQueue:false, so a command issued
+ * before the connection is up is rejected immediately ("Stream isn't
+ * writeable..."). Connect explicitly on first use, then retry with the same
+ * backoff the internal event publisher uses. Throws EventPublishError
+ * (`failureMessage`, with the attempts and the last error) once the retries
+ * are spent.
+ */
+async function xaddWithRetry(
+  fields: Record<string, string>,
+  failureMessage: string,
+): Promise<void> {
+  const redis = getChatLedgerRedisClient()
+  let lastError: Error | undefined
+  for (let attempt = 0; attempt < PUBLISH_MAX_RETRIES; attempt++) {
+    try {
+      if (redis.status === 'wait') {
+        await redis.connect()
+      }
+      await redis.xadd(CHATLEDGER_STREAM, '*', ...Object.entries(fields).flat())
+      return
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error))
+      console.warn(
+        `[ChatLedgerPublisher] Attempt ${attempt + 1}/${PUBLISH_MAX_RETRIES} failed:`,
+        lastError.message,
+      )
+      if (attempt < PUBLISH_MAX_RETRIES - 1) {
+        await sleep(PUBLISH_BACKOFF_MS[attempt] ?? 400)
+      }
+    }
+  }
+  throw new EventPublishError(failureMessage, {
+    attempts: PUBLISH_MAX_RETRIES,
+    cause: lastError,
+  })
+}
+
+/**
  * Publish a reapplication_block.clear_authorized.v1 command to chatLedger.
  *
  * The command uses a synthetic ops conversation ID (`ops:block-clear:{request_id}`)
@@ -61,35 +101,8 @@ export async function publishClearAuthorized(
     cause: eventId,
     payload: JSON.stringify(payload),
   }
-  const redis = getChatLedgerRedisClient()
-
-  // The client is lazyConnect + enableOfflineQueue:false, so a command issued
-  // before the connection is up is rejected immediately ("Stream isn't
-  // writeable..."). Connect explicitly on first use, then retry transient
-  // failures with the same backoff the internal event publisher uses.
-  let lastError: Error | undefined
-  for (let attempt = 0; attempt < PUBLISH_MAX_RETRIES; attempt++) {
-    try {
-      if (redis.status === 'wait') {
-        await redis.connect()
-      }
-      await redis.xadd(CHATLEDGER_STREAM, '*', ...Object.entries(fields).flat())
-      return { eventId }
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error))
-      console.warn(
-        `[ChatLedgerPublisher] Attempt ${attempt + 1}/${PUBLISH_MAX_RETRIES} failed:`,
-        lastError.message,
-      )
-      if (attempt < PUBLISH_MAX_RETRIES - 1) {
-        await sleep(PUBLISH_BACKOFF_MS[attempt] ?? 400)
-      }
-    }
-  }
-  throw new EventPublishError('Failed to publish clear_authorized to chatLedger after retries', {
-    attempts: PUBLISH_MAX_RETRIES,
-    cause: lastError,
-  })
+  await xaddWithRetry(fields, 'Failed to publish clear_authorized to chatLedger after retries')
+  return { eventId }
 }
 
 /**
@@ -118,32 +131,8 @@ export async function publishManualBlockSet(
     cause: eventId,
     payload: JSON.stringify(payload),
   }
-  const redis = getChatLedgerRedisClient()
-
-  // Same lazyConnect + retry posture as publishClearAuthorized above.
-  let lastError: Error | undefined
-  for (let attempt = 0; attempt < PUBLISH_MAX_RETRIES; attempt++) {
-    try {
-      if (redis.status === 'wait') {
-        await redis.connect()
-      }
-      await redis.xadd(CHATLEDGER_STREAM, '*', ...Object.entries(fields).flat())
-      return { eventId }
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error))
-      console.warn(
-        `[ChatLedgerPublisher] Attempt ${attempt + 1}/${PUBLISH_MAX_RETRIES} failed:`,
-        lastError.message,
-      )
-      if (attempt < PUBLISH_MAX_RETRIES - 1) {
-        await sleep(PUBLISH_BACKOFF_MS[attempt] ?? 400)
-      }
-    }
-  }
-  throw new EventPublishError('Failed to publish manual block set to chatLedger after retries', {
-    attempts: PUBLISH_MAX_RETRIES,
-    cause: lastError,
-  })
+  await xaddWithRetry(fields, 'Failed to publish manual block set to chatLedger after retries')
+  return { eventId }
 }
 
 /**
@@ -173,32 +162,8 @@ export async function publishContactIntakeRequested(
     cause: eventId,
     payload: JSON.stringify(payload),
   }
-  const redis = getChatLedgerRedisClient()
-
-  // Same lazyConnect + retry posture as publishClearAuthorized above.
-  let lastError: Error | undefined
-  for (let attempt = 0; attempt < PUBLISH_MAX_RETRIES; attempt++) {
-    try {
-      if (redis.status === 'wait') {
-        await redis.connect()
-      }
-      await redis.xadd(CHATLEDGER_STREAM, '*', ...Object.entries(fields).flat())
-      return { eventId }
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error))
-      console.warn(
-        `[ChatLedgerPublisher] Attempt ${attempt + 1}/${PUBLISH_MAX_RETRIES} failed:`,
-        lastError.message,
-      )
-      if (attempt < PUBLISH_MAX_RETRIES - 1) {
-        await sleep(PUBLISH_BACKOFF_MS[attempt] ?? 400)
-      }
-    }
-  }
-  throw new EventPublishError('Failed to publish contact intake to chatLedger after retries', {
-    attempts: PUBLISH_MAX_RETRIES,
-    cause: lastError,
-  })
+  await xaddWithRetry(fields, 'Failed to publish contact intake to chatLedger after retries')
+  return { eventId }
 }
 
 /**
@@ -227,32 +192,8 @@ export async function publishFeedbackSubmitted(
     cause: eventId,
     payload: JSON.stringify(payload),
   }
-  const redis = getChatLedgerRedisClient()
-
-  // Same lazyConnect + retry posture as the other chatLedger publishers above.
-  let lastError: Error | undefined
-  for (let attempt = 0; attempt < PUBLISH_MAX_RETRIES; attempt++) {
-    try {
-      if (redis.status === 'wait') {
-        await redis.connect()
-      }
-      await redis.xadd(CHATLEDGER_STREAM, '*', ...Object.entries(fields).flat())
-      return { eventId }
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error))
-      console.warn(
-        `[ChatLedgerPublisher] Attempt ${attempt + 1}/${PUBLISH_MAX_RETRIES} failed:`,
-        lastError.message,
-      )
-      if (attempt < PUBLISH_MAX_RETRIES - 1) {
-        await sleep(PUBLISH_BACKOFF_MS[attempt] ?? 400)
-      }
-    }
-  }
-  throw new EventPublishError('Failed to publish feedback intake to chatLedger after retries', {
-    attempts: PUBLISH_MAX_RETRIES,
-    cause: lastError,
-  })
+  await xaddWithRetry(fields, 'Failed to publish feedback intake to chatLedger after retries')
+  return { eventId }
 }
 
 /**
@@ -276,28 +217,6 @@ export async function publishConversationKill(
     cause: eventId,
     payload: JSON.stringify(payload),
   }
-  const redis = getChatLedgerRedisClient()
-  let lastError: Error | undefined
-  for (let attempt = 0; attempt < PUBLISH_MAX_RETRIES; attempt++) {
-    try {
-      if (redis.status === 'wait') {
-        await redis.connect()
-      }
-      await redis.xadd(CHATLEDGER_STREAM, '*', ...Object.entries(fields).flat())
-      return { eventId }
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error))
-      console.warn(
-        `[ChatLedgerPublisher] Attempt ${attempt + 1}/${PUBLISH_MAX_RETRIES} failed:`,
-        lastError.message,
-      )
-      if (attempt < PUBLISH_MAX_RETRIES - 1) {
-        await sleep(PUBLISH_BACKOFF_MS[attempt] ?? 400)
-      }
-    }
-  }
-  throw new EventPublishError('Failed to publish conversation kill after retries', {
-    attempts: PUBLISH_MAX_RETRIES,
-    cause: lastError,
-  })
+  await xaddWithRetry(fields, 'Failed to publish conversation kill after retries')
+  return { eventId }
 }

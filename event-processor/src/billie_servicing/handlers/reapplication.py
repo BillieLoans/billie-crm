@@ -483,6 +483,31 @@ def _manual_set_request_id(payload: dict[str, Any], reason: str | None) -> str |
     return conv[len(MANUAL_SET_CONV_PREFIX) :] or None
 
 
+async def unbind_manual_block(pool: asyncpg.Pool, customer_id: str | None) -> None:
+    """Forget which CRM manual set raised this customer's block (BTB-517, R23).
+
+    Called on ``conversation.killed.v1``. A kill can raise its own MANUAL_ADMIN
+    block over a manual-set one; when both are permanent billieChat's decision
+    does not move, so no state.changed arrives to unbind the set, and the
+    servicing view would keep naming the set's reason (say "cancelled before
+    disbursement") on what is now a kill block. The kill event does not say
+    whether it asked for a block, so every kill unbinds: the label then falls
+    back to "Manually blocked (staff)", which is never wrong. A later manual set
+    binds again through its own state.changed, in whatever order they arrive.
+
+    Update only, on the canonical row: never creates a customer.
+    """
+    canonical = await resolve_canonical_customer_id(pool, customer_id)
+    if not canonical:
+        return
+    await pool.execute(
+        "UPDATE customers SET reapplication_block_manual_block_request_id = NULL, "
+        "updated_at = NOW() WHERE customer_id = $1 "
+        "AND reapplication_block_manual_block_request_id IS NOT NULL",
+        canonical,
+    )
+
+
 async def handle_reapplication_block_manual_set_applied(
     pool: asyncpg.Pool, event: dict[str, Any]
 ) -> None:

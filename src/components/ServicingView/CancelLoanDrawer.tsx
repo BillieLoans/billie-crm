@@ -12,6 +12,11 @@ import {
 import { MIN_CANCELLATION_NOTE_LENGTH, MIN_NO_BLOCK_REASON_LENGTH } from '@/lib/constants'
 import { formatBlockLabel, formatBlockedUntil, isManualBlockActive } from '@/lib/reapplicationBlock'
 import type { BlockConfirmation } from '@/lib/schemas/ledger'
+import {
+  clearFrozenCancellation,
+  loadFrozenCancellation,
+  saveFrozenCancellation,
+} from '@/lib/frozenCancellation'
 import type { CustomerData } from '@/hooks/queries/useCustomer'
 import styles from './CancelLoanDrawer.module.css'
 
@@ -122,8 +127,18 @@ function CancelLoanForm({
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  /** Set after an outcome-unknown failure: every retry sends this, unchanged. */
-  const [lockedRequest, setLockedRequest] = useState<CancelRequest | null>(null)
+  /**
+   * Set after an outcome-unknown failure: every retry sends this, unchanged,
+   * key and all. It is also kept for this loan across closing and reopening
+   * (frozenCancellation), so a reopened drawer starts from it.
+   */
+  const [lockedRequest, setLockedRequest] = useState<CancelRequest | null>(() =>
+    loadFrozenCancellation(loanAccountId),
+  )
+  /** The drawer opened on a cancellation an earlier opening left unfinished. */
+  const [resumed, setResumed] = useState(() => lockedRequest !== null)
+  /** Whether the frozen request is safely kept; if not, the drawer must stay open. */
+  const [kept, setKept] = useState(true)
   const [result, setResult] = useState<{ noteError: boolean } | null>(null)
   const [blockModalOpen, setBlockModalOpen] = useState(false)
   const [blockRequestId, setBlockRequestId] = useState<string | null>(null)
@@ -131,7 +146,11 @@ function CancelLoanForm({
   /** Minted on the first submit of this form, then reused by every retry. */
   const idempotencyKeyRef = useRef<string | null>(null)
 
-  const busy = confirmOpen || blockModalOpen || submitting
+  const locked = lockedRequest !== null
+  // Without storage the frozen request lives only in this drawer: closing it
+  // would lose the key that finishes the cancellation.
+  const mustStayOpen = locked && !kept
+  const busy = confirmOpen || blockModalOpen || submitting || mustStayOpen
   useEffect(() => {
     onBusyChange(busy)
   }, [busy, onBusyChange])
@@ -186,8 +205,6 @@ function CancelLoanForm({
     })
   }
 
-  const locked = lockedRequest !== null
-
   /** What this cancel will send, less the idempotency key; null until complete. */
   const draft: Omit<CancelRequest, 'idempotencyKey'> | null =
     reason && blockConfirmation && missing.length === 0
@@ -202,6 +219,34 @@ function CancelLoanForm({
   const shown = lockedRequest ?? draft
   const canSubmit = shown !== null
 
+  /** Keep this exact request until an answer settles it. */
+  const freeze = (request: CancelRequest) => {
+    setLockedRequest(request)
+    setKept(saveFrozenCancellation(request))
+  }
+
+  /** The platform answered for this key and holds nothing for it: start afresh. */
+  const unfreeze = () => {
+    clearFrozenCancellation(loanAccountId)
+    setLockedRequest(null)
+    setResumed(false)
+    setKept(true)
+    idempotencyKeyRef.current = null
+  }
+
+  /*
+   * What settles a request:
+   * - success (2xx): done;
+   * - NOT_CANCELLABLE or VALIDATION: the platform itself answered this key and
+   *   holds no claim for it (a claim or record for the key would have been
+   *   resumed or replayed instead).
+   * Anything else keeps a frozen request: 5xx, 409 ACCOUNT_BUSY or no answer
+   * (the outcome is unknown), and the CRM's own refusals on a retry
+   * (BLOCK_REQUIRED, 401/403, 404, a 400 from the form check), because the
+   * platform was not asked this time and may still hold the first attempt.
+   * On a first attempt those refusals mean nothing was sent, so nothing is
+   * frozen.
+   */
   const submit = async () => {
     let request = lockedRequest
     if (!request) {
@@ -221,33 +266,39 @@ function CancelLoanForm({
           body: JSON.stringify(request),
         })
       } catch {
-        setLockedRequest(request)
+        freeze(request)
         setError(UNSENT_MESSAGE)
         return
       }
       const body = ((await res.json().catch(() => null)) ?? {}) as Record<string, unknown>
 
       if (res.ok && body.success === true) {
+        clearFrozenCancellation(loanAccountId)
         setResult({ noteError: body.noteError === true })
         onRefresh?.()
         return
       }
 
       const message = messageFrom(body)
-      if (res.status >= 500 || res.ok) {
-        // The cancel may have happened part-way. Only the same request is safe.
-        setLockedRequest(request)
+      if (res.status >= 500 || res.ok || res.status === 409) {
+        // The cancel may be part-way through, or the account was busy. Only
+        // the same request, with the same key, is safe to send again.
+        freeze(request)
         setError(message ?? UNSENT_MESSAGE)
       } else if (body.error === 'NOT_CANCELLABLE') {
+        unfreeze()
         setError(`This loan can’t be cancelled: ${message ?? 'the ledger refused it.'}`)
         onRefresh?.()
+      } else if (body.error === 'VALIDATION') {
+        unfreeze()
+        setError(message ?? 'The ledger refused the request.')
       } else if (body.error === 'BLOCK_REQUIRED') {
         setError(message ?? 'This customer has no active manual re-application block.')
         onRefresh?.()
       } else if (res.status === 401 || res.status === 403) {
         setError(message ?? 'You do not have permission to cancel loans.')
       } else {
-        // 400 / 404 / 409 ACCOUNT_BUSY: refused, nothing changed.
+        // 400 form check / 404: refused before the ledger was asked.
         setError(message ?? 'The loan was not cancelled.')
       }
     } finally {
@@ -255,6 +306,11 @@ function CancelLoanForm({
       setConfirmOpen(false)
     }
   }
+
+  // A frozen request that claimed the customer's manual block, which has since
+  // gone: the route will refuse it until the block is set again.
+  const frozenNeedsBlock =
+    lockedRequest?.blockConfirmation.kind === 'manual_block_active' && !manualBlockActive
 
   const blockSummary = manualBlockActive
     ? `${formatBlockLabel(reapplicationBlock)} (${formatBlockedUntil(reapplicationBlock ?? {})})`
@@ -306,10 +362,16 @@ function CancelLoanForm({
               {error}
             </div>
           )}
+          {resumed && (
+            <p className={styles.info} role="status">
+              A cancellation for this loan is in progress — retry to finish it.
+            </p>
+          )}
           {locked && (
             <p className={styles.hint}>
-              The request is kept exactly as it was sent, so trying again cannot cancel the loan
-              twice or with different details. Close the drawer to start again.
+              {kept
+                ? 'Try again to finish it: it sends exactly the same request, so the loan is never cancelled twice. You can close this drawer; the cancellation stays here until it is finished.'
+                : 'Keep this drawer open and try again to finish it: it sends exactly the same request, so the loan is never cancelled twice.'}
             </p>
           )}
 
@@ -349,7 +411,8 @@ function CancelLoanForm({
               aria-describedby="cancel-loan-note-count"
             />
             <p id="cancel-loan-note-count" className={styles.hint}>
-              {noteLength}/{MIN_CANCELLATION_NOTE_LENGTH} characters minimum
+              {(lockedRequest?.note ?? note).trim().length}/{MIN_CANCELLATION_NOTE_LENGTH}{' '}
+              characters minimum
             </p>
           </div>
 
@@ -383,8 +446,9 @@ function CancelLoanForm({
             ) : (
               <>
                 <p className={styles.hint}>
-                  This customer has no active manual block. Once the loan is cancelled they could
-                  apply again straight away.
+                  {frozenNeedsBlock
+                    ? 'This cancellation relies on a manual block that is no longer on the customer record. Set it again, then try again.'
+                    : 'This customer has no active manual block. Once the loan is cancelled they could apply again straight away.'}
                 </p>
                 {waitingForBlock && (
                   <p className={styles.info} role="status">
@@ -402,7 +466,7 @@ function CancelLoanForm({
                     The manual block was not set: {blockRejection}
                   </p>
                 )}
-                {!waitingForBlock && !locked && (
+                {!waitingForBlock && (!locked || frozenNeedsBlock) && (
                   <button
                     type="button"
                     className={styles.secondaryBtn}
@@ -412,19 +476,21 @@ function CancelLoanForm({
                     Set manual block
                   </button>
                 )}
-                <label className={styles.checkbox}>
-                  <input
-                    type="checkbox"
-                    checked={
-                      lockedRequest
-                        ? lockedRequest.blockConfirmation.kind === 'no_block_needed'
-                        : noBlockNeeded
-                    }
-                    onChange={(e) => setNoBlockNeeded(e.target.checked)}
-                    disabled={locked || submitting}
-                  />
-                  No block needed
-                </label>
+                {!frozenNeedsBlock && (
+                  <label className={styles.checkbox}>
+                    <input
+                      type="checkbox"
+                      checked={
+                        lockedRequest
+                          ? lockedRequest.blockConfirmation.kind === 'no_block_needed'
+                          : noBlockNeeded
+                      }
+                      onChange={(e) => setNoBlockNeeded(e.target.checked)}
+                      disabled={locked || submitting}
+                    />
+                    No block needed
+                  </label>
+                )}
                 {(noBlockNeeded || lockedRequest?.blockConfirmation.kind === 'no_block_needed') && (
                   <div className={styles.field}>
                     <label htmlFor="cancel-loan-no-block-reason" className={styles.label}>
@@ -444,7 +510,10 @@ function CancelLoanForm({
                       aria-describedby="cancel-loan-no-block-count"
                     />
                     <p id="cancel-loan-no-block-count" className={styles.hint}>
-                      {noBlockReasonLength}/{MIN_NO_BLOCK_REASON_LENGTH} characters minimum
+                      {lockedRequest?.blockConfirmation.kind === 'no_block_needed'
+                        ? lockedRequest.blockConfirmation.reason.length
+                        : noBlockReasonLength}
+                      /{MIN_NO_BLOCK_REASON_LENGTH} characters minimum
                     </p>
                   </div>
                 )}
@@ -472,7 +541,10 @@ function CancelLoanForm({
               type="button"
               className={styles.secondaryBtn}
               onClick={onClose}
-              disabled={submitting}
+              disabled={submitting || mustStayOpen}
+              title={
+                mustStayOpen ? 'Try again first: closing would lose this cancellation' : undefined
+              }
             >
               Close
             </button>

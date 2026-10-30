@@ -35,7 +35,7 @@ import { CancelAccountSchema, type CancelAccount } from '@/lib/schemas/ledger'
 import { isBlockActive } from '@/lib/reapplicationBlock'
 import { textToTiptapDoc } from '@/lib/tiptap'
 import { buildCancellationNoteText, CANCELLATION_NOTE_SUBJECT } from '@/lib/cancellation'
-import { UNKNOWN_USER_FALLBACK } from '@/lib/constants'
+import { staffDisplayName } from '@/lib/staffDisplayName'
 import type { Customer, LoanAccount, User } from '@/payload-types'
 
 const ACTION = 'cancel-account'
@@ -46,14 +46,6 @@ const GRPC_INVALID_ARGUMENT = 3
 const GRPC_FAILED_PRECONDITION = 9
 const GRPC_ABORTED = 10
 const GRPC_UNAVAILABLE = 14
-
-/** Display name used on the ledger record and in the note: "First Last", else the email. */
-function displayName(user: User): string {
-  if (user.firstName) {
-    return `${user.firstName}${user.lastName ? ` ${user.lastName}` : ''}`
-  }
-  return user.email || UNKNOWN_USER_FALLBACK
-}
 
 async function findCustomer(payload: Payload, customerId: string): Promise<Customer | null> {
   const result = await payload.find({
@@ -215,7 +207,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const actorName = displayName(user)
+    const actorName = staffDisplayName(user)
 
     // The block confirmation is not part of the note or the ledger record; it
     // is recorded here, with the actor.

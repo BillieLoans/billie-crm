@@ -102,6 +102,7 @@ const lastCancelBody = () => {
 beforeEach(() => {
   fetchMock.mockReset()
   vi.stubGlobal('fetch', fetchMock)
+  sessionStorage.clear()
 })
 
 afterEach(() => {
@@ -332,24 +333,157 @@ describe('CancelLoanDrawer: confirm and submit', () => {
     expect(lastCancelBody().idempotencyKey).toBe(first.idempotencyKey)
   })
 
-  it('reopening the drawer starts a new cancel with a new key', async () => {
-    const { rerender } = renderDrawer()
-    fillValidForm()
-    reply(503, { error: 'LEDGER_UNAVAILABLE', message: 'not completed' })
+  // Fix round 1 (review finding 1). After an outcome-unknown failure the
+  // platform may hold a cancellation claim for this key: only a retry with the
+  // SAME key finishes it, and any other key is refused, leaving the loan
+  // neither cancelled nor disbursable. So the frozen request outlives the
+  // drawer, until an answer that settles it.
+  async function failWith503() {
+    reply(503, { error: 'LEDGER_UNAVAILABLE', message: 'The cancellation was not completed.' })
     fireEvent.click(submitButton())
     confirm()
     await screen.findByRole('alert')
-    const first = lastCancelBody().idempotencyKey
+    return lastCancelBody()
+  }
+
+  it('says to retry after an outcome-unknown failure, never to start again', async () => {
+    renderDrawer()
+    fillValidForm()
+    await failWith503()
+    expect(screen.getByText(/Try again to finish it/)).toBeInTheDocument()
+    expect(screen.queryByText(/start again/i)).toBeNull()
+  })
+
+  it('a 503, then close and reopen: the same cancel is offered and retried with the same key and body', async () => {
+    const { rerender } = renderDrawer()
+    fillValidForm()
+    const first = await failWith503()
+    // Closing is safe: the frozen request is kept for this loan.
+    expect(screen.getByRole('button', { name: 'Close' })).toBeEnabled()
+
+    rerender({ isOpen: false })
+    rerender({ isOpen: true })
+    expect(
+      screen.getByText('A cancellation for this loan is in progress — retry to finish it.'),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Reason')).toHaveValue('customer_withdrew')
+    expect(screen.getByLabelText('Reason')).toBeDisabled()
+    expect(screen.getByLabelText('Note')).toHaveValue(NOTE)
+
+    reply(200, { ...SUCCESS, idempotentReplay: true })
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    confirm()
+    await screen.findByText('Loan 1000001 cancelled.')
+    expect(lastCancelBody()).toEqual(first)
+  })
+
+  it('success clears the stored cancel: the next opening is a new cancel with a new key', async () => {
+    const { rerender } = renderDrawer()
+    fillValidForm()
+    const first = await failWith503()
+    reply(200, SUCCESS)
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    confirm()
+    await screen.findByText('Loan 1000001 cancelled.')
 
     rerender({ isOpen: false })
     rerender({ isOpen: true })
     expect(screen.getByLabelText('Reason')).toHaveValue('')
+    expect(screen.queryByText(/in progress/)).toBeNull()
     fillValidForm()
     reply(200, SUCCESS)
     fireEvent.click(submitButton())
     confirm()
     await screen.findByText('Loan 1000001 cancelled.')
-    expect(lastCancelBody().idempotencyKey).not.toBe(first)
+    expect(lastCancelBody().idempotencyKey).not.toBe(first.idempotencyKey)
+  })
+
+  it('a 422 NOT_CANCELLABLE on the retry clears it: the platform holds nothing for this key', async () => {
+    const { rerender } = renderDrawer()
+    fillValidForm()
+    await failWith503()
+    reply(422, { error: 'NOT_CANCELLABLE', message: 'account is not cancellable in status ACTIVE' })
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    confirm()
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'This loan can’t be cancelled: account is not cancellable in status ACTIVE',
+    )
+    expect(screen.getByLabelText('Reason')).toBeEnabled()
+
+    rerender({ isOpen: false })
+    rerender({ isOpen: true })
+    expect(screen.getByLabelText('Reason')).toHaveValue('')
+    expect(screen.queryByText(/in progress/)).toBeNull()
+  })
+
+  it('a refusal from the CRM itself on the retry keeps it: the platform was not asked', async () => {
+    const { rerender } = renderDrawer()
+    fillValidForm()
+    const first = await failWith503()
+    reply(422, { error: 'BLOCK_REQUIRED', message: 'This customer has no active manual block.' })
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    confirm()
+    expect(await screen.findByRole('alert')).toHaveTextContent('no active manual block')
+    expect(screen.getByLabelText('Reason')).toBeDisabled()
+
+    rerender({ isOpen: false })
+    rerender({ isOpen: true })
+    expect(screen.getByText(/in progress/)).toBeInTheDocument()
+    reply(200, SUCCESS)
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    confirm()
+    await screen.findByText('Loan 1000001 cancelled.')
+    expect(lastCancelBody()).toEqual(first)
+  })
+
+  it('a stored cancel belongs to its own loan only', async () => {
+    const { rerender } = renderDrawer()
+    fillValidForm()
+    await failWith503()
+    rerender({ isOpen: false })
+    rerender({ isOpen: true, loanAccountId: 'LA-2', accountNumber: '1000002' })
+    expect(screen.getByLabelText('Reason')).toHaveValue('')
+    expect(screen.queryByText(/in progress/)).toBeNull()
+  })
+
+  it('a frozen cancel that relied on a manual block now gone offers to set the block again', () => {
+    sessionStorage.setItem(
+      'btb517:cancel:LA-1',
+      JSON.stringify({
+        loanAccountId: 'LA-1',
+        reason: 'customer_withdrew',
+        note: NOTE,
+        blockConfirmation: { kind: 'manual_block_active' },
+        idempotencyKey: '3f2b8c1e-5d4a-4e6f-9a7b-0c1d2e3f4a5b',
+      }),
+    )
+    renderDrawer({ reapplicationBlock: null })
+    expect(screen.getByText(/in progress/)).toBeInTheDocument()
+    expect(
+      screen.getByText(/relies on a manual block that is no longer on the customer record/),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Set manual block' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('No block needed')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeEnabled()
+  })
+
+  it('without browser storage, the drawer cannot be closed while a cancel is frozen', async () => {
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError')
+    })
+    try {
+      const { props } = renderDrawer()
+      fillValidForm()
+      await failWith503()
+      expect(screen.getByRole('button', { name: 'Close' })).toBeDisabled()
+      expect(
+        screen.getByText(/Keep this drawer open and try again to finish it/),
+      ).toBeInTheDocument()
+      fireEvent.keyDown(document, { key: 'Escape' })
+      expect(props.onClose).not.toHaveBeenCalled()
+    } finally {
+      setItem.mockRestore()
+    }
   })
 })
 
@@ -386,7 +520,7 @@ describe('CancelLoanDrawer: refusals', () => {
     expect(screen.queryByText('Loan 1000001 cancelled.')).toBeNull()
   })
 
-  it('409 ACCOUNT_BUSY says to try again, keeping the form editable and the key', async () => {
+  it('409 ACCOUNT_BUSY says to try again, and retries the same cancel', async () => {
     const { alert } = await submitWith(409, {
       error: 'ACCOUNT_BUSY',
       message: 'Another change is being applied to this account. Try again in a moment.',
@@ -394,13 +528,13 @@ describe('CancelLoanDrawer: refusals', () => {
     expect(alert).toHaveTextContent(
       'Another change is being applied to this account. Try again in a moment.',
     )
-    expect(screen.getByLabelText('Note')).toBeEnabled()
-    const first = lastCancelBody().idempotencyKey
+    expect(screen.getByLabelText('Note')).toBeDisabled()
+    const first = lastCancelBody()
     reply(200, SUCCESS)
-    fireEvent.click(submitButton())
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
     confirm()
     await screen.findByText('Loan 1000001 cancelled.')
-    expect(lastCancelBody().idempotencyKey).toBe(first)
+    expect(lastCancelBody()).toEqual(first)
   })
 
   it('422 BLOCK_REQUIRED shows the message and re-reads the customer', async () => {

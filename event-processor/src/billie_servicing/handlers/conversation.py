@@ -29,6 +29,7 @@ from .attribution import sanitise_attribution
 from .cancellation import CUSTOMER_DECLINED, terminal_rank
 from .identity_verification import mirror_lab_verification
 from .network import sanitise_network
+from .reapplication import unbind_manual_block
 from .reporting import conversation_of, decision_of, record_decision_event
 from .sanitize import parse_payload, safe_str, strip_dollar_keys
 
@@ -903,6 +904,14 @@ async def handle_conversation_killed(pool: asyncpg.Pool, event: dict[str, Any]) 
     if not conversation_id:
         log.warning("conversation.killed.v1 without conversation id — skipping")
         return
+
+    # BTB-517 (R23): the kill may have replaced a CRM manual-set block with
+    # its own; stop naming the set's reason. The block is the customer's, so
+    # this runs even for a conversation the CRM never saw.
+    await unbind_manual_block(
+        pool,
+        safe_str(payload.get("customer_id") or event.get("usr"), "customer_id") or None,
+    )
 
     kill_record = {
         "request_id": payload.get("request_id"),

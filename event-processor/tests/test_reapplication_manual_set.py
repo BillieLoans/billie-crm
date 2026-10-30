@@ -298,3 +298,120 @@ def test_reply_handlers_registered(make_processor):
     setup_handlers(proc)
     assert "reapplication_block.manual_set_applied.v1" in proc.handlers
     assert "reapplication_block.manual_set_rejected.v1" in proc.handlers
+
+
+# ---------------------------------------------------------------------------
+# Fix round 1 (ruling R23, case K3): a conversation kill can replace a
+# permanent manual-set block with a permanent kill block without moving
+# billieChat's decision, so no state.changed arrives to unbind the set's code.
+# conversation.killed.v1 unbinds it instead.
+# ---------------------------------------------------------------------------
+
+KILL_CONV = "conv-killed-1"
+
+
+def _killed(customer_id="B81FC35E"):
+    return {
+        "typ": "conversation.killed.v1",
+        "usr": customer_id,
+        "conv": KILL_CONV,
+        "payload": {
+            "request_id": "kill-1",
+            "conversation_id": KILL_CONV,
+            "application_number": "APP-1",
+            "customer_id": customer_id,
+            "reason_category": "fraud_abuse",
+            "note": "live abuse",
+            "actor": "user:42",
+            "killed_at": "2026-10-30T05:00:00+00:00",
+        },
+    }
+
+
+def _binding_writes(mock_pool):
+    """Every value written to the binding column, in order (None = unbound)."""
+    writes = []
+    for call in mock_pool.calls_against("customers"):
+        if call.op == "UPDATE" and "reapplication_block_manual_block_request_id = NULL" in call.sql:
+            writes.append(None)
+        elif "reapplication_block_manual_block_request_id" in call.values:
+            writes.append(call.values["reapplication_block_manual_block_request_id"])
+    return writes
+
+
+class TestConversationKillUnbindsTheManualBlock:
+    async def test_a_kill_unbinds_the_customers_manual_block(self, mock_pool):
+        from billie_servicing.handlers.conversation import handle_conversation_killed
+
+        mock_pool.set_fetchrow({"status": "active", "cancellation_record": None})
+        await handle_conversation_killed(mock_pool, _killed())
+        unbinds = [
+            c
+            for c in mock_pool.calls_against("customers")
+            if c.op == "UPDATE" and "reapplication_block_manual_block_request_id = NULL" in c.sql
+        ]
+        assert len(unbinds) == 1
+        assert unbinds[0].args == (CANONICAL,)
+        # Update only: never creates a customer row.
+        assert not mock_pool.inserts_into("customers")
+
+    async def test_lands_on_the_canonical_row(self, mock_pool):
+        from billie_servicing.handlers.conversation import handle_conversation_killed
+
+        mock_pool.set_fetchval("CANON-1")
+        mock_pool.set_fetchrow({"status": "active", "cancellation_record": None})
+        await handle_conversation_killed(mock_pool, _killed("JOURNEY-1"))
+        unbind = next(
+            c for c in mock_pool.calls_against("customers")
+            if c.op == "UPDATE" and "= NULL" in c.sql
+        )
+        assert unbind.args == ("CANON-1",)
+
+    async def test_a_kill_for_a_conversation_the_crm_never_saw_still_unbinds(self, mock_pool):
+        """The block is the customer's, not the conversation's."""
+        from billie_servicing.handlers.conversation import handle_conversation_killed
+
+        mock_pool.set_fetchrow(None)
+        await handle_conversation_killed(mock_pool, _killed())
+        assert _binding_writes(mock_pool) == [None]
+
+    async def test_a_kill_without_a_customer_unbinds_nothing(self, mock_pool):
+        from billie_servicing.handlers.conversation import handle_conversation_killed
+
+        event = _killed()
+        event["payload"]["customer_id"] = None
+        event["usr"] = None
+        mock_pool.set_fetchrow({"status": "active", "cancellation_record": None})
+        await handle_conversation_killed(mock_pool, event)
+        assert not mock_pool.calls_against("customers")
+
+    async def test_kill_after_set_leaves_the_block_unbound(self, mock_pool):
+        """Set (bound to req-1), then the kill: the last word is unbound, so the
+        label falls back to "Manually blocked (staff)"."""
+        from billie_servicing.handlers.conversation import handle_conversation_killed
+
+        await handle_reapplication_block_state_changed(
+            mock_pool,
+            _state_changed(
+                conv="ops:block-set:req-1", event_type="reapplication_block.manual_set.v1"
+            ),
+        )
+        await handle_reapplication_block_manual_set_applied(mock_pool, _applied())
+        mock_pool.set_fetchrow({"status": "active", "cancellation_record": None})
+        await handle_conversation_killed(mock_pool, _killed())
+        assert _binding_writes(mock_pool) == ["req-1", None]
+
+    async def test_a_set_after_the_kill_binds_again(self, mock_pool):
+        """Kill, then a new set: its own state.changed rebinds to its request."""
+        from billie_servicing.handlers.conversation import handle_conversation_killed
+
+        mock_pool.set_fetchrow({"status": "active", "cancellation_record": None})
+        await handle_conversation_killed(mock_pool, _killed())
+        await handle_reapplication_block_state_changed(
+            mock_pool,
+            _state_changed(
+                conv="ops:block-set:req-2", event_type="reapplication_block.manual_set.v1"
+            ),
+        )
+        await handle_reapplication_block_manual_set_applied(mock_pool, _applied(request_id="req-2"))
+        assert _binding_writes(mock_pool) == [None, "req-2"]

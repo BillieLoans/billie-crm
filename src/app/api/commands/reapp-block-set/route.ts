@@ -31,18 +31,9 @@ import { ManualBlockSetCommandSchema } from '@/lib/events/schemas'
 import { createValidationError } from '@/lib/utils/api-error'
 import { manualBlockExpiresAt } from '@/lib/reapplicationBlock'
 import { sydneyDateString } from '@/lib/disbursement-cutoff'
-import { UNKNOWN_USER_FALLBACK } from '@/lib/constants'
+import { staffDisplayName } from '@/lib/staffDisplayName'
 import { EventPublishError } from '@/server/event-publisher'
 import { publishManualBlockSet } from '@/server/chatledger-publisher'
-import type { User } from '@/payload-types'
-
-/** "First Last", else the email: the name billieChat records as the operator. */
-function displayName(user: User): string {
-  if (user.firstName) {
-    return `${user.firstName}${user.lastName ? ` ${user.lastName}` : ''}`
-  }
-  return user.email || UNKNOWN_USER_FALLBACK
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -67,7 +58,7 @@ export async function POST(request: NextRequest) {
       request_id: requestId,
       canonical_customer_id: cmd.canonicalCustomerId,
       operator_id: String(user.id),
-      operator_name: displayName(user),
+      operator_name: staffDisplayName(user),
       reason_code: cmd.reasonCode,
       note: cmd.note,
       expires_at: cmd.blockUntil ? manualBlockExpiresAt(cmd.blockUntil) : null,
