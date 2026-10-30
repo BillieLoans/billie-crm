@@ -30,7 +30,7 @@ const packageDefinition = protoLoader.loadSync(PROTO_PATH, PROTO_LOADER_OPTIONS)
 
 /** Round-trip a plain object through a message type's wire encoding. */
 function roundTrip(typeName: string, value: Record<string, unknown>): any {
-  const def = packageDefinition[`${PKG}.${typeName}`] as protoLoader.MessageTypeDefinition
+  const def = packageDefinition[`${PKG}.${typeName}`] as protoLoader.MessageTypeDefinition<object, object>
   expect(def, `${typeName} missing from vendored proto`).toBeDefined()
   const bytes = (def as any).serialize ? (def as any).serialize(value) : undefined
   expect(bytes).toBeDefined()
@@ -38,7 +38,7 @@ function roundTrip(typeName: string, value: Record<string, unknown>): any {
 }
 
 function fieldNames(typeName: string): string[] {
-  const def = packageDefinition[`${PKG}.${typeName}`] as protoLoader.MessageTypeDefinition
+  const def = packageDefinition[`${PKG}.${typeName}`] as protoLoader.MessageTypeDefinition<object, object>
   expect(def, `${typeName} missing from vendored proto`).toBeDefined()
   return (def.type as any).field.map((f: any) => f.name as string)
 }
