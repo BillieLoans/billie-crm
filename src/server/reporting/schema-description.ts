@@ -1084,6 +1084,9 @@ export const RESTRICTED_COLUMNS: Readonly<Record<string, readonly string[]>> = {
   ],
   // The decision view carries the same reason, generalised for the connector.
   decision_event: ['reason'],
+  // `fraud_hold` names fraud by value, on a loan row that joins to the customer
+  // (BTB-517). The dates stay open: when a loan was cancelled says nothing about why.
+  loan: ['cancellation_reason'],
 }
 
 export const isRestrictedColumn = (table: string, column: string): boolean =>

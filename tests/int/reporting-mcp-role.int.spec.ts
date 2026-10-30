@@ -134,6 +134,65 @@ describe('the restricted columns', () => {
   })
 })
 
+describe('cancelled loans (BTB-517)', () => {
+  // `cancellation_reason = 'fraud_hold'` names fraud by value, on a loan row
+  // that joins to the customer: the same disclosure as `kill_reason`. The
+  // generic restricted-column cases above cover it because it is listed; these
+  // say why, and pin that the dates stay open.
+  const LOAN = `${P}-LOAN`
+
+  beforeAll(async () => {
+    await pool.query('DELETE FROM loan_accounts WHERE loan_account_id = $1', [LOAN])
+    await pool.query(
+      `INSERT INTO loan_accounts
+         (loan_account_id, account_number, account_status, cancellation_reason,
+          cancellation_cancelled_at)
+       VALUES ($1, $2, 'cancelled', 'fraud_hold', '2026-10-30T22:30:00Z')`,
+      [LOAN, `${P}-1`],
+    )
+  })
+
+  afterAll(async () => {
+    await pool.query('DELETE FROM loan_accounts WHERE loan_account_id = $1', [LOAN])
+  })
+
+  it('lists the cancellation reason as restricted', () => {
+    expect(RESTRICTED_COLUMNS.loan).toContain('cancellation_reason')
+  })
+
+  it('does not let the connector read, or probe for, why a loan was cancelled', async () => {
+    await expectPermissionError(
+      asMcp('SELECT cancellation_reason FROM loan WHERE loan_account_id = $1', [LOAN]),
+    )
+    // Filtering on the value is as revealing as reading it.
+    await expectPermissionError(
+      asMcp(`SELECT count(*) AS n FROM loan WHERE cancellation_reason = 'fraud_hold'`),
+    )
+    await expectPermissionError(asMcp('SELECT * FROM loan WHERE loan_account_id = $1', [LOAN]))
+  })
+
+  it('still shows the connector that, and when, the loan was cancelled', async () => {
+    const { rows } = await asMcp(
+      `SELECT account_status, cancelled_at, cancelled_on::text AS cancelled_on
+         FROM loan WHERE loan_account_id = $1`,
+      [LOAN],
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0].account_status).toBe('cancelled')
+    expect(new Date(rows[0].cancelled_at).toISOString()).toBe('2026-10-30T22:30:00.000Z')
+    // 22:30Z on 30 Oct is the morning of 31 Oct in Sydney.
+    expect(rows[0].cancelled_on).toBe('2026-10-31')
+  })
+
+  it('stays readable as reporting_reader for reviewed reports', async () => {
+    const { rows } = await asReader(
+      'SELECT cancellation_reason FROM loan WHERE loan_account_id = $1',
+      [LOAN],
+    )
+    expect(rows).toEqual([{ cancellation_reason: 'fraud_hold' }])
+  })
+})
+
 describe('every other column', () => {
   it.each(REPORTING_TABLES.map((t) => ({ table: t.name })))(
     '$table: the open columns can be selected',
