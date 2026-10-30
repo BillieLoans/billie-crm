@@ -171,6 +171,15 @@ export const DisburseLoanDrawer: React.FC<DisburseLoanDrawerProps> = ({
           return
         }
 
+        // BTB-517: the loan was cancelled before disbursement. Nothing was paid
+        // out and retrying cannot succeed, so this is an error, not a "done" like
+        // ALREADY_DISBURSED above: no success banner, no onSuccess, drawer stays open.
+        if (res.status === 409 && data.error === 'LOAN_CANCELLED') {
+          setValidationError(data.message || 'Loan is CANCELLED — cannot disburse.')
+          setProgressMessage(null)
+          return
+        }
+
         if (!res.ok) {
           throw new Error(data.message || data.error || 'Failed to disburse loan')
         }

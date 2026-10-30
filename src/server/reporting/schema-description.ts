@@ -10,7 +10,7 @@
  * and logged requests say which description they used.
  */
 
-export const SCHEMA_DESCRIPTION_VERSION = 'reporting-desc-v8'
+export const SCHEMA_DESCRIPTION_VERSION = 'reporting-desc-v9'
 
 export interface ColumnDescription {
   name: string
@@ -514,7 +514,8 @@ export const REPORTING_TABLES: readonly TableDescription[] = [
       {
         name: 'account_status',
         type: 'text',
-        meaning: 'pending_disbursement, active, paid_off, in_arrears, written_off.',
+        meaning:
+          'pending_disbursement, active, paid_off, in_arrears, written_off or cancelled (cancelled before disbursement; terminal).',
       },
       {
         name: 'aging_bucket',
@@ -576,6 +577,13 @@ export const REPORTING_TABLES: readonly TableDescription[] = [
       col('status_before_closure', 'text', 'Account status just before it closed, or NULL.'),
       col('final_balance', 'numeric', 'Balance at closure, AUD, or NULL while open.'),
       col('total_paid_at_closure', 'numeric', 'Total repaid by closure, AUD, or NULL while open.'),
+      col(
+        'cancellation_reason',
+        'text',
+        'Why a loan was cancelled before disbursement: mutual_cancellation, customer_withdrew, offer_lapsed, fraud_hold or duplicate. NULL unless account_status is cancelled.',
+      ),
+      col('cancelled_at', 'timestamptz', 'When the loan was cancelled, or NULL.'),
+      col('cancelled_on', 'date', 'Sydney day the loan was cancelled, or NULL.'),
     ],
   },
   {
@@ -596,7 +604,12 @@ export const REPORTING_TABLES: readonly TableDescription[] = [
         meaning: 'Sydney day the instalment is due. Filter and group by this.',
       },
       { name: 'amount', type: 'numeric', meaning: 'Amount due, AUD.' },
-      { name: 'status', type: 'text', meaning: 'scheduled, paid, missed, partial.' },
+      {
+        name: 'status',
+        type: 'text',
+        meaning:
+          'scheduled, paid, missed, partial or void (every instalment of a loan cancelled before disbursement).',
+      },
       { name: 'amount_paid', type: 'numeric', meaning: 'Amount paid against it, AUD.' },
       { name: 'amount_remaining', type: 'numeric', meaning: 'Amount still due, AUD.' },
       { name: 'paid_date', type: 'timestamptz', meaning: 'When it was paid, or NULL.' },

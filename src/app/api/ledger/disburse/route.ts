@@ -68,9 +68,10 @@ export async function POST(request: NextRequest) {
       idempotentReplay: response.idempotentReplay,
     })
   } catch (error) {
-    // Bespoke branch: a duplicate disbursement keeps its own ALREADY_DISBURSED body and
-    // operator-facing wording, so it stays ahead of the generic mapping. Everything else
-    // (gRPC 9 -> 422, 5 -> 404, 14 -> 503) is handled centrally by handleApiError.
+    // Bespoke branches: a duplicate disbursement keeps its own ALREADY_DISBURSED body and
+    // operator-facing wording, and a cancelled loan gets LOAN_CANCELLED, so both stay ahead
+    // of the generic mapping. Everything else (gRPC 9 -> 422, 5 -> 404, 14 -> 503) is
+    // handled centrally by handleApiError.
     const grpcCode = (error as { code?: number } | undefined)?.code
     const grpcDetails = (error as { details?: string } | undefined)?.details
     const grpcMessage = error instanceof Error ? error.message : String(error)
@@ -82,6 +83,17 @@ export async function POST(request: NextRequest) {
           error: 'ALREADY_DISBURSED',
           message: 'This account has already been disbursed. Please check the account status.',
         },
+        { status: 409 },
+      )
+    }
+
+    // BTB-517: the loan was cancelled before disbursement. Matched on the ledger's
+    // wording (original case) because it arrives as plain FAILED_PRECONDITION
+    // details. A 409 the drawer shows as an error: nothing was paid out, and
+    // retrying can never succeed.
+    if ((grpcDetails || grpcMessage || '').includes('Loan is CANCELLED')) {
+      return NextResponse.json(
+        { error: 'LOAN_CANCELLED', message: 'Loan is CANCELLED — cannot disburse.' },
         { status: 409 },
       )
     }

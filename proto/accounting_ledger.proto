@@ -56,6 +56,11 @@ service AccountingLedgerService {
   // Disburse funds for a loan account (transitions from PENDING_DISBURSEMENT to ACTIVE)
   rpc DisburseLoan(DisburseLoanRequest) returns (DisburseLoanResponse);
 
+  // Cancel a loan before disbursement (PENDING / PENDING_DISBURSEMENT -> CANCELLED).
+  // Terminal. Refused once funds have been disbursed. Retrying with the same
+  // idempotency_key after UNAVAILABLE completes the cancel.
+  rpc CancelAccount(CancelAccountRequest) returns (CancelAccountResponse);
+
   // ==========================================================================
   // Schedule Queries (with Instalment Status)
   // ==========================================================================
@@ -545,6 +550,26 @@ message DisburseLoanResponse {
   string fee_transaction_id = 4;           // Transaction ID for ESTABLISHMENT_FEE (empty if no fee)
   string event_id = 5;                     // Published account.disbursed.v1 event ID
   bool idempotent_replay = 6;             // True if response was served from idempotency cache
+}
+
+// Cancel a loan before disbursement -- publishes account.cancelled.v1
+message CancelAccountRequest {
+  string loan_account_id = 1;
+  string reason_code = 2;                // mutual_cancellation, customer_withdrew, offer_lapsed, fraud_hold, duplicate
+  string note = 3;                       // Required: at least 20 characters after trimming
+  optional string evidence_ref = 4;      // Required when reason_code is mutual_cancellation
+  string actor_id = 5;                   // ID of the supervisor performing the cancel
+  string actor_name = 6;                 // Display name of that supervisor
+  string idempotency_key = 7;            // Required; reuse on retry
+}
+
+message CancelAccountResponse {
+  bool success = 1;
+  string message = 2;
+  string event_id = 3;                   // Published account.cancelled.v1 event ID
+  string cancelled_at = 4;               // When the platform recorded the cancel (ISO 8601)
+  string previous_status = 5;            // Status before the cancel (PENDING or PENDING_DISBURSEMENT)
+  bool idempotent_replay = 6;            // True if this cancel had already been recorded
 }
 
 // =============================================================================

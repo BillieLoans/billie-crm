@@ -240,6 +240,34 @@ export interface DisburseLoanResponse {
   idempotentReplay: boolean
 }
 
+/**
+ * Cancel a loan before disbursement. Hand-written to match
+ * `CancelAccountRequest` in proto/accounting_ledger.proto (loaded with
+ * `keepCase: false`, so the wire names are camelCase here).
+ */
+export interface CancelAccountRequest {
+  loanAccountId: string
+  /** mutual_cancellation | customer_withdrew | offer_lapsed | fraud_hold | duplicate */
+  reasonCode: string
+  note: string
+  /** Required by the platform when reasonCode is mutual_cancellation. */
+  evidenceRef?: string
+  actorId: string
+  actorName: string
+  /** Required. Reuse the same key to retry: it completes the cancel without a second one. */
+  idempotencyKey: string
+}
+
+export interface CancelAccountResponse {
+  success: boolean
+  message: string
+  eventId: string
+  /** When the platform recorded the cancel (ISO 8601). */
+  cancelledAt: string
+  previousStatus: string
+  idempotentReplay: boolean
+}
+
 export interface InstalmentAllocation {
   paymentNumber: number
   amountApplied: string
@@ -1130,6 +1158,13 @@ export class LedgerClient {
   async disburseLoan(request: DisburseLoanRequest): Promise<DisburseLoanResponse> {
     return this.promisify<DisburseLoanRequest, DisburseLoanResponse>(
       this.client.disburseLoan,
+      'write',
+    )(request)
+  }
+
+  async cancelAccount(request: CancelAccountRequest): Promise<CancelAccountResponse> {
+    return this.promisify<CancelAccountRequest, CancelAccountResponse>(
+      this.client.cancelAccount,
       'write',
     )(request)
   }

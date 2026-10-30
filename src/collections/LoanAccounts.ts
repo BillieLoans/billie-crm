@@ -294,6 +294,7 @@ export const LoanAccounts: CollectionConfig = {
         { label: 'Paid Off', value: 'paid_off' },
         { label: 'In Arrears', value: 'in_arrears' },
         { label: 'Written Off', value: 'written_off' },
+        { label: 'Cancelled', value: 'cancelled' },
       ],
       defaultValue: 'active',
       admin: {
@@ -457,6 +458,76 @@ export const LoanAccounts: CollectionConfig = {
       ],
     },
 
+    // === Cancellation (from account.cancelled.v1, BTB-517) ===
+    // Written by the event processor's handle_account_cancelled straight into the
+    // columns the adapter derives from these names (cancellation_reason,
+    // cancellation_note, cancellation_evidence_ref, cancellation_cancelled_by_id,
+    // cancellation_cancelled_by_name, cancellation_cancelled_at). Change a name
+    // here and that handler's SQL must change with it.
+    {
+      name: 'cancellation',
+      type: 'group',
+      admin: {
+        description:
+          'Cancellation snapshot from account.cancelled.v1 (cancelled before disbursement)',
+        condition: (data) => data?.accountStatus === 'cancelled',
+      },
+      fields: [
+        {
+          name: 'reason',
+          // Text, not a select: the processor writes the platform's code verbatim,
+          // so a code added on the platform later can never hit an enum mismatch.
+          // Staff see it through the label map in src/lib/cancellation.ts.
+          type: 'text',
+          admin: {
+            readOnly: true,
+            description:
+              'Reason code: mutual_cancellation, customer_withdrew, offer_lapsed, fraud_hold or duplicate',
+          },
+        },
+        {
+          name: 'note',
+          type: 'textarea',
+          admin: {
+            readOnly: true,
+            description: 'Note the supervisor wrote when cancelling (at least 20 characters)',
+          },
+        },
+        {
+          name: 'evidenceRef',
+          type: 'text',
+          admin: {
+            readOnly: true,
+            description: 'Reference to the evidence (required for a mutual cancellation)',
+          },
+        },
+        {
+          name: 'cancelledById',
+          type: 'text',
+          admin: {
+            readOnly: true,
+            description: 'CRM user id of the supervisor who cancelled the loan',
+          },
+        },
+        {
+          name: 'cancelledByName',
+          type: 'text',
+          admin: {
+            readOnly: true,
+            description: 'Display name of the supervisor who cancelled the loan',
+          },
+        },
+        {
+          name: 'cancelledAt',
+          type: 'date',
+          admin: {
+            readOnly: true,
+            description: 'When the platform recorded the cancellation',
+          },
+        },
+      ],
+    },
+
     // === Repayment Schedule (from account.schedule.created.v1) ===
     {
       name: 'repaymentSchedule',
@@ -538,6 +609,8 @@ export const LoanAccounts: CollectionConfig = {
                 { label: 'Paid', value: 'paid' },
                 { label: 'Missed', value: 'missed' },
                 { label: 'Partial', value: 'partial' },
+                // BTB-517: every instalment of a loan cancelled before disbursement.
+                { label: 'Void', value: 'void' },
               ],
               defaultValue: 'scheduled',
             },

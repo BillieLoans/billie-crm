@@ -632,7 +632,10 @@ export const REPORTING_SCHEMA_STATEMENTS: readonly string[] = [
      reporting.sydney_date(la.closure_closed_date)          AS closed_on,
      la.closure_previous_status                             AS status_before_closure,
      la.closure_final_balance                               AS final_balance,
-     la.closure_total_paid                                  AS total_paid_at_closure
+     la.closure_total_paid                                  AS total_paid_at_closure,
+     la.cancellation_reason                                 AS cancellation_reason,
+     la.cancellation_cancelled_at                           AS cancelled_at,
+     reporting.sydney_date(la.cancellation_cancelled_at)    AS cancelled_on
    FROM public.loan_accounts la
    -- Find the conversation on the raw column, so the lookup uses
    -- conversations_application_number_idx; matching the application view's
