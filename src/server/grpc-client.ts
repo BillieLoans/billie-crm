@@ -302,7 +302,7 @@ export interface InstalmentWithStatus {
   paymentNumber: number
   dueDate: string
   scheduledAmount: string
-  status: string // PENDING, PARTIAL, PAID, OVERDUE
+  status: string // PENDING, PARTIAL, PAID, OVERDUE, VOID (account cancelled before disbursement)
   amountPaid: string
   amountRemaining: string
   paidDate?: string
@@ -316,6 +316,8 @@ export interface ScheduleSummary {
   partialCount: number
   overdueCount: number
   pendingCount: number
+  /** Instalments voided by a cancellation before disbursement (BTB-517). */
+  voidCount: number
   nextDueDate?: string
   nextDueAmount?: string
   totalScheduled: string
@@ -742,6 +744,8 @@ export interface PreviewPeriodCloseResponse {
   eclMovement: ECLMovement
   processingTimeSeconds: number
   reconciliation: ReconciliationResult
+  /** Accounts cancelled before disbursement in the period (BTB-517). */
+  cancelledBeforeDisbursementCount: number
 }
 
 export interface FinalizePeriodCloseRequest {
@@ -782,6 +786,8 @@ export interface PeriodCloseResponse {
   journalEntries: JournalEntry[]
   hasCorrections: boolean
   correctionCount: number
+  /** Accounts cancelled before disbursement in the period (BTB-517). */
+  cancelledBeforeDisbursementCount: number
 }
 
 export interface GetClosedPeriodsRequest {

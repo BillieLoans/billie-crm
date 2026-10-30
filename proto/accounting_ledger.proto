@@ -503,7 +503,9 @@ message ApplyDishonourFeeRequest {
 // Waive fees
 message WaiveFeeRequest {
   string loan_account_id = 1;
-  string waiver_amount = 2;  // Amount to waive (decimal as string)
+  string waiver_amount = 2;  // Amount to waive (decimal as string). May exceed the current
+                             // fee balance if the fee was already settled by a repayment:
+                             // the paid portion is reallocated to principal (retroactive waiver).
   string reason = 3;  // Required: reason for waiver
   string approved_by = 4;  // Required: approver ID
   optional string notes = 5;  // Additional operator notes (max 1000 chars)
@@ -590,7 +592,7 @@ message InstalmentWithStatus {
   int32 payment_number = 1;
   string due_date = 2;            // YYYY-MM-DD
   string scheduled_amount = 3;
-  string status = 4;              // PENDING, PARTIAL, PAID, OVERDUE
+  string status = 4;              // PENDING, PARTIAL, PAID, OVERDUE, VOID (account cancelled before disbursement)
   string amount_paid = 5;
   string amount_remaining = 6;
   optional string paid_date = 7;  // When fully paid (ISO datetime)
@@ -610,6 +612,7 @@ message ScheduleSummary {
   string total_scheduled = 8;
   string total_paid = 9;
   string total_remaining = 10;
+  int32 void_count = 11;                // Instalments voided by a cancellation before disbursement
 }
 
 // Response with schedule and instalment statuses
@@ -643,7 +646,7 @@ message AccountAgingResponse {
   optional string transition_reason = 7;             // Reason for bucket transition
   optional string oldest_overdue_instalment_id = 8;  // ID of oldest overdue instalment
   string total_overdue_amount = 9;                   // Decimal as string for precision
-  bool is_in_arrears = 10;                           // Derived: bucket not in {current,closed} AND not terminal (aging-v1.1.0)
+  bool is_in_arrears = 10;                           // Derived: True iff bucket is non-current and account is not terminal
 }
 
 // Request to get list of overdue accounts
@@ -663,7 +666,7 @@ message OverdueAccount {
   int32 days_until_overdue = 4;           // Always 0 for overdue accounts
   string total_overdue_amount = 5;        // Decimal as string for precision
   string last_updated = 6;                // ISO 8601 UTC timestamp
-  bool is_in_arrears = 7;                 // Derived: bucket not in {current,closed} AND not terminal (aging-v1.1.0)
+  bool is_in_arrears = 7;                 // Derived; always True for entries in this list (kept for symmetry)
 }
 
 // Response with list of overdue accounts
@@ -1272,6 +1275,9 @@ message PreviewPeriodCloseResponse {
   
   // Account reconciliation (ECL vs Accrual)
   ReconciliationResult reconciliation = 16;
+
+  // Accounts cancelled before disbursement in the period (BTB-517)
+  int32 cancelled_before_disbursement_count = 17;
 }
 
 // Request to finalize period close
@@ -1332,6 +1338,9 @@ message PeriodCloseResponse {
   // Correction info
   bool has_corrections = 12;
   int32 correction_count = 13;
+
+  // Accounts cancelled before disbursement in the period (BTB-517)
+  int32 cancelled_before_disbursement_count = 14;
 }
 
 // Request to get closed periods
@@ -1356,7 +1365,12 @@ message AcknowledgeAnomalyRequest {
 message AcknowledgeAnomalyResponse {
   bool success = 1;
   string error_message = 2;
-  bool all_anomalies_acknowledged = 3;  // True if all anomalies now acknowledged
+  bool all_anomalies_acknowledged = 3;  // True if all GATING anomalies are now
+                                         // acknowledged (excludes anomaly_type
+                                         // values in NON_GATING_ANOMALY_TYPES,
+                                         // e.g. late_arrival_income_recovered
+                                         // — BTB-256 — comment-only, no wire
+                                         // change; see period_close_models.py)
 }
 
 // =============================================================================
