@@ -9,12 +9,19 @@
  * all, until an answer settles it, even when the drawer is closed and opened
  * again.
  *
- * Kept in sessionStorage, one entry per loan:
+ * Kept in sessionStorage, one entry per loan, `{ ownerId, request }`:
  * - it survives closing the drawer, moving between accounts and reloading the
- *   page, which is how an operator loses a drawer's state;
- * - it goes when the tab closes, so the note (free text about a customer)
- *   never outlives the session on a shared machine, which localStorage would;
- * - parent React state would not survive a reload.
+ *   page, which is how an operator loses a drawer's state; parent React state
+ *   would not survive a reload;
+ * - it belongs to the CRM user who made the request (`ownerId`, the user id
+ *   the routes record as the actor). Only that user is offered it: another
+ *   user signed in to the same tab never sees its note or resumes it, and the
+ *   entry is left for its owner (R26);
+ * - UserSessionGuard sweeps every entry (`clearAllFrozenCancellations`) when
+ *   the signed-in user changes or signs out, and the tab closing ends them
+ *   all, so a note about a customer does not outlive the session on a shared
+ *   machine. A cancel left part-way by a user change is finished through the
+ *   platform runbook's guard-recovery path.
  *
  * Every access is guarded: storage can be missing or throw (private modes,
  * blocked site data, the server render). Callers learn from `save` whether
@@ -25,8 +32,10 @@ import { CancelAccountSchema, type CancelAccount } from '@/lib/schemas/ledger'
 
 export type FrozenCancellation = CancelAccount
 
+const KEY_PREFIX = 'btb517:cancel:'
+
 export function frozenCancellationKey(loanAccountId: string): string {
-  return `btb517:cancel:${loanAccountId}`
+  return `${KEY_PREFIX}${loanAccountId}`
 }
 
 function storage(): Storage | null {
@@ -37,12 +46,21 @@ function storage(): Storage | null {
   }
 }
 
-/** The frozen request for this loan, or null when there is none (or it is unreadable). */
-export function loadFrozenCancellation(loanAccountId: string): FrozenCancellation | null {
+/**
+ * The frozen request for this loan made by `ownerId`, or null: none, unreadable,
+ * or another user's (which stays where it is, for them).
+ */
+export function loadFrozenCancellation(
+  loanAccountId: string,
+  ownerId: string | null | undefined,
+): FrozenCancellation | null {
+  if (!ownerId) return null
   try {
     const raw = storage()?.getItem(frozenCancellationKey(loanAccountId))
     if (!raw) return null
-    const parsed = CancelAccountSchema.safeParse(JSON.parse(raw))
+    const entry = JSON.parse(raw) as { ownerId?: unknown; request?: unknown } | null
+    if (!entry || entry.ownerId !== ownerId) return null
+    const parsed = CancelAccountSchema.safeParse(entry.request)
     if (!parsed.success || parsed.data.loanAccountId !== loanAccountId) return null
     return parsed.data
   } catch {
@@ -50,12 +68,19 @@ export function loadFrozenCancellation(loanAccountId: string): FrozenCancellatio
   }
 }
 
-/** Keep the request. Returns false when it could not be kept. */
-export function saveFrozenCancellation(request: FrozenCancellation): boolean {
+/** Keep the request for `ownerId`. Returns false when it could not be kept. */
+export function saveFrozenCancellation(
+  request: FrozenCancellation,
+  ownerId: string | null | undefined,
+): boolean {
+  if (!ownerId) return false
   try {
     const store = storage()
     if (!store) return false
-    store.setItem(frozenCancellationKey(request.loanAccountId), JSON.stringify(request))
+    store.setItem(
+      frozenCancellationKey(request.loanAccountId),
+      JSON.stringify({ ownerId, request }),
+    )
     return true
   } catch {
     return false
@@ -69,5 +94,21 @@ export function clearFrozenCancellation(loanAccountId: string): void {
   } catch {
     // Best effort: a request left behind is offered again, and its retry
     // settles it.
+  }
+}
+
+/** Forget every frozen request in this tab: the signed-in user changed (R26). */
+export function clearAllFrozenCancellations(): void {
+  try {
+    const store = storage()
+    if (!store) return
+    const keys: string[] = []
+    for (let i = 0; i < store.length; i++) {
+      const key = store.key(i)
+      if (key?.startsWith(KEY_PREFIX)) keys.push(key)
+    }
+    for (const key of keys) store.removeItem(key)
+  } catch {
+    // Best effort, like the rest of the session clear-out.
   }
 }

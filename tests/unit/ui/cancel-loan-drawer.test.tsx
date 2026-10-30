@@ -16,6 +16,12 @@ import {
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
+// The signed-in CRM user: a frozen cancel belongs to the user who made it (R26).
+const auth = vi.hoisted(() => ({
+  user: { id: 'sup-1', role: 'supervisor' } as { id: string; role: string } | null,
+}))
+vi.mock('@payloadcms/ui', () => ({ useAuth: () => ({ user: auth.user }) }))
+
 const fetchMock = vi.fn()
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 const NOTE = 'Customer rang to withdraw before the money moved.'
@@ -103,6 +109,7 @@ beforeEach(() => {
   fetchMock.mockReset()
   vi.stubGlobal('fetch', fetchMock)
   sessionStorage.clear()
+  auth.user = { id: 'sup-1', role: 'supervisor' }
 })
 
 afterEach(() => {
@@ -450,11 +457,14 @@ describe('CancelLoanDrawer: confirm and submit', () => {
     sessionStorage.setItem(
       'btb517:cancel:LA-1',
       JSON.stringify({
-        loanAccountId: 'LA-1',
-        reason: 'customer_withdrew',
-        note: NOTE,
-        blockConfirmation: { kind: 'manual_block_active' },
-        idempotencyKey: '3f2b8c1e-5d4a-4e6f-9a7b-0c1d2e3f4a5b',
+        ownerId: 'sup-1',
+        request: {
+          loanAccountId: 'LA-1',
+          reason: 'customer_withdrew',
+          note: NOTE,
+          blockConfirmation: { kind: 'manual_block_active' },
+          idempotencyKey: '3f2b8c1e-5d4a-4e6f-9a7b-0c1d2e3f4a5b',
+        },
       }),
     )
     renderDrawer({ reapplicationBlock: null })
@@ -465,6 +475,45 @@ describe('CancelLoanDrawer: confirm and submit', () => {
     expect(screen.getByRole('button', { name: 'Set manual block' })).toBeInTheDocument()
     expect(screen.queryByLabelText('No block needed')).toBeNull()
     expect(screen.getByRole('button', { name: 'Try again' })).toBeEnabled()
+  })
+
+  it('a frozen cancel is not offered to another signed-in user, and stays theirs', async () => {
+    const { rerender } = renderDrawer()
+    fillValidForm()
+    await failWith503()
+    rerender({ isOpen: false })
+
+    auth.user = { id: 'sup-2', role: 'supervisor' }
+    rerender({ isOpen: true })
+    expect(screen.queryByText(/in progress/)).toBeNull()
+    expect(screen.getByLabelText('Reason')).toHaveValue('')
+    expect(screen.getByLabelText('Note')).toHaveValue('')
+    // Left in place for its owner, never shown to anyone else.
+    expect(sessionStorage.getItem('btb517:cancel:LA-1')).not.toBeNull()
+  })
+
+  it('the success screen can be closed even when the frozen cancel could not be kept', async () => {
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError')
+    })
+    try {
+      const { props } = renderDrawer()
+      fillValidForm()
+      await failWith503()
+      reply(200, SUCCESS)
+      fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+      confirm()
+      await screen.findByText('Loan 1000001 cancelled.')
+      expect(screen.getByRole('button', { name: 'Close' })).toBeEnabled()
+      // The answer arrived outside React's act(), so the drawer's guard settles
+      // on the next scheduler tick: wait for it, as a person pressing Escape would.
+      await waitFor(() => {
+        fireEvent.keyDown(document, { key: 'Escape' })
+        expect(props.onClose).toHaveBeenCalled()
+      })
+    } finally {
+      setItem.mockRestore()
+    }
   })
 
   it('without browser storage, the drawer cannot be closed while a cancel is frozen', async () => {

@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useAuth } from '@payloadcms/ui'
 import { ContextDrawer } from '@/components/ui/ContextDrawer'
 import { Modal } from '@/components/ui/Modal'
 import { SetManualBlockModal } from '@/components/BlockSet/SetManualBlockModal'
@@ -96,8 +97,10 @@ export const CancelLoanDrawer: React.FC<CancelLoanDrawerProps> = ({
     onClose()
   }, [busy, onClose])
 
-  // The form lives inside the drawer, so it mounts on every opening: each
-  // opening is a new cancel with a fresh form and a fresh idempotency key.
+  // The form lives inside the drawer, so it mounts on every opening. An
+  // opening is a new cancel with a fresh form and a fresh idempotency key,
+  // unless this user left a cancel for this loan unfinished: then it reopens
+  // that request, key and all (frozenCancellation).
   return (
     <ContextDrawer isOpen={isOpen} onClose={guardedClose} title="Cancel loan" maxWidth="520px">
       <CancelLoanForm {...formProps} onClose={onClose} onBusyChange={setBusy} />
@@ -127,13 +130,16 @@ function CancelLoanForm({
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // The signed-in CRM user owns a frozen request; nobody else is offered it.
+  const { user } = useAuth()
+  const ownerId = user?.id != null ? String(user.id) : null
   /**
    * Set after an outcome-unknown failure: every retry sends this, unchanged,
-   * key and all. It is also kept for this loan across closing and reopening
-   * (frozenCancellation), so a reopened drawer starts from it.
+   * key and all. It is also kept for this user and loan across closing and
+   * reopening (frozenCancellation), so a reopened drawer starts from it.
    */
   const [lockedRequest, setLockedRequest] = useState<CancelRequest | null>(() =>
-    loadFrozenCancellation(loanAccountId),
+    loadFrozenCancellation(loanAccountId, ownerId),
   )
   /** The drawer opened on a cancellation an earlier opening left unfinished. */
   const [resumed, setResumed] = useState(() => lockedRequest !== null)
@@ -149,7 +155,8 @@ function CancelLoanForm({
   const locked = lockedRequest !== null
   // Without storage the frozen request lives only in this drawer: closing it
   // would lose the key that finishes the cancellation.
-  const mustStayOpen = locked && !kept
+  // (Not once it succeeded: the success screen has nothing left to lose.)
+  const mustStayOpen = locked && !kept && !result
   const busy = confirmOpen || blockModalOpen || submitting || mustStayOpen
   useEffect(() => {
     onBusyChange(busy)
@@ -222,7 +229,7 @@ function CancelLoanForm({
   /** Keep this exact request until an answer settles it. */
   const freeze = (request: CancelRequest) => {
     setLockedRequest(request)
-    setKept(saveFrozenCancellation(request))
+    setKept(saveFrozenCancellation(request, ownerId))
   }
 
   /** The platform answered for this key and holds nothing for it: start afresh. */
