@@ -1,4 +1,4 @@
-"""BTB-517: ``CANCELLED`` is a terminal account status in the CRM projection.
+"""BTB-517: the CRM mirrors a loan cancelled before disbursement.
 
 The platform publishes three events when a loan is cancelled before
 disbursement, to ``inbox:billie-servicing`` in no guaranteed order:
@@ -12,23 +12,22 @@ SDK (``parse_account_message``), so a field rename in the SDK breaks them
 rather than slipping past a hand-built mock. The Postgres pool is the shared
 ``mock_pool`` fixture.
 
-Review focus pinned here: a stale ``account.updated.v1`` carrying
-``PENDING_DISBURSEMENT`` must never move a cancelled loan back to
-``pending_disbursement`` - and neither may any other status, from any writer
-of ``account_status``.
+The platform is the system of record and its state machine already keeps a
+cancelled account cancelled, so the CRM carries no lifecycle rule of its own:
+it projects whatever the platform publishes (see ``TestCrmMirrorsThePlatform``).
+The one status guard in the event processor is the pre-existing one-way
+disbursement gate, pinned in ``test_status_regression_guard.py``.
 """
 
 from __future__ import annotations
 
 import ast
 import copy
-import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 from billie_accounts_events import AccountCancelledV1, parse_account_message
-from structlog.testing import capture_logs
 
 import billie_servicing.handlers as handlers_pkg
 from billie_servicing.handlers.account import (
@@ -233,30 +232,6 @@ def _row(account_status, sdk_status=None, disbursed=None, balance=52.5):
 
 CANCELLED_ROW = _row("cancelled", "CANCELLED")
 
-# Every SDK status plus a value the map has never heard of - none may move a
-# cancelled loan.
-ANY_INCOMING_STATUS = [
-    "PENDING",
-    "PENDING_DISBURSEMENT",
-    "ACTIVE",
-    "SUSPENDED",
-    "CLOSED",
-    "CANCELLED",
-    "SOMETHING_NEW",
-]
-
-
-def _account_status_writes(mock_pool):
-    """Every statement against loan_accounts that sets account_status."""
-    return [
-        c
-        for c in mock_pool.calls
-        if c.table == "loan_accounts"
-        and c.op in {"INSERT", "UPDATE"}
-        and "account_status" in c.values
-    ]
-
-
 # ---------------------------------------------------------------------------
 # account.cancelled.v1 - direct projection (AC12)
 # ---------------------------------------------------------------------------
@@ -386,126 +361,25 @@ class TestStatusMap:
 
 
 # ---------------------------------------------------------------------------
-# Terminal guard (Review focus 1) - every writer of account_status
+# The CRM mirrors the platform: no lifecycle rule of its own for cancelled
 # ---------------------------------------------------------------------------
 
 
-class TestCancelledIsTerminal:
+class TestCrmMirrorsThePlatform:
     @pytest.mark.asyncio
-    async def test_stale_updated_after_cancel_ignored(self, mock_pool):
-        """Review focus 1: stale PENDING_DISBURSEMENT after the cancel."""
+    async def test_a_later_updated_status_is_applied_to_a_cancelled_row(self, mock_pool):
+        """The CRM is a projection, not the system of record. The platform's
+        state machine guarantees a cancelled account never leaves CANCELLED, so
+        the CRM does not re-enforce that: a later account.updated.v1 carrying a
+        status is applied to a row stored as cancelled, exactly like any other
+        row."""
         mock_pool.set_fetchrow(CANCELLED_ROW)
 
-        await handle_account_updated(mock_pool, _updated_event("PENDING_DISBURSEMENT"))
+        await handle_account_updated(mock_pool, _updated_event("ACTIVE"))
 
         update = mock_pool.last_update("loan_accounts")
-        assert update is not None
-        assert "account_status" not in update
-        assert "sdk_status" not in update
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize("incoming", ANY_INCOMING_STATUS)
-    async def test_updated_with_any_status_cannot_move_a_cancelled_account(
-        self, mock_pool, incoming
-    ):
-        mock_pool.set_fetchrow(CANCELLED_ROW)
-
-        await handle_account_updated(mock_pool, _updated_event(incoming))
-
-        assert _account_status_writes(mock_pool) == []
-
-    @pytest.mark.asyncio
-    async def test_other_updated_fields_still_apply_when_status_is_dropped(self, mock_pool):
-        """Mirrors the disbursement gate: only the status is dropped."""
-        mock_pool.set_fetchrow(CANCELLED_ROW)
-
-        await handle_account_updated(
-            mock_pool, _updated_event("PENDING_DISBURSEMENT", current_balance="52.50")
-        )
-
-        update = mock_pool.last_update("loan_accounts")
-        assert update["balances_current_balance"] == 52.5
-        assert update["balances_total_outstanding"] == 52.5
-
-    @pytest.mark.asyncio
-    async def test_dropped_status_change_logs_a_warning(self, mock_pool):
-        mock_pool.set_fetchrow(CANCELLED_ROW)
-
-        with capture_logs() as captured:
-            await handle_account_updated(mock_pool, _updated_event("ACTIVE"))
-
-        warnings = [e for e in captured if e.get("log_level") == "warning"]
-        assert any("cancelled" in json.dumps(e, default=str).lower() for e in warnings), captured
-
-    # Final-review M2: the platform's own follow-up account.updated.v1
-    # (status CANCELLED) reaches a row account.cancelled.v1 already made
-    # cancelled on every cancel. That is a no-op, not a regression: INFO, never
-    # WARNING. A real attempt to move a cancelled loan still warns (above).
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize(
-        "deliver",
-        [
-            pytest.param(
-                lambda pool: handle_account_updated(pool, _updated_event("CANCELLED")),
-                id="updated",
-            ),
-            pytest.param(
-                lambda pool: handle_account_created(pool, _created_event("CANCELLED")),
-                id="created",
-            ),
-            pytest.param(
-                lambda pool: handle_account_status_changed(
-                    pool, _status_changed_event("CANCELLED")
-                ),
-                id="status_changed",
-            ),
-        ],
-    )
-    async def test_cancelled_onto_cancelled_is_info_not_warning(self, mock_pool, deliver):
-        mock_pool.set_fetchrow(CANCELLED_ROW)
-
-        with capture_logs() as captured:
-            await deliver(mock_pool)
-
-        assert not [e for e in captured if e.get("log_level") == "warning"], captured
-        infos = [e for e in captured if e.get("log_level") == "info"]
-        assert any("already cancelled" in str(e.get("event", "")) for e in infos), captured
-
-    @pytest.mark.asyncio
-    async def test_no_phantom_last_payment_on_a_cancelled_account(self, mock_pool):
-        """With the status dropped, the 'balance went down so a payment must
-        have happened' inference must not run against a cancelled loan."""
-        mock_pool.set_fetchrow(_row("cancelled", "CANCELLED", balance=52.5))
-
-        await handle_account_updated(
-            mock_pool,
-            _updated_event("PENDING_DISBURSEMENT", current_balance="0.00", trigger_type=""),
-        )
-
-        update = mock_pool.last_update("loan_accounts")
-        assert "last_payment_date" not in update
-        assert "last_payment_amount" not in update
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize("incoming", ANY_INCOMING_STATUS)
-    async def test_status_changed_cannot_move_a_cancelled_account(self, mock_pool, incoming):
-        mock_pool.set_fetchrow(CANCELLED_ROW)
-
-        await handle_account_status_changed(mock_pool, _status_changed_event(incoming))
-
-        assert _account_status_writes(mock_pool) == []
-
-    @pytest.mark.asyncio
-    async def test_created_replay_cannot_move_a_cancelled_account(self, mock_pool):
-        """A replayed account.created.v1 carries the original
-        PENDING_DISBURSEMENT snapshot."""
-        mock_pool.set_fetchrow(CANCELLED_ROW)
-
-        await handle_account_created(mock_pool, _created_event("PENDING_DISBURSEMENT"))
-
-        assert _account_status_writes(mock_pool) == []
-        # ...but the row is still upserted (non-status fields apply).
-        assert mock_pool.last_insert("loan_accounts") is not None
+        assert update["account_status"] == "active"
+        assert update["sdk_status"] == "ACTIVE"
 
     @pytest.mark.asyncio
     async def test_created_for_a_new_account_still_sets_status(self, mock_pool):
@@ -518,15 +392,7 @@ class TestCancelledIsTerminal:
         assert insert["sdk_status"] == "PENDING_DISBURSEMENT"
 
     @pytest.mark.asyncio
-    async def test_closed_cannot_move_a_cancelled_account(self, mock_pool):
-        mock_pool.set_fetchrow(CANCELLED_ROW)
-
-        await handle_account_closed(mock_pool, _closed_event())
-
-        assert mock_pool.updates_to("loan_accounts") == []
-
-    @pytest.mark.asyncio
-    async def test_closed_still_closes_an_account_that_is_not_cancelled(self, mock_pool):
+    async def test_closed_closes_an_account(self, mock_pool):
         mock_pool.set_fetchrow(_row("active", "ACTIVE"))
 
         await handle_account_closed(mock_pool, _closed_event())
@@ -534,8 +400,7 @@ class TestCancelledIsTerminal:
         assert mock_pool.last_update("loan_accounts")["account_status"] == "paid_off"
 
     @pytest.mark.asyncio
-    async def test_updated_still_transitions_a_pending_account(self, mock_pool):
-        """The guard is cancelled-only: forward transitions are untouched."""
+    async def test_updated_transitions_a_pending_account(self, mock_pool):
         mock_pool.set_fetchrow(_row("pending_disbursement", "PENDING_DISBURSEMENT"))
 
         await handle_account_updated(mock_pool, _updated_event("ACTIVE"))

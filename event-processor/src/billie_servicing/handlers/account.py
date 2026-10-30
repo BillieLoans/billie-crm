@@ -77,62 +77,24 @@ PRE_DISBURSEMENT_SDK_STATUSES = frozenset({"PENDING", "PENDING_DISBURSEMENT"})
 POST_DISBURSEMENT_SDK_STATUSES = frozenset({"ACTIVE", "SUSPENDED", "CLOSED"})
 
 
-# Terminal cancellation gate (BTB-517): a loan cancelled before disbursement
-# is CANCELLED for good. account.cancelled.v1, the follow-up account.updated.v1
-# (status CANCELLED) and the schedule VOID update reach the CRM in no guaranteed
-# order, and a stale PENDING_DISBURSEMENT account.updated.v1 emitted before the
-# cancel can be applied after it. Unlike the one-way disbursement gate above,
-# which only drops a *pre*-disbursement status, nothing legitimate leaves
-# CANCELLED, so once the stored row is cancelled NO incoming status is applied
-# - whatever event carries it. Every writer of ``account_status`` below routes
-# through ``_status_block_reason`` / ``_is_status_regression``.
+# Values written by handle_account_cancelled (BTB-517). The CRM only mirrors
+# what the platform publishes; it carries no lifecycle rule for cancellation.
 CANCELLED_ACCOUNT_STATUS = "cancelled"
 CANCELLED_SDK_STATUS = "CANCELLED"
 
 
-def _is_account_cancelled(row: Any) -> bool:
-    """True when the stored projection is already cancelled. ``row`` may be an
-    asyncpg.Record or dict and may lack either column (legacy rows / older
-    query shapes) - absence of evidence means not cancelled."""
+def _is_status_regression(incoming_sdk_status: str, row: Any) -> bool:
+    """True when a pre-disbursement status arrives for an account the stored
+    projection shows has already been disbursed. ``row`` may be an
+    asyncpg.Record or dict and may lack either evidence column (legacy rows/
+    older query shapes) — absence of evidence means no regression."""
+    if incoming_sdk_status not in PRE_DISBURSEMENT_SDK_STATUSES:
+        return False
     if row is None:
         return False
-    return (
-        row.get("account_status") == CANCELLED_ACCOUNT_STATUS
-        or row.get("sdk_status") == CANCELLED_SDK_STATUS
-    )
-
-
-def _status_block_reason(incoming_sdk_status: str, row: Any) -> str | None:
-    """Why an incoming status must be dropped for the stored ``row``, or None
-    when it may be applied."""
-    if row is None:
-        return None
-    if _is_account_cancelled(row):
-        return "stored projection is cancelled (terminal)"
-    if incoming_sdk_status not in PRE_DISBURSEMENT_SDK_STATUSES:
-        return None
-    if row.get("sdk_status") in POST_DISBURSEMENT_SDK_STATUSES or row.get(
-        "loan_terms_disbursed_date"
-    ):
-        return "stored projection is already disbursed"
-    return None
-
-
-def _is_cancelled_echo(incoming_sdk_status: str, row: Any) -> bool:
-    """True when the dropped status is CANCELLED arriving for a row already
-    cancelled: the platform's normal follow-up to account.cancelled.v1, a no-op
-    rather than a regression (logged at INFO, not WARNING)."""
-    return incoming_sdk_status == CANCELLED_SDK_STATUS and _is_account_cancelled(row)
-
-
-def _is_status_regression(incoming_sdk_status: str, row: Any) -> bool:
-    """True when ``incoming_sdk_status`` must not be applied to the stored
-    projection: either a pre-disbursement status arriving for an account the
-    row shows has already been disbursed, or ANY status arriving for an
-    account the row shows is cancelled. ``row`` may be an asyncpg.Record or
-    dict and may lack either evidence column (legacy rows/older query shapes)
-    - absence of evidence means no regression."""
-    return _status_block_reason(incoming_sdk_status, row) is not None
+    if row.get("sdk_status") in POST_DISBURSEMENT_SDK_STATUSES:
+        return True
+    return bool(row.get("loan_terms_disbursed_date"))
 
 
 async def _resolve_customer_link(pool: asyncpg.Pool, customer_id: str | None) -> Any | None:
@@ -159,7 +121,7 @@ async def handle_account_created(pool: asyncpg.Pool, parsed_event: Any) -> None:
     account_status = SDK_STATUS_MAP.get(sdk_status, "active")
 
     existing_row = await pool.fetchrow(
-        "SELECT account_status, sdk_status, loan_terms_disbursed_date "
+        "SELECT sdk_status, loan_terms_disbursed_date "
         "FROM loan_accounts WHERE loan_account_id = $1",
         account_id,
     )
@@ -217,23 +179,14 @@ async def handle_account_created(pool: asyncpg.Pool, parsed_event: Any) -> None:
     # A replayed account.created.v1 carries the original pre-disbursement
     # snapshot; dropping the status keys is safe because the regression check
     # only fires when the row already exists (so the INSERT branch — where
-    # account_status is NOT NULL — can't be taken). The same replay must not
-    # un-cancel a cancelled loan (BTB-517).
-    block_reason = _status_block_reason(sdk_status, existing_row)
-    if block_reason:
-        if _is_cancelled_echo(sdk_status, existing_row):
-            log.info(
-                "Account already cancelled; CANCELLED on account.created.v1 is a no-op — "
-                "other fields in this event still apply",
-            )
-        else:
-            log.warning(
-                "Ignoring status regression on account.created.v1 replay — "
-                "other fields in this event still apply",
-                block_reason=block_reason,
-                incoming_sdk_status=sdk_status,
-                stored_sdk_status=existing_row.get("sdk_status"),
-            )
+    # account_status is NOT NULL — can't be taken).
+    if _is_status_regression(sdk_status, existing_row):
+        log.warning(
+            "Ignoring pre-disbursement status regression on account.created.v1 "
+            "replay — stored projection is already disbursed",
+            incoming_sdk_status=sdk_status,
+            stored_sdk_status=existing_row.get("sdk_status"),
+        )
         del values["account_status"]
         del values["sdk_status"]
 
@@ -335,17 +288,11 @@ async def handle_account_updated(pool: asyncpg.Pool, parsed_event: Any) -> None:
     if payload.status:
         sdk_status = _normalise_status(payload.status)
         row = await _load_existing()
-        block_reason = _status_block_reason(sdk_status, row)
-        if block_reason and _is_cancelled_echo(sdk_status, row):
-            log.info(
-                "Account already cancelled; CANCELLED on account.updated.v1 is a no-op — "
-                "other fields in this event still apply",
-            )
-        elif block_reason:
+        if _is_status_regression(sdk_status, row):
             log.warning(
-                "Ignoring status regression on account.updated.v1 — "
+                "Ignoring pre-disbursement status regression on "
+                "account.updated.v1 — stored projection is already disbursed; "
                 "other fields in this event still apply",
-                block_reason=block_reason,
                 incoming_sdk_status=sdk_status,
                 stored_sdk_status=row.get("sdk_status"),
             )
@@ -402,15 +349,7 @@ async def handle_account_updated(pool: asyncpg.Pool, parsed_event: Any) -> None:
     ):
         row = await _load_existing()
         existing_balance = row["balances_total_outstanding"] if row else None
-        # A dropped status leaves update_doc without account_status, which the
-        # "active" default above reads as "a repayment may have happened".
-        # Acceptable for the disbursement gate; a cancelled loan can never have
-        # been repaid, so never infer a payment onto one (BTB-517).
-        if (
-            existing_balance is not None
-            and not _is_account_cancelled(row)
-            and current_balance_value < float(existing_balance)
-        ):
+        if existing_balance is not None and current_balance_value < float(existing_balance):
             delta = float(existing_balance) - current_balance_value
             update_doc["last_payment_date"] = now
             update_doc["last_payment_amount"] = delta
@@ -463,17 +402,13 @@ async def handle_account_status_changed(pool: asyncpg.Pool, parsed_event: Any) -
         account_id,
     )
 
-    block_reason = _status_block_reason(sdk_status, row)
-    if block_reason:
-        if _is_cancelled_echo(sdk_status, row):
-            log.info("Account already cancelled; CANCELLED on account.status_changed.v1 is a no-op")
-        else:
-            log.warning(
-                "Ignoring status regression on account.status_changed.v1",
-                block_reason=block_reason,
-                incoming_sdk_status=sdk_status,
-                stored_sdk_status=row.get("sdk_status"),
-            )
+    if _is_status_regression(sdk_status, row):
+        log.warning(
+            "Ignoring pre-disbursement status regression on "
+            "account.status_changed.v1 — stored projection is already disbursed",
+            incoming_sdk_status=sdk_status,
+            stored_sdk_status=row.get("sdk_status"),
+        )
         return
 
     update_doc: dict[str, Any] = {
@@ -518,23 +453,6 @@ async def handle_account_closed(pool: asyncpg.Pool, parsed_event: Any) -> None:
 
     log = logger.bind(account_id=account_id, closure_reason=closure_reason)
     log.info("Processing account.closed.v1")
-
-    # Cancelled is terminal (BTB-517): the platform cannot close a cancelled
-    # loan, so a closure event for one is contradictory. Drop it whole - unlike
-    # a stale status on account.updated.v1, its other fields (closure_* snapshot,
-    # zeroed balances) would only describe a closure that never happened.
-    stored = await pool.fetchrow(
-        "SELECT account_status, sdk_status FROM loan_accounts "
-        "WHERE loan_account_id = $1",
-        account_id,
-    )
-    if _is_account_cancelled(stored):
-        log.warning(
-            "Ignoring account.closed.v1 for a cancelled account — "
-            "cancelled is terminal",
-            stored_account_status=stored.get("account_status"),
-        )
-        return
 
     final_balance = (
         float(payload.final_balance) if payload.final_balance is not None else 0.0
@@ -590,8 +508,8 @@ async def handle_account_cancelled(pool: asyncpg.Pool, parsed_event: Any) -> Non
     event alone. Balances and the repayment schedule are left to those follow-up
     events. Idempotent: replaying writes the same values.
 
-    Cancelled is terminal; later events cannot change ``account_status`` (see
-    ``_status_block_reason``).
+    The CRM mirrors the platform here; it enforces no lifecycle rule of its own
+    (the platform's state machine keeps a cancelled account cancelled).
     """
     payload = parsed_event.payload
     account_id = payload.account_id
