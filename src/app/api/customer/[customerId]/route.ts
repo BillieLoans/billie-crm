@@ -149,6 +149,8 @@ export async function GET(
         createdAt: account.createdAt,
         updatedAt: account.updatedAt, // For version conflict detection
         signedLoanAgreementUrl: account.signedLoanAgreementUrl ?? undefined,
+        // BTB-517: the header's cancellation block (reason, note, by, when, evidence).
+        cancellation: account.cancellation ?? null,
       })),
       conversations: conversationsResult.docs.map((conv) => ({
         id: conv.id,

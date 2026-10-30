@@ -1,10 +1,16 @@
 // tests/unit/lib/reapplication-block.test.ts
 import { describe, it, expect } from 'vitest'
 import {
+  formatBlockLabel,
   formatBlockReason,
   formatBlockedUntil,
   isBlockActive,
   isBlockDeclineReason,
+  isManualBlockActive,
+  manualBlockExpiresAt,
+  manualBlockReasonCode,
+  MANUAL_BLOCK_REASON_CODES,
+  MANUAL_BLOCK_REASON_LABELS,
 } from '@/lib/reapplicationBlock'
 
 const TODAY = new Date('2026-06-10T12:00:00+10:00')
@@ -120,5 +126,88 @@ describe('isBlockDeclineReason', () => {
     expect(isBlockDeclineReason('SERVICEABILITY_FAILED')).toBe(false)
     expect(isBlockDeclineReason(null)).toBe(false)
     expect(isBlockDeclineReason(undefined)).toBe(false)
+  })
+})
+
+// BTB-517: a MANUAL_ADMIN block raised by the CRM's "Set manual block" carries a
+// reason code. It is shown only while the mirrored block is the one that set
+// put in place: state.changed binds the block to the set's request id, and the
+// manual_set_applied reply supplies that request's code.
+describe('manual block reason code (BTB-517)', () => {
+  const setBlock = {
+    reason: 'MANUAL_ADMIN',
+    blockedUntil: null,
+    manualBlockRequestId: 'req-1',
+    manualSetRequestId: 'req-1',
+    manualSetReasonCode: 'credit_review_hold',
+  }
+
+  it('offers exactly the three manual block reason codes, with staff labels', () => {
+    expect([...MANUAL_BLOCK_REASON_CODES]).toEqual([
+      'credit_review_hold',
+      'cancelled_pre_disbursement',
+      'fraud_hold',
+    ])
+    expect(MANUAL_BLOCK_REASON_LABELS.credit_review_hold).toBe('Credit review hold')
+    expect(MANUAL_BLOCK_REASON_LABELS.cancelled_pre_disbursement).toBe('Cancelled before disbursement')
+    expect(MANUAL_BLOCK_REASON_LABELS.fraud_hold).toBe('Fraud hold')
+  })
+
+  it('labels a MANUAL_ADMIN block with the reason code of the set that raised it', () => {
+    expect(manualBlockReasonCode(setBlock)).toBe('credit_review_hold')
+    expect(formatBlockLabel(setBlock)).toBe('Manual block — credit review hold')
+    expect(formatBlockLabel({ ...setBlock, manualSetReasonCode: 'cancelled_pre_disbursement' })).toBe(
+      'Manual block — cancelled before disbursement',
+    )
+    expect(formatBlockLabel({ ...setBlock, manualSetReasonCode: 'fraud_hold' })).toBe(
+      'Manual block — fraud hold',
+    )
+  })
+
+  it('a block raised by a conversation kill never shows an older set\'s code', () => {
+    // state.changed for the kill unbinds the block (manualBlockRequestId null);
+    // the older set's applied reply is still stored.
+    const killBlock = { ...setBlock, manualBlockRequestId: null }
+    expect(manualBlockReasonCode(killBlock)).toBeNull()
+    expect(formatBlockLabel(killBlock)).toBe('Manually blocked (staff)')
+  })
+
+  it('a late reply for an older set does not relabel a newer block', () => {
+    const block = { ...setBlock, manualBlockRequestId: 'req-2', manualSetRequestId: 'req-1' }
+    expect(formatBlockLabel(block)).toBe('Manually blocked (staff)')
+  })
+
+  it('stays generic while the applied reply has not arrived yet', () => {
+    const block = { ...setBlock, manualSetRequestId: null, manualSetReasonCode: null }
+    expect(formatBlockLabel(block)).toBe('Manually blocked (staff)')
+  })
+
+  it('stays generic for a code it does not know', () => {
+    expect(formatBlockLabel({ ...setBlock, manualSetReasonCode: 'something_else' })).toBe(
+      'Manually blocked (staff)',
+    )
+  })
+
+  it('never applies a manual code to another reason', () => {
+    const block = { ...setBlock, reason: 'ACTIVE_LOAN' }
+    expect(manualBlockReasonCode(block)).toBeNull()
+    expect(formatBlockLabel(block)).toBe('Active loan')
+    expect(formatBlockLabel(null)).toBe('—')
+  })
+
+  it('isManualBlockActive: an active MANUAL_ADMIN block only', () => {
+    expect(isManualBlockActive(setBlock, TODAY)).toBe(true)
+    expect(isManualBlockActive({ reason: 'MANUAL_ADMIN', blockedUntil: '2026-06-01' }, TODAY)).toBe(false)
+    expect(isManualBlockActive({ reason: 'ACTIVE_LOAN', blockedUntil: null }, TODAY)).toBe(false)
+    expect(isManualBlockActive(null, TODAY)).toBe(false)
+  })
+
+  it('manualBlockExpiresAt: the block runs to the end of the chosen Sydney day', () => {
+    // AEDT (UTC+11): 23:59:59.999 on 3 Nov 2026 Sydney is 12:59:59.999Z.
+    expect(manualBlockExpiresAt('2026-11-03')).toBe('2026-11-03T12:59:59.999Z')
+    // AEST (UTC+10) in winter.
+    expect(manualBlockExpiresAt('2026-07-15')).toBe('2026-07-15T13:59:59.999Z')
+    // The day the clocks go forward (4 Oct 2026) ends on AEDT.
+    expect(manualBlockExpiresAt('2026-10-04')).toBe('2026-10-04T12:59:59.999Z')
   })
 })

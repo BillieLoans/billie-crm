@@ -14,6 +14,12 @@ export interface DisburseLoanDrawerProps {
   /** When set, show a link to view the signed loan agreement (opens in new window) */
   signedLoanAgreementUrl?: string | null
   onSuccess?: () => void
+  /**
+   * The ledger refused because the loan was cancelled before disbursement
+   * (BTB-517). The view that opened the drawer is stale: it still offers
+   * Disburse. The parent re-reads the account so that button goes.
+   */
+  onLoanCancelled?: () => void
 }
 
 const PAYMENT_METHODS = [
@@ -41,6 +47,7 @@ export const DisburseLoanDrawer: React.FC<DisburseLoanDrawerProps> = ({
   loanAmount,
   signedLoanAgreementUrl,
   onSuccess,
+  onLoanCancelled,
 }) => {
   const [disbursementAmount, setDisbursementAmount] = useState('')
   const [bankReference, setBankReference] = useState('')
@@ -177,6 +184,7 @@ export const DisburseLoanDrawer: React.FC<DisburseLoanDrawerProps> = ({
         if (res.status === 409 && data.error === 'LOAN_CANCELLED') {
           setValidationError(data.message || 'Loan is CANCELLED — cannot disburse.')
           setProgressMessage(null)
+          onLoanCancelled?.()
           return
         }
 
@@ -208,6 +216,7 @@ export const DisburseLoanDrawer: React.FC<DisburseLoanDrawerProps> = ({
       selectedFile,
       onClose,
       onSuccess,
+      onLoanCancelled,
       uploadFileToS3,
     ],
   )

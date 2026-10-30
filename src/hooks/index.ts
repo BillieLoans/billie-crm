@@ -182,6 +182,10 @@ export type { AskClaudeParams, DraftOutcome } from './mutations/useAskClaude'
 export { useKillConversation } from './mutations/useKillConversation'
 export type { KillConversationResult } from './mutations/useKillConversation'
 
+// Manual re-application block (BTB-517)
+export { useSetManualBlock } from './mutations/useSetManualBlock'
+export type { SetManualBlockResult } from './mutations/useSetManualBlock'
+
 export { useLendingAccess } from './useLendingAccess'
 
 // Re-export types from canonical location

@@ -141,6 +141,15 @@ export const EVENT_TYPE_REAPPLICATION_BLOCK_CLEAR_AUTHORIZED =
   'reapplication_block.clear_authorized.v1'
 
 /**
+ * Command: put a MANUAL_ADMIN re-application block on a canonical customer
+ * (BTB-517, posted to chatLedger). billieChat answers with
+ * reapplication_block.manual_set_applied.v1 or ..._rejected.v1, and the block
+ * itself reaches the customer row through reapplication_block.state.changed.v1.
+ */
+export const EVENT_TYPE_REAPPLICATION_BLOCK_MANUAL_SET =
+  process.env.EVENT_TYPE_REAPPLICATION_BLOCK_MANUAL_SET ?? 'reapplication_block.manual_set.v1'
+
+/**
  * Event type for the public-intake contact command, published to chatLedger
  * as the durable fallback when the primary gRPC UpsertContact fails. The
  * Broker routes it to the marketingService inbox (see billieChat routes.json,

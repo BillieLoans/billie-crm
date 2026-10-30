@@ -35,3 +35,43 @@ describe('ActionsTab', () => {
     expect(screen.getByTestId('action-record-repayment')).toBeDisabled()
   })
 })
+
+describe('ActionsTab: cancel before disbursement (BTB-517)', () => {
+  test('supervisor sees a Cancel loan card on a pending loan', () => {
+    const onCancelLoan = vi.fn()
+    render(
+      <ActionsTab
+        account={account({ accountStatus: 'pending_disbursement' })}
+        hasPendingWriteOff={false}
+        role="supervisor"
+        onCancelLoan={onCancelLoan}
+        {...h()}
+      />,
+    )
+    const button = screen.getByTestId('action-cancel-loan')
+    expect(button).toHaveTextContent('Cancel loan')
+    button.click()
+    expect(onCancelLoan).toHaveBeenCalled()
+  })
+
+  test('operations sees no Cancel loan card', () => {
+    render(
+      <ActionsTab
+        account={account({ accountStatus: 'pending_disbursement' })}
+        hasPendingWriteOff={false}
+        role="operations"
+        onCancelLoan={vi.fn()}
+        {...h()}
+      />,
+    )
+    expect(screen.queryByTestId('action-cancel-loan')).toBeNull()
+  })
+
+  test('a cancelled loan has no actions at all', () => {
+    render(
+      <ActionsTab account={account({ accountStatus: 'cancelled' })} hasPendingWriteOff={false} role="admin" onCancelLoan={vi.fn()} {...h()} />,
+    )
+    expect(screen.queryAllByRole('button')).toEqual([])
+    expect(screen.getByText('No actions are available on a cancelled loan.')).toBeInTheDocument()
+  })
+})

@@ -62,13 +62,19 @@ function isOverdue(dueDate: string | null): boolean {
 /**
  * Derive the effective status considering overdue logic
  */
-type EffectiveStatus = 'complete' | 'partial' | 'overdue' | 'due-next' | 'outstanding'
+type EffectiveStatus = 'complete' | 'partial' | 'overdue' | 'due-next' | 'outstanding' | 'void'
 
 function getEffectiveStatus(
   payment: ScheduledPayment,
   isNextDue: boolean
 ): EffectiveStatus {
   const { status, dueDate } = payment
+
+  // Void: an instalment of a loan cancelled before disbursement (BTB-517).
+  // Never owed, so never due, next, overdue or outstanding.
+  if (status === 'void') {
+    return 'void'
+  }
 
   // Paid in full = complete
   if (status === 'paid') {
@@ -128,6 +134,12 @@ function getPaymentStatusConfig(effectiveStatus: EffectiveStatus) {
         label: 'Due (next)',
         className: styles.paymentStatusNext,
       }
+    case 'void':
+      return {
+        icon: '–',
+        label: 'Void',
+        className: styles.paymentStatusVoid,
+      }
     case 'outstanding':
     default:
       return {
@@ -185,6 +197,7 @@ export const RepaymentScheduleList: React.FC<RepaymentScheduleListProps> = ({
         partial: 0,
         overdue: 0,
         outstanding: 0,
+        void: 0,
         total: numberOfPayments ?? 0,
         nextPaymentIndex: -1,
         totalPaid: 0,
@@ -196,11 +209,18 @@ export const RepaymentScheduleList: React.FC<RepaymentScheduleListProps> = ({
     let partial = 0
     let overdue = 0
     let outstanding = 0
+    let voided = 0
     let nextPaymentIndex = -1
     let totalPaid = 0
     let totalRemaining = 0
 
     payments.forEach((p, index) => {
+      // A void instalment counts towards nothing owed or paid.
+      if (p.status === 'void') {
+        voided++
+        return
+      }
+
       // Accumulate totals
       if (p.amountPaid != null) totalPaid += p.amountPaid
       if (p.amountRemaining != null) totalRemaining += p.amountRemaining
@@ -225,6 +245,7 @@ export const RepaymentScheduleList: React.FC<RepaymentScheduleListProps> = ({
       partial,
       overdue,
       outstanding,
+      void: voided,
       total: payments.length,
       nextPaymentIndex,
       totalPaid,
@@ -284,6 +305,11 @@ export const RepaymentScheduleList: React.FC<RepaymentScheduleListProps> = ({
           {stats.outstanding > 0 && (
             <span className={`${styles.summaryBadge} ${styles.summaryBadgeOutstanding}`}>
               {stats.outstanding} Outstanding
+            </span>
+          )}
+          {stats.void > 0 && (
+            <span className={`${styles.summaryBadge} ${styles.summaryBadgeVoid}`}>
+              {stats.void} Void
             </span>
           )}
         </div>

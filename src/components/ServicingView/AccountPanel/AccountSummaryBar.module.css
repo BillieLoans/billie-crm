@@ -31,3 +31,20 @@
 .iconBtn svg { display: block; }
 .spinning .refreshIcon { animation: summaryRefreshSpin 0.7s linear infinite; transform-origin: center; }
 @keyframes summaryRefreshSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/*
+ * BTB-517: a loan cancelled before disbursement. Neutral grey pill and
+ * cancellation block, never a red/green pair (red/green colour-blind staff);
+ * the words carry the meaning. Theme tokens, so light (Payload's default) and
+ * dark both hold. Contrast on the real light tokens: pill text elevation-800
+ * #2f2f2f on elevation-100 #ebebeb 11.2:1 (dark: #ebebeb on #2f2f2f, same);
+ * block labels elevation-600 #656565 on white 5.8:1; body text on white
+ * >= 12:1.
+ */
+.statusCancelled { background: var(--theme-elevation-100, #ebebeb); color: var(--theme-elevation-800, #2f2f2f); border: 1px solid var(--theme-elevation-300, #b5b5b5); }
+.cancellation { margin: 2px 0 10px; padding: 10px 12px; max-width: 560px; background: var(--theme-elevation-0, #fff); border: 1px solid var(--theme-elevation-200, #d0d0d0); border-left: 3px solid var(--theme-elevation-600, #656565); border-radius: 6px; }
+.cancellationTitle { margin: 0 0 6px; font-size: 13px; font-weight: 700; color: var(--theme-text, #1f2733); }
+.cancellationList { display: grid; grid-template-columns: max-content 1fr; gap: 3px 14px; margin: 0; font-size: 12.5px; }
+.cancellationList dt { color: var(--theme-elevation-600, #656565); }
+.cancellationList dd { margin: 0; color: var(--theme-text, #1f2733); overflow-wrap: anywhere; }
+.cancellationNote { white-space: pre-wrap; }

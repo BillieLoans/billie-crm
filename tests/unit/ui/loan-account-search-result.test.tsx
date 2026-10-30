@@ -154,4 +154,16 @@ describe('LoanAccountSearchResult component', () => {
 
     expect(screen.getByText('$0.00')).toBeInTheDocument()
   })
+
+  test('labels a cancelled loan "Cancelled" in a neutral badge, not as Active (BTB-517)', () => {
+    const props = createProps({ accountStatus: 'cancelled' as const, totalOutstanding: 0 })
+    render(
+      <CommandWrapper>
+        <LoanAccountSearchResult {...props} />
+      </CommandWrapper>,
+    )
+    const badge = screen.getByText('Cancelled')
+    expect(badge.className).toMatch(/badgeCancelled/)
+    expect(screen.queryByText('Active')).toBeNull()
+  })
 })

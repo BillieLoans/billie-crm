@@ -105,3 +105,26 @@ describe('DisburseLoanDrawer: an already disbursed loan', () => {
     expect(screen.getByText('This account has already been disbursed.')).toBeTruthy()
   })
 })
+
+describe('DisburseLoanDrawer: refreshes the stale view after LOAN_CANCELLED (BTB-517)', () => {
+  it('asks the parent to re-read the account, so the stale Disburse button goes', async () => {
+    reply(409, { error: 'LOAN_CANCELLED', message: 'Loan is CANCELLED — cannot disburse.' })
+    const onLoanCancelled = vi.fn()
+    const onSuccess = vi.fn()
+    render(
+      <DisburseLoanDrawer
+        isOpen
+        onClose={vi.fn()}
+        onSuccess={onSuccess}
+        onLoanCancelled={onLoanCancelled}
+        loanAccountId="LA-1"
+        accountNumber="1000001"
+        loanAmount={500}
+      />,
+    )
+    await submit()
+    await screen.findByText('Loan is CANCELLED — cannot disburse.')
+    expect(onLoanCancelled).toHaveBeenCalledTimes(1)
+    expect(onSuccess).not.toHaveBeenCalled()
+  })
+})

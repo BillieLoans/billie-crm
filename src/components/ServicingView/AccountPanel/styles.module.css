@@ -899,6 +899,21 @@
   color: var(--theme-elevation-500, #888);
 }
 
+/* Void (BTB-517): an instalment of a loan cancelled before disbursement.
+   Neutral, and the amount struck through, so it never reads as owed. */
+.paymentStatusVoid {
+  background: var(--theme-elevation-50, #f5f5f5);
+}
+
+.paymentStatusVoid .paymentStatus {
+  color: var(--theme-elevation-600, #656565);
+}
+
+.paymentStatusVoid .paymentAmount {
+  text-decoration: line-through;
+  color: var(--theme-elevation-600, #656565);
+}
+
 /* Overdue status - more urgent than missed */
 .paymentStatusOverdue {
   background: var(--theme-error-100, #fee2e2);
@@ -954,6 +969,11 @@
 .summaryBadgeOutstanding {
   background: var(--theme-elevation-100, #f0f0f0);
   color: var(--theme-elevation-600, #666);
+}
+
+.summaryBadgeVoid {
+  background: var(--theme-elevation-100, #ebebeb);
+  color: var(--theme-elevation-800, #2f2f2f);
 }
 
 /* Mobile responsive */

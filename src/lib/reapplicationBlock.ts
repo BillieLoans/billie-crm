@@ -17,6 +17,7 @@
  */
 
 import { formatDateOnly } from '@/lib/formatters'
+import { sydneyDayStartUtc } from '@/lib/disbursement-cutoff'
 
 /** Block reason enum → staff-facing label. Unknown values fall back to the raw enum. */
 const BLOCK_REASON_LABELS: Record<string, string> = {
@@ -40,6 +41,91 @@ export function formatBlockReason(reason: string | null | undefined): string {
 export interface BlockLike {
   reason?: string | null
   blockedUntil?: string | Date | null
+}
+
+// =============================================================================
+// Manual block set from the CRM (BTB-517)
+// =============================================================================
+
+/**
+ * Reason codes for a MANUAL_ADMIN block set from the CRM
+ * (`reapplication_block.manual_set.v1`). billieChat accepts exactly these.
+ */
+export const MANUAL_BLOCK_REASON_CODES = [
+  'credit_review_hold',
+  'cancelled_pre_disbursement',
+  'fraud_hold',
+] as const
+
+export type ManualBlockReasonCode = (typeof MANUAL_BLOCK_REASON_CODES)[number]
+
+export const MANUAL_BLOCK_REASON_LABELS: Record<ManualBlockReasonCode, string> = {
+  credit_review_hold: 'Credit review hold',
+  cancelled_pre_disbursement: 'Cancelled before disbursement',
+  fraud_hold: 'Fraud hold',
+}
+
+/** The customer-row block fields that say which manual set raised the block. */
+export interface ManualBlockFields extends BlockLike {
+  /** Written by state.changed only: the manual-set request that raised the block shown now. */
+  manualBlockRequestId?: string | null
+  /** The latest manual set billieChat applied, and its reason code. */
+  manualSetRequestId?: string | null
+  manualSetReasonCode?: string | null
+}
+
+/**
+ * The reason code of the manual set that raised this MANUAL_ADMIN block, or
+ * null when it is not known.
+ *
+ * state.changed binds the mirrored block to the request that caused it, and
+ * unbinds it for any other cause (a conversation kill, which sends no applied
+ * reply; a merge; an unblock). The applied reply supplies a request's code.
+ * The code is used only when both name the same request, so an older set's
+ * code never describes a block something else raised.
+ */
+export function manualBlockReasonCode(
+  block: ManualBlockFields | null | undefined,
+): ManualBlockReasonCode | null {
+  if (block?.reason !== 'MANUAL_ADMIN') return null
+  const bound = block.manualBlockRequestId
+  if (!bound || bound !== block.manualSetRequestId) return null
+  const code = block.manualSetReasonCode
+  return code && (MANUAL_BLOCK_REASON_CODES as readonly string[]).includes(code)
+    ? (code as ManualBlockReasonCode)
+    : null
+}
+
+/**
+ * Staff-facing name of a block: its reason, and for a manual block set from
+ * the CRM, why it was set ("Manual block — credit review hold").
+ */
+export function formatBlockLabel(block: ManualBlockFields | null | undefined): string {
+  const code = manualBlockReasonCode(block)
+  if (code) return `Manual block — ${MANUAL_BLOCK_REASON_LABELS[code].toLowerCase()}`
+  return formatBlockReason(block?.reason)
+}
+
+/** Whether the customer has an active MANUAL_ADMIN block (the cancel route re-checks this, AC16). */
+export function isManualBlockActive(
+  block: BlockLike | null | undefined,
+  today: Date = new Date(),
+): boolean {
+  return block?.reason === 'MANUAL_ADMIN' && isBlockActive(block, today)
+}
+
+/**
+ * `expires_at` for a manual block that runs through `day` ('YYYY-MM-DD', a
+ * Sydney calendar day): the last millisecond of that day in Sydney, as UTC ISO.
+ *
+ * billieChat blocks while now < expires_at, and the CRM shows a dated block as
+ * active through the end of its `blockedUntil` day, so both read the chosen
+ * day as the last day of the block.
+ */
+export function manualBlockExpiresAt(day: string): string {
+  const [y, m, d] = day.split('-').map(Number)
+  const next = new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10)
+  return new Date(sydneyDayStartUtc(next).getTime() - 1).toISOString()
 }
 
 /**

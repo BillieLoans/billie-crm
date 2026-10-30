@@ -429,6 +429,26 @@ export interface Customer {
      * Emission time of the billieChat block state event that last wrote this mirror
      */
     stateChangedAt?: string | null;
+    /**
+     * Manual-set request that raised the block shown now (written by state.changed only)
+     */
+    manualBlockRequestId?: string | null;
+    /**
+     * Latest manual block set billieChat applied
+     */
+    manualSetRequestId?: string | null;
+    /**
+     * Reason code of that set: credit_review_hold, cancelled_pre_disbursement, fraud_hold
+     */
+    manualSetReasonCode?: string | null;
+    /**
+     * Latest manual block set billieChat refused
+     */
+    manualSetRejectedRequestId?: string | null;
+    /**
+     * Why it was refused: "CODE: detail"
+     */
+    manualSetRejection?: string | null;
   };
   /**
    * Latest LAB EVS identity verification result
@@ -3084,6 +3104,11 @@ export interface CustomersSelect<T extends boolean = true> {
         clearedAt?: T;
         stateVersion?: T;
         stateChangedAt?: T;
+        manualBlockRequestId?: T;
+        manualSetRequestId?: T;
+        manualSetReasonCode?: T;
+        manualSetRejectedRequestId?: T;
+        manualSetRejection?: T;
       };
   identityVerification?:
     | T

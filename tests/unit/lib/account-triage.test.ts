@@ -313,3 +313,57 @@ describe('getAttentionItems', () => {
     expect(items.map((i) => i.kind)).not.toContain('fraud_risk')
   })
 })
+
+// BTB-517: a loan cancelled before disbursement is closed, not pending or active.
+describe('cancelled loans (BTB-517)', () => {
+  it('cancelled is a closed account with nothing due', () => {
+    const cancelled = acc({
+      loanAccountId: 'X',
+      accountStatus: 'cancelled',
+      repaymentSchedule: {
+        scheduleId: 's',
+        numberOfPayments: 2,
+        paymentFrequency: 'fortnightly',
+        createdDate: null,
+        payments: [pay(1, '2026-05-01', 'void'), pay(2, '2026-05-15', 'void')],
+      },
+    })
+    expect(getAccountSignal(cancelled, TODAY)).toEqual({
+      tier: 'closed',
+      isOverdue: false,
+      daysOverdue: 0,
+      nextDueDate: null,
+      nextDueAmount: null,
+    })
+    const { active, closed } = sortAccountsForRail([cancelled], TODAY)
+    expect(active).toEqual([])
+    expect(closed.map((a) => a.loanAccountId)).toEqual(['X'])
+  })
+
+  it('a cancelled loan raises no pending-disbursement or overdue chip', () => {
+    const items = getAttentionItems({
+      vulnerable: false,
+      accounts: [acc({ loanAccountId: 'X', accountStatus: 'cancelled' })],
+      today: TODAY,
+    })
+    expect(items).toEqual([])
+  })
+
+  it('Needs attention names the manual block reason set from the CRM', () => {
+    const items = getAttentionItems({
+      vulnerable: false,
+      accounts: [],
+      reapplicationBlock: {
+        reason: 'MANUAL_ADMIN',
+        blockedUntil: null,
+        manualBlockRequestId: 'req-1',
+        manualSetRequestId: 'req-1',
+        manualSetReasonCode: 'credit_review_hold',
+      },
+      today: TODAY,
+    })
+    expect(items.map((i) => i.label)).toEqual([
+      'Re-application blocked — Manual block — credit review hold (permanent)',
+    ])
+  })
+})

@@ -92,6 +92,8 @@ from .handlers import (
     handle_reapplication_block_auto_cleared,
     handle_reapplication_block_clear_rejected,
     handle_reapplication_block_cleared,
+    handle_reapplication_block_manual_set_applied,
+    handle_reapplication_block_manual_set_rejected,
     handle_reapplication_block_state_changed,
     # Re-application block (BTB-135) + cleared/rejected projection (Task 6)
     handle_reapplication_blocked,
@@ -238,6 +240,17 @@ def setup_handlers(processor: EventProcessor) -> None:
     # mirror, version-guarded so arrival order across consumers is irrelevant.
     processor.register_handler(
         "reapplication_block.state.changed.v1", handle_reapplication_block_state_changed
+    )
+    # BTB-517: billieChat's answer to the CRM's manual block set. Records the
+    # set's outcome (reason code, or why it was refused); state.changed above
+    # stays the only writer of the block itself.
+    processor.register_handler(
+        "reapplication_block.manual_set_applied.v1",
+        handle_reapplication_block_manual_set_applied,
+    )
+    processor.register_handler(
+        "reapplication_block.manual_set_rejected.v1",
+        handle_reapplication_block_manual_set_rejected,
     )
 
     # Identity verification report archival (PR #67)

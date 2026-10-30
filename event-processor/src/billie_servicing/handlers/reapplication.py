@@ -458,6 +458,132 @@ STATE_VERSION_GUARD = (
 )
 
 
+# billieChat answers the CRM's manual set on this synthetic conversation, and
+# carries the command's own conv into state.changed's ``cause.conv``.
+MANUAL_SET_CONV_PREFIX = "ops:block-set:"
+
+
+def _manual_set_request_id(payload: dict[str, Any], reason: str | None) -> str | None:
+    """The CRM manual-set request that produced this MANUAL_ADMIN state, else None.
+
+    BTB-517. A manual block's reason code (``credit_review_hold`` …) arrives on
+    ``manual_set_applied.v1``; state.changed carries no reason code, only what
+    caused it. Binding the mirrored block to the causing request lets the CRM
+    show the code for exactly the block that set raised. Any other cause — a
+    conversation kill (which emits no ``manual_set_applied``), a merge, an
+    unblock or another reason — unbinds it, so an older set's code can never
+    describe a block something else raised.
+    """
+    if reason != "MANUAL_ADMIN":
+        return None
+    cause = payload.get("cause")
+    conv = cause.get("conv") if isinstance(cause, dict) else None
+    if not isinstance(conv, str) or not conv.startswith(MANUAL_SET_CONV_PREFIX):
+        return None
+    return conv[len(MANUAL_SET_CONV_PREFIX) :] or None
+
+
+async def handle_reapplication_block_manual_set_applied(
+    pool: asyncpg.Pool, event: dict[str, Any]
+) -> None:
+    """Handle ``reapplication_block.manual_set_applied.v1`` (BTB-517).
+
+    billieChat applied a manual block the CRM asked for with
+    ``reapplication_block.manual_set.v1``. Records the request id and its reason
+    code on the canonical customer. The block itself (reason, until, version) is
+    not written here: ``state.changed.v1`` stays its only writer. The code is
+    shown only while the block ``state.changed`` bound to this request is the
+    one in force (see ``_manual_set_request_id``).
+
+    Idempotent: a redelivery, or billieChat's replay of the same request, writes
+    the same values.
+    """
+    payload = parse_payload(event)
+    request_id = safe_str(payload.get("request_id"), "request_id") or None
+    customer_id = (
+        safe_str(payload.get("canonical_customer_id") or event.get("usr"), "customer_id")
+        or None
+    )
+    log = logger.bind(customer_id=customer_id, request_id=request_id)
+    log.info("Processing reapplication_block.manual_set_applied.v1")
+    if not request_id:
+        log.warning("manual_set_applied without request_id — ignored")
+        return
+
+    canonical = await resolve_canonical_customer_id(pool, customer_id)
+    if not canonical:
+        log.warning("manual_set_applied without resolvable customer id — no customer mirror")
+        return
+
+    now = datetime.now(UTC)
+    await upsert(
+        pool,
+        "customers",
+        conflict_columns=["customer_id"],
+        values={
+            "customer_id": canonical,
+            "reapplication_block_manual_set_request_id": request_id,
+            "reapplication_block_manual_set_reason_code": safe_str(
+                payload.get("reason_code"), "reason_code"
+            )
+            or None,
+            "updated_at": now,
+            "created_at": now,
+        },
+        insert_only_columns=["created_at"],
+    )
+    log.info("Manual block set recorded", canonical_customer_id=canonical)
+
+
+async def handle_reapplication_block_manual_set_rejected(
+    pool: asyncpg.Pool, event: dict[str, Any]
+) -> None:
+    """Handle ``reapplication_block.manual_set_rejected.v1`` (BTB-517).
+
+    billieChat refused a manual set (``MISSING_FIELDS``, ``INVALID_REASON``,
+    ``INVALID_EXPIRY``, ``WOULD_SHORTEN_ACTIVE_BLOCK``). Records which request
+    was refused and why, so the supervisor who asked sees it. The block and the
+    last applied set are left alone: a refused set changes nothing.
+    """
+    payload = parse_payload(event)
+    request_id = safe_str(payload.get("request_id"), "request_id") or None
+    customer_id = (
+        safe_str(payload.get("canonical_customer_id") or event.get("usr"), "customer_id")
+        or None
+    )
+    rejection_code = safe_str(payload.get("rejection_code"), "rejection_code") or None
+    detail = safe_str(payload.get("detail"), "detail") or None
+    log = logger.bind(
+        customer_id=customer_id, request_id=request_id, rejection_code=rejection_code
+    )
+    log.info("Processing reapplication_block.manual_set_rejected.v1")
+    if not request_id:
+        log.warning("manual_set_rejected without request_id — ignored")
+        return
+
+    canonical = await resolve_canonical_customer_id(pool, customer_id)
+    if not canonical:
+        log.warning("manual_set_rejected without resolvable customer id — no customer mirror")
+        return
+
+    rejection = ": ".join(part for part in (rejection_code, detail) if part) or None
+    now = datetime.now(UTC)
+    await upsert(
+        pool,
+        "customers",
+        conflict_columns=["customer_id"],
+        values={
+            "customer_id": canonical,
+            "reapplication_block_manual_set_rejected_request_id": request_id,
+            "reapplication_block_manual_set_rejection": rejection,
+            "updated_at": now,
+            "created_at": now,
+        },
+        insert_only_columns=["created_at"],
+    )
+    log.info("Manual block set rejection recorded", canonical_customer_id=canonical)
+
+
 async def handle_reapplication_block_state_changed(
     pool: asyncpg.Pool, event: dict[str, Any]
 ) -> None:
@@ -538,6 +664,12 @@ async def handle_reapplication_block_state_changed(
         "reapplication_block_state_version": state_version,
         "reapplication_block_state_changed_at": changed_at,
         "reapplication_block_reason": reason,
+        # BTB-517: which CRM manual set (if any) raised the block shown now.
+        # Written in this same version-guarded upsert, so it moves only with
+        # the block itself.
+        "reapplication_block_manual_block_request_id": _manual_set_request_id(
+            payload, reason
+        ),
         "reapplication_block_blocked_until": (
             coerce_date(payload.get("blocked_until")) if blocked else None
         ),

@@ -18,6 +18,7 @@ import { RecordRepaymentDrawer } from './RecordRepaymentDrawer'
 import { BulkWaiveFeeDrawer } from './BulkWaiveFeeDrawer'
 import { WriteOffRequestDrawer } from './WriteOffRequestDrawer'
 import { DisburseLoanDrawer } from './DisburseLoanDrawer'
+import { CancelLoanDrawer } from './CancelLoanDrawer'
 import { ApplyFeeDrawer, type FeeType } from './ApplyFeeDrawer'
 import { AccountPanel, type TabId } from './AccountPanel'
 import type { SelectedFee } from './FeeList'
@@ -145,6 +146,7 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
   const [selectedFees, setSelectedFees] = useState<SelectedFee[]>([])
   const [writeOffOpen, setWriteOffOpen] = useState(false)
   const [disburseLoanOpen, setDisburseLoanOpen] = useState(false)
+  const [cancelLoanOpen, setCancelLoanOpen] = useState(false)
   const [applyFeeOpen, setApplyFeeOpen] = useState(false)
   const [applyFeeType, setApplyFeeType] = useState<FeeType>('late-fee')
 
@@ -304,6 +306,20 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
 
   const handleCloseDisburseLoan = useCallback(() => {
     setDisburseLoanOpen(false)
+  }, [])
+
+  // Re-read the customer and accounts after a cancel, or when a drawer learned
+  // the view is stale, e.g. a Disburse on a loan already cancelled (BTB-517).
+  const handleAccountChanged = useCallback(() => {
+    void refetchCustomer()
+  }, [refetchCustomer])
+
+  const handleOpenCancelLoan = useCallback(() => {
+    setCancelLoanOpen(true)
+  }, [])
+
+  const handleCloseCancelLoan = useCallback(() => {
+    setCancelLoanOpen(false)
   }, [])
 
   const handleOpenApplyLateFee = useCallback(() => {
@@ -498,6 +514,7 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
               onRequestWriteOff={handleOpenWriteOff}
               hasPendingWriteOff={hasPendingWriteOff}
               onDisburseLoan={handleOpenDisburseLoan}
+              onCancelLoan={handleOpenCancelLoan}
             />
           ) : (
             <div className={styles.detailEmpty}>Select an account from the list.</div>
@@ -610,6 +627,21 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
           accountNumber={selectedAccount.accountNumber}
           loanAmount={selectedAccount.loanTerms?.loanAmount ?? 0}
           signedLoanAgreementUrl={selectedAccount.signedLoanAgreementUrl}
+          onLoanCancelled={handleAccountChanged}
+        />
+      )}
+
+      {/* Cancel Loan Drawer (BTB-517) - overlay */}
+      {selectedAccount && customer && (
+        <CancelLoanDrawer
+          isOpen={cancelLoanOpen}
+          onClose={handleCloseCancelLoan}
+          loanAccountId={selectedAccount.loanAccountId}
+          accountNumber={selectedAccount.accountNumber}
+          customerId={customer.customerId}
+          customerName={customer.fullName ?? undefined}
+          reapplicationBlock={customer.reapplicationBlock ?? null}
+          onRefresh={handleAccountChanged}
         />
       )}
     </div>
