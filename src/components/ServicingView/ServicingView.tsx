@@ -452,6 +452,8 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
           customer={customer}
           actions={
             <SetManualBlockButton
+              // A pending request's notice belongs to this customer only.
+              key={customer.customerId}
               canonicalCustomerId={customer.customerId}
               customerName={customer.fullName ?? undefined}
               reapplicationBlock={customer.reapplicationBlock ?? null}

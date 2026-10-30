@@ -63,6 +63,7 @@ vi.mock('@/components/ServicingView/ApplicationsPanel', () => ({
   ApplicationsPanel: () => <div data-testid="mock-apps" />,
 }))
 
+import { useAuth } from '@payloadcms/ui'
 import { ServicingView } from '@/components/ServicingView/ServicingView'
 
 const renderWithClient = (ui: ReactNode) => {
@@ -98,6 +99,23 @@ describe('ServicingView cockpit layout', () => {
     // immediately re-pick the top-triaged account.
     expect(screen.queryByTestId('account-summary-bar')).not.toBeInTheDocument()
     expect(screen.getByText('Select an account from the list.')).toBeInTheDocument()
+  })
+})
+
+describe('ServicingView customer-level manual block', () => {
+  test('a supervisor gets "Set manual block" in the customer header', () => {
+    vi.mocked(useAuth).mockReturnValue({ user: { id: 'sup-1', role: 'supervisor' } } as never)
+    try {
+      renderWithClient(<ServicingView customerId="CUST-1" />)
+      expect(screen.getByTestId('set-manual-block-btn')).toBeInTheDocument()
+    } finally {
+      vi.mocked(useAuth).mockReturnValue({ user: { id: 'ops-1', role: 'operations' } } as never)
+    }
+  })
+
+  test('an operations user does not', () => {
+    renderWithClient(<ServicingView customerId="CUST-1" />)
+    expect(screen.queryByTestId('set-manual-block-btn')).toBeNull()
   })
 })
 
