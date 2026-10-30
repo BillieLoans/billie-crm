@@ -9,19 +9,23 @@
  * all, until an answer settles it, even when the drawer is closed and opened
  * again.
  *
- * Kept in sessionStorage, one entry per loan, `{ ownerId, request }`:
+ * Kept in sessionStorage (so per browser tab), one entry per loan,
+ * `{ ownerId, request }`:
  * - it survives closing the drawer, moving between accounts and reloading the
  *   page, which is how an operator loses a drawer's state; parent React state
  *   would not survive a reload;
  * - it belongs to the CRM user who made the request (`ownerId`, the user id
- *   the routes record as the actor). Only that user is offered it: another
- *   user signed in to the same tab never sees its note or resumes it, and the
- *   entry is left for its owner (R26);
- * - UserSessionGuard sweeps every entry (`clearAllFrozenCancellations`) when
- *   the signed-in user changes or signs out, and the tab closing ends them
- *   all, so a note about a customer does not outlive the session on a shared
- *   machine. A cancel left part-way by a user change is finished through the
- *   platform runbook's guard-recovery path.
+ *   the routes record as the actor), on read AND write. Only the owner is
+ *   offered it; only the owner can replace or clear it. Another user in the
+ *   same tab never sees its note, cannot resume it, and cannot overwrite or
+ *   delete it (R26, fix round 3); their own request is then not kept here;
+ * - UserSessionGuard sweeps the entries of the tab it runs in
+ *   (`clearAllFrozenCancellations`) when it sees the signed-in user change or
+ *   sign out. It compares against the user in shared localStorage, so another
+ *   tab can change user without that tab's entries being swept: owner scoping
+ *   is what protects them. Closing the tab ends its entries. A cancel left
+ *   part-way by a user change is finished through the platform runbook's
+ *   guard-recovery path.
  *
  * Every access is guarded: storage can be missing or throw (private modes,
  * blocked site data, the server render). Callers learn from `save` whether
@@ -41,6 +45,18 @@ export function frozenCancellationKey(loanAccountId: string): string {
 function storage(): Storage | null {
   try {
     return typeof window === 'undefined' ? null : window.sessionStorage
+  } catch {
+    return null
+  }
+}
+
+/** The owner of this loan's entry, or null when there is none (or it is unreadable). */
+function entryOwner(store: Storage, loanAccountId: string): string | null {
+  try {
+    const raw = store.getItem(frozenCancellationKey(loanAccountId))
+    if (!raw) return null
+    const entry = JSON.parse(raw) as { ownerId?: unknown } | null
+    return entry && typeof entry.ownerId === 'string' && entry.ownerId ? entry.ownerId : null
   } catch {
     return null
   }
@@ -68,7 +84,11 @@ export function loadFrozenCancellation(
   }
 }
 
-/** Keep the request for `ownerId`. Returns false when it could not be kept. */
+/**
+ * Keep the request for `ownerId`. Returns false when it could not be kept:
+ * no owner, no storage, or another user's unfinished request already holds
+ * this loan's entry (it is never overwritten).
+ */
 export function saveFrozenCancellation(
   request: FrozenCancellation,
   ownerId: string | null | undefined,
@@ -77,6 +97,8 @@ export function saveFrozenCancellation(
   try {
     const store = storage()
     if (!store) return false
+    const owner = entryOwner(store, request.loanAccountId)
+    if (owner && owner !== ownerId) return false
     store.setItem(
       frozenCancellationKey(request.loanAccountId),
       JSON.stringify({ ownerId, request }),
@@ -87,10 +109,33 @@ export function saveFrozenCancellation(
   }
 }
 
-/** Forget the request: the platform's answer settled it. */
-export function clearFrozenCancellation(loanAccountId: string): void {
+/**
+ * Whether another user's unfinished request holds this loan's entry, so a
+ * request from `ownerId` cannot be kept here.
+ */
+export function frozenCancellationHeldByAnother(
+  loanAccountId: string,
+  ownerId: string | null | undefined,
+): boolean {
   try {
-    storage()?.removeItem(frozenCancellationKey(loanAccountId))
+    const store = storage()
+    const owner = store ? entryOwner(store, loanAccountId) : null
+    return owner !== null && owner !== ownerId
+  } catch {
+    return false
+  }
+}
+
+/** Forget `ownerId`'s request for this loan: the platform's answer settled it. */
+export function clearFrozenCancellation(
+  loanAccountId: string,
+  ownerId: string | null | undefined,
+): void {
+  if (!ownerId) return
+  try {
+    const store = storage()
+    if (!store || entryOwner(store, loanAccountId) !== ownerId) return
+    store.removeItem(frozenCancellationKey(loanAccountId))
   } catch {
     // Best effort: a request left behind is offered again, and its retry
     // settles it.

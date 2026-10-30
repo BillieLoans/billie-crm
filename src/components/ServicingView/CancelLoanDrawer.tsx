@@ -15,6 +15,7 @@ import { formatBlockLabel, formatBlockedUntil, isManualBlockActive } from '@/lib
 import type { BlockConfirmation } from '@/lib/schemas/ledger'
 import {
   clearFrozenCancellation,
+  frozenCancellationHeldByAnother,
   loadFrozenCancellation,
   saveFrozenCancellation,
 } from '@/lib/frozenCancellation'
@@ -145,6 +146,8 @@ function CancelLoanForm({
   const [resumed, setResumed] = useState(() => lockedRequest !== null)
   /** Whether the frozen request is safely kept; if not, the drawer must stay open. */
   const [kept, setKept] = useState(true)
+  /** It could not be kept because another user's unfinished cancel holds this loan here. */
+  const [heldByAnother, setHeldByAnother] = useState(false)
   const [result, setResult] = useState<{ noteError: boolean } | null>(null)
   const [blockModalOpen, setBlockModalOpen] = useState(false)
   const [blockRequestId, setBlockRequestId] = useState<string | null>(null)
@@ -229,15 +232,18 @@ function CancelLoanForm({
   /** Keep this exact request until an answer settles it. */
   const freeze = (request: CancelRequest) => {
     setLockedRequest(request)
-    setKept(saveFrozenCancellation(request, ownerId))
+    const saved = saveFrozenCancellation(request, ownerId)
+    setKept(saved)
+    setHeldByAnother(!saved && frozenCancellationHeldByAnother(loanAccountId, ownerId))
   }
 
   /** The platform answered for this key and holds nothing for it: start afresh. */
   const unfreeze = () => {
-    clearFrozenCancellation(loanAccountId)
+    clearFrozenCancellation(loanAccountId, ownerId)
     setLockedRequest(null)
     setResumed(false)
     setKept(true)
+    setHeldByAnother(false)
     idempotencyKeyRef.current = null
   }
 
@@ -280,7 +286,7 @@ function CancelLoanForm({
       const body = ((await res.json().catch(() => null)) ?? {}) as Record<string, unknown>
 
       if (res.ok && body.success === true) {
-        clearFrozenCancellation(loanAccountId)
+        clearFrozenCancellation(loanAccountId, ownerId)
         setResult({ noteError: body.noteError === true })
         onRefresh?.()
         return
@@ -372,6 +378,12 @@ function CancelLoanForm({
           {resumed && (
             <p className={styles.info} role="status">
               A cancellation for this loan is in progress — retry to finish it.
+            </p>
+          )}
+          {locked && heldByAnother && (
+            <p className={styles.info}>
+              Another operator has an unfinished cancellation for this loan in this browser, so this
+              one cannot be kept here.
             </p>
           )}
           {locked && (

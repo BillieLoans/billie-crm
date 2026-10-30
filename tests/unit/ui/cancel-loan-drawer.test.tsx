@@ -492,6 +492,72 @@ describe('CancelLoanDrawer: confirm and submit', () => {
     expect(sessionStorage.getItem('btb517:cancel:LA-1')).not.toBeNull()
   })
 
+  // Fix round 3: two users against ONE store (a tab that changed user
+  // without its own sweep). User A left an unfinished cancel for LA-1.
+  describe('another user’s unfinished cancel for this loan in this tab', () => {
+    const A_ENTRY = JSON.stringify({
+      ownerId: 'sup-a',
+      request: {
+        loanAccountId: 'LA-1',
+        reason: 'duplicate',
+        note: 'Operator A’s note: duplicate of an open application.',
+        blockConfirmation: {
+          kind: 'no_block_needed',
+          reason: 'Duplicate; customer still eligible.',
+        },
+        idempotencyKey: 'a3c1e2f4-1b2c-4d5e-8f90-123456789abc',
+      },
+    })
+
+    beforeEach(() => {
+      sessionStorage.setItem('btb517:cancel:LA-1', A_ENTRY)
+      auth.user = { id: 'sup-b', role: 'supervisor' }
+    })
+
+    it('B is not shown it, and B’s outcome-unknown failure leaves it intact and keeps B’s drawer open', async () => {
+      const { props } = renderDrawer()
+      expect(screen.queryByText(/in progress/)).toBeNull()
+      fillValidForm()
+      await failWith503()
+      expect(sessionStorage.getItem('btb517:cancel:LA-1')).toBe(A_ENTRY)
+      expect(
+        screen.getByText(
+          'Another operator has an unfinished cancellation for this loan in this browser, so this one cannot be kept here.',
+        ),
+      ).toBeInTheDocument()
+      expect(
+        screen.getByText(/Keep this drawer open and try again to finish it/),
+      ).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Close' })).toBeDisabled()
+      fireEvent.keyDown(document, { key: 'Escape' })
+      expect(props.onClose).not.toHaveBeenCalled()
+    })
+
+    it('B’s NOT_CANCELLABLE leaves it intact', async () => {
+      renderDrawer()
+      fillValidForm()
+      await failWith503()
+      reply(422, {
+        error: 'NOT_CANCELLABLE',
+        message: 'account is not cancellable in status ACTIVE',
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+      confirm()
+      await screen.findByText(/This loan can’t be cancelled/)
+      expect(sessionStorage.getItem('btb517:cancel:LA-1')).toBe(A_ENTRY)
+    })
+
+    it('B’s success leaves it intact', async () => {
+      renderDrawer()
+      fillValidForm()
+      reply(200, SUCCESS)
+      fireEvent.click(submitButton())
+      confirm()
+      await screen.findByText('Loan 1000001 cancelled.')
+      expect(sessionStorage.getItem('btb517:cancel:LA-1')).toBe(A_ENTRY)
+    })
+  })
+
   it('the success screen can be closed even when the frozen cancel could not be kept', async () => {
     const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new Error('QuotaExceededError')

@@ -8,6 +8,7 @@ import {
   clearAllFrozenCancellations,
   clearFrozenCancellation,
   frozenCancellationKey,
+  frozenCancellationHeldByAnother,
   loadFrozenCancellation,
   saveFrozenCancellation,
 } from '@/lib/frozenCancellation'
@@ -43,10 +44,51 @@ describe('frozen cancellation storage', () => {
     expect(sessionStorage.length).toBe(0)
   })
 
-  it('clears it', () => {
+  it("A's own clear removes A's entry", () => {
     saveFrozenCancellation(REQUEST, 'user-a')
-    clearFrozenCancellation('LA-1')
+    clearFrozenCancellation('LA-1', 'user-a')
     expect(loadFrozenCancellation('LA-1', 'user-a')).toBeNull()
+    expect(sessionStorage.getItem('btb517:cancel:LA-1')).toBeNull()
+  })
+
+  // Fix round 3: writes are owner-scoped too. Two users can share one tab's
+  // store (UserSessionGuard compares against the user in shared localStorage,
+  // so a tab can change user without its own sweep).
+  describe('two users, one store', () => {
+    const OTHER = {
+      ...REQUEST,
+      note: 'Another operator’s note about this loan.',
+      idempotencyKey: 'a3c1e2f4-1b2c-4d5e-8f90-123456789abc',
+    }
+
+    it("B's save refuses to overwrite A's entry, and writes nothing", () => {
+      saveFrozenCancellation(REQUEST, 'user-a')
+      const before = sessionStorage.getItem('btb517:cancel:LA-1')
+      expect(saveFrozenCancellation(OTHER, 'user-b')).toBe(false)
+      expect(sessionStorage.getItem('btb517:cancel:LA-1')).toBe(before)
+      expect(loadFrozenCancellation('LA-1', 'user-a')).toEqual(REQUEST)
+      expect(frozenCancellationHeldByAnother('LA-1', 'user-b')).toBe(true)
+      expect(frozenCancellationHeldByAnother('LA-1', 'user-a')).toBe(false)
+    })
+
+    it("B's clear leaves A's entry intact", () => {
+      saveFrozenCancellation(REQUEST, 'user-a')
+      clearFrozenCancellation('LA-1', 'user-b')
+      clearFrozenCancellation('LA-1', null)
+      expect(loadFrozenCancellation('LA-1', 'user-a')).toEqual(REQUEST)
+    })
+
+    it('the owner can overwrite their own entry', () => {
+      saveFrozenCancellation(REQUEST, 'user-a')
+      expect(saveFrozenCancellation(OTHER, 'user-a')).toBe(true)
+      expect(loadFrozenCancellation('LA-1', 'user-a')).toEqual(OTHER)
+    })
+
+    it('an unreadable entry is not anyone’s, so it may be replaced', () => {
+      sessionStorage.setItem('btb517:cancel:LA-1', '{not json')
+      expect(saveFrozenCancellation(REQUEST, 'user-b')).toBe(true)
+      expect(loadFrozenCancellation('LA-1', 'user-b')).toEqual(REQUEST)
+    })
   })
 
   it('the sweep removes every btb517:cancel: entry and nothing else', () => {
@@ -88,7 +130,8 @@ describe('frozen cancellation storage', () => {
     })
     expect(saveFrozenCancellation(REQUEST, 'user-a')).toBe(false)
     expect(loadFrozenCancellation('LA-1', 'user-a')).toBeNull()
-    expect(() => clearFrozenCancellation('LA-1')).not.toThrow()
+    expect(() => clearFrozenCancellation('LA-1', 'user-a')).not.toThrow()
+    expect(frozenCancellationHeldByAnother('LA-1', 'user-a')).toBe(false)
     vi.spyOn(Storage.prototype, 'key').mockImplementation(() => {
       throw new Error('SecurityError')
     })
