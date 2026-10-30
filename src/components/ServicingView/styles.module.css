@@ -2353,6 +2353,13 @@
 .contextToggle {
   display: none;
 }
+/* Slide-over chrome (backdrop + close button) — only shown in the ≤1440 slide-over */
+.contextBackdrop {
+  display: none;
+}
+.contextSlideoverHeader {
+  display: none;
+}
 
 /* ≤1440: show the toggle; .contextOpen becomes a fixed slide-over. Applies below 1100
    too — the context column is hidden there, so without the toggle notes were unreachable. */
@@ -2370,7 +2377,7 @@
     cursor: pointer;
   }
   .contextOpen {
-    display: block !important;
+    display: flex !important;
     position: fixed;
     right: 16px;
     top: 80px;
@@ -2379,6 +2386,46 @@
     max-height: none;
     z-index: 50;
     box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
+    /* Header row + pane: the pane shrinks to what is left and scrolls inside */
+    flex-direction: column;
+    background: var(--theme-elevation-0, #fff);
+    border-radius: 8px;
+  }
+  .contextOpen > .contextSlideoverHeader {
+    display: flex;
+    justify-content: flex-end;
+    flex-shrink: 0;
+  }
+  .contextOpen > :last-child {
+    flex: 1;
+    min-height: 0;
+  }
+  .contextBackdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 49;
+    background: rgba(0, 0, 0, 0.2);
+  }
+  .contextClose {
+    min-width: 32px;
+    min-height: 32px;
+    margin: 4px 4px 0 0;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    color: var(--theme-elevation-600, #6b7280);
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .contextClose:hover {
+    background: var(--theme-elevation-50, #f5f5f5);
+    color: var(--theme-text, #1a1a1a);
+  }
+  .contextClose:focus-visible {
+    outline: 2px solid var(--theme-elevation-800, #1f2937);
+    outline-offset: 2px;
   }
 }
 

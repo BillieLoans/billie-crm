@@ -117,8 +117,26 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<TabId>('overview')
 
-  // Context pane toggle for mid-width screens (1101–1440px)
+  // Context pane toggle for screens ≤1440px, where the context column becomes a slide-over
   const [contextOpen, setContextOpen] = useState(false)
+  const contextToggleRef = useRef<HTMLButtonElement>(null)
+  const closeContext = useCallback(() => {
+    setContextOpen(false)
+    contextToggleRef.current?.focus()
+  }, [])
+
+  // Escape closes the slide-over — unless a dialog opened from inside it (full note,
+  // Add Note drawer) is up, in which case Escape belongs to that dialog alone.
+  useEffect(() => {
+    if (!contextOpen) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (document.querySelector('[aria-modal="true"]')) return
+      closeContext()
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [contextOpen, closeContext])
 
   // Action drawer states
   const [waiveFeeOpen, setWaiveFeeOpen] = useState(false)
@@ -452,6 +470,7 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
 
         <div className={styles.detailCol}>
           <button
+            ref={contextToggleRef}
             type="button"
             className={styles.contextToggle}
             onClick={() => setContextOpen((v) => !v)}
@@ -485,7 +504,27 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
           )}
         </div>
 
+        {contextOpen && (
+          // Click-away to close; only rendered visibly while the slide-over is in use (≤1440px)
+          <div
+            className={styles.contextBackdrop}
+            onClick={closeContext}
+            aria-hidden="true"
+            data-testid="context-backdrop"
+          />
+        )}
         <div className={`${styles.contextCol}${contextOpen ? ` ${styles.contextOpen}` : ''}`}>
+          <div className={styles.contextSlideoverHeader}>
+            <button
+              type="button"
+              className={styles.contextClose}
+              onClick={closeContext}
+              aria-label="Close context panel"
+              data-testid="context-close"
+            >
+              <span aria-hidden="true">×</span>
+            </button>
+          </div>
           {/* Tabbed context: Communications (contact notes + notification history) and
               Applications (loan origination conversations). customer.id is the Payload
               document ID for note queries; customerId (route param) is the business key. */}
