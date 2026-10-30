@@ -14,6 +14,11 @@ import styles from './CustomerHeader.module.css'
 
 export interface CustomerHeaderProps {
   customer: CustomerData
+  /**
+   * Customer-level actions, shown first in the header's action row. A slot, so
+   * the header stays presentational and the caller owns what they do.
+   */
+  actions?: React.ReactNode
 }
 
 /**
@@ -61,7 +66,7 @@ function formatAddress(address: CustomerData['residentialAddress']): string {
  * CustomerHeader - Compact horizontal display of customer info.
  * Shows key details in a single row with expandable full details.
  */
-export const CustomerHeader: React.FC<CustomerHeaderProps> = ({ customer }) => {
+export const CustomerHeader: React.FC<CustomerHeaderProps> = ({ customer, actions }) => {
   const [isExpanded, setIsExpanded] = useState(false)
   const [showIdentityDetail, setShowIdentityDetail] = useState(false)
 
@@ -164,6 +169,8 @@ export const CustomerHeader: React.FC<CustomerHeaderProps> = ({ customer }) => {
         </div>
 
         <div className={styles.actions}>
+          {actions}
+
           {/* Per-customer notification kill switch */}
           <NotificationStatusPill
             customerId={customer.customerId}

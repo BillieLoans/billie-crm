@@ -13,6 +13,7 @@ import {
 } from '@/lib/cancellation'
 import { MIN_CANCELLATION_NOTE_LENGTH, MIN_NO_BLOCK_REASON_LENGTH } from '@/lib/constants'
 import {
+  describeManualSetRejection,
   formatBlockLabel,
   formatBlockedUntil,
   isBlockActive,
@@ -176,7 +177,7 @@ function CancelLoanForm({
   const manualBlockActive = isManualBlockActive(reapplicationBlock)
   const blockRejection =
     blockRequestId && reapplicationBlock?.manualSetRejectedRequestId === blockRequestId
-      ? (reapplicationBlock.manualSetRejection ?? 'no reason given')
+      ? describeManualSetRejection(reapplicationBlock.manualSetRejection)
       : null
   const waitingForBlock = Boolean(
     blockRequestId && !manualBlockActive && !blockRejection && !blockWaitExpired,

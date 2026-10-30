@@ -115,6 +115,29 @@ export function isManualBlockActive(
 }
 
 /**
+ * Staff wording for why billieChat refused a manual set, shared by every place
+ * that shows it. `manualSetRejection` is stored as "CODE: detail" (the code on
+ * its own is also accepted); a code with no wording here is shown as received,
+ * so a new billieChat code is never hidden or mis-described.
+ */
+export function describeManualSetRejection(rejection: string | null | undefined): string {
+  const raw = rejection?.trim()
+  if (!raw) return 'no reason given'
+  switch (raw.split(':', 1)[0].trim()) {
+    case 'WOULD_SHORTEN_ACTIVE_BLOCK':
+      return 'a longer manual block is already in place'
+    case 'INVALID_EXPIRY':
+      return "the end date isn't valid"
+    case 'INVALID_REASON':
+      return "the reason isn't valid"
+    case 'MISSING_FIELDS':
+      return 'details were missing'
+    default:
+      return raw
+  }
+}
+
+/**
  * `expires_at` for a manual block that runs through `day` ('YYYY-MM-DD', a
  * Sydney calendar day): the last millisecond of that day in Sydney, as UTC ISO.
  *

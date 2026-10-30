@@ -1,6 +1,7 @@
 // tests/unit/lib/reapplication-block.test.ts
 import { describe, it, expect } from 'vitest'
 import {
+  describeManualSetRejection,
   formatBlockLabel,
   formatBlockReason,
   formatBlockedUntil,
@@ -209,5 +210,45 @@ describe('manual block reason code (BTB-517)', () => {
     expect(manualBlockExpiresAt('2026-07-15')).toBe('2026-07-15T13:59:59.999Z')
     // The day the clocks go forward (4 Oct 2026) ends on AEDT.
     expect(manualBlockExpiresAt('2026-10-04')).toBe('2026-10-04T12:59:59.999Z')
+  })
+})
+
+describe('describeManualSetRejection (BTB-517)', () => {
+  it.each([
+    ['WOULD_SHORTEN_ACTIVE_BLOCK', 'a longer manual block is already in place'],
+    ['INVALID_EXPIRY', "the end date isn't valid"],
+    ['INVALID_REASON', "the reason isn't valid"],
+    ['MISSING_FIELDS', 'details were missing'],
+  ])('puts %s in staff wording', (code, text) => {
+    expect(describeManualSetRejection(code)).toBe(text)
+  })
+
+  it('reads the code from the "CODE: detail" the customer record stores', () => {
+    expect(
+      describeManualSetRejection(
+        'INVALID_EXPIRY: expires_at must be an ISO-8601 timestamp or null',
+      ),
+    ).toBe("the end date isn't valid")
+    expect(describeManualSetRejection('WOULD_SHORTEN_ACTIVE_BLOCK: existing ends later')).toBe(
+      'a longer manual block is already in place',
+    )
+  })
+
+  it('shows a code it has no wording for exactly as received', () => {
+    expect(describeManualSetRejection('SOMETHING_NEW')).toBe('SOMETHING_NEW')
+    expect(describeManualSetRejection('SOMETHING_NEW: with detail')).toBe(
+      'SOMETHING_NEW: with detail',
+    )
+  })
+
+  it('never reads an object prototype name as a code', () => {
+    expect(describeManualSetRejection('constructor')).toBe('constructor')
+    expect(describeManualSetRejection('toString')).toBe('toString')
+  })
+
+  it('says so when there is no reason', () => {
+    expect(describeManualSetRejection(null)).toBe('no reason given')
+    expect(describeManualSetRejection(undefined)).toBe('no reason given')
+    expect(describeManualSetRejection('  ')).toBe('no reason given')
   })
 })

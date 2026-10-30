@@ -26,6 +26,7 @@ import { AccountRail } from './AccountRail'
 import { AttentionStrip } from './AttentionStrip'
 import { ContextPane } from './ContextPane'
 import { ClearBlockButton } from '@/components/BlockClear'
+import { SetManualBlockButton } from '@/components/BlockSet/SetManualBlockButton'
 import { getAttentionItems, sortAccountsForRail } from '@/lib/accountTriage'
 import { usePendingWriteOff } from '@/hooks/queries/usePendingWriteOff'
 import { useCollectionsCasesByCustomer } from '@/hooks/queries/useCollectionsCasesByCustomer'
@@ -446,7 +447,19 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
       )}
 
       {/* Compact horizontal customer header */}
-      {customer && <CustomerHeader customer={customer} />}
+      {customer && (
+        <CustomerHeader
+          customer={customer}
+          actions={
+            <SetManualBlockButton
+              canonicalCustomerId={customer.customerId}
+              customerName={customer.fullName ?? undefined}
+              reapplicationBlock={customer.reapplicationBlock ?? null}
+              onRefresh={handleAccountChanged}
+            />
+          }
+        />
+      )}
 
       {/* Customer-level attention chips (replaces the vulnerable banner).
           The block-clear action (BTB-202) rides inline after the chips so the

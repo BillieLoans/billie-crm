@@ -806,7 +806,7 @@ describe('CancelLoanDrawer: setting a manual block first', () => {
       },
     })
     expect(screen.getByRole('alert')).toHaveTextContent(
-      'The manual block was not set: INVALID_EXPIRY: expires_at must be an ISO-8601 timestamp or null',
+      "The manual block was not set: the end date isn't valid",
     )
     expect(screen.getByRole('button', { name: 'Set manual block' })).toBeInTheDocument()
   })

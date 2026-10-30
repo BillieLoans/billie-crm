@@ -23,8 +23,9 @@ export interface SetManualBlockModalProps {
 
 /**
  * "Set manual block" (BTB-517): ask billieChat to put a MANUAL_ADMIN
- * re-application block on the customer. Supervisor/admin only: it opens only
- * from the Cancel loan drawer, whose action needs approval authority, and the
+ * re-application block on the customer. Supervisor/admin only. It opens from
+ * the Cancel loan drawer and from the customer header ("Set manual block",
+ * without cancelling a loan); both are gated to approval authority, and the
  * route checks it again.
  *
  * Sending the request is all this does. The block reaches the customer record

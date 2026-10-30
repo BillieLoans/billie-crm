@@ -118,3 +118,72 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/*
+ * "Set manual block" in the customer header's actions (BTB-517).
+ *
+ * The button matches the header's "More" button (size, weight, neutral
+ * tokens). Nothing here relies on telling red from green: the notice under it
+ * says the outcome in words, and a refusal reuses the modal's error tint with
+ * a heavier border. Contrast on the light theme: button text elevation-600
+ * #656565 on elevation-50 #fafafa 5.6:1; notice text #1a1a1a on white 17.4:1;
+ * refusal text error-750 on error-50 8.6:1.
+ */
+.headerBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  max-width: 280px;
+}
+
+.headerBtn {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--theme-elevation-600, #656565);
+  background: var(--theme-elevation-50, #fafafa);
+  border: 1px solid var(--theme-elevation-200, #ddd);
+  border-radius: 6px;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+  white-space: nowrap;
+}
+
+.headerBtn:hover:not(:disabled) {
+  background: var(--theme-elevation-100, #f0f0f0);
+  border-color: var(--theme-elevation-300, #ccc);
+}
+
+.headerBtn:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.headerBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.headerNotice {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--theme-text, #1a1a1a);
+}
+
+.headerNoticeError {
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 2px solid var(--theme-error-300, #fd9a92);
+  background: var(--theme-error-50, #faf1f0);
+  color: var(--theme-error-750, #7b2927);
+}
+
+@media (max-width: 768px) {
+  .headerBlock {
+    max-width: none;
+  }
+}
