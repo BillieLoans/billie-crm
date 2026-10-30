@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from 'react'
 import { ContactNoteData } from '@/hooks/queries/useContactNotes'
+import { Modal } from '@/components/ui/Modal'
 import { renderNoteContent } from '@/lib/tiptap'
 import styles from './styles.module.css'
 
@@ -74,7 +75,14 @@ function deriveMetadata(note: ContactNoteData): {
     }
   }
 
-  const fromLegacy: Record<LegacyNoteType, { channel: ContactNoteData['channel']; topic: ContactNoteData['topic']; contactDirection?: ContactNoteData['contactDirection'] }> = {
+  const fromLegacy: Record<
+    LegacyNoteType,
+    {
+      channel: ContactNoteData['channel']
+      topic: ContactNoteData['topic']
+      contactDirection?: ContactNoteData['contactDirection']
+    }
+  > = {
     phone_inbound: { channel: 'phone', topic: 'general_enquiry', contactDirection: 'inbound' },
     phone_outbound: { channel: 'phone', topic: 'general_enquiry', contactDirection: 'outbound' },
     email_inbound: { channel: 'email', topic: 'general_enquiry', contactDirection: 'inbound' },
@@ -125,16 +133,22 @@ const PreviousVersionCard: React.FC<{ version: ContactNoteData }> = ({ version }
       </div>
       <div className={styles.prevVersionSubject}>{version.subject}</div>
       <div className={styles.noteMetaRow}>
-        <span className={`${styles.badge} ${styles.badgeMeta}`}>Channel: {toTitle(metadata.channel)}</span>
+        <span className={`${styles.badge} ${styles.badgeMeta}`}>
+          Channel: {toTitle(metadata.channel)}
+        </span>
         {metadata.contactDirection && (
-          <span className={`${styles.badge} ${styles.badgeMeta}`}>Direction: {toTitle(metadata.contactDirection)}</span>
+          <span className={`${styles.badge} ${styles.badgeMeta}`}>
+            Direction: {toTitle(metadata.contactDirection)}
+          </span>
         )}
         <span className={`${styles.badge} ${styles.badgeTopic}`}>{versionTopicLabel}</span>
       </div>
       {hasBody && (
         <>
           {rich ? (
-            <div className={`${styles.noteBody} ${styles.noteBodyRich} ${expanded ? '' : styles.bodyTruncated}`}>
+            <div
+              className={`${styles.noteBody} ${styles.noteBodyRich} ${expanded ? '' : styles.bodyTruncated}`}
+            >
               {rich}
             </div>
           ) : (
@@ -162,11 +176,13 @@ export const ContactNoteCard: React.FC<ContactNoteCardProps> = ({
   onNavigateToAccount,
   previousVersions = [],
 }) => {
-  const [expanded, setExpanded] = useState(false)
+  const [fullNoteOpen, setFullNoteOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
 
   const metadata = deriveMetadata(note)
-  const channelMeta = metadata.channel ? (CHANNEL_META[metadata.channel] ?? { icon: '📝', label: 'Unknown' }) : { icon: '📝', label: 'Unknown' }
+  const channelMeta = metadata.channel
+    ? (CHANNEL_META[metadata.channel] ?? { icon: '📝', label: 'Unknown' })
+    : { icon: '📝', label: 'Unknown' }
   const topicLabel = metadata.topic ? (TOPIC_LABELS[metadata.topic] ?? 'Unknown') : 'Unknown'
   const { rich: bodyRich, plainText: bodyText } = useMemo(
     () => renderNoteContent(note.content),
@@ -187,10 +203,7 @@ export const ContactNoteCard: React.FC<ContactNoteCardProps> = ({
 
   const authorName = getAuthorName(note.createdBy)
 
-  const cardClasses = [
-    styles.noteCard,
-    isHighlighted ? styles.noteCardHighlighted : '',
-  ]
+  const cardClasses = [styles.noteCard, isHighlighted ? styles.noteCardHighlighted : '']
     .filter(Boolean)
     .join(' ')
 
@@ -212,9 +225,13 @@ export const ContactNoteCard: React.FC<ContactNoteCardProps> = ({
       </div>
 
       <div className={styles.noteMetaRow}>
-        <span className={`${styles.badge} ${styles.badgeMeta}`}>Channel: {toTitle(metadata.channel)}</span>
+        <span className={`${styles.badge} ${styles.badgeMeta}`}>
+          Channel: {toTitle(metadata.channel)}
+        </span>
         {metadata.contactDirection && (
-          <span className={`${styles.badge} ${styles.badgeMeta}`}>Direction: {toTitle(metadata.contactDirection)}</span>
+          <span className={`${styles.badge} ${styles.badgeMeta}`}>
+            Direction: {toTitle(metadata.contactDirection)}
+          </span>
         )}
         <span className={`${styles.badge} ${styles.badgeTopic}`}>{topicLabel}</span>
       </div>
@@ -246,26 +263,49 @@ export const ContactNoteCard: React.FC<ContactNoteCardProps> = ({
       {/* Subject */}
       <div className={styles.noteSubject}>{note.subject}</div>
 
-      {/* Body */}
+      {/* Body — always a short preview; the whole note opens in a dialog so a long note
+          never pushes the card past the bottom of the context pane. */}
       {hasBody && (
         <>
-          {bodyRich ? (
-            <div className={`${styles.noteBody} ${styles.noteBodyRich} ${expanded ? '' : styles.bodyTruncated}`}>
-              {bodyRich}
-            </div>
-          ) : (
-            <div className={`${styles.noteBody} ${expanded ? '' : styles.bodyTruncated}`}>
-              {bodyText}
-            </div>
-          )}
+          <div
+            className={`${styles.noteBody} ${bodyRich ? styles.noteBodyRich : ''} ${styles.bodyTruncated}`}
+          >
+            {bodyRich ?? bodyText}
+          </div>
           <button
             className={styles.showMoreBtn}
             type="button"
-            onClick={() => setExpanded((prev) => !prev)}
+            aria-haspopup="dialog"
+            onClick={() => setFullNoteOpen(true)}
           >
-            {expanded ? 'Show less' : 'Show more'}
+            View full note
           </button>
         </>
+      )}
+
+      {fullNoteOpen && (
+        <Modal
+          title={note.subject || 'Contact note'}
+          onClose={() => setFullNoteOpen(false)}
+          maxWidth="720px"
+          testId="full-note-dialog"
+        >
+          <div className={styles.fullNoteMeta}>
+            <span>
+              {channelMeta.icon} {channelMeta.label}
+              {metadata.contactDirection ? ` (${metadata.contactDirection})` : ''}
+            </span>
+            <span>{topicLabel}</span>
+            <span>{timestamp}</span>
+            <span>By {authorName}</span>
+            {linkedAccount && <span>🔗 {linkedAccount}</span>}
+          </div>
+          <div
+            className={`${styles.noteBody} ${bodyRich ? styles.noteBodyRich : ''} ${styles.fullNoteBody}`}
+          >
+            {bodyRich ?? bodyText}
+          </div>
+        </Modal>
       )}
 
       <hr className={styles.noteDivider} />

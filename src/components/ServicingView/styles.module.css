@@ -2324,6 +2324,10 @@
   position: sticky;
   top: 12px;
   max-height: calc(100vh - 120px);
+  /* Flex column so the pane shrinks to the cap and scrolls inside, instead of
+     running past the bottom of the screen (the sticky column never scrolls into view). */
+  display: flex;
+  flex-direction: column;
 }
 
 /* 1100–1440: drop the context column (revealed via a toggle/overlay) */
@@ -2350,8 +2354,9 @@
   display: none;
 }
 
-/* 1101–1440: show the toggle; .contextOpen becomes a fixed slide-over */
-@media (max-width: 1440px) and (min-width: 1101px) {
+/* ≤1440: show the toggle; .contextOpen becomes a fixed slide-over. Applies below 1100
+   too — the context column is hidden there, so without the toggle notes were unreachable. */
+@media (max-width: 1440px) {
   .contextToggle {
     display: inline-flex;
     align-items: center;
@@ -2370,7 +2375,8 @@
     right: 16px;
     top: 80px;
     bottom: 16px;
-    width: 340px;
+    width: min(340px, calc(100vw - 32px));
+    max-height: none;
     z-index: 50;
     box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
   }

@@ -455,6 +455,7 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
             type="button"
             className={styles.contextToggle}
             onClick={() => setContextOpen((v) => !v)}
+            aria-expanded={contextOpen}
             data-testid="context-toggle"
           >
             {contextOpen ? 'Hide context' : 'Show context'}
