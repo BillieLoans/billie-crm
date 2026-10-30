@@ -16,7 +16,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { NextRequest } from 'next/server'
-import { textToTiptapDoc } from '@/lib/tiptap'
+import { paragraphsToTiptapDoc } from '@/lib/tiptap'
 
 vi.mock('next/server', () => ({
   NextResponse: {
@@ -386,6 +386,44 @@ describe('POST /api/ledger/cancel-account: block confirmation (AC16)', () => {
       logged.some((l) => l.includes('no_block_needed') && l.includes('Customer is welcome back')),
     ).toBe(true)
   })
+
+  // Final-review I1: the confirmation is logged once the outcome is known,
+  // with the eventId, so a refused cancel is never logged as a confirmation.
+  it('logs the confirmation after the ledger answered, with the eventId and the outcome', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+    await call(validBody())
+
+    const confirmationCalls = info.mock.calls
+      .map((c, i) => ({ args: c, order: info.mock.invocationCallOrder[i] }))
+      .filter(({ args }) => String(args[0]).includes('block confirmation'))
+    expect(confirmationCalls).toHaveLength(1)
+    expect(confirmationCalls[0].order).toBeGreaterThan(
+      mockCancelAccount.mock.invocationCallOrder[0],
+    )
+    expect(confirmationCalls[0].args[1]).toMatchObject({
+      loanAccountId: 'LA-1',
+      actorId: 'user-1',
+      outcome: 'cancelled',
+      eventId: 'evt-1',
+      idempotentReplay: false,
+      blockConfirmation: { kind: 'no_block_needed', reason: 'Customer is welcome back' },
+    })
+  })
+
+  it('logs a refused cancel as not cancelled, never as a recorded confirmation', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {})
+    mockCancelAccount.mockRejectedValue(grpcError(9, 'account is not cancellable in status ACTIVE'))
+
+    await call(validBody())
+
+    const confirmationCalls = info.mock.calls.filter((c) =>
+      String(c[0]).includes('block confirmation'),
+    )
+    expect(confirmationCalls).toHaveLength(1)
+    expect(confirmationCalls[0][1]).toMatchObject({ outcome: 'not_cancelled', grpcCode: 9 })
+    expect(confirmationCalls[0][1]).not.toHaveProperty('eventId')
+  })
 })
 
 describe('POST /api/ledger/cancel-account: the ledger call', () => {
@@ -470,9 +508,28 @@ describe('POST /api/ledger/cancel-account: the system contact note', () => {
       subject: 'Loan cancelled before disbursement',
       createdBy: 'user-1',
       status: 'active',
-      content: textToTiptapDoc(
+      content: paragraphsToTiptapDoc([
         `Cancelled — Mutual cancellation — ${NOTE} — by Sam Supervisor at 30 Oct 2026, 3:45 pm — evidence: email-2026-10-29-agreement`,
-      ),
+        'Re-application block: none needed — Customer is welcome back',
+      ]),
+    })
+  })
+
+  it('records a manual block in place as the second paragraph', async () => {
+    customerDocs = [
+      { ...CUSTOMER, reapplicationBlock: { reason: 'MANUAL_ADMIN', blockedUntil: null } },
+    ]
+
+    await call(validBody({ blockConfirmation: { kind: 'manual_block_active' } }))
+
+    const doc = mockPayload.create.mock.calls[0][0].data.content
+    expect(doc.content).toHaveLength(2)
+    expect(doc.content[0].content[0].text).toBe(
+      `Cancelled — Customer withdrew — ${NOTE} — by Sam Supervisor at 30 Oct 2026, 3:45 pm — evidence: none`,
+    )
+    expect(doc.content[1]).toEqual({
+      type: 'paragraph',
+      content: [{ type: 'text', text: 'Re-application block: manual block in place' }],
     })
   })
 
@@ -495,11 +552,18 @@ describe('POST /api/ledger/cancel-account: the system contact note', () => {
     expect(text).toContain(' at 31 Oct 2026, 9:30 am — ')
   })
 
-  it('does not write the block confirmation into the note', async () => {
+  it('keeps the first line exactly as it was; the block confirmation is its own paragraph', async () => {
     await call(validBody())
 
-    const text = mockPayload.create.mock.calls[0][0].data.content.content[0].content[0].text
-    expect(text).not.toContain('welcome back')
+    const doc = mockPayload.create.mock.calls[0][0].data.content
+    expect(doc.content).toHaveLength(2)
+    expect(doc.content[0].content[0].text).toBe(
+      `Cancelled — Customer withdrew — ${NOTE} — by Sam Supervisor at 30 Oct 2026, 3:45 pm — evidence: none`,
+    )
+    expect(doc.content[0].content[0].text).not.toContain('welcome back')
+    expect(doc.content[1].content[0].text).toBe(
+      'Re-application block: none needed — Customer is welcome back',
+    )
   })
 
   it('still creates the note when the ledger replays an earlier cancel and no note exists', async () => {

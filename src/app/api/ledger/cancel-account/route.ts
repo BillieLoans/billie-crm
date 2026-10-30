@@ -26,15 +26,19 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import type { Payload } from 'payload'
-import { getLedgerClient } from '@/server/grpc-client'
+import { getLedgerClient, type CancelAccountResponse } from '@/server/grpc-client'
 import { handleApiError, createValidationError, createApiError } from '@/lib/utils/api-error'
 import { ERROR_CODES } from '@/lib/errors/codes'
 import { requireAuth } from '@/lib/auth'
 import { hasApprovalAuthority } from '@/lib/access'
 import { CancelAccountSchema, type CancelAccount } from '@/lib/schemas/ledger'
 import { isBlockActive } from '@/lib/reapplicationBlock'
-import { textToTiptapDoc } from '@/lib/tiptap'
-import { buildCancellationNoteText, CANCELLATION_NOTE_SUBJECT } from '@/lib/cancellation'
+import { paragraphsToTiptapDoc } from '@/lib/tiptap'
+import {
+  buildCancellationBlockLine,
+  buildCancellationNoteText,
+  CANCELLATION_NOTE_SUBJECT,
+} from '@/lib/cancellation'
 import { staffDisplayName } from '@/lib/staffDisplayName'
 import type { Customer, LoanAccount, User } from '@/payload-types'
 
@@ -148,7 +152,9 @@ async function ensureCancellationNote(
         // and `status` defaults to active; the create type needs both present.
         createdBy: user.id,
         status: 'active',
-        content: textToTiptapDoc(
+        // First line exactly as specified; the block confirmation is its own
+        // paragraph so the record carries it (§4.7, §4.10).
+        content: paragraphsToTiptapDoc([
           buildCancellationNoteText({
             reason: data.reason,
             note: data.note,
@@ -156,7 +162,8 @@ async function ensureCancellationNote(
             cancelledAt: args.cancelledAt,
             evidenceRef: data.evidenceRef,
           }),
-        ),
+          buildCancellationBlockLine(data.blockConfirmation),
+        ]),
       },
       user,
     })
@@ -209,23 +216,44 @@ export async function POST(request: NextRequest) {
 
     const actorName = staffDisplayName(user)
 
-    // The block confirmation is not part of the note or the ledger record; it
-    // is recorded here, with the actor.
-    console.info(`[${ACTION}] block confirmation`, {
-      loanAccountId: data.loanAccountId,
-      actorId: String(user.id),
-      blockConfirmation: data.blockConfirmation,
-    })
+    // The block confirmation is logged once the ledger has answered, with the
+    // outcome, so a refused cancel never reads as a recorded confirmation. On
+    // success it is also the second paragraph of the system note.
+    const logConfirmation = (outcome: Record<string, unknown>) =>
+      console.info(`[${ACTION}] block confirmation`, {
+        loanAccountId: data.loanAccountId,
+        actorId: String(user.id),
+        blockConfirmation: data.blockConfirmation,
+        ...outcome,
+      })
 
-    const response = await getLedgerClient().cancelAccount({
-      loanAccountId: data.loanAccountId,
-      reasonCode: data.reason,
-      note: data.note,
-      evidenceRef: data.evidenceRef || undefined,
-      actorId: String(user.id),
-      actorName,
-      idempotencyKey: data.idempotencyKey,
-    })
+    let response: CancelAccountResponse
+    try {
+      response = await getLedgerClient().cancelAccount({
+        loanAccountId: data.loanAccountId,
+        reasonCode: data.reason,
+        note: data.note,
+        evidenceRef: data.evidenceRef || undefined,
+        actorId: String(user.id),
+        actorName,
+        idempotencyKey: data.idempotencyKey,
+      })
+    } catch (error) {
+      logConfirmation({
+        outcome: 'not_cancelled',
+        grpcCode: (error as { code?: unknown } | undefined)?.code,
+      })
+      throw error
+    }
+    logConfirmation(
+      response.success
+        ? {
+            outcome: 'cancelled',
+            eventId: response.eventId,
+            idempotentReplay: response.idempotentReplay,
+          }
+        : { outcome: 'not_cancelled' },
+    )
 
     // Only a recorded cancel gets a note. An idempotent replay gets one too if
     // the first attempt never managed to leave it.

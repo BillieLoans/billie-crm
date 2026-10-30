@@ -437,6 +437,40 @@ class TestCancelledIsTerminal:
         warnings = [e for e in captured if e.get("log_level") == "warning"]
         assert any("cancelled" in json.dumps(e, default=str).lower() for e in warnings), captured
 
+    # Final-review M2: the platform's own follow-up account.updated.v1
+    # (status CANCELLED) reaches a row account.cancelled.v1 already made
+    # cancelled on every cancel. That is a no-op, not a regression: INFO, never
+    # WARNING. A real attempt to move a cancelled loan still warns (above).
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "deliver",
+        [
+            pytest.param(
+                lambda pool: handle_account_updated(pool, _updated_event("CANCELLED")),
+                id="updated",
+            ),
+            pytest.param(
+                lambda pool: handle_account_created(pool, _created_event("CANCELLED")),
+                id="created",
+            ),
+            pytest.param(
+                lambda pool: handle_account_status_changed(
+                    pool, _status_changed_event("CANCELLED")
+                ),
+                id="status_changed",
+            ),
+        ],
+    )
+    async def test_cancelled_onto_cancelled_is_info_not_warning(self, mock_pool, deliver):
+        mock_pool.set_fetchrow(CANCELLED_ROW)
+
+        with capture_logs() as captured:
+            await deliver(mock_pool)
+
+        assert not [e for e in captured if e.get("log_level") == "warning"], captured
+        infos = [e for e in captured if e.get("log_level") == "info"]
+        assert any("already cancelled" in str(e.get("event", "")) for e in infos), captured
+
     @pytest.mark.asyncio
     async def test_no_phantom_last_payment_on_a_cancelled_account(self, mock_pool):
         """With the status dropped, the 'balance went down so a payment must

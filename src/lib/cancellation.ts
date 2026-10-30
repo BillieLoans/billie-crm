@@ -80,3 +80,16 @@ export function buildCancellationNoteText(input: CancellationNoteInput): string 
     `evidence: ${evidence}`,
   ].join(' — ')
 }
+
+/**
+ * The second paragraph of the system note: what the supervisor confirmed
+ * about the customer's re-application block (spec §4.7; the note is the
+ * durable record, §4.10).
+ */
+export function buildCancellationBlockLine(
+  confirmation: { kind: 'manual_block_active' } | { kind: 'no_block_needed'; reason: string },
+): string {
+  return confirmation.kind === 'manual_block_active'
+    ? 'Re-application block: manual block in place'
+    : `Re-application block: none needed — ${confirmation.reason}`
+}

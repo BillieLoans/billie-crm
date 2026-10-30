@@ -186,6 +186,10 @@ describe('cancel-account route over a real Payload', () => {
             },
           ],
         },
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: 'Re-application block: manual block in place' }],
+        },
       ],
     })
   })

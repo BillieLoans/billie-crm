@@ -112,7 +112,7 @@ describe('loan account cancellation schema', () => {
       cancellation_cancelled_by_id: 'usr-supervisor-1',
       cancellation_cancelled_by_name: 'Sam Supervisor',
     })
-    expect(new Date(rows[0].cancellation_cancelled_at).toISOString()).toBe(
+    expect(new Date(rows[0].cancellation_cancelled_at as string).toISOString()).toBe(
       '2026-10-30T04:45:00.000Z',
     )
   })
@@ -185,7 +185,7 @@ describe('reporting.loan for a cancelled loan', () => {
       account_status: 'cancelled',
       cancellation_reason: 'customer_withdrew',
     })
-    expect(new Date(rows[0].cancelled_at).toISOString()).toBe('2026-10-30T22:30:00.000Z')
+    expect(new Date(rows[0].cancelled_at as string).toISOString()).toBe('2026-10-30T22:30:00.000Z')
     // 22:30Z on 30 Oct is the morning of 31 Oct in Sydney.
     expect(
       (

@@ -215,6 +215,37 @@ describe('CancelLoanDrawer: the form', () => {
     expect(lastCancelBody().blockConfirmation).toEqual({ kind: 'manual_block_active' })
   })
 
+  // Final-review M4: only no block, or ACTIVE_LOAN (which the cancel itself
+  // ends), lets the customer apply again straight away.
+  it.each([
+    ['no block', null],
+    ['ACTIVE_LOAN', { reason: 'ACTIVE_LOAN', blockedUntil: null }],
+  ])('with %s, says they could apply again once the loan is cancelled', (_label, block) => {
+    renderDrawer({ reapplicationBlock: block })
+    expect(screen.getByText(/they could apply again straight away/)).toBeInTheDocument()
+    expect(screen.queryByText(/existing block still applies/)).toBeNull()
+  })
+
+  it('with another block in force, says that block still applies instead', () => {
+    renderDrawer({ reapplicationBlock: { reason: 'PRIOR_DEFAULT', blockedUntil: null } })
+    expect(
+      screen.getByText(
+        'This customer has no active manual block. Their existing block still applies after the cancel: Prior default (permanent).',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/straight away/)).toBeNull()
+    // A manual block can still be set or declined.
+    expect(screen.getByRole('button', { name: 'Set manual block' })).toBeInTheDocument()
+    expect(screen.getByLabelText('No block needed')).toBeInTheDocument()
+  })
+
+  it('a lapsed other block does not count as in force', () => {
+    renderDrawer({
+      reapplicationBlock: { reason: 'SERVICEABILITY', blockedUntil: '2020-01-01T00:00:00Z' },
+    })
+    expect(screen.getByText(/they could apply again straight away/)).toBeInTheDocument()
+  })
+
   it('an expired manual block does not count', () => {
     renderDrawer({ reapplicationBlock: { ...MANUAL_BLOCK, blockedUntil: '2020-01-01T00:00:00Z' } })
     expect(screen.getByRole('button', { name: 'Set manual block' })).toBeInTheDocument()

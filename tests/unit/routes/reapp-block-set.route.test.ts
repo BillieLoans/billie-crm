@@ -164,7 +164,7 @@ describe('POST /api/commands/reapp-block-set', () => {
   })
 
   it('a publish failure is 503 and says to try again', async () => {
-    vi.mocked(publishManualBlockSet).mockRejectedValueOnce(new EventPublishError('down'))
+    vi.mocked(publishManualBlockSet).mockRejectedValueOnce(new EventPublishError('down', { attempts: 3 }))
     const res = await call(valid)
     expect(res.status).toBe(503)
     expect(res.body.error.code).toBe('EVENT_PUBLISH_FAILED')

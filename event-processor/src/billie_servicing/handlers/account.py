@@ -118,6 +118,13 @@ def _status_block_reason(incoming_sdk_status: str, row: Any) -> str | None:
     return None
 
 
+def _is_cancelled_echo(incoming_sdk_status: str, row: Any) -> bool:
+    """True when the dropped status is CANCELLED arriving for a row already
+    cancelled: the platform's normal follow-up to account.cancelled.v1, a no-op
+    rather than a regression (logged at INFO, not WARNING)."""
+    return incoming_sdk_status == CANCELLED_SDK_STATUS and _is_account_cancelled(row)
+
+
 def _is_status_regression(incoming_sdk_status: str, row: Any) -> bool:
     """True when ``incoming_sdk_status`` must not be applied to the stored
     projection: either a pre-disbursement status arriving for an account the
@@ -214,13 +221,19 @@ async def handle_account_created(pool: asyncpg.Pool, parsed_event: Any) -> None:
     # un-cancel a cancelled loan (BTB-517).
     block_reason = _status_block_reason(sdk_status, existing_row)
     if block_reason:
-        log.warning(
-            "Ignoring status regression on account.created.v1 replay — "
-            "other fields in this event still apply",
-            block_reason=block_reason,
-            incoming_sdk_status=sdk_status,
-            stored_sdk_status=existing_row.get("sdk_status"),
-        )
+        if _is_cancelled_echo(sdk_status, existing_row):
+            log.info(
+                "Account already cancelled; CANCELLED on account.created.v1 is a no-op — "
+                "other fields in this event still apply",
+            )
+        else:
+            log.warning(
+                "Ignoring status regression on account.created.v1 replay — "
+                "other fields in this event still apply",
+                block_reason=block_reason,
+                incoming_sdk_status=sdk_status,
+                stored_sdk_status=existing_row.get("sdk_status"),
+            )
         del values["account_status"]
         del values["sdk_status"]
 
@@ -323,7 +336,12 @@ async def handle_account_updated(pool: asyncpg.Pool, parsed_event: Any) -> None:
         sdk_status = _normalise_status(payload.status)
         row = await _load_existing()
         block_reason = _status_block_reason(sdk_status, row)
-        if block_reason:
+        if block_reason and _is_cancelled_echo(sdk_status, row):
+            log.info(
+                "Account already cancelled; CANCELLED on account.updated.v1 is a no-op — "
+                "other fields in this event still apply",
+            )
+        elif block_reason:
             log.warning(
                 "Ignoring status regression on account.updated.v1 — "
                 "other fields in this event still apply",
@@ -447,12 +465,15 @@ async def handle_account_status_changed(pool: asyncpg.Pool, parsed_event: Any) -
 
     block_reason = _status_block_reason(sdk_status, row)
     if block_reason:
-        log.warning(
-            "Ignoring status regression on account.status_changed.v1",
-            block_reason=block_reason,
-            incoming_sdk_status=sdk_status,
-            stored_sdk_status=row.get("sdk_status"),
-        )
+        if _is_cancelled_echo(sdk_status, row):
+            log.info("Account already cancelled; CANCELLED on account.status_changed.v1 is a no-op")
+        else:
+            log.warning(
+                "Ignoring status regression on account.status_changed.v1",
+                block_reason=block_reason,
+                incoming_sdk_status=sdk_status,
+                stored_sdk_status=row.get("sdk_status"),
+            )
         return
 
     update_doc: dict[str, Any] = {

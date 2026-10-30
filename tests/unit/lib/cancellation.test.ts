@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  buildCancellationBlockLine,
   CANCELLATION_REASON_CODES,
   CANCELLATION_REASON_LABELS,
   buildCancellationNoteText,
@@ -64,5 +65,23 @@ describe('buildCancellationNoteText', () => {
 
   it.each([undefined, null, '', '   '])('says evidence: none for %j', (evidenceRef) => {
     expect(buildCancellationNoteText({ ...base, evidenceRef })).toMatch(/ — evidence: none$/)
+  })
+})
+
+// Final-review I1: the block confirmation is recorded in the system note.
+describe('buildCancellationBlockLine', () => {
+  it('says a manual block is in place', () => {
+    expect(buildCancellationBlockLine({ kind: 'manual_block_active' })).toBe(
+      'Re-application block: manual block in place',
+    )
+  })
+
+  it('says none is needed, and why', () => {
+    expect(
+      buildCancellationBlockLine({
+        kind: 'no_block_needed',
+        reason: 'Customer may reapply later.',
+      }),
+    ).toBe('Re-application block: none needed — Customer may reapply later.')
   })
 })

@@ -179,7 +179,7 @@ describe('cancelled loans (BTB-517)', () => {
     )
     expect(rows).toHaveLength(1)
     expect(rows[0].account_status).toBe('cancelled')
-    expect(new Date(rows[0].cancelled_at).toISOString()).toBe('2026-10-30T22:30:00.000Z')
+    expect(new Date(rows[0].cancelled_at as string).toISOString()).toBe('2026-10-30T22:30:00.000Z')
     // 22:30Z on 30 Oct is the morning of 31 Oct in Sydney.
     expect(rows[0].cancelled_on).toBe('2026-10-31')
   })

@@ -11,7 +11,12 @@ import {
   type CancellationReasonCode,
 } from '@/lib/cancellation'
 import { MIN_CANCELLATION_NOTE_LENGTH, MIN_NO_BLOCK_REASON_LENGTH } from '@/lib/constants'
-import { formatBlockLabel, formatBlockedUntil, isManualBlockActive } from '@/lib/reapplicationBlock'
+import {
+  formatBlockLabel,
+  formatBlockedUntil,
+  isBlockActive,
+  isManualBlockActive,
+} from '@/lib/reapplicationBlock'
 import type { BlockConfirmation } from '@/lib/schemas/ledger'
 import {
   clearFrozenCancellation,
@@ -320,6 +325,13 @@ function CancelLoanForm({
     }
   }
 
+  // Another block in force (PRIOR_DEFAULT, PEP, a decline window…) still
+  // applies after the cancel. ACTIVE_LOAN is the one the cancel itself ends.
+  const otherBlockInForce =
+    !manualBlockActive &&
+    isBlockActive(reapplicationBlock) &&
+    reapplicationBlock?.reason !== 'ACTIVE_LOAN'
+
   // A frozen request that claimed the customer's manual block, which has since
   // gone: the route will refuse it until the block is set again.
   const frozenNeedsBlock =
@@ -467,7 +479,9 @@ function CancelLoanForm({
                 <p className={styles.hint}>
                   {frozenNeedsBlock
                     ? 'This cancellation relies on a manual block that is no longer on the customer record. Set it again, then try again.'
-                    : 'This customer has no active manual block. Once the loan is cancelled they could apply again straight away.'}
+                    : otherBlockInForce
+                      ? `This customer has no active manual block. Their existing block still applies after the cancel: ${formatBlockLabel(reapplicationBlock)} (${formatBlockedUntil(reapplicationBlock ?? {})}).`
+                      : 'This customer has no active manual block. Once the loan is cancelled they could apply again straight away.'}
                 </p>
                 {waitingForBlock && (
                   <p className={styles.info} role="status">
