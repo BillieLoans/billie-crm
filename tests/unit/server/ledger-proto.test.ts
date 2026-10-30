@@ -93,6 +93,42 @@ describe('vendored accounting_ledger.proto (BTB-517)', () => {
     ).toMatchObject(response)
   })
 
+  it('exposes checkDisbursable, the read-only gate for the payment panel', () => {
+    const checkDisbursable = service.service.CheckDisbursable
+    expect(checkDisbursable?.originalName).toBe('checkDisbursable')
+    expect(checkDisbursable.path).toBe(`/${SERVICE_PATH}/CheckDisbursable`)
+    expect(typeof service.prototype.checkDisbursable).toBe('function')
+    // Unary: the CRM client promisifies it like the other reads.
+    expect(checkDisbursable.requestStream).toBe(false)
+    expect(checkDisbursable.responseStream).toBe(false)
+  })
+
+  it('round-trips a camelCase CheckDisbursableRequest and CheckDisbursableResponse', () => {
+    const checkDisbursable = service.service.CheckDisbursable
+    expect(fieldNames('CheckDisbursableRequest')).toEqual(['loanAccountId'])
+    expect(fieldNames('CheckDisbursableResponse')).toEqual([
+      'disbursable',
+      'reason',
+      'status',
+      'message',
+    ])
+
+    const request = { loanAccountId: 'acc_123' }
+    expect(
+      checkDisbursable.requestDeserialize(checkDisbursable.requestSerialize(request)),
+    ).toMatchObject(request)
+
+    const response = {
+      disbursable: false,
+      reason: 'CANCELLED',
+      status: 'CANCELLED',
+      message: 'Loan is CANCELLED — cannot disburse.',
+    }
+    expect(
+      checkDisbursable.responseDeserialize(checkDisbursable.responseSerialize(response)),
+    ).toMatchObject(response)
+  })
+
   it('ScheduleSummary carries voidCount', () => {
     expect(fieldNames('ScheduleSummary')).toContain('voidCount')
 

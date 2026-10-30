@@ -61,6 +61,11 @@ service AccountingLedgerService {
   // idempotency_key after UNAVAILABLE completes the cancel.
   rpc CancelAccount(CancelAccountRequest) returns (CancelAccountResponse);
 
+  // Read-only: would DisburseLoan accept this loan right now? Returns the same
+  // verdict DisburseLoan's status rules reach, without taking the account lock
+  // or writing anything. The CRM asks before it shows a loan's payout details.
+  rpc CheckDisbursable(CheckDisbursableRequest) returns (CheckDisbursableResponse);
+
   // ==========================================================================
   // Schedule Queries (with Instalment Status)
   // ==========================================================================
@@ -572,6 +577,18 @@ message CancelAccountResponse {
   string cancelled_at = 4;               // When the platform recorded the cancel (ISO 8601)
   string previous_status = 5;            // Status before the cancel (PENDING or PENDING_DISBURSEMENT)
   bool idempotent_replay = 6;            // True if this cancel had already been recorded
+}
+
+// Would DisburseLoan accept this loan right now? (read-only)
+message CheckDisbursableRequest {
+  string loan_account_id = 1;
+}
+
+message CheckDisbursableResponse {
+  bool disbursable = 1;
+  string reason = 2;                     // DISBURSABLE, CANCELLED, ALREADY_DISBURSED, NOT_PENDING_DISBURSEMENT, NO_LEDGER_RECORD
+  string status = 3;                     // The account projection's status; empty when there is none
+  string message = 4;                    // Human-readable; for CANCELLED, DisburseLoan's own refusal text
 }
 
 // =============================================================================

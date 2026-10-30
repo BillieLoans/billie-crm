@@ -268,6 +268,29 @@ export interface CancelAccountResponse {
   idempotentReplay: boolean
 }
 
+/**
+ * Would `DisburseLoan` accept this loan right now? Hand-written to match
+ * `CheckDisbursableRequest` / `CheckDisbursableResponse` in
+ * proto/accounting_ledger.proto (loaded with `keepCase: false`).
+ */
+export interface CheckDisbursableRequest {
+  loanAccountId: string
+}
+
+export interface CheckDisbursableResponse {
+  disbursable: boolean
+  /**
+   * DISBURSABLE | CANCELLED | ALREADY_DISBURSED | NOT_PENDING_DISBURSEMENT |
+   * NO_LEDGER_RECORD. Callers must tolerate any other value; the verdict
+   * itself is `disbursable`.
+   */
+  reason: string
+  /** The platform account projection's status; empty when there is none. */
+  status: string
+  /** Human-readable. For CANCELLED it is DisburseLoan's own refusal text. */
+  message: string
+}
+
 export interface InstalmentAllocation {
   paymentNumber: number
   amountApplied: string
@@ -1113,6 +1136,16 @@ export class LedgerClient {
 
   async getStatement(request: GetStatementRequest): Promise<StatementResponse> {
     return this.promisify<GetStatementRequest, StatementResponse>(this.client.getStatement)(request)
+  }
+
+  /**
+   * Read-only: would DisburseLoan accept this loan right now (BTB-517)? The
+   * Pending Disbursements payment panel asks before it shows any payout details.
+   */
+  async checkDisbursable(request: CheckDisbursableRequest): Promise<CheckDisbursableResponse> {
+    return this.promisify<CheckDisbursableRequest, CheckDisbursableResponse>(
+      this.client.checkDisbursable,
+    )(request)
   }
 
   // ===========================================================================
