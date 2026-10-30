@@ -1,7 +1,8 @@
 'use client'
 
-import { useCallback, useId, useState } from 'react'
+import { useCallback, useEffect, useId, useState } from 'react'
 import { useAnnouncerStore } from '@/stores/announcer'
+import { useDisbursableCheck, type DisbursableVerdict } from '@/hooks/useDisbursableCheck'
 import { recordDisbursementAccess } from '@/lib/disbursement-access-log'
 import { OSKO_MESSAGE_MAX_LENGTH } from '@/lib/disbursement-payments'
 import { formatDateOnly } from '@/lib/formatters'
@@ -31,9 +32,138 @@ const EKYC_META = {
   unknown: { label: 'Customer (no eKYC record)', badge: '⚠ not verified', tone: 'unverified' },
 } as const
 
+/** Shown while the platform has not yet answered. Carries no payout details. */
+const CHECKING_COPY = 'Checking with the platform that this loan can be paid…'
+
+/** Fail-closed copy: no answer is "do not pay", never "probably fine". */
+const CHECK_FAILED_COPY =
+  "🛑 Couldn't confirm with the platform that this loan can be paid. Don't pay until this clears."
+
+interface BlockedCopy {
+  /** The do-not-pay line, announced to assistive tech as well. */
+  headline: string
+  /** A second line, when there is something the operator should do next. */
+  detail?: string
+  /** Offer a Retry: the platform may simply not be ready yet. */
+  retryable?: boolean
+}
+
 /**
- * The per-loan payment panel: everything an operator needs to pay one advance by
- * hand in ANZ "Pay Anyone", and the Confirmation-of-Payee gate they must pass first.
+ * What the operator reads when the platform says it would refuse DisburseLoan.
+ * The CRM holds no rule of its own: this only words the platform's verdict. An
+ * unfamiliar reason falls back to the platform's own message, so a reason the
+ * platform adds later still reads as "do not pay" rather than slipping through.
+ */
+function blockedCopy(verdict: DisbursableVerdict): BlockedCopy {
+  switch (verdict.reason) {
+    case 'CANCELLED':
+      return {
+        headline:
+          '🛑 Do not pay. The platform has recorded this loan as cancelled before disbursement.',
+        detail:
+          'This queue may be showing it from a stale update. Refresh the page to see its current status.',
+      }
+    case 'ALREADY_DISBURSED':
+      return {
+        headline: '🛑 Do not pay. The platform has already recorded a disbursement for this loan.',
+      }
+    case 'NOT_PENDING_DISBURSEMENT':
+      return {
+        headline: `🛑 Do not pay. The platform says this loan is ${verdict.status || 'not set up'} and can't be disbursed yet.`,
+      }
+    case 'NO_LEDGER_RECORD':
+      return {
+        headline:
+          "🛑 Do not pay yet. The platform hasn't finished setting up this loan's ledger. Try again in a minute.",
+        retryable: true,
+      }
+    default:
+      return {
+        headline: `🛑 Do not pay. ${verdict.message || "The platform says this loan can't be disbursed."}`,
+      }
+  }
+}
+
+/**
+ * The per-loan payment panel. It asks the platform, the system of record,
+ * whether DisburseLoan would accept this loan BEFORE it shows anything an
+ * operator could pay from (BTB-517).
+ *
+ * The CRM is a projection and can show a stale status: a replayed
+ * account.updated can put a cancelled loan back in the queue. "Mark disbursed"
+ * is only reached after the operator has already paid by hand in ANZ, and by
+ * then the platform's refusal comes too late to stop the money. So until the
+ * platform answers, and whenever it says no or cannot be reached, the panel
+ * shows a status or a stop message and none of the payout details, the copy
+ * actions, the signed-agreement link or the disburse control.
+ */
+export function DisbursementPaymentPanel({ item, onDisburse }: Props) {
+  const { state, retry } = useDisbursableCheck(item.loanAccountId)
+  const announce = useAnnouncerStore((s) => s.announce)
+
+  useEffect(() => {
+    if (state.status === 'failed') {
+      announce(CHECK_FAILED_COPY, 'assertive')
+    } else if (state.status === 'answered') {
+      if (state.verdict.disbursable) {
+        announce('Platform confirmed this loan can be paid', 'polite')
+      } else {
+        announce(blockedCopy(state.verdict).headline, 'assertive')
+      }
+    }
+  }, [state, announce])
+
+  if (state.status === 'checking') {
+    return (
+      <div className={styles.panel}>
+        <p className={styles.notice} role="status">
+          {CHECKING_COPY}
+        </p>
+      </div>
+    )
+  }
+
+  if (state.status === 'failed') {
+    return (
+      <div className={styles.panel}>
+        <p className={styles.stop} role="alert" data-testid="disbursable-blocked">
+          {CHECK_FAILED_COPY}
+        </p>
+        <div className={styles.blockActions}>
+          <button type="button" className={styles.secondaryBtn} onClick={retry}>
+            Retry
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!state.verdict.disbursable) {
+    const copy = blockedCopy(state.verdict)
+    return (
+      <div className={styles.panel}>
+        <div className={styles.stop} role="alert" data-testid="disbursable-blocked">
+          <p className={styles.stopLine}>{copy.headline}</p>
+          {copy.detail && <p className={styles.stopLine}>{copy.detail}</p>}
+        </div>
+        {copy.retryable && (
+          <div className={styles.blockActions}>
+            <button type="button" className={styles.secondaryBtn} onClick={retry}>
+              Retry
+            </button>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  return <PaymentDetails item={item} onDisburse={onDisburse} />
+}
+
+/**
+ * The platform has said this loan can be paid, so this is everything an operator
+ * needs to pay one advance by hand in ANZ "Pay Anyone", and the
+ * Confirmation-of-Payee gate they must pass first.
  *
  * Order matters and mirrors the operator's real sequence (ops spec §A2-A3):
  * copy the details → pay in ANZ → check the name the bank returns against the
@@ -41,7 +171,7 @@ const EKYC_META = {
  * stays disabled until that name check is answered, so "stop on mismatch" is a
  * property of the UI rather than of the operator remembering.
  */
-export function DisbursementPaymentPanel({ item, onDisburse }: Props) {
+function PaymentDetails({ item, onDisburse }: Props) {
   const [payeeCheck, setPayeeCheck] = useState<PayeeCheck>('unchecked')
   const [messageCopied, setMessageCopied] = useState(false)
   const announce = useAnnouncerStore((s) => s.announce)

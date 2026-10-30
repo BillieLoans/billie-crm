@@ -1,6 +1,12 @@
 // Hooks barrel export
 export { useGlobalHotkeys, useCommandPaletteHotkeys } from './useGlobalHotkeys'
 export { useTrackCustomerView } from './useTrackCustomerView'
+export { useDisbursableCheck } from './useDisbursableCheck'
+export type {
+  DisbursableVerdict,
+  DisbursableCheckState,
+  UseDisbursableCheckResult,
+} from './useDisbursableCheck'
 export { useCustomerSearch } from './queries/useCustomerSearch'
 export { useLoanAccountSearch } from './queries/useLoanAccountSearch'
 export { useCustomer } from './queries/useCustomer'

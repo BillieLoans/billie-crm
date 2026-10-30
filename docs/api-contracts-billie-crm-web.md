@@ -246,13 +246,14 @@ Aggregates multiple data sources in parallel: pending approvals count, ledger he
 
 ## 3. Ledger Core Transactions
 
-Six endpoints for reading balances, recording repayments, disbursing loans, and querying transaction history. All communicate with the gRPC AccountingLedgerService.
+Seven endpoints for reading balances, recording repayments, disbursing loans, and querying transaction history. All communicate with the gRPC AccountingLedgerService.
 
 | Method | Path | Purpose | Auth Level | External Services |
 |--------|------|---------|------------|-------------------|
 | GET | `/api/ledger/balance` | Current account balance | `hasAnyRole` | gRPC Ledger |
 | POST | `/api/ledger/repayment` | Record a repayment | `canService` | gRPC Ledger |
 | POST | `/api/ledger/disburse` | Disburse loan funds | `canService` | gRPC Ledger, S3 |
+| GET | `/api/ledger/disbursable` | Would `DisburseLoan` accept this loan right now? | `canService` | gRPC Ledger |
 | GET | `/api/ledger/record` | Full ledger record for an account | `hasAnyRole` | gRPC Ledger |
 | GET | `/api/ledger/statement` | Period statement | `hasAnyRole` | gRPC Ledger |
 | GET | `/api/ledger/transactions` | Transaction list with filtering | `hasAnyRole` | gRPC Ledger |
@@ -358,6 +359,29 @@ Records `DISBURSEMENT` + `ESTABLISHMENT_FEE` transactions and transitions the ac
   "error": "ALREADY_DISBURSED",
   "message": "This account has already been disbursed. Please check the account status."
 }
+```
+
+### GET /api/ledger/disbursable
+
+The Pending Disbursements payment panel calls this when it opens, before it shows any payout details. It relays the platform's `CheckDisbursable` verdict (read-only, `ledger:read`); the CRM applies no rule of its own, because the queue is a projection and can be stale. Never cached (`Cache-Control: no-store`).
+
+**Query Parameters**: `loanAccountId` (required, else `400`)
+
+**Response `200`**
+```json
+{
+  "disbursable": false,
+  "reason": "CANCELLED",
+  "status": "CANCELLED",
+  "message": "Loan is CANCELLED — cannot disburse."
+}
+```
+
+`reason` is one of `DISBURSABLE`, `CANCELLED`, `ALREADY_DISBURSED`, `NOT_PENDING_DISBURSEMENT`, `NO_LEDGER_RECORD`.
+
+**Error `503`** (any gRPC failure: unavailable, deadline, an older platform without the RPC). The text is fixed and carries no internal detail. The panel fails closed: it shows "Don't pay until this clears" and a Retry, with no payout details.
+```json
+{ "error": "DISBURSABLE_CHECK_FAILED", "message": "Couldn't confirm with the platform that this loan can be paid." }
 ```
 
 ### GET /api/ledger/record
