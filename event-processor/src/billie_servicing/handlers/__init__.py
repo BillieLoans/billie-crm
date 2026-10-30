@@ -1,6 +1,7 @@
 """Event handlers for Billie Servicing App."""
 
 from .account import (
+    handle_account_cancelled,
     handle_account_closed,
     handle_account_created,
     handle_account_status_changed,
@@ -121,6 +122,7 @@ __all__ = [
     "handle_account_updated",
     "handle_account_status_changed",
     "handle_account_closed",
+    "handle_account_cancelled",
     "handle_schedule_created",
     "handle_schedule_updated",
     # Customer handlers

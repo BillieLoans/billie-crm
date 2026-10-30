@@ -10,6 +10,7 @@ import structlog
 from .config import settings
 from .handlers import (
     # Account handlers
+    handle_account_cancelled,
     handle_account_closed,
     handle_account_created,
     handle_account_status_changed,
@@ -152,6 +153,7 @@ def setup_handlers(processor: EventProcessor) -> None:
     processor.register_handler("account.updated.v1", handle_account_updated)
     processor.register_handler("account.status_changed.v1", handle_account_status_changed)
     processor.register_handler("account.closed.v1", handle_account_closed)
+    processor.register_handler("account.cancelled.v1", handle_account_cancelled)
     processor.register_handler("account.schedule.created.v1", handle_schedule_created)
     processor.register_handler("account.schedule.updated.v1", handle_schedule_updated)
     processor.register_handler("loan.aging.updated.v1", handle_loan_aging_updated)
