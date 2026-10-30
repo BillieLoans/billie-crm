@@ -22,12 +22,16 @@ export interface DisbursableVerdict {
 
 /**
  * `checking` until the platform answers. `failed` is every way of not getting a
- * usable answer (network error, non-200, a body that is not a verdict): the
- * caller must treat it as "do not pay", never as "probably fine".
+ * usable answer (network error, 401, 5xx, a body that is not a verdict): the
+ * caller must treat it as "do not pay", never as "probably fine", and may offer
+ * Retry. `forbidden` is a 403: the signed-in role may not ask, which asking again
+ * cannot change, so there is nothing to retry. The payout details stay hidden
+ * either way.
  */
 export type DisbursableCheckState =
   | { status: 'checking' }
   | { status: 'answered'; verdict: DisbursableVerdict }
+  | { status: 'forbidden' }
   | { status: 'failed' }
 
 export interface UseDisbursableCheckResult {
@@ -86,6 +90,10 @@ export function useDisbursableCheck(loanAccountId: string): UseDisbursableCheckR
           `/api/ledger/disbursable?loanAccountId=${encodeURIComponent(loanAccountId)}`,
           { cache: 'no-store', signal: controller.signal },
         )
+        if (res.status === 403) {
+          if (!superseded) setSettled({ key, outcome: { status: 'forbidden' } })
+          return
+        }
         if (!res.ok) throw new Error(`disbursable check answered ${res.status}`)
         const verdict = parseVerdict(await res.json())
         if (!verdict) throw new Error('disbursable check returned a malformed body')

@@ -379,10 +379,14 @@ The Pending Disbursements payment panel calls this when it opens, before it show
 
 `reason` is one of `DISBURSABLE`, `CANCELLED`, `ALREADY_DISBURSED`, `NOT_PENDING_DISBURSEMENT`, `NO_LEDGER_RECORD`.
 
+**Error `403`** (a role that is not `canService`, such as `readonly`). The panel shows "Your role can't record disbursements, so the payout details are hidden", with no Retry. A `401` and every other failure take the fail-closed path below.
+
 **Error `503`** (any gRPC failure: unavailable, deadline, an older platform without the RPC). The text is fixed and carries no internal detail. The panel fails closed: it shows "Don't pay until this clears" and a Retry, with no payout details.
 ```json
 { "error": "DISBURSABLE_CHECK_FAILED", "message": "Couldn't confirm with the platform that this loan can be paid." }
 ```
+
+The check runs when the panel opens. A cancel recorded while the panel is already open is not caught, so reopen the panel if a payment was interrupted.
 
 ### GET /api/ledger/record
 

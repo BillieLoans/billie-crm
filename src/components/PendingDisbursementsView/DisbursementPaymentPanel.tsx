@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useId, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState, type Ref } from 'react'
 import { useAnnouncerStore } from '@/stores/announcer'
 import { useDisbursableCheck, type DisbursableVerdict } from '@/hooks/useDisbursableCheck'
 import { recordDisbursementAccess } from '@/lib/disbursement-access-log'
@@ -34,6 +34,14 @@ const EKYC_META = {
 
 /** Shown while the platform has not yet answered. Carries no payout details. */
 const CHECKING_COPY = 'Checking with the platform that this loan can be paid…'
+
+/**
+ * A 403: the signed-in role may look at the queue but may not record
+ * disbursements, and the platform check is a servicing action. Nothing to retry,
+ * so it has none, and the payout details stay hidden.
+ */
+const FORBIDDEN_COPY =
+  "Your role can't record disbursements, so the payout details are hidden. Ask a servicing operator or supervisor."
 
 /** Fail-closed copy: no answer is "do not pay", never "probably fine". */
 const CHECK_FAILED_COPY =
@@ -101,8 +109,31 @@ export function DisbursementPaymentPanel({ item, onDisburse }: Props) {
   const { state, retry } = useDisbursableCheck(item.loanAccountId)
   const announce = useAnnouncerStore((s) => s.announce)
 
+  // Retry unmounts the button the operator just pressed, which would drop
+  // keyboard focus to the page body. So after a Retry, focus follows the panel:
+  // first to the status line while the platform is asked again, then to the
+  // outcome (the stop message, or the first heading of the payment details) when
+  // the answer lands. Only after a Retry: opening the panel never takes focus.
+  // The refs are callback refs, so each runs the moment its element mounts.
+  const focusPending = useRef(false)
+  const handleRetry = useCallback(() => {
+    focusPending.current = true
+    retry()
+  }, [retry])
+  const statusRef = useCallback((el: HTMLElement | null) => {
+    if (el && focusPending.current) el.focus()
+  }, [])
+  const outcomeRef = useCallback((el: HTMLElement | null) => {
+    if (el && focusPending.current) {
+      focusPending.current = false
+      el.focus()
+    }
+  }, [])
+
   useEffect(() => {
-    if (state.status === 'failed') {
+    if (state.status === 'forbidden') {
+      announce(FORBIDDEN_COPY, 'assertive')
+    } else if (state.status === 'failed') {
       announce(CHECK_FAILED_COPY, 'assertive')
     } else if (state.status === 'answered') {
       if (state.verdict.disbursable) {
@@ -116,8 +147,24 @@ export function DisbursementPaymentPanel({ item, onDisburse }: Props) {
   if (state.status === 'checking') {
     return (
       <div className={styles.panel}>
-        <p className={styles.notice} role="status">
+        <p ref={statusRef} tabIndex={-1} className={styles.notice} role="status">
           {CHECKING_COPY}
+        </p>
+      </div>
+    )
+  }
+
+  if (state.status === 'forbidden') {
+    return (
+      <div className={styles.panel}>
+        <p
+          ref={outcomeRef}
+          tabIndex={-1}
+          className={styles.notice}
+          role="alert"
+          data-testid="disbursable-forbidden"
+        >
+          {FORBIDDEN_COPY}
         </p>
       </div>
     )
@@ -126,11 +173,17 @@ export function DisbursementPaymentPanel({ item, onDisburse }: Props) {
   if (state.status === 'failed') {
     return (
       <div className={styles.panel}>
-        <p className={styles.stop} role="alert" data-testid="disbursable-blocked">
+        <p
+          ref={outcomeRef}
+          tabIndex={-1}
+          className={styles.stop}
+          role="alert"
+          data-testid="disbursable-blocked"
+        >
           {CHECK_FAILED_COPY}
         </p>
         <div className={styles.blockActions}>
-          <button type="button" className={styles.secondaryBtn} onClick={retry}>
+          <button type="button" className={styles.secondaryBtn} onClick={handleRetry}>
             Retry
           </button>
         </div>
@@ -142,13 +195,19 @@ export function DisbursementPaymentPanel({ item, onDisburse }: Props) {
     const copy = blockedCopy(state.verdict)
     return (
       <div className={styles.panel}>
-        <div className={styles.stop} role="alert" data-testid="disbursable-blocked">
+        <div
+          ref={outcomeRef}
+          tabIndex={-1}
+          className={styles.stop}
+          role="alert"
+          data-testid="disbursable-blocked"
+        >
           <p className={styles.stopLine}>{copy.headline}</p>
           {copy.detail && <p className={styles.stopLine}>{copy.detail}</p>}
         </div>
         {copy.retryable && (
           <div className={styles.blockActions}>
-            <button type="button" className={styles.secondaryBtn} onClick={retry}>
+            <button type="button" className={styles.secondaryBtn} onClick={handleRetry}>
               Retry
             </button>
           </div>
@@ -157,7 +216,7 @@ export function DisbursementPaymentPanel({ item, onDisburse }: Props) {
     )
   }
 
-  return <PaymentDetails item={item} onDisburse={onDisburse} />
+  return <PaymentDetails item={item} onDisburse={onDisburse} headingRef={outcomeRef} />
 }
 
 /**
@@ -171,7 +230,11 @@ export function DisbursementPaymentPanel({ item, onDisburse }: Props) {
  * stays disabled until that name check is answered, so "stop on mismatch" is a
  * property of the UI rather than of the operator remembering.
  */
-function PaymentDetails({ item, onDisburse }: Props) {
+function PaymentDetails({
+  item,
+  onDisburse,
+  headingRef,
+}: Props & { headingRef: Ref<HTMLHeadingElement> }) {
   const [payeeCheck, setPayeeCheck] = useState<PayeeCheck>('unchecked')
   const [messageCopied, setMessageCopied] = useState(false)
   const announce = useAnnouncerStore((s) => s.announce)
@@ -236,7 +299,9 @@ function PaymentDetails({ item, onDisburse }: Props) {
     <div className={styles.panel}>
       {/* ── 1. Where the money goes ────────────────────────────────── */}
       <section className={styles.block}>
-        <h4 className={styles.blockTitle}>Pay to</h4>
+        <h4 ref={headingRef} tabIndex={-1} className={styles.blockTitle}>
+          Pay to
+        </h4>
         {account ? (
           <>
             <div className={styles.fieldGrid}>

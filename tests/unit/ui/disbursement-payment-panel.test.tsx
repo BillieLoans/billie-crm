@@ -1,3 +1,4 @@
+import { Profiler } from 'react'
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { DisbursementPaymentPanel } from '@/components/PendingDisbursementsView/DisbursementPaymentPanel'
@@ -453,13 +454,58 @@ describe('DisbursementPaymentPanel: the platform check', () => {
       expectNoPayoutDetails()
     })
 
-    it.each([401, 403, 404, 500])('a %i from the route also fails closed', async (status) => {
+    it.each([401, 404, 500])('a %i from the route also fails closed, with Retry', async (status) => {
       checkHandler = async () => reply({}, status)
       vi.spyOn(console, 'error').mockImplementation(() => {})
       render(<DisbursementPaymentPanel item={makeItem()} onDisburse={vi.fn()} />)
 
       expect((await screen.findByRole('alert')).textContent).toBe(FAILED)
+      expect(screen.getByRole('button', { name: /^retry$/i })).toBeInTheDocument()
       expectNoPayoutDetails()
+    })
+
+    describe('a 403 is its own outcome: the role may not record disbursements', () => {
+      const FORBIDDEN =
+        "Your role can't record disbursements, so the payout details are hidden. Ask a servicing operator or supervisor."
+
+      it('says so, with no Retry and no payout details', async () => {
+        checkHandler = async () => reply({ error: { code: 'FORBIDDEN' } }, 403)
+        vi.spyOn(console, 'error').mockImplementation(() => {})
+        render(<DisbursementPaymentPanel item={makeItem()} onDisburse={vi.fn()} />)
+
+        const alert = await screen.findByRole('alert')
+        expect(alert.textContent).toBe(FORBIDDEN)
+        // Asking again cannot change a role, so there is nothing to retry.
+        expect(screen.queryByRole('button')).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: /retry/i })).not.toBeInTheDocument()
+        // Not the fail-closed "couldn't confirm" message, and not a status line either.
+        expect(screen.queryByText(/couldn't confirm/i)).not.toBeInTheDocument()
+        expect(screen.queryByRole('status')).not.toBeInTheDocument()
+        expectNoPayoutDetails()
+        expect(callsTo(CHECK_URL)).toHaveLength(1)
+      })
+
+      it('announces it assertively, and a 403 is an expected outcome that logs no error', async () => {
+        checkHandler = async () => reply({}, 403)
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+        render(<DisbursementPaymentPanel item={makeItem()} onDisburse={vi.fn()} />)
+        await screen.findByRole('alert')
+
+        expect(useAnnouncerStore.getState().assertive).toBe(FORBIDDEN)
+        expect(useAnnouncerStore.getState().polite).toBe('')
+        expect(error).not.toHaveBeenCalled()
+      })
+
+      it('is neutral: it does not use the red stop style', async () => {
+        checkHandler = async () => reply({}, 403)
+        render(<DisbursementPaymentPanel item={makeItem()} onDisburse={vi.fn()} />)
+
+        const alert = await screen.findByTestId('disbursable-forbidden')
+        expect(screen.queryByTestId('disbursable-blocked')).not.toBeInTheDocument()
+        expect(alert.className).toMatch(/notice/)
+        expect(alert.className).not.toMatch(/stop/)
+        expect(alert.textContent).not.toContain('🛑')
+      })
     })
 
     it.each([
@@ -545,6 +591,108 @@ describe('DisbursementPaymentPanel: the platform check', () => {
     })
   })
 
+  describe('keyboard focus', () => {
+    const FAILED_503 = async () => reply({}, 503)
+
+    it('does not take focus when the panel opens, whatever the answer', async () => {
+      const outside = document.createElement('button')
+      document.body.appendChild(outside)
+      outside.focus()
+
+      await renderReady()
+
+      expect(document.activeElement).toBe(outside)
+      outside.remove()
+    })
+
+    it('does not take focus when the opening check fails either', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      checkHandler = FAILED_503
+      render(<DisbursementPaymentPanel item={makeItem()} onDisburse={vi.fn()} />)
+      await screen.findByRole('alert')
+
+      expect(document.activeElement).toBe(document.body)
+    })
+
+    it('moves to the status line when Retry is clicked, instead of falling to the page', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      checkHandler = FAILED_503
+      render(<DisbursementPaymentPanel item={makeItem()} onDisburse={vi.fn()} />)
+      await screen.findByRole('alert')
+      const retry = screen.getByRole('button', { name: /^retry$/i })
+      retry.focus()
+      expect(document.activeElement).toBe(retry)
+
+      checkHandler = () => new Promise<FetchResult>(() => {})
+      fireEvent.click(retry)
+
+      const status = screen.getByRole('status')
+      expect(retry).not.toBeInTheDocument()
+      expect(status).toHaveAttribute('tabindex', '-1')
+      expect(document.activeElement).toBe(status)
+    })
+
+    it('moves to the first heading of the payment details when the answer after a Retry is yes', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      checkHandler = FAILED_503
+      render(<DisbursementPaymentPanel item={makeItem()} onDisburse={vi.fn()} />)
+      await screen.findByRole('alert')
+
+      let answer!: (r: FetchResult) => void
+      checkHandler = () => new Promise<FetchResult>((resolve) => (answer = resolve))
+      fireEvent.click(screen.getByRole('button', { name: /^retry$/i }))
+      expect(document.activeElement).toBe(screen.getByRole('status'))
+
+      answer(reply(DISBURSABLE))
+      await screen.findByTestId('panel-disburse')
+
+      const heading = screen.getByRole('heading', { name: 'Pay to' })
+      expect(heading).toHaveAttribute('tabindex', '-1')
+      expect(document.activeElement).toBe(heading)
+    })
+
+    it('moves to the stop message when the answer after a Retry is a refusal', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      checkHandler = FAILED_503
+      render(<DisbursementPaymentPanel item={makeItem()} onDisburse={vi.fn()} />)
+      await screen.findByRole('alert')
+
+      checkHandler = async () =>
+        reply({ disbursable: false, reason: 'CANCELLED', status: 'CANCELLED', message: '' })
+      fireEvent.click(screen.getByRole('button', { name: /^retry$/i }))
+
+      const blocked = await screen.findByTestId('disbursable-blocked')
+      expect(blocked).toHaveAttribute('tabindex', '-1')
+      expect(document.activeElement).toBe(blocked)
+    })
+
+    it('moves to the check-failed message when a Retry fails again, so Retry can be pressed again', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      checkHandler = FAILED_503
+      render(<DisbursementPaymentPanel item={makeItem()} onDisburse={vi.fn()} />)
+      await screen.findByRole('alert')
+
+      fireEvent.click(screen.getByRole('button', { name: /^retry$/i }))
+
+      await waitFor(() => expect(callsTo(CHECK_URL)).toHaveLength(2))
+      const blocked = await screen.findByTestId('disbursable-blocked')
+      await waitFor(() => expect(document.activeElement).toBe(blocked))
+    })
+
+    it('follows a NO_LEDGER_RECORD Retry from the refusal through to the payment details', async () => {
+      checkHandler = async () =>
+        reply({ disbursable: false, reason: 'NO_LEDGER_RECORD', status: '', message: '' })
+      render(<DisbursementPaymentPanel item={makeItem()} onDisburse={vi.fn()} />)
+      await screen.findByRole('alert')
+      expect(document.activeElement).toBe(document.body)
+
+      checkHandler = async () => reply(DISBURSABLE)
+      fireEvent.click(screen.getByRole('button', { name: /^retry$/i }))
+      await screen.findByTestId('panel-disburse')
+      expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Pay to' }))
+    })
+  })
+
   describe('a superseded or abandoned check', () => {
     it('ignores an earlier answer that lands after the panel moved to another loan', async () => {
       const pending: Record<string, (r: FetchResult) => void> = {}
@@ -611,29 +759,77 @@ describe('DisbursementPaymentPanel: the platform check', () => {
       expectNoPayoutDetails()
     })
 
-    it('abandons the request when the panel closes before the platform answers', async () => {
-      checkHandler = () => new Promise<FetchResult>(() => {})
+    it('never commits a render with payout details for loan B before B\'s own verdict', async () => {
+      // The panel is moved from loan A (answered, details showing) to loan B whose
+      // check is pending. The hook derives `checking` from the request key on the
+      // render that changes the loan, so no committed render may carry details
+      // for B until B's own verdict lands. Every commit is observed through a
+      // Profiler: its onRender runs after React has mutated the DOM for that
+      // commit, so the snapshot is exactly what the browser could paint.
+      const commits: string[] = []
+      const loanA = makeItem({ loanAccountId: 'a1' })
+      const loanB = makeItem({
+        loanAccountId: 'b2',
+        applicationNumber: 'B2B2B2B2-XYZ',
+        oskoMessage: 'Billie Pay Advance B2B2B2B2-XYZ.',
+        disbursementAccount: {
+          holder: 'Ms Bee Two',
+          bsb: '062000',
+          bsbFormatted: '062-000',
+          number: '11112222',
+          isComplete: true,
+          missing: [],
+        },
+      })
+      const tree = (item: QueueItem) => (
+        <Profiler id="panel" onRender={() => commits.push(document.body.innerHTML)}>
+          <DisbursementPaymentPanel item={item} onDisburse={vi.fn()} />
+        </Profiler>
+      )
+
+      const { rerender } = render(tree(loanA))
+      await screen.findByTestId('panel-disburse')
+      expect(commits[commits.length - 1]).toContain('923-100')
+
+      let answerB!: (r: FetchResult) => void
+      checkHandler = () => new Promise<FetchResult>((resolve) => (answerB = resolve))
+      const before = commits.length
+      rerender(tree(loanB))
+      await waitFor(() => expect(callsTo(CHECK_URL)).toHaveLength(2))
+
+      // B is awaiting its own verdict: only the status line has ever been committed for it.
+      expect(commits.length).toBeGreaterThan(before)
+      for (const html of commits.slice(before)) {
+        expect(html).not.toContain('062-000')
+        expect(html).not.toContain('Ms Bee Two')
+        expect(html).not.toContain('923-100')
+        expect(html).not.toContain('data-testid="panel-disburse"')
+        expect(html).not.toContain('data-testid="osko-message"')
+        expect(html).toContain('Checking with the platform')
+      }
+
+      // And B's own verdict then shows B's details.
+      answerB(reply(DISBURSABLE))
+      await screen.findByTestId('panel-disburse')
+      expect(commits[commits.length - 1]).toContain('062-000')
+    })
+
+    it('abandons the request when the panel closes: aborts it, and a late answer announces nothing', async () => {
+      let answer!: (r: FetchResult) => void
+      checkHandler = () => new Promise<FetchResult>((resolve) => (answer = resolve))
       const { unmount } = render(<DisbursementPaymentPanel item={makeItem()} onDisburse={vi.fn()} />)
+      await waitFor(() => expect(callsTo(CHECK_URL)).toHaveLength(1))
       const [, init] = callsTo(CHECK_URL)[0]
       const signal = (init as RequestInit).signal as AbortSignal
       expect(signal.aborted).toBe(false)
 
       unmount()
-
       expect(signal.aborted).toBe(true)
-    })
 
-    it('says nothing when an abandoned request answers after the panel closed', async () => {
-      let answer!: (r: FetchResult) => void
-      checkHandler = () => new Promise<FetchResult>((resolve) => (answer = resolve))
-      const { unmount } = render(<DisbursementPaymentPanel item={makeItem()} onDisburse={vi.fn()} />)
-      await waitFor(() => expect(callsTo(CHECK_URL)).toHaveLength(1))
-      unmount()
-
+      // A mock fetch ignores the signal, so the answer still arrives. It lands on
+      // nothing: no announcement for a panel nobody is looking at.
       answer(reply({ disbursable: false, reason: 'CANCELLED', status: 'CANCELLED', message: '' }))
       await new Promise((r) => setTimeout(r, 0))
-
-      // No announcement for a panel nobody is looking at.
       expect(useAnnouncerStore.getState().assertive).toBe('')
       expect(useAnnouncerStore.getState().polite).toBe('')
     })

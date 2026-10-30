@@ -195,6 +195,14 @@
   border: 1px solid var(--theme-elevation-250);
 }
 
+/* Programmatic focus targets after a Retry (tabIndex -1): neutral ring, no colour pair. */
+.notice:focus-visible,
+.stop:focus-visible,
+.blockTitle:focus-visible {
+  outline: 2px solid var(--theme-elevation-800);
+  outline-offset: 2px;
+}
+
 /* A stop message that carries more than one line (headline, then what to do). */
 .stopLine {
   margin: 0;

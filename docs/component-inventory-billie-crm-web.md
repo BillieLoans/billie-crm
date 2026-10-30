@@ -165,7 +165,7 @@ Pending loan disbursements with disburse action. Route: `/admin/pending-disburse
 |-----------|------|-------------|
 | PendingDisbursementsView | `PendingDisbursementsView.tsx` | List of loans awaiting disbursement with action drawer |
 | PendingDisbursementsViewWithTemplate | `PendingDisbursementsViewWithTemplate.tsx` | Payload admin template wrapper |
-| DisbursementPaymentPanel | `DisbursementPaymentPanel.tsx` | Per-loan payout details. Asks the platform (`GET /api/ledger/disbursable`) first and shows no payout details until it says the loan can be paid; fails closed with Retry. |
+| DisbursementPaymentPanel | `DisbursementPaymentPanel.tsx` | Per-loan payout details. Asks the platform (`GET /api/ledger/disbursable`) first and shows no payout details until it says the loan can be paid; fails closed with Retry (a 403 shows a role message instead, with no Retry). The check runs when the panel opens: a cancel recorded while the panel is already open is not caught, so reopen the panel if a payment was interrupted. |
 
 `src/components/PendingDisbursementsView/`
 
