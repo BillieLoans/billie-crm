@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '@payloadcms/ui'
+import { useQueryClient } from '@tanstack/react-query'
 import { ContextDrawer } from '@/components/ui/ContextDrawer'
 import { Modal } from '@/components/ui/Modal'
 import { SetManualBlockModal } from '@/components/BlockSet/SetManualBlockModal'
@@ -138,6 +139,7 @@ function CancelLoanForm({
   const [error, setError] = useState<string | null>(null)
   // The signed-in CRM user owns a frozen request; nobody else is offered it.
   const { user } = useAuth()
+  const queryClient = useQueryClient()
   const ownerId = user?.id != null ? String(user.id) : null
   /**
    * Set after an outcome-unknown failure: every retry sends this, unchanged,
@@ -294,6 +296,9 @@ function CancelLoanForm({
         clearFrozenCancellation(loanAccountId, ownerId)
         setResult({ noteError: body.noteError === true })
         onRefresh?.()
+        // The route wrote the pinned system note; the Communications panel's
+        // list was fetched before it existed.
+        void queryClient.invalidateQueries({ queryKey: ['contact-notes'] })
         return
       }
 

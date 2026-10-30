@@ -75,7 +75,7 @@ function renderDrawer(over: Partial<CancelLoanDrawerProps> = {}) {
         <CancelLoanDrawer {...props} {...next} />
       </QueryClientProvider>,
     )
-  return { props, rerender }
+  return { props, rerender, client }
 }
 
 const submitButton = () => screen.getByRole('button', { name: 'Cancel loan' })
@@ -305,6 +305,21 @@ describe('CancelLoanDrawer: confirm and submit', () => {
     })
     expect(props.onRefresh).toHaveBeenCalled()
     expect(screen.getByRole('status')).toHaveTextContent('Loan 1000001 cancelled.')
+  })
+
+  it('refreshes the Communications list so the new system note shows', async () => {
+    const { client } = renderDrawer()
+    const invalidate = vi.spyOn(client, 'invalidateQueries')
+    chooseReason('mutual_cancellation')
+    writeNote(NOTE)
+    fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'DOC-77' } })
+    confirmNoBlock('Customer remains eligible to reapply.')
+    reply(200, SUCCESS)
+    fireEvent.click(submitButton())
+    confirm()
+
+    await screen.findByText('Loan 1000001 cancelled.')
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['contact-notes'] })
   })
 
   it('omits the evidence reference for other reasons', async () => {
