@@ -11,6 +11,7 @@ import {
 } from '@/hooks'
 import { formatCurrency } from '@/lib/formatters'
 import { METRIC_CATALOG, METRIC_CATEGORY_ORDER, type MetricKind } from './metricCatalog'
+import { formatDateOnly } from '@/lib/formatters'
 import styles from './styles.module.css'
 
 interface StatementFileViewerProps {
@@ -82,6 +83,9 @@ function FileContent({ slot, content }: { slot: StatementSlot; content: Statemen
   }
   if (slot === 'statementData' && isBankStatementDataShape(content.data)) {
     return <BankStatementData data={content.data} />
+  }
+  if (slot === 'statementData' && isTalefinStatementShape(content.data)) {
+    return <BankStatementData data={talefinToBankStatementData(content.data)} />
   }
   return <GenericJson data={content.data} />
 }
@@ -210,7 +214,12 @@ function CategoryGroups({ groups }: { groups: AffordabilityGroup[] }) {
           Category breakdown
           <span className={styles.count}>{groups.length}</span>
         </h3>
-        <span className={`${styles.rawChevron} ${open ? styles.rawChevronOpen : ''}`} aria-hidden="true">▶</span>
+        <span
+          className={`${styles.rawChevron} ${open ? styles.rawChevronOpen : ''}`}
+          aria-hidden="true"
+        >
+          ▶
+        </span>
       </button>
       {open && (
         <div className={styles.tableScroll}>
@@ -415,6 +424,113 @@ function collectStatementAccounts(data: BankStatementDataShape): StatementAccoun
   return Object.values(data.accounts).flatMap((bank) => bank?.accounts ?? [])
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// TaleFin combined document — { provider: 'TALEFIN', report: { profiles: [...] },
+// transactions: { <accountId>: [{ transaction: {...}, category_name }] } }
+//
+// Written by billieChat's TaleFin pull (backend/src/services/talefin/pull.py).
+// Mapped onto the bankstatements.com.au shape above so one renderer serves
+// both providers; the raw JSON toggle still shows the original document.
+// ══════════════════════════════════════════════════════════════════════════════
+
+interface TalefinTxnInfo {
+  category_name?: string | null
+  transaction?: {
+    date?: string
+    descr?: string
+    amount?: string | number
+    balance?: string | number
+  }
+}
+
+interface TalefinAccount {
+  id?: number | string
+  nickname?: string
+  bsb?: string
+  number?: string
+  balance?: string | number
+  available?: string | number
+  type?: string
+  type_display?: string
+  account_owner_info?: { name?: string } | null
+}
+
+interface TalefinProfile {
+  id?: number
+  full_name?: string
+  owner?: string | null
+  bank?: { name?: string; slug?: string }
+  accounts?: TalefinAccount[]
+}
+
+interface TalefinStatementShape {
+  provider?: string
+  report?: { profiles?: TalefinProfile[] }
+  profiles?: TalefinProfile[]
+  transactions?: Record<string, TalefinTxnInfo[]>
+}
+
+function isTalefinStatementShape(v: unknown): v is TalefinStatementShape {
+  if (typeof v !== 'object' || v === null) return false
+  const doc = v as TalefinStatementShape
+  // billieChat's pull always stamps the provider; nothing else is re-shaped.
+  if (String(doc.provider ?? '').toUpperCase() !== 'TALEFIN') return false
+  const profiles = doc.report?.profiles ?? doc.profiles
+  return Array.isArray(profiles)
+}
+
+/** TaleFin dates are ISO datetimes with an offset; show the en-AU date only. */
+function formatTalefinDate(value: string): string {
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? value : formatDateOnly(parsed)
+}
+
+/** Re-shape a TaleFin combined document into the bankstatements.com.au layout. */
+function talefinToBankStatementData(doc: TalefinStatementShape): BankStatementDataShape {
+  const profiles = doc.report?.profiles ?? doc.profiles ?? []
+  const transactions = doc.transactions ?? {}
+  const accounts: BankStatementDataShape['accounts'] = {}
+  profiles.forEach((profile, index) => {
+    const bankKey = profile.bank?.slug ?? `profile-${profile.id ?? index}`
+    const mapped: StatementAccount[] = (profile.accounts ?? []).map((account) => {
+      const holder =
+        account.account_owner_info?.name?.trim() ||
+        profile.owner?.trim() ||
+        profile.full_name?.trim() ||
+        undefined
+      const details: StatementTxn[] = (transactions[String(account.id ?? '')] ?? [])
+        .map((info) => info.transaction)
+        .filter((t): t is NonNullable<TalefinTxnInfo['transaction']> => !!t)
+        .map((t) => {
+          // TaleFin amounts are signed; the shared renderer expects a magnitude
+          // plus a debit/credit type (bankstatements.com.au's convention).
+          const amount = toNumber(t.amount)
+          return {
+            date: t.date ? formatTalefinDate(t.date) : undefined,
+            text: t.descr,
+            amount: amount === undefined ? undefined : Math.abs(amount),
+            type: amount === undefined ? undefined : amount < 0 ? 'debit' : 'credit',
+            balance: t.balance,
+          }
+        })
+      return {
+        accountHolder: holder,
+        name: account.nickname,
+        accountNumber: account.number,
+        bsb: account.bsb,
+        balance: account.balance,
+        available: account.available,
+        accountType: account.type_display ?? account.type,
+        institution: profile.bank?.name,
+        statementData: { details },
+      }
+    })
+    const existing = accounts[bankKey]?.accounts ?? []
+    accounts[bankKey] = { accounts: [...existing, ...mapped] }
+  })
+  return { accounts }
+}
+
 const TXN_DISPLAY_LIMIT = 500
 
 function BankStatementData({ data }: { data: BankStatementDataShape }) {
@@ -446,7 +562,9 @@ function StatementAccountSection({ account }: { account: StatementAccount }) {
           </div>
           <div className={styles.accountBalance}>
             <div className={styles.metaLabel}>Balance</div>
-            <div className={styles.balanceValue}>{formatTypedValue(toNumber(account.balance), 'money')}</div>
+            <div className={styles.balanceValue}>
+              {formatTypedValue(toNumber(account.balance), 'money')}
+            </div>
             {account.available != null && account.available !== account.balance && (
               <div className={styles.availableValue}>
                 {formatTypedValue(toNumber(account.available), 'money')} available
@@ -455,11 +573,36 @@ function StatementAccountSection({ account }: { account: StatementAccount }) {
           </div>
         </div>
         <dl className={styles.accountMeta}>
-          {account.institution && (<><dt>Institution</dt><dd>{account.institution}</dd></>)}
-          {account.bsb && (<><dt>BSB</dt><dd className={styles.metricId}>{account.bsb}</dd></>)}
-          {account.accountNumber && (<><dt>Account</dt><dd className={styles.metricId}>{account.accountNumber}</dd></>)}
-          {account.accountType && (<><dt>Type</dt><dd>{account.accountType}</dd></>)}
-          {account.openDate && (<><dt>Open date</dt><dd>{account.openDate}</dd></>)}
+          {account.institution && (
+            <>
+              <dt>Institution</dt>
+              <dd>{account.institution}</dd>
+            </>
+          )}
+          {account.bsb && (
+            <>
+              <dt>BSB</dt>
+              <dd className={styles.metricId}>{account.bsb}</dd>
+            </>
+          )}
+          {account.accountNumber && (
+            <>
+              <dt>Account</dt>
+              <dd className={styles.metricId}>{account.accountNumber}</dd>
+            </>
+          )}
+          {account.accountType && (
+            <>
+              <dt>Type</dt>
+              <dd>{account.accountType}</dd>
+            </>
+          )}
+          {account.openDate && (
+            <>
+              <dt>Open date</dt>
+              <dd>{account.openDate}</dd>
+            </>
+          )}
         </dl>
       </div>
 
@@ -475,14 +618,20 @@ function StatementAccountSection({ account }: { account: StatementAccount }) {
             {truncated ? `${visibleTxns.length} of ${txns.length}` : txns.length}
           </span>
         </h4>
-        <span className={`${styles.rawChevron} ${open ? styles.rawChevronOpen : ''}`} aria-hidden="true">▶</span>
+        <span
+          className={`${styles.rawChevron} ${open ? styles.rawChevronOpen : ''}`}
+          aria-hidden="true"
+        >
+          ▶
+        </span>
       </button>
 
       {open && txns.length > 0 && (
         <>
           {truncated && (
             <p className={styles.truncationNotice}>
-              Showing the first {visibleTxns.length.toLocaleString()} of {txns.length.toLocaleString()} transactions. Download the raw file for the full list.
+              Showing the first {visibleTxns.length.toLocaleString()} of{' '}
+              {txns.length.toLocaleString()} transactions. Download the raw file for the full list.
             </p>
           )}
           <div className={styles.tableScroll}>
@@ -499,16 +648,21 @@ function StatementAccountSection({ account }: { account: StatementAccount }) {
               <tbody>
                 {visibleTxns.map((t, i) => {
                   const isDebit = (t.type ?? '').toLowerCase() === 'debit'
-                  const signedAmount = typeof t.amount === 'number' && isDebit ? -t.amount : t.amount
+                  const signedAmount =
+                    typeof t.amount === 'number' && isDebit ? -t.amount : t.amount
                   return (
                     <tr key={i}>
                       <td className={styles.dateCell}>{t.date ?? '—'}</td>
                       <td className={styles.txnText}>{t.text ?? '—'}</td>
                       <td>{t.type ?? '—'}</td>
-                      <td className={`${styles.numberCol} ${isDebit ? styles.negative : styles.positive}`}>
+                      <td
+                        className={`${styles.numberCol} ${isDebit ? styles.negative : styles.positive}`}
+                      >
                         {formatTypedValue(signedAmount, 'money')}
                       </td>
-                      <td className={styles.numberCol}>{formatTypedValue(toNumber(t.balance), 'money')}</td>
+                      <td className={styles.numberCol}>
+                        {formatTypedValue(toNumber(t.balance), 'money')}
+                      </td>
                     </tr>
                   )
                 })}
@@ -546,7 +700,8 @@ function CsvTable({ csv }: { csv: CsvData }) {
         </h3>
         {csv.truncated && (
           <p className={styles.truncationNotice}>
-            Showing the first {csv.rows.length.toLocaleString()} rows. Use “Download raw” for the full file.
+            Showing the first {csv.rows.length.toLocaleString()} rows. Use “Download raw” for the
+            full file.
           </p>
         )}
         <div className={styles.tableScroll}>
@@ -721,7 +876,10 @@ function RawJsonToggle({ data }: { data: unknown }) {
         aria-expanded={open}
       >
         Raw JSON
-        <span className={`${styles.rawChevron} ${open ? styles.rawChevronOpen : ''}`} aria-hidden="true">
+        <span
+          className={`${styles.rawChevron} ${open ? styles.rawChevronOpen : ''}`}
+          aria-hidden="true"
+        >
           ▶
         </span>
       </button>
