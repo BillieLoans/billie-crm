@@ -5,6 +5,7 @@ Handles events:
 - account.updated.v1
 - account.status_changed.v1
 - account.closed.v1
+- account.cancelled.v1
 - account.schedule.created.v1
 - account.schedule.updated.v1
 """
@@ -30,6 +31,7 @@ SDK_STATUS_MAP = {
     "ACTIVE": "active",
     "SUSPENDED": "in_arrears",
     "CLOSED": "paid_off",
+    "CANCELLED": "cancelled",
 }
 
 # AccountClosedV1.closure_reason → Payload accountStatus
@@ -40,7 +42,8 @@ CLOSURE_REASON_STATUS_MAP = {
 }
 
 # SDK PaymentStatus → Payload repayment-schedule enum
-# (enum_loan_accounts_repayment_schedule_payments_status: scheduled/paid/partial/missed).
+# (enum_loan_accounts_repayment_schedule_payments_status:
+# scheduled/paid/partial/missed/void).
 # Keyed by the upper-cased status member; already-Payload values map to themselves.
 SCHEDULE_PAYMENT_STATUS_MAP = {
     "PENDING": "scheduled",
@@ -49,6 +52,8 @@ SCHEDULE_PAYMENT_STATUS_MAP = {
     "PAID": "paid",
     "OVERDUE": "missed",
     "MISSED": "missed",
+    # BTB-517: every instalment of a cancelled-before-disbursement loan.
+    "VOID": "void",
 }
 
 
@@ -70,6 +75,12 @@ def _normalise_status(value: Any, default: str = "PENDING") -> str:
 # regression is safe to drop.
 PRE_DISBURSEMENT_SDK_STATUSES = frozenset({"PENDING", "PENDING_DISBURSEMENT"})
 POST_DISBURSEMENT_SDK_STATUSES = frozenset({"ACTIVE", "SUSPENDED", "CLOSED"})
+
+
+# Values written by handle_account_cancelled (BTB-517). The CRM only mirrors
+# what the platform publishes; it carries no lifecycle rule for cancellation.
+CANCELLED_ACCOUNT_STATUS = "cancelled"
+CANCELLED_SDK_STATUS = "CANCELLED"
 
 
 def _is_status_regression(incoming_sdk_status: str, row: Any) -> bool:
@@ -485,6 +496,62 @@ async def handle_account_closed(pool: asyncpg.Pool, parsed_event: Any) -> None:
         final_balance=final_balance,
         asyncpg_status=status,
     )
+
+
+async def handle_account_cancelled(pool: asyncpg.Pool, parsed_event: Any) -> None:
+    """Handle account.cancelled.v1 event (accounts SDK v2.12.0+, BTB-517).
+
+    Projects the cancellation directly: ``account_status='cancelled'`` plus the
+    full cancellation record (reason, note, evidence, who, when). It does NOT
+    wait for the follow-up account.updated.v1 (status CANCELLED), which may
+    arrive before, after or never - ``account_status`` must be right from this
+    event alone. Balances and the repayment schedule are left to those follow-up
+    events. Idempotent: replaying writes the same values.
+
+    The CRM mirrors the platform here; it enforces no lifecycle rule of its own
+    (the platform's state machine keeps a cancelled account cancelled).
+    """
+    payload = parsed_event.payload
+    account_id = payload.account_id
+
+    # reason_code is a str-Enum on the SDK model; stringifying the member
+    # itself would store "CancellationReason.CUSTOMER_WITHDREW".
+    reason = getattr(payload.reason_code, "value", payload.reason_code)
+    cancelled_by = payload.cancelled_by
+
+    log = logger.bind(account_id=account_id, cancellation_reason=reason)
+    log.info("Processing account.cancelled.v1")
+
+    update_doc: dict[str, Any] = {
+        "account_status": CANCELLED_ACCOUNT_STATUS,
+        "sdk_status": CANCELLED_SDK_STATUS,
+        "cancellation_reason": reason,
+        "cancellation_note": payload.note,
+        "cancellation_evidence_ref": getattr(payload, "evidence_ref", None),
+        "cancellation_cancelled_by_id": cancelled_by.id,
+        "cancellation_cancelled_by_name": cancelled_by.name,
+        "cancellation_cancelled_at": coerce_date(payload.cancelled_at),
+        "updated_at": datetime.now(timezone.utc),
+    }
+
+    status = await update_by_key(
+        pool,
+        "loan_accounts",
+        key_column="loan_account_id",
+        key_value=account_id,
+        values=update_doc,
+    )
+    if status.endswith(" 0"):
+        # No loan_accounts row yet (account.created.v1 not projected): nothing
+        # was cancelled in the CRM. Like handle_account_closed this is an
+        # UPDATE-only projection, so only a replay after account.created.v1
+        # recovers it - make the gap visible rather than silent.
+        log.warning(
+            "account.cancelled.v1 matched no loan_accounts row",
+            asyncpg_status=status,
+        )
+        return
+    log.info("Loan account cancelled", asyncpg_status=status)
 
 
 async def _get_parent_id(pool_or_conn: Any, account_id: str) -> Any | None:

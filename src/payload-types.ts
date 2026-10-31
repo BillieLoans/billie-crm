@@ -429,6 +429,26 @@ export interface Customer {
      * Emission time of the billieChat block state event that last wrote this mirror
      */
     stateChangedAt?: string | null;
+    /**
+     * Manual-set request that raised the block shown now (written by state.changed only)
+     */
+    manualBlockRequestId?: string | null;
+    /**
+     * Latest manual block set billieChat applied
+     */
+    manualSetRequestId?: string | null;
+    /**
+     * Reason code of that set: credit_review_hold, cancelled_pre_disbursement, fraud_hold
+     */
+    manualSetReasonCode?: string | null;
+    /**
+     * Latest manual block set billieChat refused
+     */
+    manualSetRejectedRequestId?: string | null;
+    /**
+     * Why it was refused: "CODE: detail"
+     */
+    manualSetRejection?: string | null;
   };
   /**
    * Latest LAB EVS identity verification result
@@ -1274,7 +1294,7 @@ export interface LoanAccount {
   /**
    * Mapped from SDK AccountStatus enum
    */
-  accountStatus: 'pending_disbursement' | 'active' | 'paid_off' | 'in_arrears' | 'written_off';
+  accountStatus: 'pending_disbursement' | 'active' | 'paid_off' | 'in_arrears' | 'written_off' | 'cancelled';
   /**
    * Original status from SDK (PENDING, ACTIVE, SUSPENDED, CLOSED)
    */
@@ -1342,6 +1362,35 @@ export interface LoanAccount {
     triggeredByTransactionId?: string | null;
   };
   /**
+   * Cancellation snapshot from account.cancelled.v1 (cancelled before disbursement)
+   */
+  cancellation?: {
+    /**
+     * Reason code: mutual_cancellation, customer_withdrew, offer_lapsed, fraud_hold or duplicate
+     */
+    reason?: string | null;
+    /**
+     * Note the supervisor wrote when cancelling (at least 20 characters)
+     */
+    note?: string | null;
+    /**
+     * Reference to the evidence (required for a mutual cancellation)
+     */
+    evidenceRef?: string | null;
+    /**
+     * CRM user id of the supervisor who cancelled the loan
+     */
+    cancelledById?: string | null;
+    /**
+     * Display name of the supervisor who cancelled the loan
+     */
+    cancelledByName?: string | null;
+    /**
+     * When the platform recorded the cancellation
+     */
+    cancelledAt?: string | null;
+  };
+  /**
    * Repayment schedule from account.schedule.created.v1
    */
   repaymentSchedule?: {
@@ -1371,7 +1420,7 @@ export interface LoanAccount {
            * Scheduled payment amount
            */
           amount?: number | null;
-          status?: ('scheduled' | 'paid' | 'missed' | 'partial') | null;
+          status?: ('scheduled' | 'paid' | 'missed' | 'partial' | 'void') | null;
           /**
            * Amount actually paid (from schedule.updated)
            */
@@ -3055,6 +3104,11 @@ export interface CustomersSelect<T extends boolean = true> {
         clearedAt?: T;
         stateVersion?: T;
         stateChangedAt?: T;
+        manualBlockRequestId?: T;
+        manualSetRequestId?: T;
+        manualSetReasonCode?: T;
+        manualSetRejectedRequestId?: T;
+        manualSetRejection?: T;
       };
   identityVerification?:
     | T
@@ -3377,6 +3431,16 @@ export interface LoanAccountsSelect<T extends boolean = true> {
         totalPaid?: T;
         loanTotalPayable?: T;
         triggeredByTransactionId?: T;
+      };
+  cancellation?:
+    | T
+    | {
+        reason?: T;
+        note?: T;
+        evidenceRef?: T;
+        cancelledById?: T;
+        cancelledByName?: T;
+        cancelledAt?: T;
       };
   repaymentSchedule?:
     | T

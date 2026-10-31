@@ -316,3 +316,28 @@ describe('CustomerHeader contact provenance (BTB-392)', () => {
     expect(screen.queryByTestId('provenance-footer')).not.toBeInTheDocument()
   })
 })
+
+describe('CustomerHeader actions slot', () => {
+  afterEach(cleanup)
+
+  test('renders what the caller passes in the action row, ahead of "More"', () => {
+    render(
+      <CustomerHeader
+        customer={createMockCustomer()}
+        actions={<button type="button">Header action</button>}
+      />,
+      { wrapper: createWrapper() },
+    )
+    const action = screen.getByRole('button', { name: 'Header action' })
+    const more = screen.getByRole('button', { name: /More/ })
+    expect(action.parentElement).toBe(more.parentElement)
+    // DOCUMENT_POSITION_FOLLOWING: "More" comes after the action.
+    expect(action.compareDocumentPosition(more) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  test('renders nothing extra when no actions are passed', () => {
+    renderHeader(createMockCustomer())
+    expect(screen.queryByRole('button', { name: 'Header action' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /More/ })).toBeInTheDocument()
+  })
+})

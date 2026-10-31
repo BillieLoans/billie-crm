@@ -63,6 +63,7 @@ describe('Dashboard Schema', () => {
         },
       ],
       pendingDisbursementsCount: 1,
+      cancelledBeforeDisbursementCount: 2,
       disbursementBuckets: {
         overdue: { count: 0, totalAmount: 0, totalAmountFormatted: '$0.00' },
         today: { count: 0, totalAmount: 0, totalAmountFormatted: '$0.00' },
@@ -86,6 +87,17 @@ describe('Dashboard Schema', () => {
     it('should validate a valid response', () => {
       const result = DashboardResponseSchema.safeParse(validResponse)
       expect(result.success).toBe(true)
+    })
+
+    it('requires a non-negative cancelledBeforeDisbursementCount (BTB-517)', () => {
+      const { cancelledBeforeDisbursementCount: _omit, ...withoutCount } = validResponse
+      expect(DashboardResponseSchema.safeParse(withoutCount).success).toBe(false)
+      expect(
+        DashboardResponseSchema.safeParse({
+          ...validResponse,
+          cancelledBeforeDisbursementCount: -1,
+        }).success,
+      ).toBe(false)
     })
 
     it('should accept all valid roles', () => {

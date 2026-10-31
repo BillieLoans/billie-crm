@@ -11,6 +11,7 @@ import {
   publishClearAuthorized,
   publishContactIntakeRequested,
   publishFeedbackSubmitted,
+  publishManualBlockSet,
 } from '@/server/chatledger-publisher'
 import { EventPublishError } from '@/server/event-publisher'
 import type {
@@ -231,6 +232,60 @@ describe('publishFeedbackSubmitted', () => {
     await expect(
       publishFeedbackSubmitted(sampleFeedbackPayload({ idempotency_key: 'k4' })),
     ).rejects.toBeInstanceOf(EventPublishError)
+    expect(xadd).toHaveBeenCalledTimes(3)
+  })
+})
+
+// BTB-517: the CRM's "Set manual block" command, consumed by billieChat's
+// reapplicationBlock service (B2 contract).
+describe('publishManualBlockSet', () => {
+  const payload = {
+    request_id: 'req-9',
+    canonical_customer_id: 'CUS-1',
+    operator_id: '7',
+    operator_name: 'Sam Supervisor',
+    reason_code: 'credit_review_hold' as const,
+    note: 'Credit file under review.',
+    expires_at: null,
+  }
+
+  const fieldsOf = (call: unknown[]) => {
+    const [, , ...flat] = call as string[]
+    return Object.fromEntries(
+      flat.reduce((acc: string[][], v: string, i: number) => {
+        if (i % 2 === 0) acc.push([v, flat[i + 1]])
+        return acc
+      }, []),
+    )
+  }
+
+  it('xadds a billie-crm command on the ops:block-set conversation', async () => {
+    const res = await publishManualBlockSet(payload)
+    expect(res.eventId).toBeTruthy()
+    expect(xadd).toHaveBeenCalledTimes(1)
+    expect(xadd.mock.calls[0][0]).toBe('chatLedger')
+    const fields = fieldsOf(xadd.mock.calls[0])
+    expect(fields.agt).toBe('billie-crm')
+    expect(fields.cls).toBe('cmd')
+    expect(fields.typ).toBe('reapplication_block.manual_set.v1')
+    expect(fields.usr).toBe('CUS-1')
+    expect(fields.conv).toBe('ops:block-set:req-9')
+    expect(fields.seq).toBe('1')
+    expect(fields.cause).toBe(res.eventId)
+    expect(JSON.parse(fields.payload)).toEqual(payload)
+  })
+
+  it('connects first and retries a transient failure', async () => {
+    mockClient.status = 'wait'
+    xadd.mockRejectedValueOnce(new Error('not writeable')).mockResolvedValueOnce('1-2')
+    await publishManualBlockSet(payload)
+    expect(connect).toHaveBeenCalled()
+    expect(xadd).toHaveBeenCalledTimes(2)
+  })
+
+  it('throws EventPublishError after exhausting retries', async () => {
+    xadd.mockRejectedValue(new Error('down'))
+    await expect(publishManualBlockSet(payload)).rejects.toBeInstanceOf(EventPublishError)
     expect(xadd).toHaveBeenCalledTimes(3)
   })
 })

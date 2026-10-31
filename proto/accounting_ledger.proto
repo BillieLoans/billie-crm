@@ -56,6 +56,16 @@ service AccountingLedgerService {
   // Disburse funds for a loan account (transitions from PENDING_DISBURSEMENT to ACTIVE)
   rpc DisburseLoan(DisburseLoanRequest) returns (DisburseLoanResponse);
 
+  // Cancel a loan before disbursement (PENDING / PENDING_DISBURSEMENT -> CANCELLED).
+  // Terminal. Refused once funds have been disbursed. Retrying with the same
+  // idempotency_key after UNAVAILABLE completes the cancel.
+  rpc CancelAccount(CancelAccountRequest) returns (CancelAccountResponse);
+
+  // Read-only: would DisburseLoan accept this loan right now? Returns the same
+  // verdict DisburseLoan's status rules reach, without taking the account lock
+  // or writing anything. The CRM asks before it shows a loan's payout details.
+  rpc CheckDisbursable(CheckDisbursableRequest) returns (CheckDisbursableResponse);
+
   // ==========================================================================
   // Schedule Queries (with Instalment Status)
   // ==========================================================================
@@ -498,7 +508,9 @@ message ApplyDishonourFeeRequest {
 // Waive fees
 message WaiveFeeRequest {
   string loan_account_id = 1;
-  string waiver_amount = 2;  // Amount to waive (decimal as string)
+  string waiver_amount = 2;  // Amount to waive (decimal as string). May exceed the current
+                             // fee balance if the fee was already settled by a repayment:
+                             // the paid portion is reallocated to principal (retroactive waiver).
   string reason = 3;  // Required: reason for waiver
   string approved_by = 4;  // Required: approver ID
   optional string notes = 5;  // Additional operator notes (max 1000 chars)
@@ -547,6 +559,38 @@ message DisburseLoanResponse {
   bool idempotent_replay = 6;             // True if response was served from idempotency cache
 }
 
+// Cancel a loan before disbursement -- publishes account.cancelled.v1
+message CancelAccountRequest {
+  string loan_account_id = 1;
+  string reason_code = 2;                // mutual_cancellation, customer_withdrew, offer_lapsed, fraud_hold, duplicate
+  string note = 3;                       // Required: at least 20 characters after trimming
+  optional string evidence_ref = 4;      // Required when reason_code is mutual_cancellation
+  string actor_id = 5;                   // ID of the supervisor performing the cancel
+  string actor_name = 6;                 // Display name of that supervisor
+  string idempotency_key = 7;            // Required; reuse on retry
+}
+
+message CancelAccountResponse {
+  bool success = 1;
+  string message = 2;
+  string event_id = 3;                   // Published account.cancelled.v1 event ID
+  string cancelled_at = 4;               // When the platform recorded the cancel (ISO 8601)
+  string previous_status = 5;            // Status before the cancel (PENDING or PENDING_DISBURSEMENT)
+  bool idempotent_replay = 6;            // True if this cancel had already been recorded
+}
+
+// Would DisburseLoan accept this loan right now? (read-only)
+message CheckDisbursableRequest {
+  string loan_account_id = 1;
+}
+
+message CheckDisbursableResponse {
+  bool disbursable = 1;
+  string reason = 2;                     // DISBURSABLE, CANCELLED, ALREADY_DISBURSED, NOT_PENDING_DISBURSEMENT, NO_LEDGER_RECORD
+  string status = 3;                     // The account projection's status; empty when there is none
+  string message = 4;                    // Human-readable; for CANCELLED, DisburseLoan's own refusal text
+}
+
 // =============================================================================
 // Schedule with Status Messages
 // =============================================================================
@@ -565,7 +609,7 @@ message InstalmentWithStatus {
   int32 payment_number = 1;
   string due_date = 2;            // YYYY-MM-DD
   string scheduled_amount = 3;
-  string status = 4;              // PENDING, PARTIAL, PAID, OVERDUE
+  string status = 4;              // PENDING, PARTIAL, PAID, OVERDUE, VOID (account cancelled before disbursement)
   string amount_paid = 5;
   string amount_remaining = 6;
   optional string paid_date = 7;  // When fully paid (ISO datetime)
@@ -585,6 +629,7 @@ message ScheduleSummary {
   string total_scheduled = 8;
   string total_paid = 9;
   string total_remaining = 10;
+  int32 void_count = 11;                // Instalments voided by a cancellation before disbursement
 }
 
 // Response with schedule and instalment statuses
@@ -618,7 +663,7 @@ message AccountAgingResponse {
   optional string transition_reason = 7;             // Reason for bucket transition
   optional string oldest_overdue_instalment_id = 8;  // ID of oldest overdue instalment
   string total_overdue_amount = 9;                   // Decimal as string for precision
-  bool is_in_arrears = 10;                           // Derived: bucket not in {current,closed} AND not terminal (aging-v1.1.0)
+  bool is_in_arrears = 10;                           // Derived: True iff bucket is non-current and account is not terminal
 }
 
 // Request to get list of overdue accounts
@@ -638,7 +683,7 @@ message OverdueAccount {
   int32 days_until_overdue = 4;           // Always 0 for overdue accounts
   string total_overdue_amount = 5;        // Decimal as string for precision
   string last_updated = 6;                // ISO 8601 UTC timestamp
-  bool is_in_arrears = 7;                 // Derived: bucket not in {current,closed} AND not terminal (aging-v1.1.0)
+  bool is_in_arrears = 7;                 // Derived; always True for entries in this list (kept for symmetry)
 }
 
 // Response with list of overdue accounts
@@ -1247,6 +1292,9 @@ message PreviewPeriodCloseResponse {
   
   // Account reconciliation (ECL vs Accrual)
   ReconciliationResult reconciliation = 16;
+
+  // Accounts cancelled before disbursement in the period (BTB-517)
+  int32 cancelled_before_disbursement_count = 17;
 }
 
 // Request to finalize period close
@@ -1307,6 +1355,9 @@ message PeriodCloseResponse {
   // Correction info
   bool has_corrections = 12;
   int32 correction_count = 13;
+
+  // Accounts cancelled before disbursement in the period (BTB-517)
+  int32 cancelled_before_disbursement_count = 14;
 }
 
 // Request to get closed periods
@@ -1331,7 +1382,12 @@ message AcknowledgeAnomalyRequest {
 message AcknowledgeAnomalyResponse {
   bool success = 1;
   string error_message = 2;
-  bool all_anomalies_acknowledged = 3;  // True if all anomalies now acknowledged
+  bool all_anomalies_acknowledged = 3;  // True if all GATING anomalies are now
+                                         // acknowledged (excludes anomaly_type
+                                         // values in NON_GATING_ANOMALY_TYPES,
+                                         // e.g. late_arrival_income_recovered
+                                         // — BTB-256 — comment-only, no wire
+                                         // change; see period_close_models.py)
 }
 
 // =============================================================================

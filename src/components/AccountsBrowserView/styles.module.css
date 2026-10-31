@@ -387,6 +387,14 @@
   color: #4b5563;
 }
 
+/* BTB-517: neutral grey, never a red/green pair. elevation-800 on
+   elevation-100 is 11.2:1 in light (Payload's default) and dark. */
+.statusCancelled {
+  background: var(--theme-elevation-100, #ebebeb);
+  color: var(--theme-elevation-800, #2f2f2f);
+  box-shadow: inset 0 0 0 1px var(--theme-elevation-300, #b5b5b5);
+}
+
 /* === Aging bucket badges (from aging-v1.1.0 projection) === */
 
 .bucketBadge {

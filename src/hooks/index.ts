@@ -1,6 +1,12 @@
 // Hooks barrel export
 export { useGlobalHotkeys, useCommandPaletteHotkeys } from './useGlobalHotkeys'
 export { useTrackCustomerView } from './useTrackCustomerView'
+export { useDisbursableCheck } from './useDisbursableCheck'
+export type {
+  DisbursableVerdict,
+  DisbursableCheckState,
+  UseDisbursableCheckResult,
+} from './useDisbursableCheck'
 export { useCustomerSearch } from './queries/useCustomerSearch'
 export { useLoanAccountSearch } from './queries/useLoanAccountSearch'
 export { useCustomer } from './queries/useCustomer'
@@ -181,6 +187,10 @@ export type { AskClaudeParams, DraftOutcome } from './mutations/useAskClaude'
 // Conversation-kill mutation (End conversation)
 export { useKillConversation } from './mutations/useKillConversation'
 export type { KillConversationResult } from './mutations/useKillConversation'
+
+// Manual re-application block (BTB-517)
+export { useSetManualBlock } from './mutations/useSetManualBlock'
+export type { SetManualBlockResult } from './mutations/useSetManualBlock'
 
 export { useLendingAccess } from './useLendingAccess'
 

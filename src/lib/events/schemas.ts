@@ -7,6 +7,7 @@
 
 import { z } from 'zod'
 import { CLEARABLE_REASONS } from './config'
+import { MANUAL_BLOCK_REASON_CODES } from '@/lib/reapplicationBlock'
 
 // =============================================================================
 // Write-Off Request Schema
@@ -138,6 +139,25 @@ export const BlockClearRequestCommandSchema = z.object({
 })
 
 export type BlockClearRequestCommand = z.infer<typeof BlockClearRequestCommandSchema>
+
+/**
+ * Schema for the "Set manual block" command (input from client, BTB-517).
+ *
+ * `blockUntil` is the last day of the block, a Sydney calendar day
+ * ('YYYY-MM-DD'), or null for a block that does not expire. The route turns it
+ * into billieChat's `expires_at` and refuses a day already past.
+ */
+export const ManualBlockSetCommandSchema = z.object({
+  canonicalCustomerId: z.string().trim().min(1, 'Canonical customer ID is required'),
+  reasonCode: z.enum(MANUAL_BLOCK_REASON_CODES, { error: 'Choose a block reason' }),
+  note: z.string().trim().min(1, 'A note is required').max(1000),
+  blockUntil: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Block until must be a date (YYYY-MM-DD)')
+    .nullish(),
+})
+
+export type ManualBlockSetCommand = z.infer<typeof ManualBlockSetCommandSchema>
 
 /**
  * Schema for the conversation kill command (input from client).

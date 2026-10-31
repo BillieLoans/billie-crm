@@ -464,6 +464,44 @@ export const Customers: CollectionConfig = {
               'Emission time of the billieChat block state event that last wrote this mirror',
           },
         },
+        // BTB-517: the CRM's "Set manual block" (reapplication_block.manual_set.v1).
+        // state.changed.v1 binds the mirrored block to the manual-set request that
+        // raised it (null for any other cause, e.g. a conversation kill); the
+        // manual_set_applied.v1 reply names that request's reason code. The code is
+        // shown only when the two name the same request.
+        {
+          name: 'manualBlockRequestId',
+          type: 'text',
+          admin: {
+            readOnly: true,
+            description:
+              'Manual-set request that raised the block shown now (written by state.changed only)',
+          },
+        },
+        {
+          name: 'manualSetRequestId',
+          type: 'text',
+          admin: { readOnly: true, description: 'Latest manual block set billieChat applied' },
+        },
+        {
+          name: 'manualSetReasonCode',
+          type: 'text',
+          admin: {
+            readOnly: true,
+            description:
+              'Reason code of that set: credit_review_hold, cancelled_pre_disbursement, fraud_hold',
+          },
+        },
+        {
+          name: 'manualSetRejectedRequestId',
+          type: 'text',
+          admin: { readOnly: true, description: 'Latest manual block set billieChat refused' },
+        },
+        {
+          name: 'manualSetRejection',
+          type: 'text',
+          admin: { readOnly: true, description: 'Why it was refused: "CODE: detail"' },
+        },
       ],
     },
     {

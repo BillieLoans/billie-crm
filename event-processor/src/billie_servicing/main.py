@@ -10,6 +10,7 @@ import structlog
 from .config import settings
 from .handlers import (
     # Account handlers
+    handle_account_cancelled,
     handle_account_closed,
     handle_account_created,
     handle_account_status_changed,
@@ -91,6 +92,8 @@ from .handlers import (
     handle_reapplication_block_auto_cleared,
     handle_reapplication_block_clear_rejected,
     handle_reapplication_block_cleared,
+    handle_reapplication_block_manual_set_applied,
+    handle_reapplication_block_manual_set_rejected,
     handle_reapplication_block_state_changed,
     # Re-application block (BTB-135) + cleared/rejected projection (Task 6)
     handle_reapplication_blocked,
@@ -152,6 +155,7 @@ def setup_handlers(processor: EventProcessor) -> None:
     processor.register_handler("account.updated.v1", handle_account_updated)
     processor.register_handler("account.status_changed.v1", handle_account_status_changed)
     processor.register_handler("account.closed.v1", handle_account_closed)
+    processor.register_handler("account.cancelled.v1", handle_account_cancelled)
     processor.register_handler("account.schedule.created.v1", handle_schedule_created)
     processor.register_handler("account.schedule.updated.v1", handle_schedule_updated)
     processor.register_handler("loan.aging.updated.v1", handle_loan_aging_updated)
@@ -236,6 +240,17 @@ def setup_handlers(processor: EventProcessor) -> None:
     # mirror, version-guarded so arrival order across consumers is irrelevant.
     processor.register_handler(
         "reapplication_block.state.changed.v1", handle_reapplication_block_state_changed
+    )
+    # BTB-517: billieChat's answer to the CRM's manual block set. Records the
+    # set's outcome (reason code, or why it was refused); state.changed above
+    # stays the only writer of the block itself.
+    processor.register_handler(
+        "reapplication_block.manual_set_applied.v1",
+        handle_reapplication_block_manual_set_applied,
+    )
+    processor.register_handler(
+        "reapplication_block.manual_set_rejected.v1",
+        handle_reapplication_block_manual_set_rejected,
     )
 
     # Identity verification report archival (PR #67)

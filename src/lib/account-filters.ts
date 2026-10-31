@@ -8,6 +8,7 @@ export const ACCOUNT_STATUSES = [
   'in_arrears',
   'paid_off',
   'written_off',
+  'cancelled',
 ] as const
 
 export const CLOSURE_REASONS = ['PAID_OFF', 'WRITTEN_OFF', 'ADMIN_CLOSED'] as const

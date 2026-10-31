@@ -15,6 +15,7 @@ import {
   ASK_DRAFT_STORAGE_KEY,
 } from '@/lib/constants'
 import { clearIssueDiagnostics } from '@/lib/issue-diagnostics'
+import { clearAllFrozenCancellations } from '@/lib/frozenCancellation'
 
 /**
  * Clears all user-specific data from stores and localStorage.
@@ -41,6 +42,9 @@ function clearUserSessionData(): void {
     // Issue-reporter diagnostics buffers (interactions/routes/api calls/errors)
     // — User A's browsing trail must never end up on User B's report
     clearIssueDiagnostics()
+    // Unfinished Cancel loan requests (BTB-517): the previous person's note
+    // and a cancel only they may resume.
+    clearAllFrozenCancellations()
   }
 }
 
@@ -52,6 +56,7 @@ function clearUserSessionData(): void {
  * - User B seeing User A's recently viewed customers
  * - User B seeing User A's failed action queue
  * - User B's issue report carrying User A's diagnostics trail
+ * - User B seeing, or resuming, User A's unfinished Cancel loan request
  * - Any other session-specific data bleeding across users
  *
  * This component should be rendered inside the Providers component,

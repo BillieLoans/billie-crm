@@ -115,6 +115,8 @@ export const DashboardResponseSchema = z.object({
   // Loans pending disbursement
   pendingDisbursements: z.array(PendingDisbursementSchema),
   pendingDisbursementsCount: z.number().int().min(0),
+  // Loans cancelled before disbursement (BTB-517), all time
+  cancelledBeforeDisbursementCount: z.number().int().min(0),
   disbursementBuckets: DisbursementBucketSummarySchema,
   // Aggregates for the current Australian day
   moneyFlowsToday: MoneyFlowsTodaySchema,

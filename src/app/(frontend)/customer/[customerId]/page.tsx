@@ -118,6 +118,17 @@ function getStatusColor(status: string): string {
   return colors[status] || 'bg-gray-100 text-gray-800 border-gray-200'
 }
 
+/**
+ * A loan's status colour. `cancelled` here is a loan cancelled before
+ * disbursement (BTB-517): neutral slate, not the amber a cancelled
+ * conversation gets, and never a red/green pair.
+ */
+function getAccountStatusColor(status: string): string {
+  return status === 'cancelled'
+    ? 'bg-slate-100 text-slate-700 border-slate-300'
+    : getStatusColor(status)
+}
+
 // Components
 function Badge({ children, variant = 'default' }: { children: React.ReactNode; variant?: string }) {
   const variants: Record<string, string> = {
@@ -245,7 +256,7 @@ function AccountCard({ account }: { account: CustomerData['accounts'][0] }) {
         <div>
           <div className="flex items-center gap-2">
             <h3 className="font-semibold text-slate-900">{account.accountNumber}</h3>
-            <span className={`px-2 py-0.5 text-xs font-medium rounded-full border ${getStatusColor(account.accountStatus)}`}>
+            <span className={`px-2 py-0.5 text-xs font-medium rounded-full border ${getAccountStatusColor(account.accountStatus)}`}>
               {account.accountStatus.replace('_', ' ')}
             </span>
           </div>

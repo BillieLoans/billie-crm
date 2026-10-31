@@ -63,6 +63,8 @@ import * as migration_20261030_170000_core_reports from './20261030_170000_core_
 import * as migration_20261031_090000_reporting_security_review from './20261031_090000_reporting_security_review'
 import * as migration_20261101_090000_decline_reasons from './20261101_090000_decline_reasons'
 import * as migration_20261102_090000_mcp_restricted_columns from './20261102_090000_mcp_restricted_columns'
+import * as migration_20261103_090000_loan_account_cancellation from './20261103_090000_loan_account_cancellation'
+import * as migration_20261104_090000_customer_manual_block from './20261104_090000_customer_manual_block'
 
 export const migrations = [
   {
@@ -389,5 +391,15 @@ export const migrations = [
     up: migration_20261102_090000_mcp_restricted_columns.up,
     down: migration_20261102_090000_mcp_restricted_columns.down,
     name: '20261102_090000_mcp_restricted_columns',
+  },
+  {
+    up: migration_20261103_090000_loan_account_cancellation.up,
+    down: migration_20261103_090000_loan_account_cancellation.down,
+    name: '20261103_090000_loan_account_cancellation',
+  },
+  {
+    up: migration_20261104_090000_customer_manual_block.up,
+    down: migration_20261104_090000_customer_manual_block.down,
+    name: '20261104_090000_customer_manual_block',
   },
 ]

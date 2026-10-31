@@ -6,6 +6,7 @@
  */
 
 import type { ClearableReason, ReleaseType } from './config'
+import type { ManualBlockReasonCode } from '@/lib/reapplicationBlock'
 
 // =============================================================================
 // CRM Event Envelope
@@ -264,6 +265,21 @@ export interface ReapplicationBlockClearAuthorizedPayload {
     approved_at: string
     comment: string
   }
+}
+
+/**
+ * reapplication_block.manual_set.v1 — payload published to chatLedger (BTB-517).
+ * Consumed by billieChat's reapplicationBlock service. `request_id` is its
+ * idempotency key; `expires_at` null means the block does not expire.
+ */
+export interface ReapplicationBlockManualSetPayload {
+  request_id: string
+  canonical_customer_id: string
+  operator_id: string
+  operator_name: string
+  reason_code: ManualBlockReasonCode
+  note: string
+  expires_at: string | null
 }
 
 /**

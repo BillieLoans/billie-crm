@@ -36,7 +36,7 @@ async function reset() {
 /** Insert a loan account and return its uuid. */
 async function insertAccount(opts: {
   suffix: string
-  status: 'active' | 'pending_disbursement'
+  status: 'active' | 'pending_disbursement' | 'cancelled'
   amount?: number
   commencementDate?: string | null
   openedDate?: string | null
@@ -70,7 +70,7 @@ async function insertPayment(opts: {
   paymentNumber: number
   dueDate: string
   amount: number
-  status?: 'scheduled' | 'paid'
+  status?: 'scheduled' | 'paid' | 'void'
   amountPaid?: number
   paidDate?: string | null
 }) {
@@ -324,6 +324,29 @@ describe('dashboard SQL aggregates', () => {
       const flows = await fetchMoneyFlowsToday(pool, now)
       expect(flows.paymentsExpected.count).toBe(1)
       expect(flows.paymentsExpected.totalAmount).toBe(60)
+    })
+
+    it('a void instalment of a cancelled loan is not a payment expected (BTB-517)', async () => {
+      const now = new Date('2026-06-17T01:00:00Z')
+      const cancelled = await insertAccount({ suffix: 'cxl', status: 'cancelled', amount: 500 })
+      await insertPayment({
+        parentId: cancelled,
+        paymentNumber: 1,
+        dueDate: '2026-06-17T02:00:00Z',
+        amount: 130,
+        status: 'void',
+      })
+      const live = await insertAccount({ suffix: 'live', status: 'active' })
+      await insertPayment({
+        parentId: live,
+        paymentNumber: 1,
+        dueDate: '2026-06-17T03:00:00Z',
+        amount: 80,
+      })
+
+      const flows = await fetchMoneyFlowsToday(pool, now)
+      expect(flows.paymentsExpected.count).toBe(1)
+      expect(flows.paymentsExpected.totalAmount).toBe(80)
     })
 
     it('returns empty metrics without a pool', async () => {

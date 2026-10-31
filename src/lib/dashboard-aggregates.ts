@@ -116,9 +116,12 @@ export async function fetchMoneyFlowsToday(
 
   const [expectedResult, receivedResult, disbursed] = await Promise.all([
     pool.query(
+      // A void instalment (a loan cancelled before disbursement, BTB-517) is
+      // never owed, so it is never expected.
       `SELECT COUNT(*)::bigint AS count, COALESCE(SUM(amount), 0) AS total
          FROM loan_accounts_repayment_schedule_payments
-        WHERE due_date >= $1 AND due_date < $2`,
+        WHERE due_date >= $1 AND due_date < $2
+          AND status IS DISTINCT FROM 'void'`,
       [start, end],
     ),
     pool.query(

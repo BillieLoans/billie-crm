@@ -240,6 +240,57 @@ export interface DisburseLoanResponse {
   idempotentReplay: boolean
 }
 
+/**
+ * Cancel a loan before disbursement. Hand-written to match
+ * `CancelAccountRequest` in proto/accounting_ledger.proto (loaded with
+ * `keepCase: false`, so the wire names are camelCase here).
+ */
+export interface CancelAccountRequest {
+  loanAccountId: string
+  /** mutual_cancellation | customer_withdrew | offer_lapsed | fraud_hold | duplicate */
+  reasonCode: string
+  note: string
+  /** Required by the platform when reasonCode is mutual_cancellation. */
+  evidenceRef?: string
+  actorId: string
+  actorName: string
+  /** Required. Reuse the same key to retry: it completes the cancel without a second one. */
+  idempotencyKey: string
+}
+
+export interface CancelAccountResponse {
+  success: boolean
+  message: string
+  eventId: string
+  /** When the platform recorded the cancel (ISO 8601). */
+  cancelledAt: string
+  previousStatus: string
+  idempotentReplay: boolean
+}
+
+/**
+ * Would `DisburseLoan` accept this loan right now? Hand-written to match
+ * `CheckDisbursableRequest` / `CheckDisbursableResponse` in
+ * proto/accounting_ledger.proto (loaded with `keepCase: false`).
+ */
+export interface CheckDisbursableRequest {
+  loanAccountId: string
+}
+
+export interface CheckDisbursableResponse {
+  disbursable: boolean
+  /**
+   * DISBURSABLE | CANCELLED | ALREADY_DISBURSED | NOT_PENDING_DISBURSEMENT |
+   * NO_LEDGER_RECORD. Callers must tolerate any other value; the verdict
+   * itself is `disbursable`.
+   */
+  reason: string
+  /** The platform account projection's status; empty when there is none. */
+  status: string
+  /** Human-readable. For CANCELLED it is DisburseLoan's own refusal text. */
+  message: string
+}
+
 export interface InstalmentAllocation {
   paymentNumber: number
   amountApplied: string
@@ -274,7 +325,7 @@ export interface InstalmentWithStatus {
   paymentNumber: number
   dueDate: string
   scheduledAmount: string
-  status: string // PENDING, PARTIAL, PAID, OVERDUE
+  status: string // PENDING, PARTIAL, PAID, OVERDUE, VOID (account cancelled before disbursement)
   amountPaid: string
   amountRemaining: string
   paidDate?: string
@@ -288,6 +339,8 @@ export interface ScheduleSummary {
   partialCount: number
   overdueCount: number
   pendingCount: number
+  /** Instalments voided by a cancellation before disbursement (BTB-517). */
+  voidCount: number
   nextDueDate?: string
   nextDueAmount?: string
   totalScheduled: string
@@ -714,6 +767,8 @@ export interface PreviewPeriodCloseResponse {
   eclMovement: ECLMovement
   processingTimeSeconds: number
   reconciliation: ReconciliationResult
+  /** Accounts cancelled before disbursement in the period (BTB-517). */
+  cancelledBeforeDisbursementCount: number
 }
 
 export interface FinalizePeriodCloseRequest {
@@ -754,6 +809,8 @@ export interface PeriodCloseResponse {
   journalEntries: JournalEntry[]
   hasCorrections: boolean
   correctionCount: number
+  /** Accounts cancelled before disbursement in the period (BTB-517). */
+  cancelledBeforeDisbursementCount: number
 }
 
 export interface GetClosedPeriodsRequest {
@@ -1081,6 +1138,16 @@ export class LedgerClient {
     return this.promisify<GetStatementRequest, StatementResponse>(this.client.getStatement)(request)
   }
 
+  /**
+   * Read-only: would DisburseLoan accept this loan right now (BTB-517)? The
+   * Pending Disbursements payment panel asks before it shows any payout details.
+   */
+  async checkDisbursable(request: CheckDisbursableRequest): Promise<CheckDisbursableResponse> {
+    return this.promisify<CheckDisbursableRequest, CheckDisbursableResponse>(
+      this.client.checkDisbursable,
+    )(request)
+  }
+
   // ===========================================================================
   // Write Operations
   // ===========================================================================
@@ -1130,6 +1197,13 @@ export class LedgerClient {
   async disburseLoan(request: DisburseLoanRequest): Promise<DisburseLoanResponse> {
     return this.promisify<DisburseLoanRequest, DisburseLoanResponse>(
       this.client.disburseLoan,
+      'write',
+    )(request)
+  }
+
+  async cancelAccount(request: CancelAccountRequest): Promise<CancelAccountResponse> {
+    return this.promisify<CancelAccountRequest, CancelAccountResponse>(
+      this.client.cancelAccount,
       'write',
     )(request)
   }
