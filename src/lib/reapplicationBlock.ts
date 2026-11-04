@@ -164,11 +164,32 @@ export function formatBlockedUntil(block: BlockLike): string {
 }
 
 /**
- * Whether the block currently applies. Inclusive boundary per the contract —
- * a block ending today is still active today. Null window = always active.
+ * Block reasons billieChat no longer produces and nothing ever clears. A
+ * mirrored block with one of these is history, never a live block.
+ *
+ * `linked_open_review` (BTB-544): an applicant used to be held because an
+ * identity review case was open on their identity. Since SP3 the platform
+ * decides identity and the hold was removed; the block projection is the only
+ * hold. No `cleared`/`auto_cleared` event names this reason, so the mirror on
+ * the customer row would otherwise read as a permanent block forever.
  */
-export function isBlockActive(block: BlockLike | null | undefined, today: Date = new Date()): boolean {
+const RETIRED_BLOCK_REASONS: ReadonlySet<string> = new Set(['linked_open_review'])
+
+export function isRetiredBlockReason(reason: string | null | undefined): boolean {
+  return Boolean(reason && RETIRED_BLOCK_REASONS.has(reason))
+}
+
+/**
+ * Whether the block currently applies. Inclusive boundary per the contract —
+ * a block ending today is still active today. Null window = always active,
+ * except for a retired reason (see `isRetiredBlockReason`).
+ */
+export function isBlockActive(
+  block: BlockLike | null | undefined,
+  today: Date = new Date(),
+): boolean {
   if (!block?.reason) return false
+  if (isRetiredBlockReason(block.reason)) return false
   if (!block.blockedUntil) return true
   const until = new Date(block.blockedUntil)
   if (Number.isNaN(until.getTime())) return false
