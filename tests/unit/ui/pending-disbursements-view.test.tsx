@@ -75,10 +75,26 @@ const dailyLimit = {
   status: 'ok' as const,
 }
 
+const DISBURSABLE = {
+  disbursable: true,
+  reason: 'DISBURSABLE',
+  status: 'PENDING_DISBURSEMENT',
+  message: '',
+}
+
+/** loanAccountId -> the platform's verdict. Anything unlisted is disbursable. */
+let verdicts: Record<string, unknown>
+
 beforeEach(() => {
-  global.fetch = vi.fn().mockResolvedValue({
-    ok: true,
-    json: async () => ({ totalCount: 3, items, dailyLimit }),
+  verdicts = {}
+  // The queue endpoint and the per-loan platform check (BTB-517) share one fetch.
+  global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.startsWith('/api/ledger/disbursable')) {
+      const id = new URL(url, 'http://crm.test').searchParams.get('loanAccountId') ?? ''
+      return { ok: true, status: 200, json: async () => verdicts[id] ?? DISBURSABLE }
+    }
+    return { ok: true, status: 200, json: async () => ({ totalCount: 3, items, dailyLimit }) }
   }) as unknown as typeof fetch
 })
 afterEach(() => {
@@ -113,7 +129,7 @@ describe('PendingDisbursementsView', () => {
     render(<PendingDisbursementsView />)
     await waitFor(() => expect(screen.getByTestId('section-today')).toBeInTheDocument())
     fireEvent.click(screen.getByTestId('toggle-payment-a2'))
-    expect(screen.getByTestId('osko-message')).toBeInTheDocument()
+    expect(await screen.findByTestId('osko-message')).toBeInTheDocument()
     expect(screen.queryByText(/before the scheduled start date/i)).not.toBeInTheDocument()
   })
 
@@ -135,7 +151,7 @@ describe('PendingDisbursementsView', () => {
     fireEvent.click(screen.getByTestId('toggle-payment-a3'))
     fireEvent.click(screen.getByRole('button', { name: /disburse today anyway/i }))
 
-    expect(screen.getByTestId('osko-message')).toBeInTheDocument()
+    expect(await screen.findByTestId('osko-message')).toBeInTheDocument()
   })
 
   it('leaves the panel closed when the early warning is cancelled', async () => {
@@ -152,9 +168,52 @@ describe('PendingDisbursementsView', () => {
     render(<PendingDisbursementsView />)
     await waitFor(() => expect(screen.getByTestId('section-today')).toBeInTheDocument())
     fireEvent.click(screen.getByTestId('toggle-payment-a2'))
-    expect(screen.getAllByTestId('osko-message')).toHaveLength(1)
+    expect(await screen.findAllByTestId('osko-message')).toHaveLength(1)
     fireEvent.click(screen.getByTestId('toggle-payment-a1'))
-    expect(screen.getAllByTestId('osko-message')).toHaveLength(1)
+    await waitFor(() => expect(screen.getAllByTestId('osko-message')).toHaveLength(1))
+    // The second panel replaced the first: only a1's check is in play now.
+    expect(screen.getAllByRole('button', { name: /mark disbursed/i })).toHaveLength(1)
+  })
+
+  it('asks the platform about the loan whose panel is opened', async () => {
+    render(<PendingDisbursementsView />)
+    await waitFor(() => expect(screen.getByTestId('section-today')).toBeInTheDocument())
+    fireEvent.click(screen.getByTestId('toggle-payment-a2'))
+    await screen.findByTestId('osko-message')
+
+    const checks = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .map(([url]) => String(url))
+      .filter((url) => url.startsWith('/api/ledger/disbursable'))
+    expect(checks).toEqual(['/api/ledger/disbursable?loanAccountId=a2'])
+  })
+
+  it('shows a stop, not payout details, for a loan the platform has cancelled', async () => {
+    // The stale-queue case this guard exists for: the CRM still lists the loan
+    // (a replayed account.updated put it back) but the platform has cancelled it.
+    verdicts.a2 = {
+      disbursable: false,
+      reason: 'CANCELLED',
+      status: 'CANCELLED',
+      message: 'Loan is CANCELLED — cannot disburse.',
+    }
+    render(<PendingDisbursementsView />)
+    await waitFor(() => expect(screen.getByTestId('section-today')).toBeInTheDocument())
+    fireEvent.click(screen.getByTestId('toggle-payment-a2'))
+
+    const panel = document.getElementById('payment-panel-a2') as HTMLElement
+    const alert = await within(panel).findByRole('alert')
+    expect(alert.textContent).toMatch(/do not pay/i)
+    expect(alert.textContent).toMatch(/cancelled before disbursement/i)
+    // None of what an operator could pay from. (The list row keeps its BSB and
+    // last three digits, which are not enough to pay.)
+    expect(within(panel).queryByText('BSB')).not.toBeInTheDocument()
+    expect(within(panel).queryByText(/923-100/)).not.toBeInTheDocument()
+    expect(within(panel).queryByText(/63764292/)).not.toBeInTheDocument()
+    expect(within(panel).queryByText(/4292/)).not.toBeInTheDocument()
+    expect(within(panel).queryByTestId('payout-value-accountNumber')).not.toBeInTheDocument()
+    expect(within(panel).queryByTestId('osko-message')).not.toBeInTheDocument()
+    expect(within(panel).queryByRole('button', { name: /copy all details/i })).not.toBeInTheDocument()
+    expect(within(panel).queryByRole('button', { name: /mark disbursed/i })).not.toBeInTheDocument()
   })
 
   it('renders the daily bank-limit indicator', async () => {

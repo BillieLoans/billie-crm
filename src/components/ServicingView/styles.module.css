@@ -326,6 +326,14 @@
   color: #6b7280;
 }
 
+/* BTB-517: neutral grey, never a red/green pair. elevation-800 on
+   elevation-100 is 11.2:1 in light (Payload's default) and dark. */
+.statusCancelled {
+  background: var(--theme-elevation-100, #ebebeb);
+  color: var(--theme-elevation-800, #2f2f2f);
+  border: 1px solid var(--theme-elevation-300, #b5b5b5);
+}
+
 .accountCardIndicator {
   flex-shrink: 0;
 }
@@ -2324,6 +2332,10 @@
   position: sticky;
   top: 12px;
   max-height: calc(100vh - 120px);
+  /* Flex column so the pane shrinks to the cap and scrolls inside, instead of
+     running past the bottom of the screen (the sticky column never scrolls into view). */
+  display: flex;
+  flex-direction: column;
 }
 
 /* 1100–1440: drop the context column (revealed via a toggle/overlay) */
@@ -2349,9 +2361,17 @@
 .contextToggle {
   display: none;
 }
+/* Slide-over chrome (backdrop + close button) — only shown in the ≤1440 slide-over */
+.contextBackdrop {
+  display: none;
+}
+.contextSlideoverHeader {
+  display: none;
+}
 
-/* 1101–1440: show the toggle; .contextOpen becomes a fixed slide-over */
-@media (max-width: 1440px) and (min-width: 1101px) {
+/* ≤1440: show the toggle; .contextOpen becomes a fixed slide-over. Applies below 1100
+   too — the context column is hidden there, so without the toggle notes were unreachable. */
+@media (max-width: 1440px) {
   .contextToggle {
     display: inline-flex;
     align-items: center;
@@ -2365,14 +2385,55 @@
     cursor: pointer;
   }
   .contextOpen {
-    display: block !important;
+    display: flex !important;
     position: fixed;
     right: 16px;
     top: 80px;
     bottom: 16px;
-    width: 340px;
+    width: min(340px, calc(100vw - 32px));
+    max-height: none;
     z-index: 50;
     box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
+    /* Header row + pane: the pane shrinks to what is left and scrolls inside */
+    flex-direction: column;
+    background: var(--theme-elevation-0, #fff);
+    border-radius: 8px;
+  }
+  .contextOpen > .contextSlideoverHeader {
+    display: flex;
+    justify-content: flex-end;
+    flex-shrink: 0;
+  }
+  .contextOpen > :last-child {
+    flex: 1;
+    min-height: 0;
+  }
+  .contextBackdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 49;
+    background: rgba(0, 0, 0, 0.2);
+  }
+  .contextClose {
+    min-width: 32px;
+    min-height: 32px;
+    margin: 4px 4px 0 0;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    color: var(--theme-elevation-600, #6b7280);
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .contextClose:hover {
+    background: var(--theme-elevation-50, #f5f5f5);
+    color: var(--theme-text, #1a1a1a);
+  }
+  .contextClose:focus-visible {
+    outline: 2px solid var(--theme-elevation-800, #1f2937);
+    outline-offset: 2px;
   }
 }
 

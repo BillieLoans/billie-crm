@@ -197,6 +197,9 @@ export function PendingDisbursementsView() {
           isOpen={isDrawerOpen}
           onClose={handleCloseDrawer}
           onSuccess={handleDisburseSuccess}
+          // BTB-517: cancelled after this queue loaded. Reload it so the row and
+          // its Disburse go; the drawer keeps showing the error.
+          onLoanCancelled={handleDisburseSuccess}
           loanAccountId={selectedItem.loanAccountId}
           accountNumber={selectedItem.accountNumber}
           loanAmount={selectedItem.loanAmount}

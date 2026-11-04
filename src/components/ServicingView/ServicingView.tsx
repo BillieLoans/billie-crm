@@ -18,6 +18,7 @@ import { RecordRepaymentDrawer } from './RecordRepaymentDrawer'
 import { BulkWaiveFeeDrawer } from './BulkWaiveFeeDrawer'
 import { WriteOffRequestDrawer } from './WriteOffRequestDrawer'
 import { DisburseLoanDrawer } from './DisburseLoanDrawer'
+import { CancelLoanDrawer } from './CancelLoanDrawer'
 import { ApplyFeeDrawer, type FeeType } from './ApplyFeeDrawer'
 import { AccountPanel, type TabId } from './AccountPanel'
 import type { SelectedFee } from './FeeList'
@@ -25,6 +26,7 @@ import { AccountRail } from './AccountRail'
 import { AttentionStrip } from './AttentionStrip'
 import { ContextPane } from './ContextPane'
 import { ClearBlockButton } from '@/components/BlockClear'
+import { SetManualBlockButton } from '@/components/BlockSet/SetManualBlockButton'
 import { getAttentionItems, sortAccountsForRail } from '@/lib/accountTriage'
 import { usePendingWriteOff } from '@/hooks/queries/usePendingWriteOff'
 import { useCollectionsCasesByCustomer } from '@/hooks/queries/useCollectionsCasesByCustomer'
@@ -117,8 +119,26 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<TabId>('overview')
 
-  // Context pane toggle for mid-width screens (1101–1440px)
+  // Context pane toggle for screens ≤1440px, where the context column becomes a slide-over
   const [contextOpen, setContextOpen] = useState(false)
+  const contextToggleRef = useRef<HTMLButtonElement>(null)
+  const closeContext = useCallback(() => {
+    setContextOpen(false)
+    contextToggleRef.current?.focus()
+  }, [])
+
+  // Escape closes the slide-over — unless a dialog opened from inside it (full note,
+  // Add Note drawer) is up, in which case Escape belongs to that dialog alone.
+  useEffect(() => {
+    if (!contextOpen) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (document.querySelector('[aria-modal="true"]')) return
+      closeContext()
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [contextOpen, closeContext])
 
   // Action drawer states
   const [waiveFeeOpen, setWaiveFeeOpen] = useState(false)
@@ -127,6 +147,7 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
   const [selectedFees, setSelectedFees] = useState<SelectedFee[]>([])
   const [writeOffOpen, setWriteOffOpen] = useState(false)
   const [disburseLoanOpen, setDisburseLoanOpen] = useState(false)
+  const [cancelLoanOpen, setCancelLoanOpen] = useState(false)
   const [applyFeeOpen, setApplyFeeOpen] = useState(false)
   const [applyFeeType, setApplyFeeType] = useState<FeeType>('late-fee')
 
@@ -288,6 +309,20 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
     setDisburseLoanOpen(false)
   }, [])
 
+  // Re-read the customer and accounts after a cancel, or when a drawer learned
+  // the view is stale, e.g. a Disburse on a loan already cancelled (BTB-517).
+  const handleAccountChanged = useCallback(() => {
+    void refetchCustomer()
+  }, [refetchCustomer])
+
+  const handleOpenCancelLoan = useCallback(() => {
+    setCancelLoanOpen(true)
+  }, [])
+
+  const handleCloseCancelLoan = useCallback(() => {
+    setCancelLoanOpen(false)
+  }, [])
+
   const handleOpenApplyLateFee = useCallback(() => {
     setApplyFeeType('late-fee')
     setApplyFeeOpen(true)
@@ -412,7 +447,21 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
       )}
 
       {/* Compact horizontal customer header */}
-      {customer && <CustomerHeader customer={customer} />}
+      {customer && (
+        <CustomerHeader
+          customer={customer}
+          actions={
+            <SetManualBlockButton
+              // A pending request's notice belongs to this customer only.
+              key={customer.customerId}
+              canonicalCustomerId={customer.customerId}
+              customerName={customer.fullName ?? undefined}
+              reapplicationBlock={customer.reapplicationBlock ?? null}
+              onRefresh={handleAccountChanged}
+            />
+          }
+        />
+      )}
 
       {/* Customer-level attention chips (replaces the vulnerable banner).
           The block-clear action (BTB-202) rides inline after the chips so the
@@ -452,9 +501,11 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
 
         <div className={styles.detailCol}>
           <button
+            ref={contextToggleRef}
             type="button"
             className={styles.contextToggle}
             onClick={() => setContextOpen((v) => !v)}
+            aria-expanded={contextOpen}
             data-testid="context-toggle"
           >
             {contextOpen ? 'Hide context' : 'Show context'}
@@ -478,13 +529,34 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
               onRequestWriteOff={handleOpenWriteOff}
               hasPendingWriteOff={hasPendingWriteOff}
               onDisburseLoan={handleOpenDisburseLoan}
+              onCancelLoan={handleOpenCancelLoan}
             />
           ) : (
             <div className={styles.detailEmpty}>Select an account from the list.</div>
           )}
         </div>
 
+        {contextOpen && (
+          // Click-away to close; only rendered visibly while the slide-over is in use (≤1440px)
+          <div
+            className={styles.contextBackdrop}
+            onClick={closeContext}
+            aria-hidden="true"
+            data-testid="context-backdrop"
+          />
+        )}
         <div className={`${styles.contextCol}${contextOpen ? ` ${styles.contextOpen}` : ''}`}>
+          <div className={styles.contextSlideoverHeader}>
+            <button
+              type="button"
+              className={styles.contextClose}
+              onClick={closeContext}
+              aria-label="Close context panel"
+              data-testid="context-close"
+            >
+              <span aria-hidden="true">×</span>
+            </button>
+          </div>
           {/* Tabbed context: Communications (contact notes + notification history) and
               Applications (loan origination conversations). customer.id is the Payload
               document ID for note queries; customerId (route param) is the business key. */}
@@ -570,6 +642,21 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
           accountNumber={selectedAccount.accountNumber}
           loanAmount={selectedAccount.loanTerms?.loanAmount ?? 0}
           signedLoanAgreementUrl={selectedAccount.signedLoanAgreementUrl}
+          onLoanCancelled={handleAccountChanged}
+        />
+      )}
+
+      {/* Cancel Loan Drawer (BTB-517) - overlay */}
+      {selectedAccount && customer && (
+        <CancelLoanDrawer
+          isOpen={cancelLoanOpen}
+          onClose={handleCloseCancelLoan}
+          loanAccountId={selectedAccount.loanAccountId}
+          accountNumber={selectedAccount.accountNumber}
+          customerId={customer.customerId}
+          customerName={customer.fullName ?? undefined}
+          reapplicationBlock={customer.reapplicationBlock ?? null}
+          onRefresh={handleAccountChanged}
         />
       )}
     </div>

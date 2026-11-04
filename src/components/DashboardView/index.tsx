@@ -10,6 +10,7 @@ import { SystemHealthStrip } from './SystemHealthStrip'
 import { DisbursementTriagePanel } from './DisbursementTriagePanel'
 import { OverdueHeroTile } from './OverdueHeroTile'
 import { ApprovalsHeroTile } from './ApprovalsHeroTile'
+import { CancelledLoansTile } from './CancelledLoansTile'
 import { MoneyFlowsRow } from './MoneyFlowsRow'
 import { PortfolioHealthSection } from './PortfolioHealthSection'
 import styles from './styles.module.css'
@@ -123,6 +124,7 @@ export function DashboardView() {
       <div className={styles.heroRow} data-testid="hero-tiles">
         <OverdueHeroTile />
         {canSeeApprovals && <ApprovalsHeroTile />}
+        <CancelledLoansTile />
       </div>
 
       <h2 className={styles.zoneHeading}>Today&apos;s flows</h2>

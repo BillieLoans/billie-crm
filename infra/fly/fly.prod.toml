@@ -36,6 +36,11 @@ primary_region = "syd"
   NOTIFICATION_DISPATCHER_GRPC_URL = "billie-platform-services-prod.internal:50052"
   COLLECTIONS_SERVICE_GRPC_URL = "billie-platform-services-prod.internal:50053"
   S3_BUCKET_NAME="billie-files-prod-734836384687"
+  # BTB-517: chatLedger event type the CRM publishes when a supervisor sets a manual
+  # re-application block (Cancel loan drawer or the customer header "Set manual block").
+  # billieChat routes and handles this type; it must match billieChat's routes.json.
+  # Optional: the code defaults to this value (src/lib/events/config.ts).
+  EVENT_TYPE_REAPPLICATION_BLOCK_MANUAL_SET = "reapplication_block.manual_set.v1"
 
 # =============================================================================
 # HTTP service configuration

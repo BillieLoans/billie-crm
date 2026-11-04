@@ -1,6 +1,6 @@
 // src/lib/accountTriage.ts
 import type { CustomerData, LoanAccountData } from '@/hooks/queries/useCustomer'
-import { formatBlockReason, formatBlockedUntil, isBlockActive } from '@/lib/reapplicationBlock'
+import { formatBlockLabel, formatBlockedUntil, isBlockActive } from '@/lib/reapplicationBlock'
 import type { CollectionsCaseRow } from '@/types/collections'
 
 export type AccountTier = 'overdue' | 'pending' | 'active' | 'closed'
@@ -43,7 +43,8 @@ const outstanding = (a: LoanAccountData): number =>
 
 export function getAccountSignal(account: LoanAccountData, today: Date = new Date()): AccountSignal {
   const status = account.accountStatus
-  if (status === 'paid_off' || status === 'written_off') {
+  // A loan cancelled before disbursement (BTB-517) is closed: nothing is due on it.
+  if (status === 'paid_off' || status === 'written_off' || status === 'cancelled') {
     return { tier: 'closed', isOverdue: false, daysOverdue: 0, nextDueDate: null, nextDueAmount: null }
   }
   if (status === 'pending_disbursement') {
@@ -119,7 +120,7 @@ export function getAttentionItems(opts: {
   if (isBlockActive(reapplicationBlock, today)) {
     items.push({
       kind: 'reapplication_blocked',
-      label: `Re-application blocked — ${formatBlockReason(reapplicationBlock?.reason)} (${formatBlockedUntil(reapplicationBlock ?? {})})`,
+      label: `Re-application blocked — ${formatBlockLabel(reapplicationBlock)} (${formatBlockedUntil(reapplicationBlock ?? {})})`,
       accountId: null,
       severity: 'high',
     })

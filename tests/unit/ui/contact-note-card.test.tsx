@@ -1,5 +1,5 @@
 import { describe, test, expect, vi, afterEach } from 'vitest'
-import { render, screen, cleanup, fireEvent } from '@testing-library/react'
+import { render, screen, cleanup, fireEvent, within } from '@testing-library/react'
 import { ContactNoteCard } from '@/components/ServicingView/ContactNotes/ContactNoteCard'
 import type { ContactNoteData } from '@/hooks/queries/useContactNotes'
 
@@ -48,27 +48,51 @@ describe('ContactNoteCard component', () => {
   })
 
   test('hides priority badge when priority is normal', () => {
-    render(<ContactNoteCard note={createMockNote({ priority: 'normal' })} isHighlighted={false} onAmend={vi.fn()} />)
+    render(
+      <ContactNoteCard
+        note={createMockNote({ priority: 'normal' })}
+        isHighlighted={false}
+        onAmend={vi.fn()}
+      />,
+    )
     expect(screen.queryByText(/Priority/i)).not.toBeInTheDocument()
     expect(screen.queryByText('Urgent')).not.toBeInTheDocument()
   })
 
   test('shows priority badge when priority is high', () => {
-    render(<ContactNoteCard note={createMockNote({ priority: 'high' })} isHighlighted={false} onAmend={vi.fn()} />)
+    render(
+      <ContactNoteCard
+        note={createMockNote({ priority: 'high' })}
+        isHighlighted={false}
+        onAmend={vi.fn()}
+      />,
+    )
     const badge = screen.getByText('High Priority')
     expect(badge).toBeInTheDocument()
     expect(badge.className).toContain('badgePriorityHigh')
   })
 
   test('hides sentiment badge when sentiment is neutral', () => {
-    render(<ContactNoteCard note={createMockNote({ sentiment: 'neutral' })} isHighlighted={false} onAmend={vi.fn()} />)
+    render(
+      <ContactNoteCard
+        note={createMockNote({ sentiment: 'neutral' })}
+        isHighlighted={false}
+        onAmend={vi.fn()}
+      />,
+    )
     expect(screen.queryByText('Positive')).not.toBeInTheDocument()
     expect(screen.queryByText('Negative')).not.toBeInTheDocument()
     expect(screen.queryByText('Escalation')).not.toBeInTheDocument()
   })
 
   test('shows sentiment badge when sentiment is negative', () => {
-    render(<ContactNoteCard note={createMockNote({ sentiment: 'negative' })} isHighlighted={false} onAmend={vi.fn()} />)
+    render(
+      <ContactNoteCard
+        note={createMockNote({ sentiment: 'negative' })}
+        isHighlighted={false}
+        onAmend={vi.fn()}
+      />,
+    )
     const badge = screen.getByText('Negative')
     expect(badge).toBeInTheDocument()
     expect(badge.className).toContain('badgeSentimentNegative')
@@ -95,7 +119,13 @@ describe('ContactNoteCard component', () => {
   })
 
   test('shows Amend button when onAmend is provided', () => {
-    render(<ContactNoteCard note={createMockNote({ status: 'active' })} isHighlighted={false} onAmend={vi.fn()} />)
+    render(
+      <ContactNoteCard
+        note={createMockNote({ status: 'active' })}
+        isHighlighted={false}
+        onAmend={vi.fn()}
+      />,
+    )
     expect(screen.getByText('Amend ↗')).toBeInTheDocument()
   })
 
@@ -106,7 +136,13 @@ describe('ContactNoteCard component', () => {
 
   test('calls onAmend with note id when Amend button is clicked', () => {
     const onAmend = vi.fn()
-    render(<ContactNoteCard note={createMockNote({ id: 'note-abc' })} isHighlighted={false} onAmend={onAmend} />)
+    render(
+      <ContactNoteCard
+        note={createMockNote({ id: 'note-abc' })}
+        isHighlighted={false}
+        onAmend={onAmend}
+      />,
+    )
     fireEvent.click(screen.getByText('Amend ↗'))
     expect(onAmend).toHaveBeenCalledWith('note-abc')
   })
@@ -166,7 +202,9 @@ describe('ContactNoteCard component', () => {
   test('shows linked account number when loanAccount is populated', () => {
     render(
       <ContactNoteCard
-        note={createMockNote({ loanAccount: { id: 'la-1', loanAccountId: 'LOAN-001', accountNumber: 'ACC-12345' } })}
+        note={createMockNote({
+          loanAccount: { id: 'la-1', loanAccountId: 'LOAN-001', accountNumber: 'ACC-12345' },
+        })}
         isHighlighted={false}
         onAmend={vi.fn()}
       />,
@@ -178,7 +216,9 @@ describe('ContactNoteCard component', () => {
     const onNavigateToAccount = vi.fn()
     render(
       <ContactNoteCard
-        note={createMockNote({ loanAccount: { id: 'la-1', loanAccountId: 'LOAN-001', accountNumber: 'ACC-12345' } })}
+        note={createMockNote({
+          loanAccount: { id: 'la-1', loanAccountId: 'LOAN-001', accountNumber: 'ACC-12345' },
+        })}
         isHighlighted={false}
         onAmend={vi.fn()}
         onNavigateToAccount={onNavigateToAccount}
@@ -190,7 +230,11 @@ describe('ContactNoteCard component', () => {
 
   test('hides linked account when loanAccount is null', () => {
     render(
-      <ContactNoteCard note={createMockNote({ loanAccount: null })} isHighlighted={false} onAmend={vi.fn()} />,
+      <ContactNoteCard
+        note={createMockNote({ loanAccount: null })}
+        isHighlighted={false}
+        onAmend={vi.fn()}
+      />,
     )
     expect(screen.queryByText(/ACC-/)).not.toBeInTheDocument()
     expect(screen.queryByText(/🔗/)).not.toBeInTheDocument()
@@ -223,30 +267,58 @@ describe('ContactNoteCard component', () => {
     expect(card.className).not.toContain('noteCardHighlighted')
   })
 
-  test('body truncation: shows Show more button and expands on click then collapses', () => {
+  test('body is a clamped preview with a link that opens the whole note in a dialog', () => {
+    const longBody = 'Line one of a long note.\nLine two.\nLine three.\nLine four.\nLine five.'
     render(
       <ContactNoteCard
-        note={createMockNote({ content: 'Long body content that should be truncated.' })}
+        note={createMockNote({ content: longBody })}
         isHighlighted={false}
         onAmend={vi.fn()}
       />,
     )
-    const showMoreBtn = screen.getByText('Show more')
-    expect(showMoreBtn).toBeInTheDocument()
+    // Preview is clamped in the card
+    const preview = screen.getByText(/Line one of a long note/)
+    expect(preview.className).toContain('bodyTruncated')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 
-    fireEvent.click(showMoreBtn)
-    expect(screen.getByText('Show less')).toBeInTheDocument()
+    const link = screen.getByRole('button', { name: 'View full note' })
+    expect(link).toHaveAttribute('aria-haspopup', 'dialog')
+    fireEvent.click(link)
 
-    fireEvent.click(screen.getByText('Show less'))
-    expect(screen.getByText('Show more')).toBeInTheDocument()
+    const dialog = screen.getByRole('dialog', { name: 'Follow-up on payment' })
+    const fullBody = within(dialog).getByText(/Line one of a long note/)
+    expect(fullBody.className).not.toContain('bodyTruncated')
+    expect(fullBody.textContent).toContain('Line five.')
+    expect(within(dialog).getByText('By Sarah Chen')).toBeInTheDocument()
+    expect(within(dialog).getByText(/ACC-12345/)).toBeInTheDocument()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  test('Escape closes the full-note dialog', () => {
+    render(<ContactNoteCard note={createMockNote()} isHighlighted={false} onAmend={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'View full note' }))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  test('no View full note link when the note has no body', () => {
+    render(
+      <ContactNoteCard
+        note={createMockNote({ content: '' })}
+        isHighlighted={false}
+        onAmend={vi.fn()}
+      />,
+    )
+    expect(screen.queryByRole('button', { name: 'View full note' })).not.toBeInTheDocument()
   })
 
   test('extracts text from Tiptap JSON content', () => {
     const tiptapContent = {
       type: 'doc',
-      content: [
-        { type: 'paragraph', content: [{ type: 'text', text: 'Hello from Tiptap' }] },
-      ],
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Hello from Tiptap' }] }],
     }
     render(
       <ContactNoteCard note={createMockNote({ content: tiptapContent })} isHighlighted={false} />,
@@ -258,9 +330,7 @@ describe('ContactNoteCard component', () => {
     const lexicalContent = {
       root: {
         type: 'root',
-        children: [
-          { type: 'paragraph', children: [{ type: 'text', text: 'Hello from Lexical' }] },
-        ],
+        children: [{ type: 'paragraph', children: [{ type: 'text', text: 'Hello from Lexical' }] }],
       },
     }
     render(

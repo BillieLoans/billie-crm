@@ -80,3 +80,60 @@ describe('getAccountActions', () => {
     expect(m['request-write-off'].danger).toBe(true)
   })
 })
+
+// BTB-517: cancel a loan before disbursement.
+describe('getAccountActions: cancel before disbursement', () => {
+  const MONEY_AND_DISBURSE = [
+    'disburse',
+    'record-payment',
+    'waive-fee',
+    'apply-late-fee',
+    'apply-dishonour-fee',
+    'request-write-off',
+  ] as const
+
+  it('cancel-loan visible only for pending_disbursement + supervisor', () => {
+    const pending = account({ accountStatus: 'pending_disbursement' })
+    for (const role of ['supervisor', 'admin'] as const) {
+      const m = byId(pending, { ...baseCtx, role })
+      expect(m['cancel-loan'].visible).toBe(true)
+      expect(m['cancel-loan'].enabled).toBe(true)
+      expect(m['cancel-loan'].danger).toBe(true)
+      expect(m['cancel-loan'].primary).toBe(false)
+      expect(m['cancel-loan'].label).toBe('Cancel loan')
+    }
+    for (const role of ['operations', 'readonly', undefined] as const) {
+      expect(byId(pending, { ...baseCtx, role })['cancel-loan'].visible).toBe(false)
+    }
+    for (const status of ['active', 'in_arrears', 'paid_off', 'written_off', 'cancelled'] as const) {
+      const m = byId(account({ accountStatus: status }), { ...baseCtx, role: 'supervisor' })
+      expect(m['cancel-loan'].visible).toBe(false)
+    }
+  })
+
+  it('cancel-loan is disabled in read-only mode', () => {
+    const m = byId(account({ accountStatus: 'pending_disbursement' }), {
+      ...baseCtx,
+      role: 'supervisor',
+      readOnly: true,
+    })
+    expect(m['cancel-loan'].visible).toBe(true)
+    expect(m['cancel-loan'].enabled).toBe(false)
+    expect(m['cancel-loan'].disabledReason).toBe('Read-only mode')
+  })
+
+  it('cancelled hides disburse, record-payment, waive-fee, fees, write-off', () => {
+    const m = byId(account({ accountStatus: 'cancelled' }), { ...baseCtx, role: 'admin' })
+    for (const id of MONEY_AND_DISBURSE) {
+      expect(m[id].visible).toBe(false)
+    }
+    expect(getAccountActions(account({ accountStatus: 'cancelled' }), baseCtx).filter((a) => a.visible)).toEqual([])
+  })
+
+  it('a live account keeps every money action visible (cancel changes nothing there)', () => {
+    const m = byId(account(), { ...baseCtx, role: 'supervisor' })
+    for (const id of ['record-payment', 'waive-fee', 'apply-late-fee', 'apply-dishonour-fee', 'request-write-off'] as const) {
+      expect(m[id].visible).toBe(true)
+    }
+  })
+})

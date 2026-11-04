@@ -205,4 +205,48 @@ describe('useAccountPanelHotkeys', () => {
       expect(removeEventListenerSpy).toHaveBeenCalledWith('keydown', expect.any(Function))
     })
   })
+
+  // BTB-517, found in the running app: Escape on the Cancel loan confirm
+  // dialog also closed the account panel behind it, which unmounted the drawer
+  // and threw the half-done cancel away. While a modal dialog or drawer is open,
+  // the keys belong to it, not to the panel behind.
+  describe('while a modal dialog is open', () => {
+    let dialog: HTMLDivElement
+
+    beforeEach(() => {
+      dialog = document.createElement('div')
+      dialog.setAttribute('role', 'dialog')
+      dialog.setAttribute('aria-modal', 'true')
+      document.body.appendChild(dialog)
+    })
+
+    afterEach(() => {
+      dialog.remove()
+    })
+
+    test('Escape does not close the panel', () => {
+      renderHook(() => useAccountPanelHotkeys(getDefaultOptions()))
+      document.dispatchEvent(createKeyboardEvent('Escape'))
+      expect(mockOnClose).not.toHaveBeenCalled()
+    })
+
+    test('arrow keys do not switch the account behind the dialog', () => {
+      renderHook(() => useAccountPanelHotkeys(getDefaultOptions()))
+      document.dispatchEvent(createKeyboardEvent('ArrowDown'))
+      expect(mockOnSwitchAccount).not.toHaveBeenCalled()
+    })
+
+    test('number keys do not switch the tab behind the dialog', () => {
+      renderHook(() => useAccountPanelHotkeys(getDefaultOptions()))
+      document.dispatchEvent(createKeyboardEvent('2'))
+      expect(mockOnTabChange).not.toHaveBeenCalled()
+    })
+
+    test('the panel keys work again once it closes', () => {
+      renderHook(() => useAccountPanelHotkeys(getDefaultOptions()))
+      dialog.remove()
+      document.dispatchEvent(createKeyboardEvent('Escape'))
+      expect(mockOnClose).toHaveBeenCalledTimes(1)
+    })
+  })
 })

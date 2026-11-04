@@ -1,0 +1,189 @@
+/*
+ * SetManualBlockModal (BTB-517).
+ *
+ * Theme tokens only, so light (Payload's default) and dark both hold.
+ * Contrast (WCAG 2.2 AA) measured on the light theme's real tokens:
+ * hint text elevation-600 #656565 on white 5.8:1; control borders
+ * elevation-450 #8d8d8d on white 3.3:1 (non-text 3:1); error text
+ * error-750 on error-50 8.7:1. The primary button is blue-600 #2563eb with
+ * white text, 5.2:1.
+ */
+.modalBody {
+  padding: 20px;
+}
+
+.intro {
+  margin: 0 0 16px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--theme-text, #1a1a1a);
+}
+
+.fieldGroup {
+  margin-bottom: 16px;
+}
+
+.fieldLabel {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--theme-text, #1a1a1a);
+}
+
+.input,
+.textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--theme-elevation-450, #8d8d8d);
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--theme-text, #1a1a1a);
+  background: var(--theme-elevation-0, #fff);
+}
+
+.textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.input:focus-visible,
+.textarea:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
+.input:disabled,
+.textarea:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--theme-elevation-600, #656565);
+}
+
+.error {
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--theme-error-300, #fd9a92);
+  background: var(--theme-error-50, #faf1f0);
+  color: var(--theme-error-750, #7b2927);
+  font-size: 13px;
+}
+
+.modalFooter {
+  display: flex;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--theme-elevation-150, #ddd);
+}
+
+.secondaryBtn,
+.primaryBtn {
+  flex: 1;
+  min-height: 40px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.secondaryBtn {
+  border: 1px solid var(--theme-elevation-450, #8d8d8d);
+  background: var(--theme-elevation-0, #fff);
+  color: var(--theme-text, #1a1a1a);
+}
+
+.primaryBtn {
+  border: none;
+  background: #2563eb;
+  color: #fff;
+}
+
+.secondaryBtn:focus-visible,
+.primaryBtn:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.secondaryBtn:disabled,
+.primaryBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/*
+ * "Set manual block" in the customer header's actions (BTB-517).
+ *
+ * The button matches the header's "More" button (size, weight, neutral
+ * tokens). Nothing here relies on telling red from green: the notice under it
+ * says the outcome in words, and a refusal reuses the modal's error tint with
+ * a heavier border. Contrast on the light theme: button text elevation-600
+ * #656565 on elevation-50 #fafafa 5.6:1; notice text #1a1a1a on white 17.4:1;
+ * refusal text error-750 on error-50 8.6:1.
+ */
+.headerBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  max-width: 280px;
+}
+
+.headerBtn {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--theme-elevation-600, #656565);
+  background: var(--theme-elevation-50, #fafafa);
+  border: 1px solid var(--theme-elevation-200, #ddd);
+  border-radius: 6px;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+  white-space: nowrap;
+}
+
+.headerBtn:hover:not(:disabled) {
+  background: var(--theme-elevation-100, #f0f0f0);
+  border-color: var(--theme-elevation-300, #ccc);
+}
+
+.headerBtn:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.headerBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.headerNotice {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--theme-text, #1a1a1a);
+}
+
+.headerNoticeError {
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 2px solid var(--theme-error-300, #fd9a92);
+  background: var(--theme-error-50, #faf1f0);
+  color: var(--theme-error-750, #7b2927);
+}
+
+@media (max-width: 768px) {
+  .headerBlock {
+    max-width: none;
+  }
+}

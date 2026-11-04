@@ -3,7 +3,13 @@
  * Used by LoanAccountCard and LoanAccountDetails.
  */
 
-export type AccountStatus = 'pending_disbursement' | 'active' | 'paid_off' | 'in_arrears' | 'written_off'
+export type AccountStatus =
+  | 'pending_disbursement'
+  | 'active'
+  | 'paid_off'
+  | 'in_arrears'
+  | 'written_off'
+  | 'cancelled'
 
 export interface StatusConfig {
   label: string
@@ -21,6 +27,8 @@ export const ACCOUNT_STATUS_CONFIG: Record<AccountStatus, StatusConfig> = {
   paid_off: { label: 'Paid Off', colorClass: 'statusPaidOff' },
   in_arrears: { label: 'In Arrears', colorClass: 'statusArrears' },
   written_off: { label: 'Written Off', colorClass: 'statusWrittenOff' },
+  // BTB-517: neutral grey, never a red/green pair (see the statusCancelled rules).
+  cancelled: { label: 'Cancelled', colorClass: 'statusCancelled' },
 }
 
 /**

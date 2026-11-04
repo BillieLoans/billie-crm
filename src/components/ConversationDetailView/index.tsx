@@ -39,14 +39,18 @@ export function ConversationDetailView({ conversationId, referrer }: Conversatio
   const router = useRouter()
   const { data: conversation, isLoading, error } = useConversation(conversationId)
   const [showAssessmentsMobile, setShowAssessmentsMobile] = useState(false)
+  // Hides the transcript so the application details take the full width
+  const [detailsMaximised, setDetailsMaximised] = useState(false)
 
   const fromServicing = referrer === 'servicing'
 
-  // Escape: go back to entry point
+  // Escape: restore the split if the details are maximised, else go back to entry point
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (fromServicing) {
+        if (detailsMaximised) {
+          setDetailsMaximised(false)
+        } else if (fromServicing) {
           router.back()
         } else {
           router.push('/admin/applications')
@@ -55,7 +59,7 @@ export function ConversationDetailView({ conversationId, referrer }: Conversatio
     }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
-  }, [router, fromServicing])
+  }, [router, fromServicing, detailsMaximised])
 
   if (error instanceof Error && error.message === 'NOT_FOUND') {
     return (
@@ -139,6 +143,15 @@ export function ConversationDetailView({ conversationId, referrer }: Conversatio
             )}
           </div>
           <div className={styles.headerActions}>
+            <button
+              type="button"
+              className={styles.maximiseToggle}
+              onClick={() => setDetailsMaximised((v) => !v)}
+              aria-controls="application-details-panel"
+              title={detailsMaximised ? 'Show transcript (Esc)' : 'Hide transcript'}
+            >
+              {detailsMaximised ? 'Show transcript' : 'Maximise details'}
+            </button>
             {customerId && (
               <Link href={`/admin/servicing/${customerId}`} className={styles.viewProfileLink}>
                 View profile →
@@ -158,8 +171,8 @@ export function ConversationDetailView({ conversationId, referrer }: Conversatio
       )}
 
       {/* Split panel */}
-      <div className={styles.splitPanel}>
-        <div className={styles.leftPanel}>
+      <div className={`${styles.splitPanel} ${detailsMaximised ? styles.detailsMaximised : ''}`}>
+        <div className={styles.leftPanel} hidden={detailsMaximised}>
           <MessagePanel
             utterances={conversation?.utterances ?? []}
             isLoading={isLoading && !conversation}
@@ -167,6 +180,7 @@ export function ConversationDetailView({ conversationId, referrer }: Conversatio
         </div>
 
         <div
+          id="application-details-panel"
           className={`${styles.rightPanel} ${showAssessmentsMobile ? styles.mobileVisible : ''}`}
         >
           {conversation ? (

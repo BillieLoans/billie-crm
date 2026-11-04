@@ -19,7 +19,8 @@ export interface ScheduledPayment {
   paymentNumber: number
   dueDate: string
   amount: number
-  status: 'scheduled' | 'paid' | 'missed' | 'partial' | null
+  /** `void`: an instalment of a loan cancelled before disbursement (BTB-517); never owed. */
+  status: 'scheduled' | 'paid' | 'missed' | 'partial' | 'void' | null
   id?: string | null
   /** Amount actually paid (for paid/partial payments) */
   amountPaid?: number | null
@@ -50,7 +51,13 @@ export interface LoanAccountData {
   id: string
   loanAccountId: string
   accountNumber: string
-  accountStatus: 'pending_disbursement' | 'active' | 'paid_off' | 'in_arrears' | 'written_off'
+  accountStatus:
+    | 'pending_disbursement'
+    | 'active'
+    | 'paid_off'
+    | 'in_arrears'
+    | 'written_off'
+    | 'cancelled'
   loanTerms: {
     loanAmount: number | null
     loanFee: number | null
@@ -79,6 +86,18 @@ export interface LoanAccountData {
   updatedAt: string
   /** S3 URI for signed loan agreement document (accounts-v2.7.0+) */
   signedLoanAgreementUrl?: string | null
+  /**
+   * Set when the loan was cancelled before disbursement (BTB-517), from
+   * account.cancelled.v1. `reason` is the platform's lower-case reason code.
+   */
+  cancellation?: {
+    reason?: string | null
+    note?: string | null
+    evidenceRef?: string | null
+    cancelledById?: string | null
+    cancelledByName?: string | null
+    cancelledAt?: string | null
+  } | null
 }
 
 /**
@@ -126,6 +145,14 @@ export interface CustomerData extends ContactProvenanceFields {
     stateVersion?: number | null
     /** state.changed.v1: emission time of the event that last wrote this mirror (second guard clause). */
     stateChangedAt?: string | null
+    /** BTB-517: manual-set request that raised the block shown now (state.changed only). */
+    manualBlockRequestId?: string | null
+    /** BTB-517: latest manual set billieChat applied, and its reason code. */
+    manualSetRequestId?: string | null
+    manualSetReasonCode?: string | null
+    /** BTB-517: latest manual set billieChat refused, and why ("CODE: detail"). */
+    manualSetRejectedRequestId?: string | null
+    manualSetRejection?: string | null
   } | null
   /** Latest LAB EVS identity verification result (PR #67). */
   identityVerification?: {

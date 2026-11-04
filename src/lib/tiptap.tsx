@@ -3,9 +3,17 @@ import React from 'react'
 type TiptapNode = Record<string, unknown>
 
 export function textToTiptapDoc(text: string): TiptapNode {
+  return paragraphsToTiptapDoc([text])
+}
+
+/** A Tiptap doc with one plain-text paragraph per line, in order. */
+export function paragraphsToTiptapDoc(paragraphs: string[]): TiptapNode {
   return {
     type: 'doc',
-    content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
+    content: paragraphs.map((text) => ({
+      type: 'paragraph',
+      content: [{ type: 'text', text }],
+    })),
   }
 }
 

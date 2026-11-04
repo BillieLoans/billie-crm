@@ -9,7 +9,13 @@ export interface LoanAccountSearchResultProps {
     loanAccountId: string
     accountNumber: string
     customerName: string | null
-    accountStatus: 'active' | 'paid_off' | 'in_arrears' | 'written_off'
+    accountStatus:
+      | 'active'
+      | 'paid_off'
+      | 'in_arrears'
+      | 'written_off'
+      | 'pending_disbursement'
+      | 'cancelled'
     totalOutstanding: number
   }
   onSelect: () => void
@@ -20,6 +26,7 @@ const STATUS_LABELS: Record<string, { label: string; className: string }> = {
   paid_off: { label: 'Paid Off', className: 'badgePaidOff' },
   in_arrears: { label: 'In Arrears', className: 'badgeArrears' },
   written_off: { label: 'Written Off', className: 'badgeWrittenOff' },
+  cancelled: { label: 'Cancelled', className: 'badgeCancelled' },
 }
 
 // Hoisted to module scope - reused across all renders (perf optimization)

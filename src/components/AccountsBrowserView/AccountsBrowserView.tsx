@@ -189,7 +189,8 @@ export const AccountsBrowserView: React.FC = () => {
     // The status transition arrives via the event processor, so refetch
     // the browser query to pick up the updated accountStatus and
     // disbursedDate. Also invalidate the dashboard so the widget stays in
-    // sync if the user navigates back.
+    // sync if the user navigates back. Also used when the ledger refused
+    // because the loan was cancelled (BTB-517): the row's Disburse is stale.
     void queryClient.invalidateQueries({ queryKey: ['accounts', 'browse'] })
     void queryClient.invalidateQueries({ queryKey: ['dashboard'] })
   }, [queryClient])
@@ -358,6 +359,7 @@ export const AccountsBrowserView: React.FC = () => {
           isOpen={disburseOpen}
           onClose={handleDisburseClose}
           onSuccess={handleDisburseSuccess}
+          onLoanCancelled={handleDisburseSuccess}
           loanAccountId={disburseAccount.loanAccountId}
           accountNumber={disburseAccount.accountNumber}
           loanAmount={disburseAccount.loanTerms?.loanAmount ?? 0}

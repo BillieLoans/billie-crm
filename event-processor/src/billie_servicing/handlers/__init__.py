@@ -1,6 +1,7 @@
 """Event handlers for Billie Servicing App."""
 
 from .account import (
+    handle_account_cancelled,
     handle_account_closed,
     handle_account_created,
     handle_account_status_changed,
@@ -106,6 +107,8 @@ from .reapplication import (
     handle_reapplication_block_auto_cleared,
     handle_reapplication_block_clear_rejected,
     handle_reapplication_block_cleared,
+    handle_reapplication_block_manual_set_applied,
+    handle_reapplication_block_manual_set_rejected,
     handle_reapplication_block_state_changed,
     handle_reapplication_blocked,
 )
@@ -122,6 +125,7 @@ __all__ = [
     "handle_account_updated",
     "handle_account_status_changed",
     "handle_account_closed",
+    "handle_account_cancelled",
     "handle_schedule_created",
     "handle_schedule_updated",
     # Customer handlers
@@ -138,6 +142,8 @@ __all__ = [
     "handle_reapplication_block_clear_rejected",
     "handle_reapplication_block_auto_cleared",
     "handle_reapplication_block_state_changed",
+    "handle_reapplication_block_manual_set_applied",
+    "handle_reapplication_block_manual_set_rejected",
     # Identity verification archival (PR #67)
     "handle_identity_attempt",
     "handle_identity_report_archived",

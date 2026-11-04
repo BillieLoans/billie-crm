@@ -70,6 +70,18 @@ describe('LoanAccountCard (compact rail row)', () => {
     expect(screen.getByText(/Pending disbursement/i)).toBeInTheDocument()
   })
 
+  test('shows "Cancelled" for a loan cancelled before disbursement, as a closed row (BTB-517)', () => {
+    render(
+      <LoanAccountCard
+        account={createMockAccount({ accountStatus: 'cancelled', liveBalance: null, balances: null })}
+        onSelect={vi.fn()}
+        today={TODAY}
+      />,
+    )
+    expect(screen.getByText('Cancelled')).toBeInTheDocument()
+    expect(screen.getByTestId('loan-account-card-LOAN-001').className).toMatch(/rowClosed/)
+  })
+
   test('shows days-overdue line for an overdue account', () => {
     const account = createMockAccount({
       repaymentSchedule: { scheduleId: 's', numberOfPayments: 1, paymentFrequency: 'fortnightly', createdDate: null,

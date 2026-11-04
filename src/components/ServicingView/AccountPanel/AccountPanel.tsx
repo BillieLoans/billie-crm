@@ -1,6 +1,8 @@
 'use client'
 
 import { useMemo, useCallback, useEffect } from 'react'
+import { useAuth } from '@payloadcms/ui'
+import { getUserRole } from '@/lib/access'
 import type { LoanAccountData } from '@/hooks/queries/useCustomer'
 import type { SelectedFee } from '../FeeList'
 import { AccountSummaryBar } from './AccountSummaryBar'
@@ -39,6 +41,8 @@ export interface AccountPanelProps {
   hasPendingWriteOff?: boolean
   /** Callback to open disburse loan form */
   onDisburseLoan?: () => void
+  /** Callback to open the Cancel loan drawer (BTB-517, supervisor/admin) */
+  onCancelLoan?: () => void
 }
 
 /**
@@ -68,7 +72,12 @@ export const AccountPanel: React.FC<AccountPanelProps> = ({
   onRequestWriteOff,
   hasPendingWriteOff,
   onDisburseLoan,
+  onCancelLoan,
 }) => {
+  // Cancel loan needs approval authority (the route checks it again).
+  const { user } = useAuth()
+  const role = getUserRole(user)
+
   // Account IDs for keyboard navigation
   const accountIds = useMemo(
     () => allAccounts.map((a) => a.loanAccountId),
@@ -149,6 +158,8 @@ export const AccountPanel: React.FC<AccountPanelProps> = ({
             onRequestWriteOff={onRequestWriteOff}
             hasPendingWriteOff={hasPendingWriteOff}
             onDisburseLoan={onDisburseLoan}
+            onCancelLoan={onCancelLoan}
+            role={role}
           />
         )
       default:
@@ -167,6 +178,8 @@ export const AccountPanel: React.FC<AccountPanelProps> = ({
         onApplyDishonourFee={onApplyDishonourFee}
         onRequestWriteOff={onRequestWriteOff ?? (() => {})}
         onDisburseLoan={onDisburseLoan ?? (() => {})}
+        onCancelLoan={onCancelLoan}
+        role={role}
         onRefresh={onRefresh}
         isRefreshing={isRefreshing}
         onClose={onClose}

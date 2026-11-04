@@ -9,6 +9,9 @@ import { CopyButton } from '@/components/ui'
 import { getStatusConfig } from '../account-status'
 import { getAccountActions, type AccountAction } from '@/lib/getAccountActions'
 import { getAccountSignal } from '@/lib/accountTriage'
+import { cancellationReasonLabel } from '@/lib/cancellation'
+import { formatDateMedium } from '@/lib/formatters'
+import type { User } from '@/payload-types'
 import styles from './AccountSummaryBar.module.css'
 
 export interface AccountSummaryBarProps {
@@ -20,6 +23,10 @@ export interface AccountSummaryBarProps {
   onApplyDishonourFee: () => void
   onRequestWriteOff: () => void
   onDisburseLoan: () => void
+  /** Opens the Cancel loan drawer (BTB-517). Shown to supervisors/admins on a pending loan. */
+  onCancelLoan?: () => void
+  /** The signed-in user's role; gates Cancel loan. */
+  role?: User['role']
   onRefresh?: () => void
   isRefreshing?: boolean
   onClose?: () => void
@@ -37,7 +44,10 @@ export const AccountSummaryBar: React.FC<AccountSummaryBarProps> = (props) => {
   const signal = getAccountSignal(account)
   const [moreOpen, setMoreOpen] = useState(false)
 
-  const isTerminal = account.accountStatus === 'paid_off' || account.accountStatus === 'written_off'
+  const isTerminal =
+    account.accountStatus === 'paid_off' ||
+    account.accountStatus === 'written_off' ||
+    account.accountStatus === 'cancelled'
   const { isInArrears, bucket, isFallback } = useAccountAging({ accountId: account.loanAccountId, enabled: !isTerminal })
   const showAging = !isTerminal && !isFallback && (isInArrears || bucket !== 'current')
 
@@ -49,18 +59,20 @@ export const AccountSummaryBar: React.FC<AccountSummaryBarProps> = (props) => {
     hasPendingWriteOff,
     pendingRepayment: hasPendingAction(account.loanAccountId, 'record-repayment'),
     pendingWaive: hasPendingAction(account.loanAccountId, 'waive-fee'),
+    role: props.role,
   })
 
-  const handler: Record<AccountAction['id'], () => void> = {
+  const handler: Record<AccountAction['id'], (() => void) | undefined> = {
     disburse: props.onDisburseLoan,
     'record-payment': props.onRecordRepayment,
     'waive-fee': props.onWaiveFee,
     'apply-late-fee': props.onApplyLateFee,
     'apply-dishonour-fee': props.onApplyDishonourFee,
     'request-write-off': props.onRequestWriteOff,
+    'cancel-loan': props.onCancelLoan,
   }
 
-  const visible = actions.filter((a) => a.visible)
+  const visible = actions.filter((a) => a.visible && handler[a.id])
   const primary = visible.find((a) => a.primary) ?? null
   const inline = visible.find((a) => a.id === 'waive-fee') ?? null
   const menu = visible.filter((a) => a !== primary && a !== inline)
@@ -92,6 +104,7 @@ export const AccountSummaryBar: React.FC<AccountSummaryBarProps> = (props) => {
         <div className={styles.subId}>
           ID {shortId(account.loanAccountId)} <CopyButton value={account.loanAccountId} label="Copy loan account ID" />
         </div>
+        {account.accountStatus === 'cancelled' && <CancellationBlock account={account} />}
         <div className={styles.figures}>
           <div>
             <div className={styles.figLabel}>Total outstanding</div>
@@ -118,7 +131,7 @@ export const AccountSummaryBar: React.FC<AccountSummaryBarProps> = (props) => {
               {moreOpen && (
                 <div className={styles.menu} role="menu">
                   {menu.map((a) => (
-                    <button key={a.id} type="button" role="menuitem" className={styles.menuItem} onClick={() => { setMoreOpen(false); handler[a.id]() }} disabled={!a.enabled} title={a.disabledReason ?? undefined} data-testid={`summary-action-${a.id}`}>
+                    <button key={a.id} type="button" role="menuitem" className={styles.menuItem} onClick={() => { setMoreOpen(false); handler[a.id]?.() }} disabled={!a.enabled} title={a.disabledReason ?? undefined} data-testid={`summary-action-${a.id}`}>
                       {a.label}
                     </button>
                   ))}
@@ -186,5 +199,30 @@ export const AccountSummaryBar: React.FC<AccountSummaryBarProps> = (props) => {
         )}
       </div>
     </div>
+  )
+}
+
+/**
+ * The cancellation record, shown under the status pill for good (D9: this
+ * block is the "pinned" note). Neutral grey, like the pill: a cancelled loan
+ * is closed, not an alarm. Every value is said in words.
+ */
+function CancellationBlock({ account }: { account: LoanAccountData }) {
+  const c = account.cancellation
+  const cancelledAt = c?.cancelledAt ? formatDateMedium(c.cancelledAt) : '—'
+  return (
+    <section className={styles.cancellation} aria-label="Cancellation" data-testid="cancellation-block">
+      <p className={styles.cancellationTitle}>Cancelled before disbursement · {cancelledAt}</p>
+      <dl className={styles.cancellationList}>
+        <dt>Reason</dt>
+        <dd>{cancellationReasonLabel(c?.reason)}</dd>
+        <dt>Cancelled by</dt>
+        <dd>{c?.cancelledByName || '—'}</dd>
+        <dt>Evidence</dt>
+        <dd>{c?.evidenceRef || 'None given'}</dd>
+        <dt>Note</dt>
+        <dd className={styles.cancellationNote}>{c?.note || '—'}</dd>
+      </dl>
+    </section>
   )
 }

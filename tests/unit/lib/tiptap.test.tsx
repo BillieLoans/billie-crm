@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { render } from '@testing-library/react'
-import { renderNoteContent } from '@/lib/tiptap'
+import { paragraphsToTiptapDoc, renderNoteContent, textToTiptapDoc } from '@/lib/tiptap'
 
 const docWithLink = (href: string) => ({
   type: 'doc',
@@ -78,5 +78,21 @@ describe('Tiptap link protocol validation', () => {
     const anchor = container.querySelector('a')
     expect(anchor?.getAttribute('target')).toBe('_blank')
     expect(anchor?.getAttribute('rel')).toBe('noopener noreferrer')
+  })
+})
+
+describe('paragraphsToTiptapDoc', () => {
+  it('makes one paragraph per line, in order', () => {
+    expect(paragraphsToTiptapDoc(['First line', 'Second line'])).toEqual({
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'First line' }] },
+        { type: 'paragraph', content: [{ type: 'text', text: 'Second line' }] },
+      ],
+    })
+  })
+
+  it('is textToTiptapDoc for a single line', () => {
+    expect(paragraphsToTiptapDoc(['Only line'])).toEqual(textToTiptapDoc('Only line'))
   })
 })

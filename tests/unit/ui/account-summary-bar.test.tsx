@@ -70,3 +70,90 @@ describe('AccountSummaryBar', () => {
     expect(screen.queryByText('$999.00')).not.toBeInTheDocument()
   })
 })
+
+// BTB-517: cancel before disbursement.
+describe('AccountSummaryBar: cancelled before disbursement', () => {
+  afterEach(() => cleanup())
+
+  const cancelled = account({
+    accountStatus: 'cancelled',
+    liveBalance: { principalBalance: 0, feeBalance: 0, totalOutstanding: 0, asOf: '2026-10-30T05:00:00Z' },
+    cancellation: {
+      reason: 'mutual_cancellation',
+      note: 'Customer and Billie agreed to cancel before funding.',
+      evidenceRef: 'Signed variation, ticket 4411',
+      cancelledById: '7',
+      cancelledByName: 'Sam Supervisor',
+      cancelledAt: '2026-10-30T04:45:00.000Z',
+    },
+  })
+
+  test('shows a Cancelled pill in the neutral style', () => {
+    render(<AccountSummaryBar account={cancelled} hasPendingWriteOff={false} role="admin" {...handlers()} />)
+    const pill = screen.getByText('Cancelled', { selector: 'span' })
+    expect(pill.className).toMatch(/statusCancelled/)
+  })
+
+  test('renders the cancellation block: reason, date, by, note, evidence (D9)', () => {
+    render(<AccountSummaryBar account={cancelled} hasPendingWriteOff={false} role="admin" {...handlers()} />)
+    const block = screen.getByRole('region', { name: 'Cancellation' })
+    expect(block).toHaveTextContent('Cancelled before disbursement')
+    expect(block).toHaveTextContent('Mutual cancellation')
+    expect(block).toHaveTextContent('Sam Supervisor')
+    expect(block).toHaveTextContent('30 Oct 2026')
+    expect(block).toHaveTextContent('Customer and Billie agreed to cancel before funding.')
+    expect(block).toHaveTextContent('Signed variation, ticket 4411')
+  })
+
+  test('says there was no evidence reference rather than leaving a gap', () => {
+    const a = account({
+      accountStatus: 'cancelled',
+      cancellation: { ...cancelled.cancellation!, reason: 'duplicate', evidenceRef: null },
+    })
+    render(<AccountSummaryBar account={a} hasPendingWriteOff={false} role="admin" {...handlers()} />)
+    expect(screen.getByRole('region', { name: 'Cancellation' })).toHaveTextContent('Evidence')
+    expect(screen.getByRole('region', { name: 'Cancellation' })).toHaveTextContent('None given')
+  })
+
+  test('offers no money actions and no Disburse on a cancelled loan', () => {
+    render(<AccountSummaryBar account={cancelled} hasPendingWriteOff={false} role="admin" {...handlers()} />)
+    expect(screen.queryByRole('button', { name: /disburse loan/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /record payment/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /waive fee/i })).toBeNull()
+    expect(screen.queryByTestId('summary-action-more')).toBeNull()
+  })
+
+  test('no cancellation block on other statuses', () => {
+    render(<AccountSummaryBar account={account()} hasPendingWriteOff={false} role="admin" {...handlers()} />)
+    expect(screen.queryByRole('region', { name: 'Cancellation' })).toBeNull()
+  })
+
+  test('supervisor sees Cancel loan on a pending loan, and it opens the drawer', () => {
+    const h = { ...handlers(), onCancelLoan: vi.fn() }
+    render(
+      <AccountSummaryBar
+        account={account({ accountStatus: 'pending_disbursement' })}
+        hasPendingWriteOff={false}
+        role="supervisor"
+        {...h}
+      />,
+    )
+    fireEvent.click(screen.getByTestId('summary-action-more'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Cancel loan' }))
+    expect(h.onCancelLoan).toHaveBeenCalled()
+  })
+
+  test('operations does not see Cancel loan', () => {
+    render(
+      <AccountSummaryBar
+        account={account({ accountStatus: 'pending_disbursement' })}
+        hasPendingWriteOff={false}
+        role="operations"
+        {...handlers()}
+        onCancelLoan={vi.fn()}
+      />,
+    )
+    fireEvent.click(screen.getByTestId('summary-action-more'))
+    expect(screen.queryByRole('menuitem', { name: 'Cancel loan' })).toBeNull()
+  })
+})

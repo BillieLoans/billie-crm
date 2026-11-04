@@ -35,7 +35,13 @@ export interface LoanAccountSearchResult {
   accountNumber: string
   customerName: string | null
   customerIdString: string | null
-  accountStatus: 'active' | 'paid_off' | 'in_arrears' | 'written_off'
+  accountStatus:
+    | 'active'
+    | 'paid_off'
+    | 'in_arrears'
+    | 'written_off'
+    | 'pending_disbursement'
+    | 'cancelled'
   totalOutstanding: number
 }
 

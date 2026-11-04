@@ -63,6 +63,7 @@ vi.mock('@/components/ServicingView/ApplicationsPanel', () => ({
   ApplicationsPanel: () => <div data-testid="mock-apps" />,
 }))
 
+import { useAuth } from '@payloadcms/ui'
 import { ServicingView } from '@/components/ServicingView/ServicingView'
 
 const renderWithClient = (ui: ReactNode) => {
@@ -98,5 +99,66 @@ describe('ServicingView cockpit layout', () => {
     // immediately re-pick the top-triaged account.
     expect(screen.queryByTestId('account-summary-bar')).not.toBeInTheDocument()
     expect(screen.getByText('Select an account from the list.')).toBeInTheDocument()
+  })
+})
+
+describe('ServicingView customer-level manual block', () => {
+  test('a supervisor gets "Set manual block" in the customer header', () => {
+    vi.mocked(useAuth).mockReturnValue({ user: { id: 'sup-1', role: 'supervisor' } } as never)
+    try {
+      renderWithClient(<ServicingView customerId="CUST-1" />)
+      expect(screen.getByTestId('set-manual-block-btn')).toBeInTheDocument()
+    } finally {
+      vi.mocked(useAuth).mockReturnValue({ user: { id: 'ops-1', role: 'operations' } } as never)
+    }
+  })
+
+  test('an operations user does not', () => {
+    renderWithClient(<ServicingView customerId="CUST-1" />)
+    expect(screen.queryByTestId('set-manual-block-btn')).toBeNull()
+  })
+})
+
+describe('ServicingView context slide-over (≤1440px)', () => {
+  const openContext = () => {
+    const toggle = screen.getByTestId('context-toggle')
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByTestId('context-backdrop')).toBeInTheDocument()
+    return toggle
+  }
+
+  test('the close (×) button closes it and returns focus to the toggle', () => {
+    renderWithClient(<ServicingView customerId="CUST-1" />)
+    const toggle = openContext()
+    // By test id: jsdom applies the stylesheet but not the ≤1440px media rule that reveals it
+    const close = screen.getByTestId('context-close')
+    expect(close).toHaveAttribute('aria-label', 'Close context panel')
+    fireEvent.click(close)
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByTestId('context-backdrop')).not.toBeInTheDocument()
+    expect(document.activeElement).toBe(toggle)
+  })
+
+  test('clicking the background closes it', () => {
+    renderWithClient(<ServicingView customerId="CUST-1" />)
+    const toggle = openContext()
+    fireEvent.click(screen.getByTestId('context-backdrop'))
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  test('Escape closes it, but not while a dialog opened from inside it is up', () => {
+    renderWithClient(<ServicingView customerId="CUST-1" />)
+    const toggle = openContext()
+
+    const dialog = document.createElement('div')
+    dialog.setAttribute('aria-modal', 'true')
+    document.body.appendChild(dialog)
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    dialog.remove()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
   })
 })

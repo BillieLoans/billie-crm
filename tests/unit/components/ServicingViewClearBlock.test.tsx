@@ -44,6 +44,12 @@ vi.mock('@/hooks/useTrackCustomerView', () => ({
   useTrackCustomerView: vi.fn(),
 }))
 
+// The Cancel loan drawer reads the signed-in user (BTB-517). The real package
+// imports a .css file Node's ESM loader cannot handle in jsdom tests.
+vi.mock('@payloadcms/ui', () => ({
+  useAuth: vi.fn(() => ({ user: { id: 'ops-1', role: 'operations' } })),
+}))
+
 // ─── Sub-component stubs ──────────────────────────────────────────────────────
 
 vi.mock('@/components/ServicingView/CustomerHeader', () => ({

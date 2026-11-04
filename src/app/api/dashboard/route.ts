@@ -111,6 +111,7 @@ export async function GET(request: NextRequest) {
       upcomingPaymentsAll,
       pendingDisbursementResult,
       moneyFlowsToday,
+      cancelledCountResult,
     ] = await Promise.all([
       // Only query approvals if user has permission
       canSeeApprovals
@@ -155,6 +156,13 @@ export async function GET(request: NextRequest) {
 
       // Today's money flows (expected / received / disbursed)
       fetchMoneyFlowsToday(pool, now),
+
+      // Loans cancelled before disbursement (BTB-517). Cancelled is only
+      // reachable from pending, so every cancelled loan is one of these.
+      payload.count({
+        collection: 'loan-accounts',
+        where: { accountStatus: { equals: 'cancelled' } },
+      }),
     ])
 
     // 6. Get loan account data for all customers in a single batch query
@@ -267,6 +275,7 @@ export async function GET(request: NextRequest) {
       upcomingPayments: topUpcomingPayments,
       pendingDisbursements,
       pendingDisbursementsCount: pendingDisbursementResult.totalDocs,
+      cancelledBeforeDisbursementCount: cancelledCountResult.totalDocs,
       disbursementBuckets,
       moneyFlowsToday,
       systemStatus: {

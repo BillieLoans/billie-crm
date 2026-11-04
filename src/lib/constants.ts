@@ -10,6 +10,18 @@
 export const MIN_APPROVAL_COMMENT_LENGTH = 10
 
 /**
+ * Minimum length (after trimming) of the note a supervisor writes when
+ * cancelling a loan before disbursement. Mirrors the platform's own rule.
+ */
+export const MIN_CANCELLATION_NOTE_LENGTH = 20
+
+/**
+ * Minimum length (after trimming) of the reason a supervisor gives for
+ * cancelling without a manual re-application block ("no block needed").
+ */
+export const MIN_NO_BLOCK_REASON_LENGTH = 10
+
+/**
  * Default fallback name for unknown users in audit trails.
  */
 export const UNKNOWN_USER_FALLBACK = 'Unknown User'

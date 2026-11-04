@@ -75,23 +75,23 @@ to run the queries on.
 
 Defined in `src/server/reporting/schema.ts`. Every statement is idempotent.
 
-| Object | Kind | One row per | Source |
-|---|---|---|---|
-| `application` | view | conversation (an application attempt): funnel flags `submitted`, `decided`, `approved`, `funded`, `acquisition`; what was applied for (loan purpose category, amount, term); age at application; statement capture progress; identity, conduct, serviceability and fraud assessment outcomes; re-application block, kill and cancellation; LLM cost | `conversations`, `applications`, `customers`, `loan_accounts` |
-| `decision` | view | conversation, its latest decision event | `decision_event` |
-| `loan` | view | loan account, with the source of its application, repayment frequency, last payment and closure | `loan_accounts`, `application` |
-| `instalment` | view | scheduled instalment | `loan_accounts_repayment_schedule_payments` |
-| `customer` | view | customer: identity verification and screening, risk flags, fraud risk, re-application block, contact verification levels, age, state and postcode | `customers` |
-| `collection_case` | view | collections case | `collection_cases` |
-| `write_off` | view | write-off request, staff as user ids | `write_off_requests` |
-| `block_clear_request` | view | request to clear a re-application block | `reapplication_block_clear_requests` |
-| `notification` | view | notification event (no recipient or content) | `notifications` |
-| `llm_cost` | view | LLM call | `llm_costs` |
-| `contact_note` | view | staff contact note, its kind only (no subject or text) | `contact_notes` |
-| `decision_event` | table | `final_credit_decision` event, revisions included | event processor, S3 back-fill |
-| `snap_portfolio` | table | Sydney business day | ledger `GetPortfolioSummary` |
-| `decline_reason_category` | table | reason-code prefix | seeded from BTB-462 comment 11579 |
-| `credit_rule` | table | credit rule id: family and short label | seeded from billieChat's `businessRules/*.json` (`CREDIT_RULES` in `schema.ts`) |
+| Object                    | Kind  | One row per                                                                                                                                                                                                                                                                                                                                         | Source                                                                          |
+| ------------------------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `application`             | view  | conversation (an application attempt): funnel flags `submitted`, `decided`, `approved`, `funded`, `acquisition`; what was applied for (loan purpose category, amount, term); age at application; statement capture progress; identity, conduct, serviceability and fraud assessment outcomes; re-application block, kill and cancellation; LLM cost | `conversations`, `applications`, `customers`, `loan_accounts`                   |
+| `decision`                | view  | conversation, its latest decision event                                                                                                                                                                                                                                                                                                             | `decision_event`                                                                |
+| `loan`                    | view  | loan account, with the source of its application, repayment frequency, last payment and closure                                                                                                                                                                                                                                                     | `loan_accounts`, `application`                                                  |
+| `instalment`              | view  | scheduled instalment                                                                                                                                                                                                                                                                                                                                | `loan_accounts_repayment_schedule_payments`                                     |
+| `customer`                | view  | customer: identity verification and screening, risk flags, fraud risk, re-application block, contact verification levels, age, state and postcode                                                                                                                                                                                                   | `customers`                                                                     |
+| `collection_case`         | view  | collections case                                                                                                                                                                                                                                                                                                                                    | `collection_cases`                                                              |
+| `write_off`               | view  | write-off request, staff as user ids                                                                                                                                                                                                                                                                                                                | `write_off_requests`                                                            |
+| `block_clear_request`     | view  | request to clear a re-application block                                                                                                                                                                                                                                                                                                             | `reapplication_block_clear_requests`                                            |
+| `notification`            | view  | notification event (no recipient or content)                                                                                                                                                                                                                                                                                                        | `notifications`                                                                 |
+| `llm_cost`                | view  | LLM call                                                                                                                                                                                                                                                                                                                                            | `llm_costs`                                                                     |
+| `contact_note`            | view  | staff contact note, its kind only (no subject or text)                                                                                                                                                                                                                                                                                              | `contact_notes`                                                                 |
+| `decision_event`          | table | `final_credit_decision` event, revisions included                                                                                                                                                                                                                                                                                                   | event processor, S3 back-fill                                                   |
+| `snap_portfolio`          | table | Sydney business day                                                                                                                                                                                                                                                                                                                                 | ledger `GetPortfolioSummary`                                                    |
+| `decline_reason_category` | table | reason-code prefix                                                                                                                                                                                                                                                                                                                                  | seeded from BTB-462 comment 11579                                               |
+| `credit_rule`             | table | credit rule id: family and short label                                                                                                                                                                                                                                                                                                              | seeded from billieChat's `businessRules/*.json` (`CREDIT_RULES` in `schema.ts`) |
 
 Functions:
 
@@ -124,7 +124,7 @@ Functions:
   metadata. Decisions from before billieChat sent `failed_rules` have NULL
   there and report as "(rule not recorded)" until back-filled (below).
 - `effective_decline_reason(reason, account_conduct_decision,
-  serviceability_decision, identity_risk_decision, post_identity_risk_decision)`:
+serviceability_decision, identity_risk_decision, post_identity_risk_decision)`:
   the recorded reason, or for a decline from before reasons were recorded
   (BTB-462, October 2026) the first assessment component that declined, as a
   `CREDIT_ASSESSMENT:*` code, in the order billieChat's final decision rule
@@ -209,6 +209,20 @@ ALTER ROLE reporting_reader SET statement_timeout = '15s';
 ALTER ROLE reporting_reader SET search_path = reporting;
 ```
 
+`reporting_mcp_reader` is the MCP connector's role (ADR 0002). It can read
+every described column of the `reporting` views and tables except the
+restricted ones (`RESTRICTED_COLUMNS` in `schema-description.ts`), plus the
+`restricted_finding_summary` and `customer_risk_summary` views. The schema
+script grants it column by column whenever the role exists. Create it the
+same way as `reporting_reader` (see Connection, below):
+
+```sql
+CREATE ROLE reporting_mcp_reader LOGIN PASSWORD '<generated>';
+ALTER ROLE reporting_mcp_reader SET default_transaction_read_only = on;
+ALTER ROLE reporting_mcp_reader SET statement_timeout = '15s';
+ALTER ROLE reporting_mcp_reader SET search_path = reporting;
+```
+
 ## Decision events (BTB-504, BTB-505)
 
 `handle_final_decision` appends every `final_credit_decision` to
@@ -284,7 +298,7 @@ blocks).
   `today`, `today-N` or `YYYY-MM-DD`, resolved in Sydney when the report
   runs. A report whose parameters all have defaults runs as soon as it opens.
 - Charts (optional, up to two): `{type, x, series: [{column, label}], stacked,
-  sort, rollingAverage, drill}`. Types `line`, `area`, `bar`,
+sort, rollingAverage, drill}`. Types `line`, `area`, `bar`,
   `bar-horizontal` (ranked) and `stacked-100` (mix as shares). One y-axis; up
   to eight series, numeric columns only. Categories sort largest first unless
   `sort: "none"`; daily lines over three weeks get a 7-day average unless
@@ -300,7 +314,7 @@ blocks).
   days just before, or for whole calendar months the same number of months
   (October against September).
 - Column settings (optional): `{name, label, format, base, minBase,
-  description, better}`. Without them a column's format follows its name
+description, better}`. Without them a column's format follows its name
   (`*_rate` a 0–1 share, `*_pct` 0–100, money names in dollars, then hours and
   days). A rate with a `base` count is marked when the base is under `minBase`
   (20) and its tooltip gives a 95% interval.
@@ -329,11 +343,14 @@ run:
    error;
 6. rolls back.
 
-Over the MCP connector an ad-hoc query also passes the row-level guard in
-`mcp-guard.ts` (ADR 0001): a result that lists a screening, vulnerability,
-fraud, age or postcode column per identifier is refused, and any result with
-an identifier column is cut to 50 rows. Published reports are reviewed before
-they are published and are not guarded.
+Over the MCP connector, ad-hoc queries and published reports run as
+`reporting_mcp_reader` (ADR 0002), which cannot read the restricted columns
+(PEP and sanctions screening, the vulnerability flag, fraud findings, kill
+reasons) in any part of a query, and sees identity-category decline and
+block reasons as one generic code. An admin can let a published report read
+restricted columns over MCP ("Claude may read restricted columns"); it then
+runs as `reporting_reader`. Any result with an identifier column is cut to
+50 rows (`mcp-guard.ts`).
 
 Every run, refused and not-found ones included, is logged to `report-runs`:
 report, published version id (or `draft`), user, outcome, duration, rows and
@@ -354,12 +371,27 @@ changed parameter list can be tried before it is published.
 The runner connects with `REPORTING_DATABASE_URI` in every environment and
 answers "Reporting is not configured" without it.
 
-| Environment | `REPORTING_DATABASE_URI` |
-|---|---|
-| prod | the Neon read replica, logged in as `reporting_reader` |
-| demo | the read replica, or the primary while load is light, logged in as `reporting_reader` |
-| dev | the local database, logged in as `reporting_reader` |
-| test | the integration tests create the role and log in as it |
+| Environment | `REPORTING_DATABASE_URI`                                                              |
+| ----------- | ------------------------------------------------------------------------------------- |
+| prod        | the Neon read replica, logged in as `reporting_reader`                                |
+| demo        | the read replica, or the primary while load is light, logged in as `reporting_reader` |
+| dev         | the local database, logged in as `reporting_reader`                                   |
+| test        | the integration tests create the role and log in as it                                |
+
+The MCP connector's ad-hoc queries, and published reports run over it,
+connect with `REPORTING_MCP_DATABASE_URI`, logged in as
+`reporting_mcp_reader` (ADR 0002), on the same host as
+`REPORTING_DATABASE_URI`. Without it they answer "not set up"; the Reports
+view is unaffected. Set it up with the steps below, using
+`reporting_mcp_reader` in place of `reporting_reader` and
+`REPORTING_MCP_DATABASE_URI` in place of `REPORTING_DATABASE_URI`, **before**
+deploying a build that includes ADR 0002. Step 5's manual grant does not
+apply: the role's grants are column by column. If the role was created
+after the migration that grants it ran, print the grants with
+`pnpm exec tsx scripts/mcp-reader-grants.ts` and run the output as the owner
+on the primary (dev and test re-apply them at init). Step 6's
+check should also show
+`SELECT count(pep_hit) FROM reporting.application;  -- ERROR: permission denied`.
 
 Setting up an environment (once per environment: demo, then prod). Use the
 environment's **owner** connection for steps 1 and 5: `MIGRATE_DATABASE_URI`
@@ -449,13 +481,13 @@ publishes each one whose slug is free. After that, authors own them in the
 admin. The definitions are in `src/server/reporting/definitions/first-reports.ts`
 and are checked against TEST data in `tests/int/first-reports.int.spec.ts`.
 
-| Report | Slug | Roles | For |
-|---|---|---|---|
-| Decline rate and reasons | `decline-rate` | admin, supervisor | BTB-462: by source or ruleset version, with reason categories and a total. Emailed Monday. Its reasons chart drills into `decline-reasons` |
-| Application funnel by source | `application-funnel` | admin, supervisor, operations | BTB-500's split in the CRM: started, submitted, decided, approved, funded |
-| Go-to-market numbers | `gtm-numbers` | admin, supervisor | BTB-460: share of starts, pass rate, funded rate, median hours to money, repayment health, with an All sources row |
-| Decline reasons in detail | `decline-reasons` | admin, supervisor | Declines ranked by the finest reason held: each failed credit rule (via `decline_reason_label`), else the reason code in words. Parameters `segment` (what `decline-rate` drills with) and `category`. Its chart drills into `decline-reasons-trend` |
-| Decline reasons by week | `decline-reasons-trend` | admin, supervisor | Decisions by ISO week: declined, those matching one `reason` (a row name from `decline-reasons`), and the category mix |
+| Report                       | Slug                    | Roles                         | For                                                                                                                                                                                                                                                  |
+| ---------------------------- | ----------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Decline rate and reasons     | `decline-rate`          | admin, supervisor             | BTB-462: by source or ruleset version, with reason categories and a total. Emailed Monday. Its reasons chart drills into `decline-reasons`                                                                                                           |
+| Application funnel by source | `application-funnel`    | admin, supervisor, operations | BTB-500's split in the CRM: started, submitted, decided, approved, funded                                                                                                                                                                            |
+| Go-to-market numbers         | `gtm-numbers`           | admin, supervisor             | BTB-460: share of starts, pass rate, funded rate, median hours to money, repayment health, with an All sources row                                                                                                                                   |
+| Decline reasons in detail    | `decline-reasons`       | admin, supervisor             | Declines ranked by the finest reason held: each failed credit rule (via `decline_reason_label`), else the reason code in words. Parameters `segment` (what `decline-rate` drills with) and `category`. Its chart drills into `decline-reasons-trend` |
+| Decline reasons by week      | `decline-reasons-trend` | admin, supervisor             | Decisions by ISO week: declined, those matching one `reason` (a row name from `decline-reasons`), and the category mix                                                                                                                               |
 
 The two decline detail reports are created by the `20261101_090000_decline_reasons`
 migration, which also adds the drill-down to `decline-rate` where its SQL and
@@ -532,13 +564,13 @@ Checks (`src/server/reporting/ask/validate.ts`). Errors block saving, and the
 save route runs every check again (including the run on the defaults), so the
 browser cannot skip them:
 
-| Code | Error when |
-|---|---|
-| `TITLE`, `DESCRIPTION`, `PARAMETERS`, `CHART` | the field is missing or invalid |
-| `SQL`, `SCHEMA` | the SQL fails the runner's static check, or names a schema other than `reporting` |
-| `PLACEHOLDERS` | `$n` placeholders and parameters do not match one to one |
-| `RUN` | the query fails on its defaults |
-| `RATE_RANGE` | a `*_rate` column falls outside 0–1 or a `*_pct` outside 0–100 |
+| Code                                          | Error when                                                                        |
+| --------------------------------------------- | --------------------------------------------------------------------------------- |
+| `TITLE`, `DESCRIPTION`, `PARAMETERS`, `CHART` | the field is missing or invalid                                                   |
+| `SQL`, `SCHEMA`                               | the SQL fails the runner's static check, or names a schema other than `reporting` |
+| `PLACEHOLDERS`                                | `$n` placeholders and parameters do not match one to one                          |
+| `RUN`                                         | the query fails on its defaults                                                   |
+| `RATE_RANGE`                                  | a `*_rate` column falls outside 0–1 or a `*_pct` outside 0–100                    |
 
 Warnings are shown before saving: a parameter with no default (`NO_DEFAULT`),
 filtering on a `*_at` timestamp instead of the Sydney `*_on` date
@@ -585,16 +617,17 @@ drafts until a second engineer reviews each.
 Claude Code, Claude chat and Claude artifacts, built on
 `@payloadcms/plugin-mcp` and configured in `src/server/reporting/mcp.ts`. It
 reaches the same governed path as the Reports view: report SQL only ever runs
-through the runner as `reporting_reader`.
+through the runner, as `reporting_mcp_reader` (or `reporting_reader` for a
+published report an admin has allowed restricted columns; ADR 0002).
 
-| Tool | Does |
-|---|---|
-| `list_reports` | Lists the published reports the key can run, with their parameters |
-| `describe_reporting_schema` | Returns the schema description and business rules Ask Claude uses |
-| `run_report_query` | Runs one SELECT through the runner, `$n` parameters bound, at most 1,000 rows (and 200,000 characters; 50 rows when a column identifies a customer, application, loan or case), with a 5 second timeout and one query in flight per key. A result that puts screening, vulnerability, fraud, age or postcode beside an identifier is refused (`ROW_LEVEL`; ADR 0001). The whole statement is logged in Report asks as `mcp_query`, with the key or connection that ran it |
-| `run_report` | Runs a published report by slug on its parameters, with the same caps. Logged in Report runs with trigger `mcp`. Dashboards use this, so they show reviewed, aggregate reports |
-| `findReportDefinitions`, `createReportDefinitions` | The plugin's tools for `report-definitions`. Reads are always depth 0, so no user record reaches Claude. A new report is a draft with `origin: mcp` and the key's person as author |
-| `update_report_draft` | Changes a report by id and saves a new draft version; the published report is unchanged until a supervisor publishes. Never overrides an editor's lock. (The plugin's own update tool is off: it takes a server file path that it reads before any hook runs) |
+| Tool                                               | Does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `list_reports`                                     | Lists the published reports the key can run, with their parameters                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `describe_reporting_schema`                        | Returns the schema description and business rules Ask Claude uses, without the restricted columns                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `run_report_query`                                 | Runs one SELECT through the runner, `$n` parameters bound, at most 1,000 rows (and 200,000 characters; 50 rows when a column identifies a customer, application, loan or case), with a 5 second timeout and one query in flight per key, as `reporting_mcp_reader`. A query that names a restricted column fails with `PERMISSION` and a message pointing at `restricted_finding_summary` and `customer_risk_summary` (ADR 0002). The whole statement is logged in Report asks as `mcp_query`, with the key or connection that ran it |
+| `run_report`                                       | Runs a published report by slug on its parameters, with the same caps, as `reporting_mcp_reader` unless an admin has allowed the report restricted columns. Logged in Report runs with trigger `mcp`. Dashboards use this, so they show reviewed, aggregate reports                                                                                                                                                                                                                                                                   |
+| `findReportDefinitions`, `createReportDefinitions` | The plugin's tools for `report-definitions`. Reads are always depth 0, so no user record reaches Claude. A new report is a draft with `origin: mcp` and the key's person as author                                                                                                                                                                                                                                                                                                                                                    |
+| `update_report_draft`                              | Changes a report by id and saves a new draft version; the published report is unchanged until a supervisor publishes. Never overrides an editor's lock. (The plugin's own update tool is off: it takes a server file path that it reads before any hook runs)                                                                                                                                                                                                                                                                         |
 
 Every write over MCP is a draft (`mcpDraftsOnly` in `ReportDefinitions.ts`);
 bulk updates and deletes are refused. Reports keep up to 500 versions, so
@@ -626,9 +659,9 @@ Keys:
   by an HMAC of it.
 
 Over MCP, Claude sees query results. That is why only the `reporting` schema
-is reachable, rows are capped, and the row-level guard refuses sensitive
-columns per identifier (ADR 0001, `docs/adr/`). Every result carries a note
-that rows are data, not instructions, and attribution text (utm_* values,
+is reachable, rows are capped, and the restricted findings are kept from the
+connector by its database role (ADR 0002, `docs/adr/`). Every result carries a note
+that rows are data, not instructions, and attribution text (utm\_\* values,
 which anyone can put in a link) is reduced to printable characters by
 `reporting.attribution_text` before it reaches a report. Ask for aggregates;
 never pull customer-level rows you do not need.
@@ -833,9 +866,9 @@ run ignores the Monday 08:00 rule but still sends at most once a day.
 
 Repository secrets (an environment is skipped while its URL is unset):
 
-| Secret | Value |
-|---|---|
-| `CRM_URL_DEMO`, `CRM_URL_PROD` | e.g. `https://crm.billie.loans` |
+| Secret                              | Value                           |
+| ----------------------------------- | ------------------------------- |
+| `CRM_URL_DEMO`, `CRM_URL_PROD`      | e.g. `https://crm.billie.loans` |
 | `REPORTING_JOB_TOKEN_DEMO`, `_PROD` | the app's `REPORTING_JOB_TOKEN` |
 
 Cloudflare adds the `x-origin-secret` header to requests itself, so the
@@ -843,14 +876,14 @@ workflow does not hold `CF_SECRET`.
 
 ## Environment
 
-| Variable | Used by | Notes |
-|---|---|---|
-| `REPORTING_JOB_TOKEN` | scheduled jobs | Long random string, Fly secret |
-| `RESEND_API_KEY` | Monday email, report emails and alerts | Resend API key; the job refuses to run without it |
-| `RESEND_FROM_ADDRESS` | Monday email | Defaults to `noreply@billie.loans`, the verified sender platform-services uses |
-| `NEXT_PUBLIC_APP_URL` | Monday email | Already set for Payload; used for the report link |
-| `REPORTS_EMAIL_LABEL` | Monday email, report emails | `DEMO` on demo; unset on prod |
-| `REPORTS_SLACK_WEBHOOK_URL` | report emails and alerts | Slack incoming webhook for the shared channel; unset = Slack not offered |
-| `REPORTING_DATABASE_URI` | report runner | Logged in as `reporting_reader`; the Neon read replica in deployed environments. Required everywhere |
-| `ANTHROPIC_API_KEY` | Ask Claude | Fly secret on the CRM app; Ask is unavailable without it |
-| `REDIS_URL` | rate limits | Already set for event publishing; the MCP and OAuth rate limits count there, and in process memory without it |
+| Variable                    | Used by                                | Notes                                                                                                         |
+| --------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `REPORTING_JOB_TOKEN`       | scheduled jobs                         | Long random string, Fly secret                                                                                |
+| `RESEND_API_KEY`            | Monday email, report emails and alerts | Resend API key; the job refuses to run without it                                                             |
+| `RESEND_FROM_ADDRESS`       | Monday email                           | Defaults to `noreply@billie.loans`, the verified sender platform-services uses                                |
+| `NEXT_PUBLIC_APP_URL`       | Monday email                           | Already set for Payload; used for the report link                                                             |
+| `REPORTS_EMAIL_LABEL`       | Monday email, report emails            | `DEMO` on demo; unset on prod                                                                                 |
+| `REPORTS_SLACK_WEBHOOK_URL` | report emails and alerts               | Slack incoming webhook for the shared channel; unset = Slack not offered                                      |
+| `REPORTING_DATABASE_URI`    | report runner                          | Logged in as `reporting_reader`; the Neon read replica in deployed environments. Required everywhere          |
+| `ANTHROPIC_API_KEY`         | Ask Claude                             | Fly secret on the CRM app; Ask is unavailable without it                                                      |
+| `REDIS_URL`                 | rate limits                            | Already set for event publishing; the MCP and OAuth rate limits count there, and in process memory without it |

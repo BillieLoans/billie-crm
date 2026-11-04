@@ -63,6 +63,12 @@ vi.mock('@/lib/constants', () => ({
   ASK_DRAFT_STORAGE_KEY: 'billie-ask-draft',
 }))
 
+// The frozen Cancel loan requests (BTB-517, R26) are swept on a user change.
+const mockClearAllFrozenCancellations = vi.fn()
+vi.mock('@/lib/frozenCancellation', () => ({
+  clearAllFrozenCancellations: () => mockClearAllFrozenCancellations(),
+}))
+
 // Import after mocks
 import { UserSessionGuard } from '@/components/UserSessionGuard'
 
@@ -216,6 +222,20 @@ describe('UserSessionGuard', () => {
 
       expect(localStorage.getItem(RECENT_REPORTS_STORAGE_KEY)).toBeNull()
       expect(sessionStorage.getItem(ASK_DRAFT_STORAGE_KEY)).toBeNull()
+    })
+
+    it("should sweep the previous user's frozen Cancel loan requests on user change (R26)", () => {
+      localStorage.setItem(SESSION_USER_STORAGE_KEY, 'user-a')
+      mockUseAuth.mockReturnValue({ user: { id: 'user-b' } })
+      render(<UserSessionGuard />)
+      expect(mockClearAllFrozenCancellations).toHaveBeenCalledTimes(1)
+    })
+
+    it('should not sweep them when the same user reloads', () => {
+      localStorage.setItem(SESSION_USER_STORAGE_KEY, 'user-a')
+      mockUseAuth.mockReturnValue({ user: { id: 'user-a' } })
+      render(<UserSessionGuard />)
+      expect(mockClearAllFrozenCancellations).not.toHaveBeenCalled()
     })
   })
 

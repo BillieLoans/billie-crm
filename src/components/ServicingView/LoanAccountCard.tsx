@@ -42,6 +42,7 @@ function statusLine(account: LoanAccountData, signal: AccountSignal): string {
     case 'pending':
       return 'Pending disbursement'
     case 'closed':
+      if (account.accountStatus === 'cancelled') return 'Cancelled'
       return account.accountStatus === 'written_off' ? 'Written off' : 'Paid off'
     case 'active':
     default:

@@ -4,6 +4,7 @@ import type { LoanAccountData } from '@/hooks/queries/useCustomer'
 import { useUIStore } from '@/stores/ui'
 import { useOptimisticStore } from '@/stores/optimistic'
 import { getAccountActions, type AccountActionId } from '@/lib/getAccountActions'
+import type { User } from '@/payload-types'
 import styles from './styles.module.css'
 
 export interface ActionsTabProps {
@@ -14,6 +15,10 @@ export interface ActionsTabProps {
   onApplyDishonourFee: () => void
   onRequestWriteOff?: () => void
   onDisburseLoan?: () => void
+  /** Opens the Cancel loan drawer (BTB-517). */
+  onCancelLoan?: () => void
+  /** The signed-in user's role; gates Cancel loan. */
+  role?: User['role']
   hasPendingWriteOff?: boolean
 }
 
@@ -26,6 +31,7 @@ const COPY: Record<AccountActionId, { icon: string; description: string }> = {
   'apply-late-fee': { icon: '⏰', description: 'Apply a late fee for missed or overdue payments on this account.' },
   'apply-dishonour-fee': { icon: '🔄', description: 'Apply a dishonour fee for a failed direct debit on this account.' },
   'request-write-off': { icon: '📝', description: 'Submit a write-off request for this account. Requires approval from a supervisor.' },
+  'cancel-loan': { icon: '⊘', description: 'Cancel this loan before any money is paid out. Nothing will be owed and the loan can never be disbursed. This cannot be undone.' },
 }
 
 export const ActionsTab: React.FC<ActionsTabProps> = (props) => {
@@ -40,6 +46,7 @@ export const ActionsTab: React.FC<ActionsTabProps> = (props) => {
     'apply-late-fee': props.onApplyLateFee,
     'apply-dishonour-fee': props.onApplyDishonourFee,
     'request-write-off': props.onRequestWriteOff,
+    'cancel-loan': props.onCancelLoan,
   }
   const testId: Record<AccountActionId, string> = {
     disburse: 'action-disburse-loan',
@@ -48,6 +55,7 @@ export const ActionsTab: React.FC<ActionsTabProps> = (props) => {
     'apply-late-fee': 'action-apply-late-fee',
     'apply-dishonour-fee': 'action-apply-dishonour-fee',
     'request-write-off': 'action-request-writeoff',
+    'cancel-loan': 'action-cancel-loan',
   }
 
   const actions = getAccountActions(account, {
@@ -55,6 +63,7 @@ export const ActionsTab: React.FC<ActionsTabProps> = (props) => {
     hasPendingWriteOff,
     pendingRepayment: hasPendingAction(account.loanAccountId, 'record-repayment'),
     pendingWaive: hasPendingAction(account.loanAccountId, 'waive-fee'),
+    role: props.role,
   }).filter((a) => a.visible && handler[a.id])
 
   const totalOutstanding = account.liveBalance?.totalOutstanding ?? account.balances?.totalOutstanding ?? 0
@@ -67,6 +76,9 @@ export const ActionsTab: React.FC<ActionsTabProps> = (props) => {
           <span className={styles.actionsWarningIcon}>🔒</span>
           <span>System is in read-only mode. Actions are temporarily disabled.</span>
         </div>
+      )}
+      {account.accountStatus === 'cancelled' && (
+        <p className={styles.actionCardDescription}>No actions are available on a cancelled loan.</p>
       )}
       {actions.map((a) => (
         <div className={styles.actionCard} key={a.id}>

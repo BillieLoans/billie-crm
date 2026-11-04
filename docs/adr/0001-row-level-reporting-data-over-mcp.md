@@ -1,6 +1,6 @@
 # ADR 0001: Row-level reporting data over the MCP connector
 
-Date: 2026-10-24. Status: accepted. Context: BTB-509 and the October 2026
+Date: 2026-10-24. Status: superseded by ADR 0002. Context: BTB-509 and the October 2026
 security review of reporting.
 
 ## Context

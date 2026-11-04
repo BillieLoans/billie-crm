@@ -19,6 +19,7 @@ const STATUS_LABEL: Record<AccountStatus, string> = {
   in_arrears: 'In arrears',
   paid_off: 'Paid off',
   written_off: 'Written off',
+  cancelled: 'Cancelled',
 }
 
 const STATUS_CLASS: Record<AccountStatus, string> = {
@@ -27,6 +28,7 @@ const STATUS_CLASS: Record<AccountStatus, string> = {
   in_arrears: styles.statusArrears,
   paid_off: styles.statusPaidOff,
   written_off: styles.statusWrittenOff,
+  cancelled: styles.statusCancelled,
 }
 
 export interface AccountPeekDrawerProps {

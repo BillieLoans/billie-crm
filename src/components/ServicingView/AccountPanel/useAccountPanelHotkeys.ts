@@ -45,6 +45,12 @@ export function useAccountPanelHotkeys({
       // Don't handle if not active
       if (!isActive) return
 
+      // A drawer or dialog is open over the panel (they all set aria-modal):
+      // its keys are its own. Escape here would close the panel behind it and
+      // unmount the drawer with whatever was typed in it; an arrow key would
+      // swap the account the drawer is acting on.
+      if (document.querySelector('[aria-modal="true"]')) return
+
       // Don't handle if user is typing in an input
       if (isEditableTarget(event.target) || !characterShortcutAllowed(event)) return
 

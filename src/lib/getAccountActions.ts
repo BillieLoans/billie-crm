@@ -1,5 +1,7 @@
 // src/lib/getAccountActions.ts
 import type { LoanAccountData } from '@/hooks/queries/useCustomer'
+import type { User } from '@/payload-types'
+import { hasApprovalAuthority } from '@/lib/access'
 
 export type AccountActionId =
   | 'disburse'
@@ -8,12 +10,15 @@ export type AccountActionId =
   | 'apply-late-fee'
   | 'apply-dishonour-fee'
   | 'request-write-off'
+  | 'cancel-loan'
 
 export interface AccountActionContext {
   readOnly: boolean
   hasPendingWriteOff: boolean
   pendingRepayment: boolean
   pendingWaive: boolean
+  /** The signed-in user's role. Cancelling a loan needs approval authority. */
+  role?: User['role']
 }
 
 export interface AccountAction {
@@ -39,6 +44,9 @@ export function getAccountActions(
   ctx: AccountActionContext,
 ): AccountAction[] {
   const isPending = account.accountStatus === 'pending_disbursement'
+  // BTB-517: a loan cancelled before disbursement is terminal. Nothing can be
+  // disbursed, paid, waived, charged or written off on it.
+  const isCancelled = account.accountStatus === 'cancelled'
 
   // Resolve a disabledReason in precedence order; null means enabled.
   const reason = (extra: () => string | null): string | null => {
@@ -79,7 +87,20 @@ export function getAccountActions(
     ),
   })
 
-  return [disburse, recordPayment, waiveFee, lateFee, dishonourFee, writeOff]
+  // BTB-517: supervisor/admin only (the route checks it again). Danger, never
+  // primary: Disburse stays the pending loan's primary action.
+  const cancelLoan: AccountAction = {
+    id: 'cancel-loan',
+    label: 'Cancel loan',
+    visible: isPending && hasApprovalAuthority({ role: ctx.role }),
+    primary: false,
+    danger: true,
+    disabledReason: ctx.readOnly ? READONLY_REASON : null,
+    enabled: isPending && !ctx.readOnly,
+  }
+
+  const actions = [disburse, recordPayment, waiveFee, lateFee, dishonourFee, writeOff, cancelLoan]
+  return isCancelled ? actions.map((a) => ({ ...a, visible: false })) : actions
 }
 
 function mk(

@@ -156,6 +156,68 @@ describe('GET /api/customer/:customerId', () => {
   })
 })
 
+describe('GET /api/customer/:customerId: cancelled loans (BTB-517)', () => {
+  it('passes a cancelled loan’s cancellation details through to the account header', async () => {
+    const cancellation = {
+      reason: 'customer_withdrew',
+      note: 'Customer rang to withdraw before the money moved.',
+      evidenceRef: null,
+      cancelledById: '7',
+      cancelledByName: 'Sam Supervisor',
+      cancelledAt: '2026-10-30T04:45:00.000Z',
+    }
+    mockFind.mockImplementation(async ({ collection }: { collection: string }) => {
+      if (collection === 'customers') return { docs: [CANONICAL] }
+      if (collection === 'loan-accounts') {
+        return {
+          docs: [
+            {
+              id: 'la-1',
+              loanAccountId: 'LA-1',
+              accountNumber: '1000001',
+              accountStatus: 'cancelled',
+              cancellation,
+            },
+            {
+              id: 'la-2',
+              loanAccountId: 'LA-2',
+              accountNumber: '1000002',
+              accountStatus: 'active',
+            },
+          ],
+        }
+      }
+      return { docs: [] }
+    })
+
+    const res = await detailRequest('23D47AB2')
+
+    const accounts = res.body.accounts as Array<Record<string, unknown>>
+    expect(accounts[0].accountStatus).toBe('cancelled')
+    expect(accounts[0].cancellation).toEqual(cancellation)
+    expect(accounts[1].cancellation).toBeNull()
+  })
+
+  it('passes the manual block fields through on the customer’s block', async () => {
+    const reapplicationBlock = {
+      reason: 'MANUAL_ADMIN',
+      blockedUntil: null,
+      manualBlockRequestId: 'req-1',
+      manualSetRequestId: 'req-1',
+      manualSetReasonCode: 'credit_review_hold',
+      manualSetRejectedRequestId: null,
+      manualSetRejection: null,
+    }
+    mockFind.mockImplementation(async ({ collection }: { collection: string }) =>
+      collection === 'customers' ? { docs: [{ ...CANONICAL, reapplicationBlock }] } : { docs: [] },
+    )
+    const res = await detailRequest('23D47AB2')
+    expect((res.body.customer as Record<string, unknown>).reapplicationBlock).toEqual(
+      reapplicationBlock,
+    )
+  })
+})
+
 describe('GET /api/customer/search', () => {
   it('points an alias hit at the canonical and labels the former record', async () => {
     mockFind.mockResolvedValue({ docs: [ALIAS], totalDocs: 1 })

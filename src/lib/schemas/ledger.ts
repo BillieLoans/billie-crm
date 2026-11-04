@@ -6,6 +6,8 @@
  */
 
 import { z } from 'zod'
+import { CANCELLATION_REASON_CODES } from '@/lib/cancellation'
+import { MIN_CANCELLATION_NOTE_LENGTH, MIN_NO_BLOCK_REASON_LENGTH } from '@/lib/constants'
 
 // =============================================================================
 // Shared Helpers
@@ -144,3 +146,62 @@ export const DisburseLoanSchema = z.object({
 })
 
 export type DisburseLoan = z.infer<typeof DisburseLoanSchema>
+
+// =============================================================================
+// Cancel Loan (before disbursement)
+// =============================================================================
+
+/**
+ * What the supervisor confirmed about the customer's re-application block
+ * before cancelling: either a manual block is in place (the server re-checks
+ * it, AC16), or none is needed and they say why.
+ */
+export const BlockConfirmationSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('manual_block_active') }),
+  z.object({
+    kind: z.literal('no_block_needed'),
+    reason: z
+      .string()
+      .trim()
+      .min(
+        MIN_NO_BLOCK_REASON_LENGTH,
+        `Give a reason of at least ${MIN_NO_BLOCK_REASON_LENGTH} characters`,
+      ),
+  }),
+])
+
+export type BlockConfirmation = z.infer<typeof BlockConfirmationSchema>
+
+/**
+ * `reason` is one of the five codes the platform accepts, never the reserved
+ * `lender_declined_pre_disbursement`. `idempotencyKey` is minted once per form
+ * and reused on every retry, so a retry after a publish failure completes the
+ * same cancel instead of starting another.
+ */
+export const CancelAccountSchema = z
+  .object({
+    loanAccountId: z.string().min(1, 'Loan account ID is required'),
+    reason: z.enum(CANCELLATION_REASON_CODES, { error: 'Choose a cancellation reason' }),
+    note: z
+      .string()
+      .trim()
+      .min(
+        MIN_CANCELLATION_NOTE_LENGTH,
+        `Note must be at least ${MIN_CANCELLATION_NOTE_LENGTH} characters`,
+      )
+      .max(2000),
+    evidenceRef: z.string().trim().max(500).optional(),
+    blockConfirmation: BlockConfirmationSchema,
+    idempotencyKey: z.uuid('Idempotency key must be a UUID'),
+  })
+  .superRefine((value, ctx) => {
+    if (value.reason === 'mutual_cancellation' && !value.evidenceRef) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['evidenceRef'],
+        message: 'Evidence reference is required for a mutual cancellation',
+      })
+    }
+  })
+
+export type CancelAccount = z.infer<typeof CancelAccountSchema>

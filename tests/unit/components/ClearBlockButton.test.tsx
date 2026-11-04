@@ -75,6 +75,23 @@ describe('ClearBlockButton', () => {
       expect(screen.queryByTestId('clear-block-modal-stub')).not.toBeInTheDocument()
     })
   })
+  describe('retired reason (BTB-544)', () => {
+    it('renders nothing for a linked_open_review block — there is no hold to clear', () => {
+      render(
+        <ClearBlockButton
+          block={{
+            reason: 'linked_open_review',
+            canonicalCustomerId: 'cust-123',
+            clearStatus: 'cleared',
+          }}
+          conversationId="conv-1"
+        />,
+      )
+      expect(screen.queryByTestId('clear-block-btn')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('clear-block-btn-disabled')).not.toBeInTheDocument()
+      expect(screen.queryByText(/previous clear/)).not.toBeInTheDocument()
+    })
+  })
   describe('partial clear (spec §14) retry path', () => {
     it('still renders the button when clearedAt is set but the reason stands', () => {
       render(

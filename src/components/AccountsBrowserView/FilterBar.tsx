@@ -26,6 +26,7 @@ const STATUS_LABEL: Record<AccountStatus, string> = {
   in_arrears: 'Arrears',
   paid_off: 'Paid off',
   written_off: 'Written off',
+  cancelled: 'Cancelled',
 }
 
 export interface FilterBarProps {

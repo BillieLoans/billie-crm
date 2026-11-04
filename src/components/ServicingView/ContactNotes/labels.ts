@@ -4,6 +4,7 @@ export const ACCOUNT_STATUS_LABELS: Record<string, string> = {
   closed: 'Closed',
   settled: 'Settled',
   written_off: 'Written Off',
+  cancelled: 'Cancelled',
 }
 
 export function getAccountStatusLabel(status: string | null | undefined): string {

@@ -45,7 +45,9 @@ class TestConversationKilled:
     async def test_update_only_and_version_bump(self, mock_pool):
         mock_pool.set_fetchrow({"status": "active", "cancellation_record": None})
         await handle_conversation_killed(mock_pool, _event())
-        updates = [c for c in mock_pool.calls if c.op == "UPDATE"]
+        # The kill also unbinds the customer's manual block (BTB-517, R23):
+        # count the conversation write only.
+        updates = [c for c in mock_pool.calls_against("conversations") if c.op == "UPDATE"]
         assert len(updates) == 1
         assert "version = COALESCE(version, 1) + 1" in updates[0].sql
         assert not mock_pool.inserts_into("conversations")

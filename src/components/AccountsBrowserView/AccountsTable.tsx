@@ -13,6 +13,7 @@ const STATUS_CONFIG: Record<AccountStatus, { label: string; className: string }>
   in_arrears: { label: 'Arrears', className: styles.statusArrears },
   paid_off: { label: 'Paid off', className: styles.statusPaidOff },
   written_off: { label: 'Written off', className: styles.statusWrittenOff },
+  cancelled: { label: 'Cancelled', className: styles.statusCancelled },
 }
 
 export interface AccountsTableColumn {

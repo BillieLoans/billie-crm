@@ -508,3 +508,52 @@ describe('RepaymentScheduleList', () => {
     })
   })
 })
+
+// BTB-517 (AC10): every instalment of a cancelled loan is void. Void is never
+// due, next or outstanding.
+describe('RepaymentScheduleList: void instalments', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-14'))
+  })
+  afterEach(() => {
+    cleanup()
+    vi.useRealTimers()
+  })
+
+  const voided: ScheduledPayment[] = [
+    { paymentNumber: 1, dueDate: '2025-12-13', amount: 125, status: 'void', id: 'v1', amountRemaining: 125 },
+    { paymentNumber: 2, dueDate: '2026-01-20', amount: 125, status: 'void', id: 'v2', amountRemaining: 125 },
+    { paymentNumber: 3, dueDate: '2026-02-03', amount: 125, status: 'void', id: 'v3', amountRemaining: 125 },
+  ]
+
+  test('summary shows them as void, with nothing outstanding or overdue', () => {
+    render(<RepaymentScheduleList payments={voided} numberOfPayments={3} paymentFrequency="fortnightly" />)
+    const summary = screen.getByTestId('payment-summary')
+    expect(summary).toHaveTextContent('3 Void')
+    expect(summary).not.toHaveTextContent('Outstanding')
+    expect(summary).not.toHaveTextContent('Overdue')
+  })
+
+  test('each row reads Void, never Due (next), Overdue or Outstanding', () => {
+    render(<RepaymentScheduleList payments={voided} numberOfPayments={3} paymentFrequency="fortnightly" />)
+    fireEvent.click(screen.getByTestId('schedule-toggle'))
+    for (const n of [1, 2, 3]) {
+      const row = screen.getByTestId(`payment-row-${n}`)
+      expect(row).toHaveTextContent('Void')
+      expect(row).not.toHaveTextContent(/Due \(next\)|Overdue|Outstanding/)
+    }
+  })
+
+  test('a void instalment never becomes the next due among live ones', () => {
+    const mixed: ScheduledPayment[] = [
+      { paymentNumber: 1, dueDate: '2026-01-20', amount: 125, status: 'void', id: 'm1' },
+      { paymentNumber: 2, dueDate: '2026-02-03', amount: 125, status: 'scheduled', id: 'm2' },
+    ]
+    render(<RepaymentScheduleList payments={mixed} numberOfPayments={2} paymentFrequency="fortnightly" />)
+    fireEvent.click(screen.getByTestId('schedule-toggle'))
+    expect(screen.getByTestId('payment-row-1')).toHaveTextContent('Void')
+    expect(screen.getByTestId('payment-row-2')).toHaveTextContent('Due (next)')
+    expect(screen.getByTestId('payment-summary')).toHaveTextContent('1 Outstanding')
+  })
+})
