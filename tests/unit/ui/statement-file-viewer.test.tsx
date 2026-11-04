@@ -132,3 +132,79 @@ describe('StatementFileViewer — bank statement data', () => {
     expect(screen.queryByText('Records')).not.toBeInTheDocument()
   })
 })
+
+describe('StatementFileViewer — TaleFin combined document', () => {
+  afterEach(() => {
+    cleanup()
+    vi.clearAllMocks()
+  })
+
+  // The shape billieChat's TaleFin pull writes as the statement_data link:
+  // ids and metrics from TaleFin's report.json plus per-account transactioninfos.
+  const talefinDocument = {
+    provider: 'TALEFIN',
+    version: 1,
+    pulled_at: '2026-11-04T11:19:49Z',
+    application_number: '5228F104-C44',
+    application_id: 1010863,
+    vendor_specific_id: 'demo_5228F104-C44',
+    transaction_window: { from: '2026-05-05', to: '2026-11-04' },
+    report: {
+      version: '2.0',
+      id: 1010863,
+      type: 'report',
+      metrics: [{ code: 'AM2164', name: 'Primary Wage', format: 'array', value: {} }],
+      profiles: [
+        {
+          id: 60097,
+          full_name: 'Charbel Limsyn',
+          bank: { id: 130, name: 'Bank of TaleFin', slug: 'talefin' },
+          accounts: [
+            {
+              id: 163360,
+              nickname: 'Everyday',
+              bsb: '000000',
+              number: '0000000000000004',
+              type: 'TRANSACTION',
+              type_display: 'Transaction',
+              balance: '1234.56',
+              latest_analysis: { id: 132110 },
+            },
+          ],
+        },
+      ],
+    },
+    transactions: {
+      '163360': [
+        {
+          transaction_info_id: 1,
+          category_name: 'Groceries',
+          transaction: { date: '2026-10-30T00:00:00+11:00', descr: 'WOOLWORTHS 1234 SYDNEY', amount: '-42.50', balance: '1234.56' },
+        },
+        {
+          transaction_info_id: 2,
+          category_name: 'Wages',
+          transaction: { date: '2026-10-29T00:00:00+11:00', descr: 'SALARY ACME PTY LTD', amount: '1500.00', balance: '1277.06' },
+        },
+      ],
+    },
+  }
+
+  it('renders the account layout, not the generic grid with ids as money', () => {
+    mockFile(talefinDocument)
+
+    render(<StatementFileViewer conversationId="conv-1" slot="statementData" onClose={() => {}} />)
+
+    expect(screen.getByText('Everyday')).toBeInTheDocument()
+    expect(screen.getByText('Charbel Limsyn')).toBeInTheDocument()
+    expect(screen.getByText('Bank of TaleFin')).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Description' })).toBeInTheDocument()
+    expect(screen.getByText('WOOLWORTHS 1234 SYDNEY')).toBeInTheDocument()
+    expect(screen.getByText('SALARY ACME PTY LTD')).toBeInTheDocument()
+
+    // The generic fallback rendered TaleFin's integer ids through the currency
+    // formatter ("$1,010,863.00") and its metrics as a "Records" table.
+    expect(screen.queryByText('Records')).not.toBeInTheDocument()
+    expect(screen.queryByText('$1,010,863.00')).not.toBeInTheDocument()
+  })
+})
