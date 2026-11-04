@@ -8,6 +8,7 @@ import {
   isBlockActive,
   isBlockDeclineReason,
   isManualBlockActive,
+  isRetiredBlockReason,
   manualBlockExpiresAt,
   manualBlockReasonCode,
   MANUAL_BLOCK_REASON_CODES,
@@ -37,6 +38,27 @@ describe('formatBlockReason', () => {
   it('returns em dash for missing reason', () => {
     expect(formatBlockReason(null)).toBe('—')
     expect(formatBlockReason(undefined)).toBe('—')
+  })
+})
+
+describe('retired block reasons (BTB-544)', () => {
+  // billieChat no longer holds an applicant because an identity review case is
+  // open, and nothing ever emits a clear for that reason, so a mirrored
+  // linked_open_review block is history, never a live block.
+  it('linked_open_review is retired', () => {
+    expect(isRetiredBlockReason('linked_open_review')).toBe(true)
+    expect(isRetiredBlockReason('ACTIVE_LOAN')).toBe(false)
+    expect(isRetiredBlockReason(null)).toBe(false)
+  })
+
+  it('a linked_open_review block is never active, even with a null window', () => {
+    expect(isBlockActive({ reason: 'linked_open_review', blockedUntil: null }, TODAY)).toBe(
+      false,
+    )
+  })
+
+  it('other null-window reasons stay active', () => {
+    expect(isBlockActive({ reason: 'PRIOR_DEFAULT', blockedUntil: null }, TODAY)).toBe(true)
   })
 })
 

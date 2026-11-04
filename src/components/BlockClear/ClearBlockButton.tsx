@@ -5,6 +5,7 @@ import { useAuth } from '@payloadcms/ui'
 import { canService } from '@/lib/access'
 import { CLEARABLE_REASONS } from '@/lib/events/config'
 import type { ClearableReason } from '@/lib/events/config'
+import { isRetiredBlockReason } from '@/lib/reapplicationBlock'
 import { ClearBlockModal } from './ClearBlockModal'
 import styles from './BlockClear.module.css'
 
@@ -50,7 +51,8 @@ export function ClearBlockButton({
   // "unblocked" signal. clearedAt alone must NOT hide the button: a partial
   // clear that didn't lift the currently-blocking reason (spec §14) stamps
   // clearedAt while the block remains — the retry path has to stay available.
-  if (!block?.reason) return null
+  // A retired reason (BTB-544) is history, not a block: nothing to clear.
+  if (!block?.reason || isRetiredBlockReason(block.reason)) return null
 
   const isClearable = CLEARABLE_REASONS.includes(block.reason as ClearableReason)
   const canonicalCustomerId = block.canonicalCustomerId
