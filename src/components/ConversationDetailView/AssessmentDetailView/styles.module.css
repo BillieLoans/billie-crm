@@ -726,3 +726,162 @@
 }
 
 :global([data-theme="dark"]) .skeleton { background: #1f2937; }
+
+/* ── Drill-through: rule figure → categories → transactions ── */
+.drillToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px;
+  margin: -2px -6px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+.drillToggle:hover { background: var(--theme-elevation-100, #f3f4f6); }
+
+.drillToggle:focus-visible,
+.drillCategoryToggle:focus-visible {
+  outline: 2px solid var(--theme-success-500, #2563eb);
+  outline-offset: 2px;
+}
+
+.drillChevron {
+  display: inline-block;
+  font-size: 8px;
+  color: var(--theme-elevation-500, #888);
+  transition: transform 0.15s ease;
+}
+
+.drillChevronOpen { transform: rotate(90deg); }
+
+.drillChevronSpacer {
+  display: inline-block;
+  width: 8px;
+}
+
+.drill {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.drillNote {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--theme-elevation-700, #444);
+}
+
+.drillRatio {
+  margin: 0;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  color: var(--theme-elevation-800, #222);
+}
+
+.drillRatioNote {
+  margin-left: 8px;
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--theme-elevation-500, #888);
+}
+
+.drillNotice {
+  margin: 0;
+  font-size: 12px;
+  color: #78350f;
+  background: #fffbeb;
+  border-left: 3px solid #fcd34d;
+  padding: 6px 10px;
+}
+
+.drillEmpty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--theme-elevation-500, #888);
+}
+
+.drillCategoryToggle,
+.drillCategoryStatic {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+
+.drillCategoryToggle {
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+.drillCategoryToggle:hover { text-decoration: underline; }
+
+.drillCategoryStatic { color: var(--theme-elevation-500, #888); }
+
+.drillCode {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  color: var(--theme-elevation-500, #888);
+}
+
+.drillNumber {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.drillDebit { color: #b91c1c; }
+.drillCredit { color: #15803d; }
+
+.drillTxnCell {
+  padding: 4px 0 10px 20px !important;
+}
+
+.drillTxnScroll {
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--theme-elevation-150, #e5e7eb);
+  border-radius: 4px;
+  background: var(--theme-elevation-0, #fff);
+}
+
+.drillTxnTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.drillTxnTable th {
+  position: sticky;
+  top: 0;
+  padding: 5px 8px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--theme-elevation-500, #888);
+  background: var(--theme-elevation-50, #fafafa);
+  border-bottom: 1px solid var(--theme-elevation-150, #e5e7eb);
+}
+
+.drillTxnTable td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--theme-elevation-50, #f9fafb);
+  vertical-align: top;
+}
+
+.drillDate,
+.drillAccount {
+  white-space: nowrap;
+  color: var(--theme-elevation-600, #666);
+}
