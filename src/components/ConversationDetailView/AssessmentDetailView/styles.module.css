@@ -872,7 +872,7 @@
   font-size: 12px;
 }
 
-.drillCatTable th {
+.drillCatTable > thead > tr > th {
   padding: 6px 12px;
   text-align: left;
   font-size: 10px;
@@ -883,10 +883,10 @@
   border-bottom: 1px solid var(--theme-elevation-150, #e5e7eb);
 }
 
-.drillCatTable th:nth-child(2) { width: 110px; }
-.drillCatTable th:nth-child(3) { width: 130px; }
+.drillCatTable > thead > tr > th:nth-child(2) { width: 110px; }
+.drillCatTable > thead > tr > th:nth-child(3) { width: 130px; }
 
-.drillCatTable td {
+.drillCatTable > tbody > tr > td {
   padding: 0 12px;
   height: 36px;
   border-bottom: 1px solid var(--theme-elevation-100, #f3f4f6);
@@ -991,8 +991,17 @@
 .drillTxnTable {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
   font-size: 12px;
 }
+
+/* Fixed widths: date, amount and account size to their content; the
+   description takes the rest instead of being squeezed. */
+.drillTxnTable th:nth-child(1) { width: 118px; }
+.drillTxnTable th:nth-child(3) { width: 96px; }
+.drillTxnTable th:nth-child(4) { width: 178px; }
+
+.drillTxnTable td:nth-child(2) { overflow-wrap: anywhere; }
 
 .drillTxnTable th {
   position: sticky;
@@ -1025,6 +1034,8 @@
 .drillDate,
 .drillAccount {
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--theme-elevation-600, #666);
 }
 
@@ -1041,8 +1052,8 @@
 :global([data-theme="dark"]) .drillNote { color: #d1d5db; }
 :global([data-theme="dark"]) .drillRatio { background: #1f2937; color: #e5e7eb; }
 :global([data-theme="dark"]) .drillNotice { background: #1c1300; color: #fde68a; border-left-color: #92400e; }
-:global([data-theme="dark"]) .drillCatTable th { color: #9ca3af; border-bottom-color: #374151; }
-:global([data-theme="dark"]) .drillCatTable td { border-bottom-color: #1f2937; color: #e5e7eb; }
+:global([data-theme="dark"]) .drillCatTable > thead > tr > th { color: #9ca3af; border-bottom-color: #374151; }
+:global([data-theme="dark"]) .drillCatTable > tbody > tr > td { border-bottom-color: #1f2937; color: #e5e7eb; }
 :global([data-theme="dark"]) .drillCatGroup:not(.drillCatGroupEmpty) > tr:first-child:hover > td { background: #1f2937; }
 :global([data-theme="dark"]) .drillCatGroupOpen > tr:first-child > td,
 :global([data-theme="dark"]) .drill .drillTxnCell { background: #172554; }
@@ -1055,7 +1066,11 @@
 :global([data-theme="dark"]) .drillTxnTable th { background: #1f2937; color: #9ca3af; border-bottom-color: #374151; }
 :global([data-theme="dark"]) .drillTxnTable td { border-bottom-color: #1f2937; color: #e5e7eb; }
 :global([data-theme="dark"]) .drillTxnTable tbody tr:nth-child(even) td { background: #0f172a; }
-:global([data-theme="dark"]) .drillDebit { color: #fca5a5; }
-:global([data-theme="dark"]) .drillCredit { color: #86efac; }
-:global([data-theme="dark"]) .drillDate,
-:global([data-theme="dark"]) .drillAccount { color: #9ca3af; }
+/* The table-wide dark rules (.rowFail td, .rulesTable td) out-rank plain
+   class rules, so the card's cells restate their background and colour here. */
+:global([data-theme="dark"]) .drill td { background: transparent; color: #e5e7eb; }
+:global([data-theme="dark"]) .drill td.drillDebit { color: #fca5a5; }
+:global([data-theme="dark"]) .drill td.drillCredit { color: #86efac; }
+:global([data-theme="dark"]) .drill td.drillDate,
+:global([data-theme="dark"]) .drill td.drillAccount { color: #9ca3af; }
+:global([data-theme="dark"]) .drill .drillCatGroupEmpty > tr > td { color: #6b7280; }

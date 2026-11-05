@@ -208,7 +208,9 @@ function TransactionsTable({ transactions }: { transactions: DrillTransaction[] 
               <td className={`${styles.drillNumber} ${amountClass(tx.amount)}`}>
                 {formatCurrency(tx.amount)}
               </td>
-              <td className={styles.drillAccount}>{tx.account || '—'}</td>
+              <td className={styles.drillAccount} title={tx.account || undefined}>
+                {tx.account || '—'}
+              </td>
             </tr>
           ))}
         </tbody>
