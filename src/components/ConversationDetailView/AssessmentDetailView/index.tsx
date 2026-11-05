@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useId, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
@@ -9,6 +9,8 @@ import {
   usePostIdentityRiskAssessment,
 } from '@/hooks/queries/useAssessments'
 import { formatCurrency } from '@/lib/formatters'
+import { drillSpecFor } from './conductDrill'
+import { ConductDrillPanel, DrillChevron } from './ConductDrillPanel'
 import styles from './styles.module.css'
 
 type AssessmentType = 'account-conduct' | 'serviceability' | 'post-identity-risk'
@@ -94,7 +96,7 @@ export function AssessmentDetailView({
       )}
 
       {!isLoading && assessment && (
-        <AssessmentContent assessment={assessment} type={type} />
+        <AssessmentContent assessment={assessment} type={type} conversationId={conversationId} />
       )}
     </div>
   )
@@ -210,13 +212,18 @@ export type { AssessmentType }
 export interface AssessmentContentProps {
   assessment: Record<string, unknown>
   type: AssessmentType
+  /**
+   * The application's conversation id. When set, account conduct figures
+   * drill through to their categories and transactions.
+   */
+  conversationId?: string
 }
 
-export function AssessmentContent({ assessment, type }: AssessmentContentProps) {
+export function AssessmentContent({ assessment, type, conversationId }: AssessmentContentProps) {
   const decision = (assessment.decision ?? assessment.outcome ?? assessment.result) as string | undefined
 
   if (type === 'account-conduct' && isAccConductFormat(assessment)) {
-    return <AccountConductContent assessment={assessment} />
+    return <AccountConductContent assessment={assessment} conversationId={conversationId} />
   }
   if (type === 'serviceability' && isSvcFormat(assessment)) {
     return <ServiceabilityContent assessment={assessment} />
@@ -371,7 +378,13 @@ interface AccConductData {
   affordability_report_location?: string
 }
 
-function AccountConductContent({ assessment }: { assessment: Record<string, unknown> }) {
+function AccountConductContent({
+  assessment,
+  conversationId,
+}: {
+  assessment: Record<string, unknown>
+  conversationId?: string
+}) {
   const data = assessment as unknown as AccConductData
   const ac = data.account_conduct
   const rules = ac.rule_results ?? []
@@ -415,7 +428,7 @@ function AccountConductContent({ assessment }: { assessment: Record<string, unkn
             Failed Checks — Hard Rules
             <span className={`${styles.ruleCount} ${styles.ruleCountFail}`}>{hardFails.length}</span>
           </h2>
-          <ConductRulesTable rules={hardFails} />
+          <ConductRulesTable rules={hardFails} conversationId={conversationId} />
         </div>
       )}
 
@@ -426,7 +439,7 @@ function AccountConductContent({ assessment }: { assessment: Record<string, unkn
             Failed Checks — Soft Rules
             <span className={`${styles.ruleCount} ${styles.ruleCountWarn}`}>{softFails.length}</span>
           </h2>
-          <ConductRulesTable rules={softFails} />
+          <ConductRulesTable rules={softFails} conversationId={conversationId} />
         </div>
       )}
 
@@ -437,7 +450,7 @@ function AccountConductContent({ assessment }: { assessment: Record<string, unkn
             Passed Checks
             <span className={`${styles.ruleCount} ${styles.ruleCountPass}`}>{passes.length}</span>
           </h2>
-          <ConductRulesTable rules={passes} />
+          <ConductRulesTable rules={passes} conversationId={conversationId} />
         </div>
       )}
 
@@ -446,7 +459,13 @@ function AccountConductContent({ assessment }: { assessment: Record<string, unkn
   )
 }
 
-function ConductRulesTable({ rules }: { rules: AccConductRule[] }) {
+function ConductRulesTable({
+  rules,
+  conversationId,
+}: {
+  rules: AccConductRule[]
+  conversationId?: string
+}) {
   return (
     <table className={styles.rulesTable}>
       <thead>
@@ -457,33 +476,38 @@ function ConductRulesTable({ rules }: { rules: AccConductRule[] }) {
           <th>Result</th>
         </tr>
       </thead>
-      <tbody>
-        {rules.map((rule, i) => (
-          <ConductRuleRow key={rule.rule_id ?? i} rule={rule} />
-        ))}
-      </tbody>
+      {/* One <tbody> per rule, so a rule's rows (check, reason, breakdown) group visually. */}
+      {rules.map((rule, i) => (
+        <ConductRuleRow key={rule.rule_id ?? i} rule={rule} conversationId={conversationId} />
+      ))}
     </table>
   )
 }
 
-function ConductRuleRow({ rule }: { rule: AccConductRule }) {
+function ConductRuleRow({ rule, conversationId }: { rule: AccConductRule; conversationId?: string }) {
   const isPass = rule.result === 'pass'
   const hasMonthlyRatios =
     rule.details &&
     typeof rule.details.monthly_ratios === 'object' &&
     rule.details.monthly_ratios !== null
+  const drillSpec = conversationId ? drillSpecFor(rule) : undefined
+  const [drillOpen, setDrillOpen] = useState(false)
+  const drillId = useId()
+  const valueText = fmtDataValue(rule.data_value, rule.description, rule.condition)
+  const rowClass = rule.info_only
+    ? styles.rowInfo
+    : isPass
+      ? styles.rowPass
+      : rule.hard_rule
+        ? styles.rowFail
+        : styles.rowWarn
 
   return (
-    <>
-      <tr className={
-        rule.info_only
-          ? styles.rowInfo
-          : isPass
-            ? styles.rowPass
-            : rule.hard_rule
-              ? styles.rowFail
-              : styles.rowWarn
-      }>
+    <tbody
+      className={`${styles.ruleGroup} ${drillOpen ? styles.ruleGroupOpen : ''}`}
+      data-testid="conduct-rule"
+    >
+      <tr className={rowClass}>
         <td className={styles.ruleName}>
           {rule.description}
           {rule.metric_id && (
@@ -493,7 +517,22 @@ function ConductRuleRow({ rule }: { rule: AccConductRule }) {
           {rule.warning && !rule.info_only && <span className={styles.warnTag}>warning</span>}
         </td>
         <td className={styles.ruleValue}>
-          {fmtDataValue(rule.data_value, rule.description, rule.condition)}
+          <div className={styles.valueStack}>
+            <span>{valueText}</span>
+            {drillSpec && (
+              <button
+                type="button"
+                className={styles.drillToggle}
+                aria-expanded={drillOpen}
+                aria-controls={drillId}
+                aria-label={`Breakdown for ${valueText}`}
+                onClick={() => setDrillOpen((o) => !o)}
+              >
+                <DrillChevron open={drillOpen} />
+                Breakdown
+              </button>
+            )}
+          </div>
         </td>
         <td className={styles.ruleCondition}>{fmtCondition(rule.condition)}</td>
         <td>
@@ -566,7 +605,16 @@ function ConductRuleRow({ rule }: { rule: AccConductRule }) {
           </td>
         </tr>
       )}
-    </>
+
+      {/* Drill-through: categories behind the figure, then their transactions */}
+      {drillSpec && drillOpen && conversationId && (
+        <tr className={`${rowClass} ${styles.drillRow}`}>
+          <td colSpan={4} className={styles.drillRowCell}>
+            <ConductDrillPanel conversationId={conversationId} spec={drillSpec} id={drillId} />
+          </td>
+        </tr>
+      )}
+    </tbody>
   )
 }
 
