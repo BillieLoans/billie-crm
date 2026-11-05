@@ -10,7 +10,7 @@ import {
 } from '@/hooks/queries/useAssessments'
 import { formatCurrency } from '@/lib/formatters'
 import { drillSpecFor } from './conductDrill'
-import { ConductDrillPanel } from './ConductDrillPanel'
+import { ConductDrillPanel, DrillChevron } from './ConductDrillPanel'
 import styles from './styles.module.css'
 
 type AssessmentType = 'account-conduct' | 'serviceability' | 'post-identity-risk'
@@ -476,11 +476,10 @@ function ConductRulesTable({
           <th>Result</th>
         </tr>
       </thead>
-      <tbody>
-        {rules.map((rule, i) => (
-          <ConductRuleRow key={rule.rule_id ?? i} rule={rule} conversationId={conversationId} />
-        ))}
-      </tbody>
+      {/* One <tbody> per rule, so a rule's rows (check, reason, breakdown) group visually. */}
+      {rules.map((rule, i) => (
+        <ConductRuleRow key={rule.rule_id ?? i} rule={rule} conversationId={conversationId} />
+      ))}
     </table>
   )
 }
@@ -495,18 +494,20 @@ function ConductRuleRow({ rule, conversationId }: { rule: AccConductRule; conver
   const [drillOpen, setDrillOpen] = useState(false)
   const drillId = useId()
   const valueText = fmtDataValue(rule.data_value, rule.description, rule.condition)
+  const rowClass = rule.info_only
+    ? styles.rowInfo
+    : isPass
+      ? styles.rowPass
+      : rule.hard_rule
+        ? styles.rowFail
+        : styles.rowWarn
 
   return (
-    <>
-      <tr className={
-        rule.info_only
-          ? styles.rowInfo
-          : isPass
-            ? styles.rowPass
-            : rule.hard_rule
-              ? styles.rowFail
-              : styles.rowWarn
-      }>
+    <tbody
+      className={`${styles.ruleGroup} ${drillOpen ? styles.ruleGroupOpen : ''}`}
+      data-testid="conduct-rule"
+    >
+      <tr className={rowClass}>
         <td className={styles.ruleName}>
           {rule.description}
           {rule.metric_id && (
@@ -516,26 +517,22 @@ function ConductRuleRow({ rule, conversationId }: { rule: AccConductRule; conver
           {rule.warning && !rule.info_only && <span className={styles.warnTag}>warning</span>}
         </td>
         <td className={styles.ruleValue}>
-          {drillSpec ? (
-            <button
-              type="button"
-              className={styles.drillToggle}
-              aria-expanded={drillOpen}
-              aria-controls={drillId}
-              aria-label={`${valueText}, show the categories and transactions behind this figure`}
-              onClick={() => setDrillOpen((o) => !o)}
-            >
-              {valueText}
-              <span
-                className={`${styles.drillChevron} ${drillOpen ? styles.drillChevronOpen : ''}`}
-                aria-hidden="true"
+          <div className={styles.valueStack}>
+            <span>{valueText}</span>
+            {drillSpec && (
+              <button
+                type="button"
+                className={styles.drillToggle}
+                aria-expanded={drillOpen}
+                aria-controls={drillId}
+                aria-label={`Breakdown for ${valueText}`}
+                onClick={() => setDrillOpen((o) => !o)}
               >
-                ▶
-              </span>
-            </button>
-          ) : (
-            valueText
-          )}
+                <DrillChevron open={drillOpen} />
+                Breakdown
+              </button>
+            )}
+          </div>
         </td>
         <td className={styles.ruleCondition}>{fmtCondition(rule.condition)}</td>
         <td>
@@ -611,13 +608,13 @@ function ConductRuleRow({ rule, conversationId }: { rule: AccConductRule; conver
 
       {/* Drill-through: categories behind the figure, then their transactions */}
       {drillSpec && drillOpen && conversationId && (
-        <tr className={styles.subRow}>
-          <td colSpan={4} className={styles.subCell}>
+        <tr className={`${rowClass} ${styles.drillRow}`}>
+          <td colSpan={4} className={styles.drillRowCell}>
             <ConductDrillPanel conversationId={conversationId} spec={drillSpec} id={drillId} />
           </td>
         </tr>
       )}
-    </>
+    </tbody>
   )
 }
 

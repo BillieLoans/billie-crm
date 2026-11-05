@@ -249,9 +249,9 @@ describe('AssessmentContent — account conduct drill-through', () => {
   it('makes a mapped figure a collapsed toggle and leaves an unmapped one as text', () => {
     mockCsv(csv(LEAKAGE_ROWS))
     renderConduct('conv-1')
-    const toggle = screen.getByRole('button', { name: /^45\.00%, show the categories/ })
+    const toggle = screen.getByRole('button', { name: 'Breakdown for 45.00%' })
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.queryByRole('button', { name: /^3, show/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Breakdown for 3' })).toBeNull()
     expect(screen.queryByTestId('conduct-drill')).toBeNull()
   })
 
@@ -259,8 +259,15 @@ describe('AssessmentContent — account conduct drill-through', () => {
     mockCsv(csv(LEAKAGE_ROWS))
     renderConduct('conv-1')
 
-    fireEvent.click(screen.getByRole('button', { name: /^45\.00%, show the categories/ }))
+    const toggle = screen.getByRole('button', { name: 'Breakdown for 45.00%' })
+    const ruleGroup = toggle.closest('[data-testid="conduct-rule"]')!
+    expect(ruleGroup.className).not.toContain('ruleGroupOpen')
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    // The open rule is marked as a group, and its breakdown sits inside it.
+    expect(ruleGroup.className).toContain('ruleGroupOpen')
     const drill = screen.getByTestId('conduct-drill')
+    expect(ruleGroup.contains(drill)).toBe(true)
     expect(mockedUseStatementFile).toHaveBeenCalledWith('conv-1', 'categorizedTransactions')
     expect(within(drill).getByText(/Leakage is money moved/)).toBeInTheDocument()
     expect(drill.textContent).toContain('$450.00 ÷ $1,000.00 = 45.00%')
@@ -274,6 +281,10 @@ describe('AssessmentContent — account conduct drill-through', () => {
     expect(within(drill).queryByText('ATM WITHDRAWAL')).toBeNull()
     fireEvent.click(atm)
     expect(atm).toHaveAttribute('aria-expanded', 'true')
+    // The open category and its transactions share one group.
+    const categoryGroup = atm.closest('tbody')!
+    expect(categoryGroup.className).toContain('drillCatGroupOpen')
+    expect(within(categoryGroup).getAllByText('ATM WITHDRAWAL')).toHaveLength(2)
     expect(within(drill).getAllByText('ATM WITHDRAWAL')).toHaveLength(2)
     expect(within(drill).queryByText('ATM BUSINESS')).toBeNull()
   })
@@ -281,13 +292,13 @@ describe('AssessmentContent — account conduct drill-through', () => {
   it('has no drill toggles when no application id is supplied', () => {
     mockCsv(csv(LEAKAGE_ROWS))
     renderConduct(undefined)
-    expect(screen.queryByRole('button', { name: /show the categories/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Breakdown for/ })).toBeNull()
   })
 
   it('says so when the categorised transactions file is missing', () => {
     mockCsv(null)
     renderConduct('conv-1')
-    fireEvent.click(screen.getByRole('button', { name: /show the categories/ }))
+    fireEvent.click(screen.getByRole('button', { name: /^Breakdown for/ }))
     expect(
       screen.getByText('The categorised transactions file is not available for this application.'),
     ).toBeInTheDocument()
@@ -296,7 +307,7 @@ describe('AssessmentContent — account conduct drill-through', () => {
   it('warns that totals may be short when the file was truncated', () => {
     mockCsv(csv(LEAKAGE_ROWS, { totalRows: 2500, truncated: true }))
     renderConduct('conv-1')
-    fireEvent.click(screen.getByRole('button', { name: /show the categories/ }))
+    fireEvent.click(screen.getByRole('button', { name: /^Breakdown for/ }))
     expect(screen.getByTestId('conduct-drill').textContent).toContain(
       'Only the first 7 of 2,500 transactions are loaded',
     )

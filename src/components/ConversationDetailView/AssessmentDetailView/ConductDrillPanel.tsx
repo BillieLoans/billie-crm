@@ -21,6 +21,29 @@ interface ConductDrillPanelProps {
   id: string
 }
 
+/** Disclosure chevron: points right when closed, down when open. */
+export function DrillChevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      className={`${styles.drillChevron} ${open ? styles.drillChevronOpen : ''}`}
+      width="10"
+      height="10"
+      viewBox="0 0 10 10"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path
+        d="M3.5 1.5 7 5l-3.5 3.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 /**
  * The categories behind one account conduct rule, each expandable to its
  * transactions. Reads the categorised-transactions CSV the Statements panel
@@ -41,8 +64,11 @@ export function ConductDrillPanel({ conversationId, spec, id }: ConductDrillPane
   )
 
   return (
-    <div className={styles.drill} id={id} data-testid="conduct-drill">
-      <p className={styles.drillNote}>{spec.note}</p>
+    <section className={styles.drill} id={id} aria-label="Breakdown" data-testid="conduct-drill">
+      <header className={styles.drillHeader}>
+        <span className={styles.drillEyebrow}>Breakdown</span>
+        <p className={styles.drillNote}>{spec.note}</p>
+      </header>
 
       {isLoading && <div className={styles.skeleton} aria-hidden="true" />}
 
@@ -58,8 +84,10 @@ export function ConductDrillPanel({ conversationId, spec, id }: ConductDrillPane
         <>
           {ratio && (
             <p className={styles.drillRatio}>
-              {formatCurrency(ratio.numerator)} ÷ {formatCurrency(ratio.denominator)} ={' '}
-              <strong>{ratio.percent == null ? '—' : `${ratio.percent.toFixed(2)}%`}</strong>
+              <span>
+                {formatCurrency(ratio.numerator)} ÷ {formatCurrency(ratio.denominator)} ={' '}
+                <strong>{ratio.percent == null ? '—' : `${ratio.percent.toFixed(2)}%`}</strong>
+              </span>
               <span className={styles.drillRatioNote}>
                 rebuilt from the categorised transactions
               </span>
@@ -85,7 +113,7 @@ export function ConductDrillPanel({ conversationId, spec, id }: ConductDrillPane
           {breakdown.length === 0 ? (
             <p className={styles.drillEmpty}>No matching transactions.</p>
           ) : (
-            <table className={styles.subTable}>
+            <table className={styles.drillCatTable}>
               <thead>
                 <tr>
                   <th>Category</th>
@@ -93,32 +121,35 @@ export function ConductDrillPanel({ conversationId, spec, id }: ConductDrillPane
                   <th className={styles.drillNumber}>Total</th>
                 </tr>
               </thead>
-              <tbody>
-                {breakdown.map((b) => (
-                  <CategoryRow key={b.category} breakdown={b} />
-                ))}
-              </tbody>
+              {breakdown.map((b) => (
+                <CategoryGroup key={b.category} breakdown={b} />
+              ))}
             </table>
           )}
         </>
       )}
-    </div>
+    </section>
   )
 }
 
-function CategoryRow({ breakdown }: { breakdown: CategoryBreakdown }) {
+/** One category: its summary row and, when open, its transactions. */
+function CategoryGroup({ breakdown }: { breakdown: CategoryBreakdown }) {
   const [open, setOpen] = useState(false)
   const panelId = useId()
   const count = breakdown.transactions.length
   const label = (
     <>
       <span className={styles.drillCode}>{breakdown.category}</span>
-      {categoryName(breakdown.category)}
+      <span>{categoryName(breakdown.category)}</span>
     </>
   )
 
   return (
-    <>
+    <tbody
+      className={`${styles.drillCatGroup} ${open ? styles.drillCatGroupOpen : ''} ${
+        count === 0 ? styles.drillCatGroupEmpty : ''
+      }`}
+    >
       <tr>
         <td>
           {count > 0 ? (
@@ -129,17 +160,14 @@ function CategoryRow({ breakdown }: { breakdown: CategoryBreakdown }) {
               aria-controls={panelId}
               onClick={() => setOpen((o) => !o)}
             >
-              <span
-                className={`${styles.drillChevron} ${open ? styles.drillChevronOpen : ''}`}
-                aria-hidden="true"
-              >
-                ▶
+              <span className={styles.drillChevronBox}>
+                <DrillChevron open={open} />
               </span>
               {label}
             </button>
           ) : (
             <span className={styles.drillCategoryStatic}>
-              <span className={styles.drillChevronSpacer} aria-hidden="true" />
+              <span className={`${styles.drillChevronBox} ${styles.drillChevronBoxEmpty}`} />
               {label}
             </span>
           )}
@@ -156,7 +184,7 @@ function CategoryRow({ breakdown }: { breakdown: CategoryBreakdown }) {
           </td>
         </tr>
       )}
-    </>
+    </tbody>
   )
 }
 
