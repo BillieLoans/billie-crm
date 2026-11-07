@@ -1,9 +1,13 @@
 """Unit tests for statement-capture flow handlers."""
 
+from typing import Any
+
 import pytest
+from tests.conftest import MockPool
 
 from billie_servicing.handlers.conversation import (
     handle_affordability_report_downloaded,
+    handle_bank_connection_established,
     handle_basiq_job_created,
     handle_statement_checks_complete,
     handle_statement_consent_cancelled,
@@ -68,9 +72,9 @@ class TestHandleStatementConsentInitiated:
     @pytest.mark.asyncio
     async def test_updates_updated_at(self, mock_pool):
         await handle_statement_consent_initiated(mock_pool, {"cid": "conv-123"})
-        update_sql = [
-            c.sql for c in mock_pool.calls_against("conversations") if c.op == "UPDATE"
-        ][0]
+        update_sql = [c.sql for c in mock_pool.calls_against("conversations") if c.op == "UPDATE"][
+            0
+        ]
         # merge_jsonb always sets updated_at = NOW() in its SQL template.
         assert "updated_at = NOW()" in update_sql
 
@@ -268,9 +272,7 @@ class TestHandleStatementRetrievalComplete:
                 "payload": {
                     "steps": {
                         "statement-data": {"file_locations": []},
-                        "affordability-report": {
-                            "file_locations": ["s3://bucket/x/aff.json"]
-                        },
+                        "affordability-report": {"file_locations": ["s3://bucket/x/aff.json"]},
                     }
                 },
             },
@@ -292,10 +294,10 @@ class TestHandleAffordabilityReportDownloaded:
                 "payload": {
                     "application_number": "A7A73A13-659",
                     "statement_provider": "BSDC",
-                    "affordability_report": {
-                        "file_location": "s3://bucket/x/aff.json"
+                    "affordability_report": {"file_location": "s3://bucket/x/aff.json"},
+                    "summary": {
+                        "data": {"metrics": [{"id": "ME012", "result": {"value": 788.19}}]}
                     },
-                    "summary": {"data": {"metrics": [{"id": "ME012", "result": {"value": 788.19}}]}},
                 },
             },
         )
@@ -351,6 +353,7 @@ class TestExistingHandlersUnaffected:
             handle_noticeboard_updated,
             handle_utterance,
         )
+
         for fn in (
             handle_conversation_started,
             handle_utterance,
@@ -373,3 +376,107 @@ class TestExistingHandlersUnaffected:
             handle_statement_checks_complete,
         ):
             assert callable(fn)
+
+
+class TestHandleBankConnectionEstablished:
+    """``bank_connection.established.v1`` (TaleFin phase 3): provider ids on the conversation."""
+
+    EVENT = {
+        "conv": "conv-123",
+        "payload": {
+            "provider": "TALEFIN",
+            "application_number": "APP-1",
+            "customer_id": "cust-1",
+            "connection_id": "bc_1",
+            "vendor_specific_id": "demo:APP-1",
+            "talefin_application_id": 28875525,
+            "profile_id": 27716023,
+            "bank_id": 130,
+            "bank_name": "Bank of TaleFin",
+            "crawler_uuid": "f1be501e",
+            "connection": "crawler",
+            "seed_id": "seed-1",
+            "seed_expiry": "2027-10-02T01:04:40Z",
+            "established_at": "2026-10-28T10:00:00+00:00",
+        },
+    }
+
+    def _entry_merges(self, mock_pool: MockPool) -> list[tuple[str, dict[str, Any], str]]:
+        import json
+
+        out: list[tuple[str, dict[str, Any], str]] = []
+        for c in mock_pool.calls_against("conversations"):
+            if c.op == "UPDATE" and "jsonb_set" in c.sql:
+                out.append((c.args[0], json.loads(c.args[1]), c.args[2]))
+        return out
+
+    @pytest.mark.asyncio
+    async def test_records_provider_reference_and_profile(self, mock_pool: MockPool) -> None:
+        await handle_bank_connection_established(mock_pool, dict(self.EVENT))
+        assert _patch_for(mock_pool) == {
+            "provider": "TALEFIN",
+            "providerReference": {
+                "vendor_specific_id": "demo:APP-1",
+                "talefin_application_id": 28875525,
+                "connection_id": "bc_1",
+            },
+        }
+        ((entry_key, patch, conversation_id),) = self._entry_merges(mock_pool)
+        assert entry_key == "providerProfiles" and conversation_id == "conv-123"
+        assert patch == {
+            "f1be501e": {
+                "profile_id": 27716023,
+                "bank_id": 130,
+                "bank_name": "Bank of TaleFin",
+                "crawler_uuid": "f1be501e",
+                "connection": "crawler",
+                "seed_id": "seed-1",
+                "seed_expiry": "2027-10-02T01:04:40Z",
+                "established_at": "2026-10-28T10:00:00+00:00",
+            }
+        }
+        _ensures_conversation_row(mock_pool, "conv-123")
+        insert = [c for c in mock_pool.calls_against("conversations") if c.op == "INSERT"][0]
+        assert insert.values.get("customer_id_string") == "cust-1"
+        assert insert.values.get("application_number") == "APP-1"
+
+    @pytest.mark.asyncio
+    async def test_seed_inputs_never_reach_the_record(self, mock_pool: MockPool) -> None:
+        event = {"conv": "conv-1", "payload": {**self.EVENT["payload"], "inputs": "<blob>"}}
+        await handle_bank_connection_established(mock_pool, event)
+        ((_key, patch, _cid),) = self._entry_merges(mock_pool)
+        assert "inputs" not in patch["f1be501e"]
+        assert "inputs" not in (_patch_for(mock_pool) or {})
+
+    @pytest.mark.asyncio
+    async def test_payload_without_a_profile_only_sets_the_reference(
+        self, mock_pool: MockPool
+    ) -> None:
+        event = {
+            "conv": "conv-2",
+            "payload": {"provider": "talefin", "vendor_specific_id": "demo:APP-2"},
+        }
+        await handle_bank_connection_established(mock_pool, event)
+        assert _patch_for(mock_pool) == {
+            "provider": "TALEFIN",
+            "providerReference": {"vendor_specific_id": "demo:APP-2"},
+        }
+        assert self._entry_merges(mock_pool) == []
+
+    @pytest.mark.asyncio
+    async def test_profile_without_ids_falls_back_to_the_bank(self, mock_pool: MockPool) -> None:
+        event = {
+            "conv": "conv-3",
+            "payload": {"provider": "TALEFIN", "bank_id": 130, "bank_name": "ANZ", "seed_id": None},
+        }
+        await handle_bank_connection_established(mock_pool, event)
+        ((key, patch, _cid),) = self._entry_merges(mock_pool)
+        assert key == "providerProfiles"
+        assert patch == {"bank-130": {"bank_id": 130, "bank_name": "ANZ"}}
+
+    @pytest.mark.asyncio
+    async def test_placeholder_conversation_is_not_materialised(self, mock_pool: MockPool) -> None:
+        await handle_bank_connection_established(
+            mock_pool, {"conv": "talefin-APP-1", "payload": dict(self.EVENT["payload"])}
+        )
+        assert not mock_pool.has_call_against("conversations")

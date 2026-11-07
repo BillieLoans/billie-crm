@@ -141,15 +141,17 @@ The suite is pure unit tests — handlers run against an in-memory `MockPool`
 `event-processor/**`.
 
 Because the automatic GitHub Actions `GITHUB_TOKEN` is scoped to this repo and cannot
-clone the separate `billie-event-sdks` repo, the job reads the SDK token from a repo
-(or org) secret named **`SDK_GITHUB_TOKEN`**. Create it once:
+clone the separate `billie-event-sdks` repo, the job mints its own token from the org's
+SDK GitHub App with `actions/create-github-app-token`: one hour, Contents: Read on
+`BillieLoans/billie-event-sdks` only. It needs, at org level (shared with billieChat):
 
-```bash
-gh secret set SDK_GITHUB_TOKEN --repo BillieLoans/billie-crm   # paste a PAT / App token
-```
+- variable **`SDK_APP_ID`**: the App's ID
+- secret **`SDK_APP_PRIVATE_KEY`**: a private key generated for the App
 
-The token needs read access to `BillieLoans/billie-event-sdks`. A fine-grained PAT
-(Contents: Read on that repo) or a GitHub App installation token both work.
+Until those exist the job falls back to the legacy **`SDK_GITHUB_TOKEN`** secret (a PAT).
+
+Local builds and `make -C infra/fly deploy` still take `GITHUB_TOKEN` from you;
+`GITHUB_TOKEN="$(gh auth token)"` works if your GitHub login can read the SDK repo.
 
 ## Architecture
 

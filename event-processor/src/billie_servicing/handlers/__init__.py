@@ -50,6 +50,7 @@ from .conversation import (
     handle_final_decision,
     handle_noticeboard_updated,
     handle_post_identity_risk_check,
+    handle_bank_connection_established,
     handle_statement_checks_complete,
     handle_statement_consent_cancelled,
     handle_statement_consent_complete,
@@ -167,6 +168,7 @@ __all__ = [
     "handle_statement_retrieval_complete",
     "handle_affordability_report_downloaded",
     "handle_statement_checks_complete",
+    "handle_bank_connection_established",
     # Credit assessment & post-identity handlers
     "handle_post_identity_risk_check",
     "handle_credit_assessment_complete",

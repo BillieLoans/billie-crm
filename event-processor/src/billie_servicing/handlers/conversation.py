@@ -24,7 +24,14 @@ import asyncpg
 import structlog
 
 from ..config import settings
-from ..db import coerce_date, merge_jsonb, update_by_key, upsert, upsert_conversation
+from ..db import (
+    coerce_date,
+    merge_jsonb,
+    merge_jsonb_entry,
+    update_by_key,
+    upsert,
+    upsert_conversation,
+)
 from .attribution import sanitise_attribution
 from .cancellation import CUSTOMER_DECLINED, terminal_rank
 from .identity_verification import mirror_lab_verification
@@ -155,9 +162,7 @@ async def handle_conversation_started(pool: asyncpg.Pool, event: dict[str, Any])
     log.info("Conversation created")
 
 
-async def handle_conversation_summary_changed(
-    pool: asyncpg.Pool, event: dict[str, Any]
-) -> None:
+async def handle_conversation_summary_changed(pool: asyncpg.Pool, event: dict[str, Any]) -> None:
     """Project conversationSummary_changed — acts as init when conversation_started missed."""
     conversation_id = safe_str(
         event.get("cid") or event.get("conv") or event.get("conversation_id"),
@@ -178,8 +183,12 @@ async def handle_conversation_summary_changed(
     )
     status = event.get("status") or payload.get("status")
     customer_id = safe_str(
-        event.get("usr") or event.get("user_id") or event.get("customer_id")
-        or payload.get("usr") or payload.get("user_id") or payload.get("customer_id"),
+        event.get("usr")
+        or event.get("user_id")
+        or event.get("customer_id")
+        or payload.get("usr")
+        or payload.get("user_id")
+        or payload.get("customer_id"),
         "customer_id",
     )
 
@@ -198,9 +207,7 @@ async def handle_conversation_summary_changed(
         log.info("conversationSummary_changed produced no updates")
         return
 
-    await upsert_conversation(
-        pool, conversation_id=conversation_id, set_values=set_values
-    )
+    await upsert_conversation(pool, conversation_id=conversation_id, set_values=set_values)
     log.info("conversationSummary_changed processed", app_number=app_number, status=status)
 
 
@@ -341,9 +348,7 @@ async def handle_utterance(pool: asyncpg.Pool, event: dict[str, Any]) -> None:
 # =============================================================================
 
 
-async def handle_application_detail_changed(
-    pool: asyncpg.Pool, event: dict[str, Any]
-) -> None:
+async def handle_application_detail_changed(pool: asyncpg.Pool, event: dict[str, Any]) -> None:
     """Project applicationDetail_changed onto conversations + applications."""
     conversation_id = safe_str(
         event.get("cid") or event.get("conv") or event.get("conversation_id"),
@@ -359,9 +364,7 @@ async def handle_application_detail_changed(
     resolved_customer_id: str | None = None
     customer_data = event.get("customer")
     if isinstance(customer_data, dict):
-        cid = safe_str(
-            customer_data.get("customer_id") or event.get("customer_id"), "customer_id"
-        )
+        cid = safe_str(customer_data.get("customer_id") or event.get("customer_id"), "customer_id")
         if cid:
             await _sync_customer(pool, cid, customer_data)
             resolved_customer_id = cid
@@ -611,9 +614,7 @@ async def _set_assessment(
             )
 
 
-async def handle_data_quality_alert(
-    pool: asyncpg.Pool, event: dict[str, Any]
-) -> None:
+async def handle_data_quality_alert(pool: asyncpg.Pool, event: dict[str, Any]) -> None:
     """BTB-307 phase 1: land the ME001 implausibility shadow alert on the
     conversation record (``credit_assessment.data_quality_alert.v1``) so an
     operator can see exactly what the engine believed the income sources
@@ -1005,9 +1006,7 @@ async def handle_conversation_summary(pool: asyncpg.Pool, event: dict[str, Any])
             if parent_id is None:
                 return
             # Replace the facts list wholesale (matches Mongo $set semantics).
-            await conn.execute(
-                "DELETE FROM conversations_facts WHERE _parent_id = $1", parent_id
-            )
+            await conn.execute("DELETE FROM conversations_facts WHERE _parent_id = $1", parent_id)
             for i, fact in enumerate(facts):
                 await conn.execute(
                     "INSERT INTO conversations_facts (id, _order, _parent_id, fact) "
@@ -1031,10 +1030,19 @@ async def _set_statement_capture(
     conversation_id: str,
     patch: dict[str, Any],
     columns: dict[str, Any] | None = None,
+    *,
+    entries: dict[str, dict[str, Any]] | None = None,
+    event: dict[str, Any] | None = None,
 ) -> None:
-    async with pool.acquire() as conn:
-        async with conn.transaction():
-            await _ensure_conversation_exists(conn, conversation_id, {})
+    """Merge ``patch`` into ``statement_capture`` (and ``entries`` into its
+    object-of-objects keys) in one transaction, creating the row if needed.
+
+    ``event`` lets the ensure-row insert carry the customer and application
+    identifiers when the capture event arrives before ``conversation_started``.
+    """
+    async with pool.acquire() as conn, conn.transaction():
+        await _ensure_conversation_exists(conn, conversation_id, event or {})
+        if patch:
             await merge_jsonb(
                 conn,
                 "conversations",
@@ -1043,14 +1051,24 @@ async def _set_statement_capture(
                 key_value=conversation_id,
                 patch=patch,
             )
-            if columns:
-                await update_by_key(
-                    conn,
-                    "conversations",
-                    key_column="conversation_id",
-                    key_value=conversation_id,
-                    values=columns,
-                )
+        for entry_key, entry_patch in (entries or {}).items():
+            await merge_jsonb_entry(
+                conn,
+                "conversations",
+                column="statement_capture",
+                key_column="conversation_id",
+                key_value=conversation_id,
+                entry_key=entry_key,
+                patch=entry_patch,
+            )
+        if columns:
+            await update_by_key(
+                conn,
+                "conversations",
+                key_column="conversation_id",
+                key_value=conversation_id,
+                values=columns,
+            )
 
 
 async def handle_statement_consent_initiated(pool: asyncpg.Pool, event: dict[str, Any]) -> None:
@@ -1162,6 +1180,83 @@ async def handle_affordability_report_downloaded(pool: asyncpg.Pool, event: dict
     report = strip_dollar_keys(payload if isinstance(payload, dict) else event)
     logger.bind(conversation_id=conversation_id).info("Processing affordability_report_downloaded")
     await _set_statement_capture(pool, conversation_id, {"affordabilityReport": report})
+
+
+async def handle_bank_connection_established(pool: asyncpg.Pool, event: dict[str, Any]) -> None:
+    """``bank_connection.established.v1`` (billieChat, TaleFin phase 3).
+
+    One bank profile was created with the statement provider. The ids ride
+    on the conversation's ``statement_capture`` so support can find the
+    application in the provider's dashboard (TaleFin searches by
+    ``vendor_specific_id``). Per-bank profiles merge under
+    ``providerProfiles`` keyed by crawler uuid, so banks arrive in any order
+    and never overwrite each other. Seed ``inputs`` never appear here.
+    """
+    conversation_id = safe_str(
+        event.get("cid") or event.get("conv") or event.get("conversation_id"),
+        "conversation_id",
+    )
+    payload = event.get("payload") or {}
+    if not isinstance(payload, dict):
+        payload = {}
+    if conversation_id.startswith("talefin-"):
+        # billieChat's placeholder when the connection had no conversation:
+        # there is no row to attach to, and inventing one would show a ghost
+        # conversation in the monitoring grid.
+        logger.bind(conversation_id=conversation_id).warning(
+            "bank_connection.established without a conversation; not recorded"
+        )
+        return
+    provider = str(payload.get("provider") or "").upper() or None
+    profile = {
+        k: payload[k]
+        for k in (
+            "profile_id",
+            "bank_id",
+            "bank_name",
+            "crawler_uuid",
+            "connection",
+            "seed_id",
+            "seed_expiry",
+            "established_at",
+        )
+        if payload.get(k) is not None
+    }
+    profile_key = str(
+        payload.get("crawler_uuid")
+        or payload.get("profile_id")
+        or payload.get("seed_id")
+        or (f"bank-{payload['bank_id']}" if payload.get("bank_id") is not None else "")
+        or ""
+    ).strip()
+    patch: dict[str, Any] = {}
+    if provider:
+        patch["provider"] = provider
+    reference = {
+        k: payload[k]
+        for k in ("vendor_specific_id", "talefin_application_id", "connection_id")
+        if payload.get(k) is not None
+    }
+    if reference:
+        patch["providerReference"] = reference
+    entries = {"providerProfiles": {profile_key: profile}} if profile_key and profile else None
+    if profile and not profile_key:
+        logger.bind(conversation_id=conversation_id).warning(
+            "bank_connection.established profile has no id; profile not recorded"
+        )
+    logger.bind(conversation_id=conversation_id, provider=provider, profile=profile_key).info(
+        "Processing bank_connection.established"
+    )
+    await _set_statement_capture(
+        pool,
+        conversation_id,
+        patch,
+        entries=entries,
+        event={
+            "usr": payload.get("customer_id") or event.get("usr"),
+            "application_number": payload.get("application_number"),
+        },
+    )
 
 
 async def handle_statement_checks_complete(pool: asyncpg.Pool, event: dict[str, Any]) -> None:

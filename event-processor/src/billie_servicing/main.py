@@ -100,6 +100,7 @@ from .handlers import (
     handle_referral_attributed,
     handle_schedule_created,
     handle_schedule_updated,
+    handle_bank_connection_established,
     handle_statement_checks_complete,
     handle_statement_consent_cancelled,
     handle_statement_consent_complete,
@@ -273,6 +274,9 @@ def setup_handlers(processor: EventProcessor) -> None:
     processor.register_handler("statement_retrieval_complete", handle_statement_retrieval_complete)
     processor.register_handler("affordability_report_downloaded", handle_affordability_report_downloaded)
     processor.register_handler("statement_checks_complete", handle_statement_checks_complete)
+    processor.register_handler(
+        "bank_connection.established.v1", handle_bank_connection_established
+    )
 
     # Credit assessments & post-identity
     processor.register_handler("credit_assessment_accountConduct_result", handle_assessment)
