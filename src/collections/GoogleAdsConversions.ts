@@ -10,6 +10,9 @@ import { hideFromNonAdmins, isAdmin } from '@/lib/access'
  * decision and loan projections and drains it to Google Ads. Nobody can
  * create, change or delete a row through the API.
  *
+ * Conversions go through Google's Data Manager API, which cannot retract, so
+ * only `upload` rows are written; `retract` is kept in the enum for history.
+ *
  * Holds the click id, the conversion name and the time. Never amounts,
  * decline reasons or personal details. Not part of the `reporting` schema,
  * which deliberately leaves click ids out.

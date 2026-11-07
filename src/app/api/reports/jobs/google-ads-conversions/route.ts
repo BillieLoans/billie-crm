@@ -2,10 +2,11 @@
  * POST /api/reports/jobs/google-ads-conversions — send approved and funded
  * ad-click applications to Google Ads as offline click conversions (BTB-546).
  *
- * Called hourly by .github/workflows/scheduled-reports.yml with
+ * Called hourly by the in-app scheduler (src/server/google-ads/scheduler.ts,
+ * started from src/instrumentation.ts) on each machine, and by hand, with
  * `Authorization: Bearer $REPORTING_JOB_TOKEN`. A repeat or concurrent call
- * sends nothing twice: rows are claimed with SKIP LOCKED and Google
- * de-duplicates on order id (src/server/google-ads/conversions.ts).
+ * sends nothing twice: rows are claimed with SKIP LOCKED
+ * (src/server/google-ads/conversions.ts).
  *
  * `GOOGLE_ADS_CONVERSIONS_MODE` (off | validate_only | live) is the switch;
  * off returns 200 and does nothing, so the schedule can stay on.
@@ -46,10 +47,11 @@ export async function POST(request: NextRequest) {
       createGoogleAdsClient(settings.config),
       settings.config,
     )
-    // Red in the workflow when Google refused a whole request (auth, quota)
-    // or answered with a code this code does not know. Both are retried.
-    const attention = summary.result.requestErrors.length + summary.result.unrecognised.length
-    return NextResponse.json(summary, { status: attention ? 502 : 200 })
+    // 502 when Google refused a whole request (auth, quota, config); those
+    // rows are retried next hour.
+    return NextResponse.json(summary, {
+      status: summary.result.requestErrors.length ? 502 : 200,
+    })
   } catch (error) {
     console.error('[google-ads] conversion run failed:', error)
     return NextResponse.json({ error: 'Conversion run failed' }, { status: 500 })

@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import { googleAdsMode, readGoogleAdsConfig } from '@/server/google-ads/config'
 import {
+  APPROVAL_HOLD_MS,
   CLICK_SETTLE_MS,
   buildOutboxRow,
   outcomeFor,
@@ -14,8 +15,6 @@ import {
 
 const FULL_ENV = {
   GOOGLE_ADS_CONVERSIONS_MODE: 'live',
-  GOOGLE_ADS_API_VERSION: 'v22',
-  GOOGLE_ADS_DEVELOPER_TOKEN: 'dev',
   GOOGLE_ADS_CUSTOMER_ID: '123-456-7890',
   GOOGLE_ADS_OAUTH_CLIENT_ID: 'id',
   GOOGLE_ADS_OAUTH_CLIENT_SECRET: 'secret',
@@ -40,25 +39,22 @@ describe('Google Ads settings', () => {
     if (!result.ok) return
     expect(result.config.customerId).toBe('1234567890')
     expect(result.config.loginCustomerId).toBeNull()
-    expect(result.config.conversionActions).toEqual({
-      approved: 'customers/1234567890/conversionActions/111',
-      funded: 'customers/1234567890/conversionActions/222',
-    })
+    expect(result.config.conversionActions).toEqual({ approved: '111', funded: '222' })
   })
 
   it('names what is missing, never the values', () => {
     const result = readGoogleAdsConfig({
       ...FULL_ENV,
-      GOOGLE_ADS_DEVELOPER_TOKEN: '',
-      GOOGLE_ADS_API_VERSION: '22',
+      GOOGLE_ADS_OAUTH_REFRESH_TOKEN: '',
+      GOOGLE_ADS_LOGIN_CUSTOMER_ID: 'manager',
       GOOGLE_ADS_CONVERSION_ACTION_FUNDED: 'not-an-id',
     })
     expect(result).toEqual({
       ok: false,
       mode: 'live',
       missing: [
-        'GOOGLE_ADS_API_VERSION',
-        'GOOGLE_ADS_DEVELOPER_TOKEN',
+        'GOOGLE_ADS_LOGIN_CUSTOMER_ID',
+        'GOOGLE_ADS_OAUTH_REFRESH_TOKEN',
         'GOOGLE_ADS_CONVERSION_ACTION_FUNDED',
       ],
     })
@@ -104,11 +100,19 @@ describe('buildOutboxRow', () => {
   })
 
   it('times the click from the server receipt and waits for Google to settle it', () => {
-    const row = buildOutboxRow(candidate(), 'approved', now)!
+    const row = buildOutboxRow(candidate(), 'funded', now)!
     expect(row.clickAt.toISOString()).toBe('2026-11-06T01:00:00.000Z')
     expect(row.notBefore.getTime()).toBe(row.clickAt.getTime() + CLICK_SETTLE_MS)
     expect(row.expiresAt.toISOString()).toBe('2027-02-04T01:00:00.000Z')
     expect(row.status).toBe('pending')
+  })
+
+  it('holds an approval for 48 hours after it was made', () => {
+    const row = buildOutboxRow(candidate(), 'approved', now)!
+    expect(row.notBefore.getTime()).toBe(
+      new Date('2026-11-06T02:00:00Z').getTime() + APPROVAL_HOLD_MS,
+    )
+    expect(APPROVAL_HOLD_MS).toBe(48 * 3_600_000)
   })
 
   it('ignores a click time after the conversion (a wrong browser clock)', () => {
@@ -137,38 +141,11 @@ describe('buildOutboxRow', () => {
 })
 
 describe('outcomeFor', () => {
-  it('counts success and "already exists" as sent', () => {
+  it('sends on success and fails a row Google rejected for its own fields', () => {
     expect(outcomeFor({ ok: true }, 'live')).toEqual({ kind: 'sent' })
-    expect(outcomeFor({ ok: false, errorCode: 'CLICK_CONVERSION_ALREADY_EXISTS' }, 'live')).toEqual(
-      { kind: 'sent' },
-    )
-  })
-
-  it('retries a click or conversion Google has not processed yet after it settles', () => {
-    for (const code of ['TOO_RECENT_GCLID', 'TOO_RECENT_CONVERSION', 'CONVERSION_NOT_FOUND']) {
-      expect(outcomeFor({ ok: false, errorCode: code }, 'live')).toEqual({
-        kind: 'retry',
-        errorCode: code,
-        delayMs: CLICK_SETTLE_MS,
-        unrecognised: false,
-      })
-    }
-  })
-
-  it('fails for good only on an error about the click itself', () => {
-    expect(outcomeFor({ ok: false, errorCode: 'GCLID_NOT_FOUND' }, 'live').kind).toBe('failed')
-    expect(outcomeFor({ ok: false, errorCode: 'EXPIRED_GCLID' }, 'live')).toEqual({
-      kind: 'expired',
-      errorCode: 'EXPIRED_GCLID',
-    })
-  })
-
-  it('retries an unknown or configuration error daily and flags it', () => {
-    expect(outcomeFor({ ok: false, errorCode: 'INVALID_CONVERSION_ACTION' }, 'live')).toEqual({
-      kind: 'retry',
-      errorCode: 'INVALID_CONVERSION_ACTION',
-      delayMs: 24 * 3_600_000,
-      unrecognised: true,
+    expect(outcomeFor({ ok: false, errorCode: 'INVALID_GCLID' }, 'live')).toEqual({
+      kind: 'failed',
+      errorCode: 'INVALID_GCLID',
     })
   })
 
@@ -177,9 +154,9 @@ describe('outcomeFor', () => {
       kind: 'validated',
       errorCode: null,
     })
-    expect(outcomeFor({ ok: false, errorCode: 'GCLID_NOT_FOUND' }, 'validate_only')).toEqual({
+    expect(outcomeFor({ ok: false, errorCode: 'INVALID_GCLID' }, 'validate_only')).toEqual({
       kind: 'validated',
-      errorCode: 'GCLID_NOT_FOUND',
+      errorCode: 'INVALID_GCLID',
     })
   })
 })

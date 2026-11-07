@@ -11,37 +11,42 @@
  * event replays and ordering irrelevant, and back-fills anything still inside
  * the click window.
  *
+ * Conversions go through the Data Manager API (client.ts), which cannot
+ * retract a conversion once sent. So an approval is held for
+ * APPROVAL_HOLD_MS before it goes: a revision, an operator stop or a fraud
+ * hold in that time cancels it unsent. A funded loan is final and goes as
+ * soon as the click has settled.
+ *
  * Each run:
  *   1. fill     — insert a row per approved / funded application that came
  *                 from an ad click. Unique on (application_number,
  *                 conversion_name, action); a repeat inserts nothing.
- *   2. reconcile — per approval, compare what Google should count (the
- *                 approval still stands: latest decision APPROVED, not stopped
- *                 by an operator, loan not cancelled as a fraud hold) with
- *                 what it was told, both ways: an unsent upload is cancelled
- *                 or restored, and a sent one gets a retraction queued,
- *                 re-armed or called off. Also expires rows past the click
- *                 window and releases stale claims.
- *   3. claim    — `FOR UPDATE SKIP LOCKED`, so concurrent runs take disjoint
- *                 rows.
- *   4. send     — one upload call and one retraction call, partial failure on.
- *   5. record   — each row's result. Google's "already exists" answers count
- *                 as sent, so a re-send after a crash between Google
- *                 accepting and this write is harmless (`order_id` is the
- *                 application number, which Google de-duplicates on). A row
- *                 fails for good only on an error about that click; anything
- *                 else (auth, quota, an unknown code) is retried until the
- *                 click window closes, so fixing credentials loses nothing.
+ *   2. reconcile — an unsent approval that no longer stands (latest decision
+ *                 not APPROVED, stopped by an operator, loan cancelled as a
+ *                 fraud hold) is cancelled, and restored if it comes back.
+ *                 Also expires rows past the click window and releases stale
+ *                 claims.
+ *   3. claim    — `FOR UPDATE SKIP LOCKED`, so concurrent runs (two prod
+ *                 machines each run the hourly scheduler) take disjoint rows.
+ *   4. send     — one conversion per request: the API fails a whole request
+ *                 on one bad event.
+ *   5. record   — each row's result. Re-sending a transaction id is an
+ *                 adjustment, not a duplicate, so a re-send after a crash
+ *                 between Google accepting and this write is harmless. A row
+ *                 fails for good only when Google rejects the event's own
+ *                 fields; anything else (auth, quota, config, an outage) puts
+ *                 it back for the next hour until the click window closes, so
+ *                 fixing credentials loses nothing.
  *
  * Sent per row: the click id, the conversion action, the time and the
- * application number as order id. Nothing else.
+ * application number as transaction id. Nothing else.
  */
 import type { QueryablePool } from '@/lib/dashboard-aggregates'
 import {
   GoogleAdsRequestError,
   type ClickIdType,
   type GoogleAdsConversionsClient,
-  type RowResult,
+  type IngestResult,
 } from './client'
 import type { GoogleAdsConfig } from './config'
 
@@ -51,43 +56,23 @@ const DAY_MS = 24 * HOUR_MS
 export const CLICK_SETTLE_MS = 6 * HOUR_MS
 /**
  * The longest click window Google allows. Every query is bounded by it: a
- * conversion older than this can never be sent or retracted, so each run
+ * conversion older than this can never be sent, so each run
  * reads the last CLICK_WINDOW_DAYS of data whatever the size of the history.
  * Change it here only, if Google changes the limit.
  */
 export const CLICK_WINDOW_DAYS = 90
 export const CLICK_WINDOW_MS = CLICK_WINDOW_DAYS * DAY_MS
 const WINDOW = `interval '${CLICK_WINDOW_DAYS} days'`
-const BATCH_LIMIT = 500
+/**
+ * How long an approval must stand before it is sent. Google cannot retract a
+ * conversion sent through the Data Manager API, and revisions, operator stops
+ * and fraud holds mostly land within a day or two of the approval.
+ */
+export const APPROVAL_HOLD_MS = 48 * HOUR_MS
+/** One request per row; bounds a run to a few minutes. */
+const BATCH_LIMIT = 200
 const STALE_CLAIM_MINUTES = 30
-
-/** Google already holds this one: record it as sent. */
-const ALREADY_DONE = new Set([
-  'CLICK_CONVERSION_ALREADY_EXISTS',
-  'ORDER_ID_ALREADY_IN_USE',
-  'CONVERSION_ALREADY_RETRACTED',
-])
-/** Not yet: Google has not processed the click or conversion. Retry after it settles. */
-const NOT_YET = new Set([
-  'TOO_RECENT_GCLID',
-  'TOO_RECENT_EVENT',
-  'TOO_RECENT_CONVERSION',
-  'TOO_RECENT_CONVERSION_ACTION',
-  'CONVERSION_NOT_FOUND',
-])
-/** About this click itself: it will never be accepted. The only final failures. */
-const CLICK_REJECTED = new Set([
-  'UNPARSEABLE_GCLID',
-  'GCLID_NOT_FOUND',
-  'CONVERSION_PRECEDES_GCLID',
-  'CONVERSION_PRECEDES_EVENT',
-  'EVENT_NOT_FOUND',
-])
-/** Past the conversion action's click window: Google will never take it. */
-const EXPIRED = new Set(['EXPIRED_GCLID', 'EXPIRED_EVENT', 'CONVERSION_EXPIRED'])
-/** Anything else is retried daily until the window closes, and turns the job red. */
-const UNKNOWN_RETRY_MS = 24 * HOUR_MS
-/** After a whole-request failure (auth, quota, network). The job runs hourly. */
+/** After a whole-request failure (auth, quota, network, config). Runs are hourly. */
 const REQUEST_RETRY_MS = HOUR_MS
 
 export type ConversionName = 'approved' | 'funded'
@@ -136,8 +121,10 @@ function toDate(value: unknown): Date | null {
  *
  * The click time is the chat backend's `received_at` (server clock), then
  * the browser's `captured_at`, then the conversation start: the first that is
- * not after the conversion. A row whose click window has closed is written as
- * `expired`, so the panel shows why nothing was sent.
+ * not after the conversion. A row is due once the click has settled and, for
+ * an approval, once it has stood for APPROVAL_HOLD_MS. A row whose click
+ * window has closed is written as `expired`, so the panel shows why nothing
+ * was sent.
  */
 export function buildOutboxRow(
   candidate: ConversionCandidate,
@@ -166,7 +153,10 @@ export function buildOutboxRow(
       (d): d is Date => d !== null && d.getTime() <= convertedAt.getTime(),
     ) ?? convertedAt
   const expiresAt = new Date(clickAt.getTime() + CLICK_WINDOW_MS)
-  const notBefore = new Date(Math.max(clickAt.getTime() + CLICK_SETTLE_MS, convertedAt.getTime()))
+  const hold = conversionName === 'approved' ? APPROVAL_HOLD_MS : 0
+  const notBefore = new Date(
+    Math.max(clickAt.getTime() + CLICK_SETTLE_MS, convertedAt.getTime() + hold),
+  )
   const expired = convertedAt >= expiresAt || now >= expiresAt
 
   return {
@@ -332,8 +322,6 @@ const WHY_NOT = `CASE WHEN ${KILLED} THEN 'KILLED' WHEN ${FRAUD_HOLD} THEN 'FRAU
 export interface ReconcileSummary {
   cancelled: number
   restored: number
-  retractionsQueued: number
-  retractionsCancelled: number
   expired: number
   released: number
   mockCancelled: number
@@ -346,17 +334,16 @@ export async function reconcileOutbox(
   pool: QueryablePool,
   mode: GoogleAdsConfig['mode'],
 ): Promise<ReconcileSummary> {
-  // A run that died mid-send. Re-sending is safe: Google answers "already
-  // exists" for anything it took.
+  // A run that died mid-send. Re-sending is safe: the same transaction id is
+  // an adjustment, not a second conversion.
   const released = count(
     await pool.query(
       `UPDATE google_ads_conversions SET status = 'pending', claimed_at = NULL, updated_at = now()
         WHERE status = 'sending' AND claimed_at < now() - interval '${STALE_CLAIM_MINUTES} minutes'`,
     ),
   )
-  // Past the click window, uploads and retractions alike: Google will take
-  // neither. Runs first, so every step below sees only open rows. A failed
-  // row keeps its status and Google's code.
+  // Past the click window: Google will not take it. Runs first, so every step
+  // below sees only open rows. A failed row keeps its status and Google's code.
   const expired = count(
     await pool.query(
       `UPDATE google_ads_conversions SET status = 'expired', status_reason = 'CLICK_WINDOW',
@@ -384,38 +371,6 @@ export async function reconcileOutbox(
           AND ${APPROVAL_STANDS}`,
     ),
   )
-  const retractionsQueued = count(
-    await pool.query(
-      `INSERT INTO google_ads_conversions
-         (application_number, conversation_id, conversion_name, action, click_id_type, click_id,
-          click_at, converted_at, not_before, expires_at, mock_origin, status, status_reason,
-          attempts)
-       SELECT g.application_number, g.conversation_id, g.conversion_name, 'retract',
-              g.click_id_type, g.click_id, g.click_at, now(), now(), g.expires_at, g.mock_origin,
-              'pending', ${WHY_NOT}, 0
-         FROM google_ads_conversions g
-        WHERE g.conversion_name = 'approved' AND g.action = 'upload' AND g.status = 'sent'
-          AND g.expires_at > now()
-          AND NOT ${APPROVAL_STANDS}
-       -- A retraction called off because the approval came back is re-armed
-       -- when it goes again. One already sent or in flight is left alone.
-       ON CONFLICT (application_number, conversion_name, action) DO UPDATE
-          SET status = 'pending', status_reason = EXCLUDED.status_reason,
-              converted_at = now(), not_before = now(), claimed_at = NULL,
-              last_error_code = NULL, updated_at = now()
-        WHERE google_ads_conversions.status = 'cancelled'`,
-    ),
-  )
-  // Approved again before the retraction went out: nothing to retract.
-  const retractionsCancelled = count(
-    await pool.query(
-      `UPDATE google_ads_conversions g SET status = 'cancelled',
-              status_reason = 'DECISION_RESTORED', updated_at = now()
-        WHERE g.conversion_name = 'approved' AND g.action = 'retract'
-          AND g.status = 'pending' AND g.expires_at > now()
-          AND ${APPROVAL_STANDS}`,
-    ),
-  )
   // A mock approval is not a borrower. validate_only keeps them, so demo can
   // be tested end to end; live never sends one.
   const mockCancelled =
@@ -428,15 +383,7 @@ export async function reconcileOutbox(
           ),
         )
       : 0
-  return {
-    cancelled,
-    restored,
-    retractionsQueued,
-    retractionsCancelled,
-    expired,
-    released,
-    mockCancelled,
-  }
+  return { cancelled, restored, expired, released, mockCancelled }
 }
 
 // ── 3. Claim ─────────────────────────────────────────────────────────────
@@ -445,7 +392,6 @@ export interface ClaimedRow {
   id: string
   applicationNumber: string
   conversionName: ConversionName
-  action: 'upload' | 'retract'
   clickIdType: ClickIdType
   clickId: string
   convertedAt: Date
@@ -467,13 +413,13 @@ export async function claimDueRows(
     `UPDATE google_ads_conversions SET status = 'sending', claimed_at = now(), updated_at = now()
       WHERE id IN (
         SELECT id FROM google_ads_conversions
-         WHERE status = 'pending' AND not_before <= now()
+         WHERE status = 'pending' AND action = 'upload' AND not_before <= now()
            AND expires_at > now()
            ${mode === 'validate_only' ? 'AND validated_at IS NULL' : 'AND mock_origin IS NOT TRUE'}
          ORDER BY not_before
          LIMIT $1
          FOR UPDATE SKIP LOCKED)
-      RETURNING id, application_number, conversion_name, action, click_id_type, click_id,
+      RETURNING id, application_number, conversion_name, click_id_type, click_id,
                 converted_at, attempts`,
     [limit],
   )
@@ -481,7 +427,6 @@ export async function claimDueRows(
     id: String(r.id),
     applicationNumber: String(r.application_number),
     conversionName: r.conversion_name as ConversionName,
-    action: r.action as 'upload' | 'retract',
     clickIdType: r.click_id_type as ClickIdType,
     clickId: String(r.click_id),
     convertedAt: toDate(r.converted_at) ?? new Date(),
@@ -494,40 +439,25 @@ export async function claimDueRows(
 export interface SendSummary {
   sent: number
   validated: number
-  retried: number
+  /** Rejected by Google for the event's own fields; final. */
   failed: number
-  expired: number
-  /** Whole-request failures, by code. */
+  /** Put back after a whole-request failure. */
+  retried: number
+  /** Whole-request failures, by code. The job answers 502 while there are any. */
   requestErrors: string[]
-  /** Per-row codes this code does not recognise; retried, and the job goes red. */
-  unrecognised: string[]
 }
 
 type Outcome =
   | { kind: 'sent' }
   | { kind: 'validated'; errorCode: string | null }
-  | { kind: 'retry'; errorCode: string; delayMs: number; unrecognised: boolean }
   | { kind: 'failed'; errorCode: string }
-  | { kind: 'expired'; errorCode: string }
 
-/**
- * What one row's result means for the row. Only an error about the click
- * itself fails a row for good; everything else is retried until the click
- * window closes, so nothing is lost to a misconfiguration or an error code
- * this code does not know.
- */
-export function outcomeFor(result: RowResult, mode: GoogleAdsConfig['mode']): Outcome {
+/** What one row's result means for the row. */
+export function outcomeFor(result: IngestResult, mode: GoogleAdsConfig['mode']): Outcome {
   if (mode === 'validate_only') {
     return { kind: 'validated', errorCode: result.ok ? null : result.errorCode }
   }
-  if (result.ok || ALREADY_DONE.has(result.errorCode)) return { kind: 'sent' }
-  const code = result.errorCode
-  if (EXPIRED.has(code)) return { kind: 'expired', errorCode: code }
-  if (CLICK_REJECTED.has(code)) return { kind: 'failed', errorCode: code }
-  if (NOT_YET.has(code)) {
-    return { kind: 'retry', errorCode: code, delayMs: CLICK_SETTLE_MS, unrecognised: false }
-  }
-  return { kind: 'retry', errorCode: code, delayMs: UNKNOWN_RETRY_MS, unrecognised: true }
+  return result.ok ? { kind: 'sent' } : { kind: 'failed', errorCode: result.errorCode }
 }
 
 // A live outcome clears validated_at, so the panel never shows a live error
@@ -552,39 +482,21 @@ async function record(pool: QueryablePool, row: ClaimedRow, outcome: Outcome): P
         [row.id, outcome.errorCode],
       )
       return
-    case 'retry':
-      await pool.query(
-        `UPDATE google_ads_conversions SET status = 'pending', last_error_code = $2,
-                attempts = attempts + 1, last_attempt_at = now(), claimed_at = NULL,
-                not_before = now() + ($3::int * interval '1 millisecond'),
-                validated_at = NULL, updated_at = now()
-          WHERE id = $1`,
-        [row.id, outcome.errorCode, outcome.delayMs],
-      )
-      return
     case 'failed':
-    case 'expired':
-      // An expiry keeps Google's code as its reason (the conversion action's
-      // window may be shorter than 90 days).
       await pool.query(
-        `UPDATE google_ads_conversions SET status = $2, status_reason = $3, last_error_code = $4,
+        `UPDATE google_ads_conversions SET status = 'failed', last_error_code = $2,
                 attempts = attempts + 1, last_attempt_at = now(), claimed_at = NULL,
                 validated_at = NULL, updated_at = now()
           WHERE id = $1`,
-        [
-          row.id,
-          outcome.kind,
-          outcome.kind === 'expired' ? outcome.errorCode : null,
-          outcome.errorCode,
-        ],
+        [row.id, outcome.errorCode],
       )
   }
 }
 
 /**
- * Put a batch back after a whole-request failure (auth, quota, network): try
- * again next run. Never fails a row, so a weekend of revoked credentials
- * loses nothing; the click window bounds the retries, and the job is red
+ * Put rows back after a whole-request failure (auth, quota, network, config):
+ * try again next run. Never fails a row, so a weekend of revoked credentials
+ * loses nothing; the click window bounds the retries, and the job answers 502
  * until it clears. Validate-only does not count attempts.
  */
 async function releaseAfterRequestError(
@@ -606,79 +518,44 @@ async function releaseAfterRequestError(
   )
 }
 
-/** Steps 4 and 5 for claimed rows. */
+/**
+ * Steps 4 and 5 for claimed rows, one request each. A whole-request failure
+ * would fail every later request the same way (auth, quota), so it puts the
+ * rest of the batch back and stops.
+ */
 export async function sendClaimedRows(
   pool: QueryablePool,
   client: GoogleAdsConversionsClient,
   config: GoogleAdsConfig,
   claimed: ClaimedRow[],
 ): Promise<SendSummary> {
-  const summary: SendSummary = {
-    sent: 0,
-    validated: 0,
-    retried: 0,
-    failed: 0,
-    expired: 0,
-    requestErrors: [],
-    unrecognised: [],
-  }
+  const summary: SendSummary = { sent: 0, validated: 0, failed: 0, retried: 0, requestErrors: [] }
   const validateOnly = config.mode === 'validate_only'
-  const uploads = claimed.filter((r) => r.action === 'upload')
-  const retractions = claimed.filter((r) => r.action === 'retract')
 
-  const batches: Array<[ClaimedRow[], () => Promise<RowResult[]>]> = [
-    [
-      uploads,
-      () =>
-        client.uploadClickConversions(
-          uploads.map((r) => ({
-            clickIdType: r.clickIdType,
-            clickId: r.clickId,
-            conversionAction: config.conversionActions[r.conversionName],
-            conversionDateTime: r.convertedAt,
-            orderId: r.applicationNumber,
-          })),
-          { validateOnly },
-        ),
-    ],
-    [
-      retractions,
-      () =>
-        client.uploadRetractions(
-          retractions.map((r) => ({
-            conversionAction: config.conversionActions[r.conversionName],
-            adjustmentDateTime: r.convertedAt,
-            orderId: r.applicationNumber,
-          })),
-          { validateOnly },
-        ),
-    ],
-  ]
-
-  for (const [rows, send] of batches) {
-    if (rows.length === 0) continue
-    let results: RowResult[]
+  for (const [i, row] of claimed.entries()) {
+    let result: IngestResult
     try {
-      results = await send()
+      result = await client.ingestConversion(
+        {
+          clickIdType: row.clickIdType,
+          clickId: row.clickId,
+          conversionActionId: config.conversionActions[row.conversionName],
+          eventTime: row.convertedAt,
+          transactionId: row.applicationNumber,
+        },
+        { validateOnly },
+      )
     } catch (error) {
       const code = error instanceof GoogleAdsRequestError ? error.code : 'REQUEST_FAILED'
-      await releaseAfterRequestError(pool, rows, code, config.mode)
+      const rest = claimed.slice(i)
+      await releaseAfterRequestError(pool, rest, code, config.mode)
+      summary.retried += rest.length
       summary.requestErrors.push(code)
-      continue
+      break
     }
-    for (const [i, row] of rows.entries()) {
-      const outcome = outcomeFor(results[i] ?? { ok: false, errorCode: 'NO_RESULT' }, config.mode)
-      await record(pool, row, outcome)
-      if (outcome.kind === 'sent') summary.sent += 1
-      else if (outcome.kind === 'validated') summary.validated += 1
-      else if (outcome.kind === 'retry') {
-        summary.retried += 1
-        if (outcome.unrecognised && !summary.unrecognised.includes(outcome.errorCode)) {
-          summary.unrecognised.push(outcome.errorCode)
-        }
-      } else if (outcome.kind === 'expired') summary.expired += 1
-      else summary.failed += 1
-    }
+    const outcome = outcomeFor(result, config.mode)
+    await record(pool, row, outcome)
+    summary[outcome.kind] += 1
   }
   return summary
 }

@@ -36,10 +36,10 @@ export function shapeGoogleAdsConversions(docs: unknown): GoogleAdsConversionSta
 }
 
 const REASONS: Record<string, string> = {
-  DECISION_REVISED: 'the decision was revised',
+  DECISION_REVISED: 'the decision was revised before it was sent',
   DECISION_RESTORED: 'approved again',
-  KILLED: 'the application was stopped',
-  FRAUD_HOLD: 'the loan was cancelled as a fraud hold',
+  KILLED: 'the application was stopped before it was sent',
+  FRAUD_HOLD: 'the loan was cancelled as a fraud hold before it was sent',
   MOCK_DECISION: 'a mock decision',
   CLICK_WINDOW: 'the click window closed',
   EXPIRED_GCLID: 'Google says the click is too old',
