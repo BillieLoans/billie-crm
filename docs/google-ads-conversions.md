@@ -59,8 +59,13 @@ boot, then hourly with a few minutes' jitter. Each run
 5. **Record** each row, keeping Google's error code (never its message):
    - `sent`: accepted for processing. Re-sending the same transaction id is an
      adjustment, not a duplicate, so a re-send after a crash is harmless.
-   - `failed`, final, when Google rejects the event's own fields (a malformed
-     click id or time).
+   - `failed`, final, only when Google says the event's own data is bad
+     (`INVALID_FORMAT`, `EVENT_TIME_INVALID`, `INVALID_AD_IDENTIFIER_FOR_ACCOUNT`
+     and the like; `BAD_EVENT_DATA` in `client.ts`).
+   - Any other event error (`NOT_FOUND`, an unknown reason) puts the row back
+     for a day, in validate-only too, so a delay on Google's side, such as a
+     newly created conversion action, loses nothing. The run's summary lists
+     these codes under `deferred`.
    - Anything about the request as a whole (auth, quota, configuration, an
      outage) puts the row and the rest of the batch back for the next hour,
      until the click window closes, so a weekend of revoked credentials loses

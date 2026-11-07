@@ -328,15 +328,56 @@ describe('Google Ads conversion outbox (real SQL)', () => {
     const good = await application('good-click')
     await decide(good.conv, good.app, 'APPROVED', 72)
     google.respond = (e) =>
-      e.transactionId === bad.app ? { ok: false, errorCode: 'INVALID_GCLID' } : { ok: true }
+      e.transactionId === bad.app
+        ? { ok: false, errorCode: 'INVALID_FORMAT', final: true }
+        : { ok: true }
 
     await run()
 
     expect((await rowsFor(bad.app))[0]).toMatchObject({
       status: 'failed',
-      last_error_code: 'INVALID_GCLID',
+      last_error_code: 'INVALID_FORMAT',
     })
     expect((await rowsFor(good.app))[0]).toMatchObject({ status: 'sent' })
+  })
+
+  it("retries an event error that may be on Google's side daily, and sends once it passes", async () => {
+    const { conv, app } = await application('not-found')
+    await decide(conv, app, 'APPROVED', 72)
+    google.respond = (e) =>
+      e.transactionId === app ? { ok: false, errorCode: 'NOT_FOUND', final: false } : { ok: true }
+
+    const summary = await run()
+
+    expect(summary.result.deferred).toContain('NOT_FOUND')
+    const [row] = await rowsFor(app)
+    expect(row).toMatchObject({ status: 'pending', attempts: 1, last_error_code: 'NOT_FOUND' })
+    const due = new Date(row.not_before as string).getTime()
+    expect(Math.abs(due - (Date.now() + 24 * HOUR))).toBeLessThan(60_000)
+
+    google.respond = () => ({ ok: true })
+    await makeDue(app)
+    await run()
+    expect(google.sentFor(app)).toHaveLength(1)
+    expect((await rowsFor(app))[0]).toMatchObject({ status: 'sent', last_error_code: null })
+  })
+
+  it('checks a row again in validate-only mode after an event error that may pass', async () => {
+    const { conv, app } = await application('not-found-validate')
+    await decide(conv, app, 'APPROVED', 72)
+    google.respond = (e) =>
+      e.transactionId === app ? { ok: false, errorCode: 'NOT_FOUND', final: false } : { ok: true }
+    await run({ ...CONFIG, mode: 'validate_only' })
+    const [row] = await rowsFor(app)
+    expect(row).toMatchObject({ status: 'pending', attempts: 0, last_error_code: 'NOT_FOUND' })
+    expect(row.validated_at).toBeNull()
+
+    google.respond = () => ({ ok: true })
+    await makeDue(app)
+    await run({ ...CONFIG, mode: 'validate_only' })
+    const [checked] = await rowsFor(app)
+    expect(checked.validated_at).toBeTruthy()
+    expect(checked.last_error_code).toBeNull()
   })
 
   it('puts the rest of the batch back and stops when Google refuses a request', async () => {
@@ -423,7 +464,9 @@ describe('Google Ads conversion outbox (real SQL)', () => {
       const { conv, app } = await application('failed-then-closed')
       await decide(conv, app, 'APPROVED', 72)
       google.respond = (e) =>
-        e.transactionId === app ? { ok: false, errorCode: 'INVALID_GCLID' } : { ok: true }
+        e.transactionId === app
+          ? { ok: false, errorCode: 'INVALID_FORMAT', final: true }
+          : { ok: true }
       await run()
       await pool.query(
         `UPDATE google_ads_conversions SET expires_at = now() - interval '1 day'
@@ -433,7 +476,7 @@ describe('Google Ads conversion outbox (real SQL)', () => {
       await run()
       expect((await rowsFor(app))[0]).toMatchObject({
         status: 'failed',
-        last_error_code: 'INVALID_GCLID',
+        last_error_code: 'INVALID_FORMAT',
       })
     })
   })

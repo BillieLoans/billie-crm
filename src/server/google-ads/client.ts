@@ -36,10 +36,30 @@ export interface ConversionEvent {
 
 /**
  * The outcome for one conversion. `ok: false` means Google rejected this
- * event's own fields (it will never be accepted as sent); anything about the
- * request as a whole throws GoogleAdsRequestError instead.
+ * event: `final` when its own data is bad (it will never be accepted), not
+ * final when the cause may pass (for example a newly created conversion
+ * action Google has not finished setting up). Anything about the request as
+ * a whole throws GoogleAdsRequestError instead.
  */
-export type IngestResult = { ok: true } | { ok: false; errorCode: string }
+export type IngestResult = { ok: true } | { ok: false; errorCode: string; final: boolean }
+
+/**
+ * Event errors that mean this event's own data is bad, so re-sending it can
+ * never succeed (Data Manager API ErrorReason). Every other event error,
+ * NOT_FOUND among them, may be Google's side and is retried.
+ */
+const BAD_EVENT_DATA = new Set([
+  'INVALID_FORMAT',
+  'INVALID_EVENT',
+  'INVALID_DATE',
+  'INVALID_ENUM_VALUE',
+  'REQUIRED_FIELD_MISSING',
+  'FIELD_VALUE_TOO_LONG',
+  'FIELD_VALUE_TOO_SHORT',
+  'NO_IDENTIFIERS_PROVIDED',
+  'EVENT_TIME_INVALID',
+  'INVALID_AD_IDENTIFIER_FOR_ACCOUNT',
+])
 
 export interface IngestOptions {
   validateOnly: boolean
@@ -81,9 +101,10 @@ interface GoogleError {
  * Classify a failed response.
  *
  * A 400 whose field violations all point into `events` is about the event
- * itself (a malformed click id, a bad timestamp): final for that row. Anything
- * else (destinations, auth, quota, a server error) is about the request or
- * our configuration and is retried, so a misconfiguration loses nothing.
+ * itself. It is final only when the reason says the event's data is bad
+ * (BAD_EVENT_DATA); otherwise the row is retried. Anything else
+ * (destinations, auth, quota, a server error) is about the request or our
+ * configuration and is retried, so a misconfiguration loses nothing.
  * The code is the most specific one Google gives: a field violation's
  * reason, an ErrorInfo reason, then the RPC status.
  */
@@ -100,7 +121,7 @@ export function classifyFailure(httpStatus: number, body: unknown): IngestResult
     httpStatus === 400 &&
     violations.length > 0 &&
     violations.every((v) => (v.field ?? '').startsWith('events'))
-  if (aboutTheEvent) return { ok: false, errorCode: reason }
+  if (aboutTheEvent) return { ok: false, errorCode: reason, final: BAD_EVENT_DATA.has(reason) }
   throw new GoogleAdsRequestError(reason, `events:ingest: HTTP ${httpStatus}`)
 }
 

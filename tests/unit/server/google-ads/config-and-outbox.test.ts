@@ -141,22 +141,30 @@ describe('buildOutboxRow', () => {
 })
 
 describe('outcomeFor', () => {
-  it('sends on success and fails a row Google rejected for its own fields', () => {
+  it('sends on success and fails a row whose own data is bad', () => {
     expect(outcomeFor({ ok: true }, 'live')).toEqual({ kind: 'sent' })
-    expect(outcomeFor({ ok: false, errorCode: 'INVALID_GCLID' }, 'live')).toEqual({
+    expect(outcomeFor({ ok: false, errorCode: 'INVALID_FORMAT', final: true }, 'live')).toEqual({
       kind: 'failed',
-      errorCode: 'INVALID_GCLID',
+      errorCode: 'INVALID_FORMAT',
     })
   })
 
-  it('only records the check in validate-only mode', () => {
+  it('retries an event error that may pass, in both modes', () => {
+    const notFound = { ok: false as const, errorCode: 'NOT_FOUND', final: false }
+    expect(outcomeFor(notFound, 'live')).toEqual({ kind: 'retried', errorCode: 'NOT_FOUND' })
+    expect(outcomeFor(notFound, 'validate_only')).toEqual({
+      kind: 'retried',
+      errorCode: 'NOT_FOUND',
+    })
+  })
+
+  it('records the verdict in validate-only mode', () => {
     expect(outcomeFor({ ok: true }, 'validate_only')).toEqual({
       kind: 'validated',
       errorCode: null,
     })
-    expect(outcomeFor({ ok: false, errorCode: 'INVALID_GCLID' }, 'validate_only')).toEqual({
-      kind: 'validated',
-      errorCode: 'INVALID_GCLID',
-    })
+    expect(
+      outcomeFor({ ok: false, errorCode: 'INVALID_FORMAT', final: true }, 'validate_only'),
+    ).toEqual({ kind: 'validated', errorCode: 'INVALID_FORMAT' })
   })
 })
