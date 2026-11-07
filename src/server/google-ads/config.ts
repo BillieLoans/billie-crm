@@ -6,29 +6,31 @@
  *   - `validate_only`: the outbox fills and every row goes to Google with
  *     validateOnly set. Google checks it and records nothing; rows stay
  *     pending so they are sent once the mode is `live`.
- *   - `live`: rows are uploaded. Rows from mock credit decisions are cancelled.
+ *   - `live`: rows are sent. Rows from mock credit decisions are cancelled.
  *
+ * Conversions go through the Data Manager API, which needs no developer token.
  * Credentials are Fly secrets (infra/fly/env), never in the repo:
- *   GOOGLE_ADS_API_VERSION            e.g. v22: Google retires versions yearly
- *   GOOGLE_ADS_DEVELOPER_TOKEN        from the manager account's API Center
  *   GOOGLE_ADS_CUSTOMER_ID            the Ads account, digits (dashes are dropped)
- *   GOOGLE_ADS_LOGIN_CUSTOMER_ID      the manager account, when access is through one
+ *   GOOGLE_ADS_LOGIN_CUSTOMER_ID      the manager account, when the OAuth user
+ *                                     reaches the Ads account through it (optional)
  *   GOOGLE_ADS_OAUTH_CLIENT_ID / _CLIENT_SECRET / _REFRESH_TOKEN
+ *                                     refresh token with scope
+ *                                     https://www.googleapis.com/auth/datamanager
  *   GOOGLE_ADS_CONVERSION_ACTION_APPROVED / _FUNDED   conversion action ids
- *     (or full resource names) of the two "Import from clicks" actions
+ *     (the "Conversion type ID"; a resource name customers/x/conversionActions/<id>
+ *     is accepted too)
  */
 
 export type GoogleAdsMode = 'off' | 'validate_only' | 'live'
 
 export interface GoogleAdsConfig {
   mode: Exclude<GoogleAdsMode, 'off'>
-  apiVersion: string
-  developerToken: string
   customerId: string
   loginCustomerId: string | null
   oauthClientId: string
   oauthClientSecret: string
   oauthRefreshToken: string
+  /** Numeric conversion action ids. */
   conversionActions: { approved: string; funded: string }
 }
 
@@ -42,11 +44,10 @@ const digits = (value: string | undefined): string | null => {
   return /^\d+$/.test(d) ? d : null
 }
 
-function conversionAction(value: string | undefined, customerId: string): string | null {
+function conversionActionId(value: string | undefined): string | null {
   const v = (value ?? '').trim()
-  if (/^\d+$/.test(v)) return `customers/${customerId}/conversionActions/${v}`
-  if (/^customers\/\d+\/conversionActions\/\d+$/.test(v)) return v
-  return null
+  if (/^\d+$/.test(v)) return v
+  return /^customers\/\d+\/conversionActions\/(\d+)$/.exec(v)?.[1] ?? null
 }
 
 export type GoogleAdsConfigResult =
@@ -68,9 +69,6 @@ export function readGoogleAdsConfig(env: NodeJS.ProcessEnv = process.env): Googl
     if (!value) missing.push(name)
     return value ?? ''
   }
-  const apiVersion = need('GOOGLE_ADS_API_VERSION')
-  if (apiVersion && !/^v\d+$/.test(apiVersion)) missing.push('GOOGLE_ADS_API_VERSION')
-  const developerToken = need('GOOGLE_ADS_DEVELOPER_TOKEN')
   const customerId = digits(env.GOOGLE_ADS_CUSTOMER_ID)
   if (!customerId) missing.push('GOOGLE_ADS_CUSTOMER_ID')
   const loginRaw = env.GOOGLE_ADS_LOGIN_CUSTOMER_ID?.trim()
@@ -79,9 +77,9 @@ export function readGoogleAdsConfig(env: NodeJS.ProcessEnv = process.env): Googl
   const oauthClientId = need('GOOGLE_ADS_OAUTH_CLIENT_ID')
   const oauthClientSecret = need('GOOGLE_ADS_OAUTH_CLIENT_SECRET')
   const oauthRefreshToken = need('GOOGLE_ADS_OAUTH_REFRESH_TOKEN')
-  const approved = conversionAction(env.GOOGLE_ADS_CONVERSION_ACTION_APPROVED, customerId ?? '0')
+  const approved = conversionActionId(env.GOOGLE_ADS_CONVERSION_ACTION_APPROVED)
   if (!approved) missing.push('GOOGLE_ADS_CONVERSION_ACTION_APPROVED')
-  const funded = conversionAction(env.GOOGLE_ADS_CONVERSION_ACTION_FUNDED, customerId ?? '0')
+  const funded = conversionActionId(env.GOOGLE_ADS_CONVERSION_ACTION_FUNDED)
   if (!funded) missing.push('GOOGLE_ADS_CONVERSION_ACTION_FUNDED')
 
   if (missing.length > 0 || !customerId || !approved || !funded) {
@@ -91,8 +89,6 @@ export function readGoogleAdsConfig(env: NodeJS.ProcessEnv = process.env): Googl
     ok: true,
     config: {
       mode,
-      apiVersion,
-      developerToken,
       customerId,
       loginCustomerId,
       oauthClientId,

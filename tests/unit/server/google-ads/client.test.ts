@@ -1,29 +1,33 @@
 /**
- * BTB-546: the Google Ads REST client — what goes over the wire, and how a
- * partial-failure response maps back to rows.
+ * BTB-546: the Data Manager API client — what goes over the wire, and how a
+ * failure is classified (this event's fault vs the request's).
  */
 import { describe, expect, it, vi } from 'vitest'
 import {
   GoogleAdsRequestError,
+  classifyFailure,
   createGoogleAdsClient,
-  googleAdsDateTime,
-  mapPartialFailure,
+  rfc3339,
+  type ConversionEvent,
 } from '@/server/google-ads/client'
 import type { GoogleAdsConfig } from '@/server/google-ads/config'
 
 const CONFIG: GoogleAdsConfig = {
   mode: 'live',
-  apiVersion: 'v22',
-  developerToken: 'dev-token',
-  customerId: '1234567890',
-  loginCustomerId: '9999999999',
+  customerId: '9789998894',
+  loginCustomerId: '3408470500',
   oauthClientId: 'client-id',
   oauthClientSecret: 'client-secret',
   oauthRefreshToken: 'refresh-token',
-  conversionActions: {
-    approved: 'customers/1234567890/conversionActions/111',
-    funded: 'customers/1234567890/conversionActions/222',
-  },
+  conversionActions: { approved: '7891828470', funded: '222' },
+}
+
+const EVENT: ConversionEvent = {
+  clickIdType: 'gbraid',
+  clickId: 'gb-1',
+  conversionActionId: '7891828470',
+  eventTime: new Date('2026-11-06T03:04:05.678Z'),
+  transactionId: 'APP-1',
 }
 
 function json(body: unknown, status = 200): Response {
@@ -33,198 +37,128 @@ function json(body: unknown, status = 200): Response {
   })
 }
 
-function fakeFetch(apiResponse: Response | (() => Response)) {
-  return vi.fn(async (url: string | URL | Request) => {
-    if (String(url).startsWith('https://oauth2.googleapis.com/token')) {
-      return json({ access_token: 'access-1', expires_in: 3600 })
-    }
-    return typeof apiResponse === 'function' ? apiResponse() : apiResponse
-  })
+function fakeFetch(
+  apiResponse: () => Response,
+  token: () => Response = () => json({ access_token: 'access-1', expires_in: 3600 }),
+) {
+  return vi.fn(async (url: string | URL | Request) =>
+    String(url).startsWith('https://oauth2.googleapis.com/token') ? token() : apiResponse(),
+  )
 }
 
-describe('googleAdsDateTime', () => {
-  it('formats in UTC with an explicit offset', () => {
-    expect(googleAdsDateTime(new Date('2026-11-06T03:04:05.678Z'))).toBe(
-      '2026-11-06 03:04:05+00:00',
-    )
+describe('rfc3339', () => {
+  it('formats in UTC to the second', () => {
+    expect(rfc3339(new Date('2026-11-06T03:04:05.678Z'))).toBe('2026-11-06T03:04:05Z')
   })
 })
 
-describe('mapPartialFailure', () => {
-  it('is all ok without a partial failure error', () => {
-    expect(mapPartialFailure({ results: [{}, {}] }, 2)).toEqual([{ ok: true }, { ok: true }])
-  })
-
-  it('maps each error to the row at its index', () => {
-    const response = {
-      results: [{}, { gclid: 'b' }, {}],
-      partialFailureError: {
-        code: 3,
+describe('classifyFailure', () => {
+  it("returns a row failure when every violation is in the event's fields", () => {
+    const body = {
+      error: {
+        status: 'INVALID_ARGUMENT',
         details: [
           {
-            errors: [
-              {
-                errorCode: { conversionUploadError: 'TOO_RECENT_GCLID' },
-                location: { fieldPathElements: [{ fieldName: 'conversions', index: 0 }] },
-              },
-              {
-                errorCode: { conversionUploadError: 'GCLID_NOT_FOUND' },
-                location: {
-                  fieldPathElements: [
-                    { fieldName: 'conversions', index: 2 },
-                    { fieldName: 'gclid' },
-                  ],
-                },
-              },
+            '@type': 'type.googleapis.com/google.rpc.BadRequest',
+            fieldViolations: [
+              { field: 'events.events[0].ad_identifiers.gclid', reason: 'INVALID_GCLID' },
             ],
           },
         ],
       },
     }
-    expect(mapPartialFailure(response, 3)).toEqual([
-      { ok: false, errorCode: 'TOO_RECENT_GCLID' },
-      { ok: true },
-      { ok: false, errorCode: 'GCLID_NOT_FOUND' },
-    ])
+    expect(classifyFailure(400, body)).toEqual({ ok: false, errorCode: 'INVALID_GCLID' })
   })
 
-  it('treats an error that names no row as a whole-request failure', () => {
-    const response = {
-      partialFailureError: {
-        details: [{ errors: [{ errorCode: { authorizationError: 'USER_PERMISSION_DENIED' } }] }],
+  it('throws a request error for a destination or config problem', () => {
+    const body = {
+      error: {
+        status: 'INVALID_ARGUMENT',
+        details: [{ fieldViolations: [{ field: 'destinations[0].product_destination_id' }] }],
       },
     }
-    expect(() => mapPartialFailure(response, 2)).toThrow(GoogleAdsRequestError)
+    expect(() => classifyFailure(400, body)).toThrow(GoogleAdsRequestError)
+  })
+
+  it('throws a request error for auth, quota and server failures, with the most specific code', () => {
     try {
-      mapPartialFailure(response, 2)
+      classifyFailure(403, {
+        error: {
+          status: 'PERMISSION_DENIED',
+          details: [{ reason: 'ACCESS_TOKEN_SCOPE_INSUFFICIENT' }],
+        },
+      })
+      expect.unreachable()
     } catch (e) {
-      expect((e as GoogleAdsRequestError).code).toBe('USER_PERMISSION_DENIED')
+      expect((e as GoogleAdsRequestError).code).toBe('ACCESS_TOKEN_SCOPE_INSUFFICIENT')
     }
+    expect(() => classifyFailure(503, null)).toThrow('HTTP 503')
   })
 })
 
 describe('createGoogleAdsClient', () => {
-  it('sends only the click id, conversion action, time and order id', async () => {
-    const fetchImpl = fakeFetch(json({ results: [{}] }))
+  it('sends one event with only the click id, time and transaction id', async () => {
+    const fetchImpl = fakeFetch(() => json({ requestId: 'r-1' }))
     const client = createGoogleAdsClient(CONFIG, fetchImpl as unknown as typeof fetch)
 
-    const results = await client.uploadClickConversions(
-      [
-        {
-          clickIdType: 'gbraid',
-          clickId: 'gb-1',
-          conversionAction: CONFIG.conversionActions.approved,
-          conversionDateTime: new Date('2026-11-06T03:04:05Z'),
-          orderId: 'APP-1',
-        },
-      ],
-      { validateOnly: true },
-    )
+    expect(await client.ingestConversion(EVENT, { validateOnly: true })).toEqual({ ok: true })
 
-    expect(results).toEqual([{ ok: true }])
     const [url, init] = fetchImpl.mock.calls[1] as unknown as [string, RequestInit]
-    expect(url).toBe(
-      'https://googleads.googleapis.com/v22/customers/1234567890:uploadClickConversions',
-    )
-    expect(init.headers).toMatchObject({
+    expect(url).toBe('https://datamanager.googleapis.com/v1/events:ingest')
+    expect(init.headers).toEqual({
       authorization: 'Bearer access-1',
-      'developer-token': 'dev-token',
-      'login-customer-id': '9999999999',
+      'content-type': 'application/json',
     })
     expect(JSON.parse(String(init.body))).toEqual({
-      conversions: [
+      destinations: [
         {
-          gbraid: 'gb-1',
-          conversionAction: 'customers/1234567890/conversionActions/111',
-          conversionDateTime: '2026-11-06 03:04:05+00:00',
-          orderId: 'APP-1',
+          operatingAccount: { accountType: 'GOOGLE_ADS', accountId: '9789998894' },
+          loginAccount: { accountType: 'GOOGLE_ADS', accountId: '3408470500' },
+          productDestinationId: '7891828470',
         },
       ],
-      partialFailure: true,
+      events: [
+        {
+          adIdentifiers: { gbraid: 'gb-1' },
+          eventTimestamp: '2026-11-06T03:04:05Z',
+          transactionId: 'APP-1',
+          eventSource: 'WEB',
+        },
+      ],
       validateOnly: true,
     })
   })
 
-  it('sends a retraction by order id', async () => {
-    const fetchImpl = fakeFetch(json({ results: [{}] }))
-    const client = createGoogleAdsClient(CONFIG, fetchImpl as unknown as typeof fetch)
-    await client.uploadRetractions(
-      [
-        {
-          conversionAction: CONFIG.conversionActions.approved,
-          adjustmentDateTime: new Date('2026-11-08T00:00:00Z'),
-          orderId: 'APP-1',
-        },
-      ],
-      { validateOnly: false },
+  it('omits the login account when there is none', async () => {
+    const fetchImpl = fakeFetch(() => json({ requestId: 'r-1' }))
+    const client = createGoogleAdsClient(
+      { ...CONFIG, loginCustomerId: null },
+      fetchImpl as unknown as typeof fetch,
     )
-    const [url, init] = fetchImpl.mock.calls[1] as unknown as [string, RequestInit]
-    expect(url).toMatch(/:uploadConversionAdjustments$/)
-    expect(JSON.parse(String(init.body))).toEqual({
-      conversionAdjustments: [
-        {
-          conversionAction: 'customers/1234567890/conversionActions/111',
-          adjustmentType: 'RETRACTION',
-          adjustmentDateTime: '2026-11-08 00:00:00+00:00',
-          orderId: 'APP-1',
-        },
-      ],
-      partialFailure: true,
-      validateOnly: false,
-    })
+    await client.ingestConversion(EVENT, { validateOnly: false })
+    const body = JSON.parse(
+      String((fetchImpl.mock.calls[1] as unknown as [string, RequestInit])[1].body),
+    )
+    expect(body.destinations[0].loginAccount).toBeUndefined()
   })
 
   it('reuses the access token across calls', async () => {
-    const fetchImpl = fakeFetch(() => json({ results: [{}] }))
+    const fetchImpl = fakeFetch(() => json({ requestId: 'r' }))
     const client = createGoogleAdsClient(CONFIG, fetchImpl as unknown as typeof fetch)
-    const one = {
-      conversionAction: CONFIG.conversionActions.approved,
-      adjustmentDateTime: new Date(),
-      orderId: 'A',
-    }
-    await client.uploadRetractions([one], { validateOnly: false })
-    await client.uploadRetractions([one], { validateOnly: false })
-    const tokenCalls = fetchImpl.mock.calls.filter(([u]) => String(u).includes('oauth2'))
-    expect(tokenCalls).toHaveLength(1)
+    await client.ingestConversion(EVENT, { validateOnly: false })
+    await client.ingestConversion(EVENT, { validateOnly: false })
+    expect(fetchImpl.mock.calls.filter(([u]) => String(u).includes('oauth2'))).toHaveLength(1)
   })
 
-  it('throws a request error with the first error code on an HTTP failure', async () => {
+  it('throws a request error with the OAuth error code when the refresh fails', async () => {
     const fetchImpl = fakeFetch(
-      json(
-        {
-          error: {
-            code: 401,
-            message: 'echoes the request',
-            details: [{ errors: [{ errorCode: { authenticationError: 'NOT_ADS_USER' } }] }],
-          },
-        },
-        401,
-      ),
+      () => json({}),
+      () => json({ error: 'invalid_grant', error_description: 'echoes things' }, 400),
     )
     const client = createGoogleAdsClient(CONFIG, fetchImpl as unknown as typeof fetch)
-    const err = await client
-      .uploadClickConversions(
-        [
-          {
-            clickIdType: 'gclid',
-            clickId: 'g',
-            conversionAction: CONFIG.conversionActions.approved,
-            conversionDateTime: new Date(),
-            orderId: 'A',
-          },
-        ],
-        { validateOnly: false },
-      )
-      .catch((e: unknown) => e)
+    const err = await client.ingestConversion(EVENT, { validateOnly: false }).catch((e) => e)
     expect(err).toBeInstanceOf(GoogleAdsRequestError)
-    expect((err as GoogleAdsRequestError).code).toBe('NOT_ADS_USER')
-    expect((err as Error).message).not.toContain('echoes')
-  })
-
-  it('makes no call for an empty batch', async () => {
-    const fetchImpl = fakeFetch(json({}))
-    const client = createGoogleAdsClient(CONFIG, fetchImpl as unknown as typeof fetch)
-    expect(await client.uploadClickConversions([], { validateOnly: false })).toEqual([])
-    expect(fetchImpl).not.toHaveBeenCalled()
+    expect(err.code).toBe('OAUTH_INVALID_GRANT')
+    expect(err.message).not.toContain('echoes')
   })
 })
