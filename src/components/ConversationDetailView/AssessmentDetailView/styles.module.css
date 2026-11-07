@@ -726,3 +726,351 @@
 }
 
 :global([data-theme="dark"]) .skeleton { background: #1f2937; }
+
+/* ══ Drill-through: rule figure → categories → transactions ══════════════════
+   Level 0  rule group   one <tbody> per rule; open → blue bar down its left edge
+   Level 1  breakdown    white card inside the rule's own row band
+   Level 2  category     one <tbody> per category; open → tinted, transactions
+                         indented under a lighter bar                            */
+
+/* Separator between rules: each group's last row drops its border. */
+.ruleGroup + .ruleGroup > tr:first-child > td {
+  border-top: 1px solid var(--theme-elevation-100, #f3f4f6);
+}
+
+.ruleGroupOpen > tr > td:first-child { box-shadow: inset 3px 0 0 #3b82f6; }
+.ruleGroupOpen .reasonCell,
+.ruleGroupOpen .warnCell { border-left-color: #3b82f6; }
+.ruleGroupOpen .ruleName { color: var(--theme-elevation-900, #111); }
+
+/* Value cell: the figure, with its Breakdown toggle under it. */
+.valueStack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.drillToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px 3px 7px;
+  border: 1px solid var(--theme-elevation-250, #d1d5db);
+  border-radius: 999px;
+  background: var(--theme-elevation-0, #fff);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  color: #1d4ed8;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.drillToggle:hover { border-color: #3b82f6; background: #eff6ff; }
+
+.drillToggle[aria-expanded='true'] {
+  border-color: #3b82f6;
+  background: #3b82f6;
+  color: #fff;
+}
+
+.drillToggle:focus-visible,
+.drillCategoryToggle:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.drillChevron {
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+
+.drillChevronOpen { transform: rotate(90deg); }
+
+/* Level 1 — the breakdown card. */
+.drillRow > td { border-bottom: none; }
+
+.drillRowCell { padding: 2px 14px 14px 14px !important; }
+
+/* The rule's row tint (.rowFail td etc.) and info-row fade must not reach the
+   card's own tables, which are descendants of the drill row. */
+.drillRowCell { opacity: 1 !important; }
+.drill td { background: transparent; opacity: 1; }
+
+.drill {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px 14px;
+  border: 1px solid var(--theme-elevation-150, #e5e7eb);
+  border-radius: 8px;
+  background: var(--theme-elevation-0, #fff);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.drillHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.drillEyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #1d4ed8;
+}
+
+.drillNote {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--theme-elevation-700, #444);
+}
+
+.drillRatio {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--theme-elevation-50, #f8fafc);
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  color: var(--theme-elevation-800, #222);
+}
+
+.drillRatioNote {
+  font-family: system-ui, sans-serif;
+  font-size: 11px;
+  color: var(--theme-elevation-500, #888);
+}
+
+.drillNotice {
+  margin: 0;
+  font-size: 12px;
+  color: #78350f;
+  background: #fffbeb;
+  border-left: 3px solid #fcd34d;
+  padding: 6px 10px;
+}
+
+.drillEmpty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--theme-elevation-500, #888);
+}
+
+/* Level 2 — categories. */
+.drillCatTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.drillCatTable > thead > tr > th {
+  padding: 6px 12px;
+  text-align: left;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--theme-elevation-500, #888);
+  border-bottom: 1px solid var(--theme-elevation-150, #e5e7eb);
+}
+
+.drillCatTable > thead > tr > th:nth-child(2) { width: 110px; }
+.drillCatTable > thead > tr > th:nth-child(3) { width: 130px; }
+
+.drillCatTable > tbody > tr > td {
+  padding: 0 12px;
+  height: 36px;
+  border-bottom: 1px solid var(--theme-elevation-100, #f3f4f6);
+  vertical-align: middle;
+}
+
+.drillCatGroup:last-child > tr:last-child > td { border-bottom: none; }
+
+.drillCatGroup:not(.drillCatGroupEmpty) > tr:first-child:hover > td {
+  background: var(--theme-elevation-50, #f8fafc);
+}
+
+.drillCatGroupOpen > tr:first-child > td {
+  background: #eff6ff;
+  font-weight: 600;
+  border-bottom-color: transparent;
+}
+
+.drillCatGroupOpen > tr:first-child:hover > td { background: #e0edff; }
+
+.drillCatGroupEmpty > tr > td { color: var(--theme-elevation-400, #9ca3af); }
+
+.drillCategoryToggle,
+.drillCategoryStatic {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 36px;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+
+.drillCategoryToggle {
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+/* Boxed chevron: a clear, fixed-position click target on every row. */
+.drillChevronBox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--theme-elevation-250, #d1d5db);
+  border-radius: 4px;
+  background: var(--theme-elevation-0, #fff);
+  color: #1d4ed8;
+}
+
+.drillCategoryToggle:hover .drillChevronBox { border-color: #3b82f6; }
+
+.drillCatGroupOpen .drillChevronBox {
+  border-color: #3b82f6;
+  background: #3b82f6;
+  color: #fff;
+}
+
+.drillChevronBoxEmpty {
+  border-style: dashed;
+  border-color: var(--theme-elevation-150, #e5e7eb);
+  background: transparent;
+}
+
+.drillCode {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--theme-elevation-500, #888);
+}
+
+.drillNumber {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.drillDebit { color: #b91c1c; }
+.drillCredit { color: #15803d; }
+
+/* Transactions, indented under their category with a lighter bar. */
+.drill .drillTxnCell {
+  height: auto !important;
+  padding: 0 0 12px 40px !important;
+  background: #eff6ff;
+}
+
+.drillTxnScroll {
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid #bfdbfe;
+  border-left: 3px solid #93c5fd;
+  border-radius: 4px;
+  background: var(--theme-elevation-0, #fff);
+}
+
+.drillTxnTable {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 12px;
+}
+
+/* Fixed widths: date, amount and account size to their content; the
+   description takes the rest instead of being squeezed. */
+.drillTxnTable th:nth-child(1) { width: 118px; }
+.drillTxnTable th:nth-child(3) { width: 96px; }
+.drillTxnTable th:nth-child(4) { width: 178px; }
+
+.drillTxnTable td:nth-child(2) { overflow-wrap: anywhere; }
+
+.drillTxnTable th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 6px 12px;
+  text-align: left;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--theme-elevation-500, #888);
+  background: var(--theme-elevation-50, #f8fafc);
+  border-bottom: 1px solid var(--theme-elevation-150, #e5e7eb);
+}
+
+.drillTxnTable td {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--theme-elevation-100, #f3f4f6);
+  vertical-align: top;
+}
+
+.drillTxnTable tbody tr:nth-child(even) td { background: var(--theme-elevation-50, #fafafa); }
+.drillTxnTable tbody tr:last-child td { border-bottom: none; }
+
+/* Gutter between amount and account so they never run together. */
+.drillTxnTable th:nth-child(3),
+.drillTxnTable td:nth-child(3) { padding-right: 20px; }
+
+.drillDate,
+.drillAccount {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--theme-elevation-600, #666);
+}
+
+/* ── Drill-through, dark theme ── */
+:global([data-theme="dark"]) .ruleGroup + .ruleGroup > tr:first-child > td { border-top-color: #374151; }
+:global([data-theme="dark"]) .ruleGroupOpen > tr > td:first-child { box-shadow: inset 3px 0 0 #60a5fa; }
+:global([data-theme="dark"]) .ruleGroupOpen .reasonCell,
+:global([data-theme="dark"]) .ruleGroupOpen .warnCell { border-left-color: #60a5fa; }
+:global([data-theme="dark"]) .drillToggle { background: #111827; border-color: #4b5563; color: #93c5fd; }
+:global([data-theme="dark"]) .drillToggle:hover { background: #1e3a5f; border-color: #60a5fa; }
+:global([data-theme="dark"]) .drillToggle[aria-expanded='true'] { background: #2563eb; border-color: #2563eb; color: #fff; }
+:global([data-theme="dark"]) .drill { background: #111827; border-color: #374151; }
+:global([data-theme="dark"]) .drillEyebrow { color: #93c5fd; }
+:global([data-theme="dark"]) .drillNote { color: #d1d5db; }
+:global([data-theme="dark"]) .drillRatio { background: #1f2937; color: #e5e7eb; }
+:global([data-theme="dark"]) .drillNotice { background: #1c1300; color: #fde68a; border-left-color: #92400e; }
+:global([data-theme="dark"]) .drillCatTable > thead > tr > th { color: #9ca3af; border-bottom-color: #374151; }
+:global([data-theme="dark"]) .drillCatTable > tbody > tr > td { border-bottom-color: #1f2937; color: #e5e7eb; }
+:global([data-theme="dark"]) .drillCatGroup:not(.drillCatGroupEmpty) > tr:first-child:hover > td { background: #1f2937; }
+:global([data-theme="dark"]) .drillCatGroupOpen > tr:first-child > td,
+:global([data-theme="dark"]) .drill .drillTxnCell { background: #172554; }
+:global([data-theme="dark"]) .drillCatGroupOpen > tr:first-child:hover > td { background: #1e3a8a; }
+:global([data-theme="dark"]) .drillCatGroupEmpty > tr > td { color: #6b7280; }
+:global([data-theme="dark"]) .drillChevronBox { background: #111827; border-color: #4b5563; color: #93c5fd; }
+:global([data-theme="dark"]) .drillCatGroupOpen .drillChevronBox { background: #2563eb; border-color: #2563eb; color: #fff; }
+:global([data-theme="dark"]) .drillChevronBoxEmpty { background: transparent; border-color: #374151; }
+:global([data-theme="dark"]) .drillTxnScroll { background: #111827; border-color: #1e3a8a; border-left-color: #3b82f6; }
+:global([data-theme="dark"]) .drillTxnTable th { background: #1f2937; color: #9ca3af; border-bottom-color: #374151; }
+:global([data-theme="dark"]) .drillTxnTable td { border-bottom-color: #1f2937; color: #e5e7eb; }
+:global([data-theme="dark"]) .drillTxnTable tbody tr:nth-child(even) td { background: #0f172a; }
+/* The table-wide dark rules (.rowFail td, .rulesTable td) out-rank plain
+   class rules, so the card's cells restate their background and colour here. */
+:global([data-theme="dark"]) .drill td { background: transparent; color: #e5e7eb; }
+:global([data-theme="dark"]) .drill td.drillDebit { color: #fca5a5; }
+:global([data-theme="dark"]) .drill td.drillCredit { color: #86efac; }
+:global([data-theme="dark"]) .drill td.drillDate,
+:global([data-theme="dark"]) .drill td.drillAccount { color: #9ca3af; }
+:global([data-theme="dark"]) .drill .drillCatGroupEmpty > tr > td { color: #6b7280; }

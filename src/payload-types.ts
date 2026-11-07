@@ -99,6 +99,7 @@ export interface Config {
     'report-boards': ReportBoard;
     'mcp-oauth-clients': McpOauthClient;
     'mcp-oauth-grants': McpOauthGrant;
+    'google-ads-conversions': GoogleAdsConversion;
     'payload-mcp-api-keys': PayloadMcpApiKey;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
@@ -139,6 +140,7 @@ export interface Config {
     'report-boards': ReportBoardsSelect<false> | ReportBoardsSelect<true>;
     'mcp-oauth-clients': McpOauthClientsSelect<false> | McpOauthClientsSelect<true>;
     'mcp-oauth-grants': McpOauthGrantsSelect<false> | McpOauthGrantsSelect<true>;
+    'google-ads-conversions': GoogleAdsConversionsSelect<false> | GoogleAdsConversionsSelect<true>;
     'payload-mcp-api-keys': PayloadMcpApiKeysSelect<false> | PayloadMcpApiKeysSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
@@ -2714,6 +2716,58 @@ export interface McpOauthGrant {
   createdAt: string;
 }
 /**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "google-ads-conversions".
+ */
+export interface GoogleAdsConversion {
+  id: string;
+  applicationNumber: string;
+  conversationId?: string | null;
+  conversionName: 'approved' | 'funded';
+  action: 'upload' | 'retract';
+  clickIdType: 'gclid' | 'gbraid' | 'wbraid';
+  clickId: string;
+  /**
+   * When the ad was clicked
+   */
+  clickAt?: string | null;
+  /**
+   * Upload: when the application was approved or funded. Retract: the adjustment time. Fixed when the row is written so a retry sends the same value.
+   */
+  convertedAt: string;
+  /**
+   * Not sent before this time (Google rejects clicks that are too recent)
+   */
+  notBefore: string;
+  /**
+   * Google accepts nothing after this (90 days from the click). A retraction carries its upload’s. Rows past it are never looked at again.
+   */
+  expiresAt: string;
+  /**
+   * From a mock credit decision; never sent live
+   */
+  mockOrigin?: boolean | null;
+  status: 'pending' | 'sending' | 'sent' | 'failed' | 'expired' | 'cancelled';
+  /**
+   * Why a row was cancelled or expired (DECISION_REVISED, KILLED, ...)
+   */
+  statusReason?: string | null;
+  attempts?: number | null;
+  /**
+   * Google's error code from the last attempt (never its message)
+   */
+  lastErrorCode?: string | null;
+  lastAttemptAt?: string | null;
+  claimedAt?: string | null;
+  sentAt?: string | null;
+  /**
+   * Checked by Google in validate-only mode (the result is in Last error code; empty means accepted). Each row is checked once.
+   */
+  validatedAt?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * Keys for the reporting connector (BTB-509): one per person, for report authors only. Delete a key to revoke it.
  *
  * This interface was referenced by `Config`'s JSON-Schema
@@ -2937,6 +2991,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'mcp-oauth-grants';
         value: string | McpOauthGrant;
+      } | null)
+    | ({
+        relationTo: 'google-ads-conversions';
+        value: string | GoogleAdsConversion;
       } | null)
     | ({
         relationTo: 'payload-mcp-api-keys';
@@ -4085,6 +4143,33 @@ export interface McpOauthGrantsSelect<T extends boolean = true> {
   refreshExpiresAt?: T;
   refreshedAt?: T;
   lastUsedAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "google-ads-conversions_select".
+ */
+export interface GoogleAdsConversionsSelect<T extends boolean = true> {
+  applicationNumber?: T;
+  conversationId?: T;
+  conversionName?: T;
+  action?: T;
+  clickIdType?: T;
+  clickId?: T;
+  clickAt?: T;
+  convertedAt?: T;
+  notBefore?: T;
+  expiresAt?: T;
+  mockOrigin?: T;
+  status?: T;
+  statusReason?: T;
+  attempts?: T;
+  lastErrorCode?: T;
+  lastAttemptAt?: T;
+  claimedAt?: T;
+  sentAt?: T;
+  validatedAt?: T;
   updatedAt?: T;
   createdAt?: T;
 }

@@ -70,7 +70,9 @@ export function AssessmentDrawer({ conversationId, type, onClose }: AssessmentDr
             </div>
           )}
 
-          {!isLoading && assessment && <AssessmentContent assessment={assessment} type={type} />}
+          {!isLoading && assessment && (
+            <AssessmentContent assessment={assessment} type={type} conversationId={conversationId} />
+          )}
         </div>
       )}
     </ContextDrawer>
