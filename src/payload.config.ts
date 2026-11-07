@@ -39,6 +39,7 @@ import { ReportEvents } from './collections/ReportEvents'
 import { ReportSubscriptions } from './collections/ReportSubscriptions'
 import { ReportDeliveries } from './collections/ReportDeliveries'
 import { ReportBoards } from './collections/ReportBoards'
+import { GoogleAdsConversions } from './collections/GoogleAdsConversions'
 import { McpOAuthClients } from './collections/McpOAuthClients'
 import { McpOAuthGrants } from './collections/McpOAuthGrants'
 import { applyReportingSchema, dropReportingViews } from './server/reporting/schema'
@@ -187,7 +188,7 @@ export default buildConfig({
       },
     },
   },
-  collections: [Users, Media, Customers, Conversations, Applications, LoanAccounts, WriteOffRequests, ReapplicationBlockClearRequests, ContactNotes, Notifications, CollectionsCases, Contacts, Interactions, ContactAuditLog, Batches, Feedback, ReleaseBatches, ReleaseGrants, ReleaseGateStatus, Issues, LlmCosts, DisbursementAccessLog, ReportDefinitions, ReportRuns, ReportAsks, ReportPreferences, ReportEvents, ReportSubscriptions, ReportDeliveries, ReportBoards, McpOAuthClients, McpOAuthGrants],
+  collections: [Users, Media, Customers, Conversations, Applications, LoanAccounts, WriteOffRequests, ReapplicationBlockClearRequests, ContactNotes, Notifications, CollectionsCases, Contacts, Interactions, ContactAuditLog, Batches, Feedback, ReleaseBatches, ReleaseGrants, ReleaseGateStatus, Issues, LlmCosts, DisbursementAccessLog, ReportDefinitions, ReportRuns, ReportAsks, ReportPreferences, ReportEvents, ReportSubscriptions, ReportDeliveries, ReportBoards, McpOAuthClients, McpOAuthGrants, GoogleAdsConversions],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || 'build-placeholder-not-for-production',
   typescript: {
@@ -280,6 +281,34 @@ export default buildConfig({
               reportRunsScheduledDeliveryKey: uniqueIndex('report_runs_scheduled_delivery_key').on(
                 t.reportSlug,
                 t.scheduledFor,
+              ),
+            }),
+          })
+        }
+
+        // One Google Ads conversion per application, conversion and action
+        // (BTB-546). The sender fills the outbox with ON CONFLICT DO NOTHING
+        // on this key, so repeated and concurrent runs queue nothing twice.
+        const googleAdsConversions = (schema.tables as Record<string, unknown>)
+          .google_ads_conversions as Parameters<typeof extendTable>[0]['table'] | undefined
+        if (googleAdsConversions) {
+          extendTable({
+            table: googleAdsConversions,
+            extraConfig: (t) => ({
+              googleAdsConversionsKey: uniqueIndex('google_ads_conversions_key').on(
+                t.applicationNumber,
+                t.conversionName,
+                t.action,
+              ),
+              googleAdsConversionsDueIdx: index('google_ads_conversions_due_idx').on(
+                t.status,
+                t.notBefore,
+              ),
+              // Reconcile re-checks only rows whose click window is open, so a
+              // run's cost does not grow with the history (BTB-546).
+              googleAdsConversionsOpenIdx: index('google_ads_conversions_open_idx').on(
+                t.status,
+                t.expiresAt,
               ),
             }),
           })
