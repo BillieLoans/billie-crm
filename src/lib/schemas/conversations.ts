@@ -305,6 +305,19 @@ export const AttributionSchema = z.object({
 })
 export type Attribution = z.infer<typeof AttributionSchema>
 
+/** BTB-546: one Google Ads offline conversion for this application. Status and times only. */
+export const GoogleAdsConversionStatusSchema = z.object({
+  conversionName: z.enum(['approved', 'funded']),
+  action: z.enum(['upload', 'retract']),
+  status: z.enum(['pending', 'sending', 'sent', 'failed', 'expired', 'cancelled']),
+  statusReason: z.string().nullable(),
+  lastErrorCode: z.string().nullable(),
+  notBefore: z.string().nullable(),
+  sentAt: z.string().nullable(),
+  validatedAt: z.string().nullable(),
+})
+export type GoogleAdsConversionStatus = z.infer<typeof GoogleAdsConversionStatusSchema>
+
 /**
  * BTB-406: network provenance captured at chat entry (country, ASN). The IP
  * is personal information and travels separately as `networkIp`, which the
@@ -340,6 +353,8 @@ export const ConversationDetailSchema = z.object({
   identityOriginCustomerId: z.string().nullable().optional(),
   /** BTB-404 / BTB-500: where this application came from (ad click, search, LLM, social, referral); absent means direct or untracked. */
   attribution: AttributionSchema.nullable().optional(),
+  /** BTB-546: what was sent to Google Ads for this application. */
+  googleAdsConversions: z.array(GoogleAdsConversionStatusSchema).optional(),
   /** BTB-406: where this application came from on the network. */
   network: NetworkSchema.nullable().optional(),
   /** BTB-406: the client IP — present only for supervisors and admins. */

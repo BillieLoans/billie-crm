@@ -65,6 +65,7 @@ import * as migration_20261101_090000_decline_reasons from './20261101_090000_de
 import * as migration_20261102_090000_mcp_restricted_columns from './20261102_090000_mcp_restricted_columns'
 import * as migration_20261103_090000_loan_account_cancellation from './20261103_090000_loan_account_cancellation'
 import * as migration_20261104_090000_customer_manual_block from './20261104_090000_customer_manual_block'
+import * as migration_20261106_090000_google_ads_conversions from './20261106_090000_google_ads_conversions'
 
 export const migrations = [
   {
@@ -401,5 +402,10 @@ export const migrations = [
     up: migration_20261104_090000_customer_manual_block.up,
     down: migration_20261104_090000_customer_manual_block.down,
     name: '20261104_090000_customer_manual_block',
+  },
+  {
+    up: migration_20261106_090000_google_ads_conversions.up,
+    down: migration_20261106_090000_google_ads_conversions.down,
+    name: '20261106_090000_google_ads_conversions',
   },
 ]

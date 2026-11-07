@@ -157,6 +157,9 @@ const BASE_KEYS = [
   'decisionMetadata',
   'decisionStatus',
   'finalDecision',
+  // BTB-546: Google Ads conversion status and times (no click id), the
+  // outcome of the attribution above; readable by all lending roles.
+  'googleAdsConversions',
   'identityOriginCustomerId',
   'identityResolution',
   'identityVerificationAttempts',

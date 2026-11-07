@@ -343,7 +343,10 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
         title="Acquisition"
         summary={attributionSummary(conversation.attribution ?? null)}
       >
-        <AttributionDetail attribution={conversation.attribution ?? null} />
+        <AttributionDetail
+          attribution={conversation.attribution ?? null}
+          googleAdsConversions={conversation.googleAdsConversions ?? []}
+        />
       </AssessmentSection>
 
       {/* Network — country / ASN / IP captured at chat entry (BTB-406). Labelling only. */}

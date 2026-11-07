@@ -15,6 +15,7 @@ import { hasAnyRole, hasApprovalAuthority } from '@/lib/access'
 import { resolveActorDisplayName } from '@/lib/users'
 import { shapeAttempts } from '@/lib/identityAttempts'
 import { shapeAttribution } from '@/lib/attribution'
+import { shapeGoogleAdsConversions } from '@/lib/google-ads-conversions'
 import { networkIpOf, shapeNetwork } from '@/lib/network'
 import { shapeIdentityResolution } from '@/lib/identityResolution'
 
@@ -148,6 +149,37 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       })
       sourceAccountNumber = (accountResult.docs[0]?.accountNumber as string) ?? null
     }
+    // BTB-546: what was sent to Google Ads for this application. The raw
+    // outbox is admin-only; this is status and times, no click id. Only an
+    // ad click can have rows. Optional panel data: a failure here must not
+    // take the whole conversation down.
+    let googleAdsDocs: unknown[] = []
+    const attributionRaw = doc.attribution as Record<string, unknown> | null | undefined
+    if (attributionRaw?.gclid || attributionRaw?.gbraid || attributionRaw?.wbraid) {
+      try {
+        const googleAdsResult = await payload.find({
+          collection: 'google-ads-conversions',
+          where: { conversationId: { equals: conversationId } },
+          sort: ['conversionName', 'action'],
+          pagination: false,
+          depth: 0,
+          select: {
+            conversionName: true,
+            action: true,
+            status: true,
+            statusReason: true,
+            lastErrorCode: true,
+            notBefore: true,
+            sentAt: true,
+            validatedAt: true,
+          },
+        })
+        googleAdsDocs = googleAdsResult.docs
+      } catch (error) {
+        console.error('[conversations] google ads status unavailable:', error)
+      }
+    }
+
     // applicationData may be flat {loanAmount, ...} (new format) or nested {payload: {loanAmount, ...}} (old format)
     const appDataRaw = doc.applicationData as Record<string, unknown> | undefined
     const appData = (appDataRaw?.payload as Record<string, unknown> | undefined) ?? appDataRaw
@@ -214,6 +246,8 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       identityOriginCustomerId: (doc.identityOriginCustomerId as string) ?? null,
       // BTB-404 / BTB-500: ad-click or referrer-inferred attribution captured at chat entry.
       attribution: shapeAttribution(doc.attribution),
+      // BTB-546: offline conversions sent to Google Ads (status and times only).
+      googleAdsConversions: shapeGoogleAdsConversions(googleAdsDocs),
       // BTB-406: network provenance (country, ASN) captured at chat entry.
       network: shapeNetwork(doc.network),
       startedAt: toIso(doc.startedAt),
