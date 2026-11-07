@@ -61,13 +61,33 @@ describe('classifyFailure', () => {
           {
             '@type': 'type.googleapis.com/google.rpc.BadRequest',
             fieldViolations: [
-              { field: 'events.events[0].ad_identifiers.gclid', reason: 'INVALID_GCLID' },
+              { field: 'events.events[0].ad_identifiers.gclid', reason: 'INVALID_FORMAT' },
             ],
           },
         ],
       },
     }
-    expect(classifyFailure(400, body)).toEqual({ ok: false, errorCode: 'INVALID_GCLID' })
+    expect(classifyFailure(400, body)).toEqual({
+      ok: false,
+      errorCode: 'INVALID_FORMAT',
+      final: true,
+    })
+  })
+
+  it("returns a retryable row failure for an event error that may be on Google's side", () => {
+    const body = {
+      error: {
+        status: 'INVALID_ARGUMENT',
+        details: [
+          {
+            fieldViolations: [
+              { field: 'events.events[0].destination_references', reason: 'NOT_FOUND' },
+            ],
+          },
+        ],
+      },
+    }
+    expect(classifyFailure(400, body)).toEqual({ ok: false, errorCode: 'NOT_FOUND', final: false })
   })
 
   it('throws a request error for a destination or config problem', () => {

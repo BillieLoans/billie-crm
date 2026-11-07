@@ -33,10 +33,11 @@
  *   5. record   — each row's result. Re-sending a transaction id is an
  *                 adjustment, not a duplicate, so a re-send after a crash
  *                 between Google accepting and this write is harmless. A row
- *                 fails for good only when Google rejects the event's own
- *                 fields; anything else (auth, quota, config, an outage) puts
- *                 it back for the next hour until the click window closes, so
- *                 fixing credentials loses nothing.
+ *                 fails for good only when Google says the event's own data
+ *                 is bad. Any other event error is retried daily, and a
+ *                 request error (auth, quota, config, an outage) hourly,
+ *                 until the click window closes, so nothing is lost to a
+ *                 problem on Google's side or ours.
  *
  * Sent per row: the click id, the conversion action, the time and the
  * application number as transaction id. Nothing else.
@@ -74,6 +75,8 @@ const BATCH_LIMIT = 200
 const STALE_CLAIM_MINUTES = 30
 /** After a whole-request failure (auth, quota, network, config). Runs are hourly. */
 const REQUEST_RETRY_MS = HOUR_MS
+/** After an event error that may pass (NOT_FOUND, an unknown reason). */
+export const EVENT_RETRY_MS = 24 * HOUR_MS
 
 export type ConversionName = 'approved' | 'funded'
 
@@ -439,10 +442,12 @@ export async function claimDueRows(
 export interface SendSummary {
   sent: number
   validated: number
-  /** Rejected by Google for the event's own fields; final. */
+  /** Rejected by Google because the event's own data is bad; final. */
   failed: number
-  /** Put back after a whole-request failure. */
+  /** Put back: after an event error that may pass, or a whole-request failure. */
   retried: number
+  /** Event error codes put back for a day, so they show in the run's log. */
+  deferred: string[]
   /** Whole-request failures, by code. The job answers 502 while there are any. */
   requestErrors: string[]
 }
@@ -451,18 +456,30 @@ type Outcome =
   | { kind: 'sent' }
   | { kind: 'validated'; errorCode: string | null }
   | { kind: 'failed'; errorCode: string }
+  | { kind: 'retried'; errorCode: string }
 
-/** What one row's result means for the row. */
+/**
+ * What one row's result means for the row. An event error that may pass is
+ * retried daily in both modes, so validate-only checks the row again rather
+ * than recording a verdict that may only reflect a delay on Google's side.
+ */
 export function outcomeFor(result: IngestResult, mode: GoogleAdsConfig['mode']): Outcome {
-  if (mode === 'validate_only') {
-    return { kind: 'validated', errorCode: result.ok ? null : result.errorCode }
-  }
-  return result.ok ? { kind: 'sent' } : { kind: 'failed', errorCode: result.errorCode }
+  if (result.ok)
+    return mode === 'validate_only' ? { kind: 'validated', errorCode: null } : { kind: 'sent' }
+  if (!result.final) return { kind: 'retried', errorCode: result.errorCode }
+  return mode === 'validate_only'
+    ? { kind: 'validated', errorCode: result.errorCode }
+    : { kind: 'failed', errorCode: result.errorCode }
 }
 
 // A live outcome clears validated_at, so the panel never shows a live error
 // as the validate-only verdict.
-async function record(pool: QueryablePool, row: ClaimedRow, outcome: Outcome): Promise<void> {
+async function record(
+  pool: QueryablePool,
+  row: ClaimedRow,
+  outcome: Outcome,
+  mode: GoogleAdsConfig['mode'],
+): Promise<void> {
   switch (outcome.kind) {
     case 'sent':
       await pool.query(
@@ -489,6 +506,17 @@ async function record(pool: QueryablePool, row: ClaimedRow, outcome: Outcome): P
                 validated_at = NULL, updated_at = now()
           WHERE id = $1`,
         [row.id, outcome.errorCode],
+      )
+      return
+    case 'retried':
+      // validated_at stays empty so validate-only checks the row again.
+      await pool.query(
+        `UPDATE google_ads_conversions SET status = 'pending', last_error_code = $2,
+                attempts = attempts + $3, last_attempt_at = now(), claimed_at = NULL,
+                not_before = now() + ($4::int * interval '1 millisecond'),
+                validated_at = NULL, updated_at = now()
+          WHERE id = $1`,
+        [row.id, outcome.errorCode, mode === 'live' ? 1 : 0, EVENT_RETRY_MS],
       )
   }
 }
@@ -529,7 +557,14 @@ export async function sendClaimedRows(
   config: GoogleAdsConfig,
   claimed: ClaimedRow[],
 ): Promise<SendSummary> {
-  const summary: SendSummary = { sent: 0, validated: 0, failed: 0, retried: 0, requestErrors: [] }
+  const summary: SendSummary = {
+    sent: 0,
+    validated: 0,
+    failed: 0,
+    retried: 0,
+    deferred: [],
+    requestErrors: [],
+  }
   const validateOnly = config.mode === 'validate_only'
 
   for (const [i, row] of claimed.entries()) {
@@ -554,8 +589,11 @@ export async function sendClaimedRows(
       break
     }
     const outcome = outcomeFor(result, config.mode)
-    await record(pool, row, outcome)
+    await record(pool, row, outcome, config.mode)
     summary[outcome.kind] += 1
+    if (outcome.kind === 'retried' && !summary.deferred.includes(outcome.errorCode)) {
+      summary.deferred.push(outcome.errorCode)
+    }
   }
   return summary
 }
