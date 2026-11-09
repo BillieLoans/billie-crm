@@ -50,6 +50,16 @@ export const TEMPLATE_META: Record<string, TemplateMeta> = {
     legallyImportant: true,
   },
 
+  // Funds disbursed notice (platform BTB-551): sent once when a loan is paid out.
+  funds_disbursed_email: {
+    label: 'Funds disbursed notice',
+    channel: 'email',
+  },
+  funds_disbursed_email_fallback_sms: {
+    label: 'Funds disbursed notice (SMS fallback)',
+    channel: 'sms',
+  },
+
   // Statements
   statement_monthly_email: {
     label: 'Monthly statement',

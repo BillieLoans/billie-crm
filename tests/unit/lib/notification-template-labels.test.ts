@@ -20,6 +20,8 @@ describe('TEMPLATE_META coverage', () => {
     'overdue_sms_v2',
     'overdue_email_final',
     'statement_monthly_email',
+    'funds_disbursed_email',
+    'funds_disbursed_email_fallback_sms',
   ]
 
   it.each(requiredTemplates)('has metadata for %s', (templateName) => {
@@ -36,6 +38,17 @@ describe('TEMPLATE_META coverage', () => {
 describe('getTemplateLabel', () => {
   it('returns the friendly label when the template is known', () => {
     expect(getTemplateLabel('pre_due_email_first')).toBe('First pre-due reminder')
+  })
+
+  it('labels the funds disbursed notice and its SMS fallback (platform BTB-551)', () => {
+    expect(getTemplateLabel('funds_disbursed_email', { reason: 'disbursed' })).toBe(
+      'Funds disbursed notice',
+    )
+    expect(getTemplateLabel('funds_disbursed_email_fallback_sms')).toBe(
+      'Funds disbursed notice (SMS fallback)',
+    )
+    expect(TEMPLATE_META.funds_disbursed_email.channel).toBe('email')
+    expect(TEMPLATE_META.funds_disbursed_email_fallback_sms.channel).toBe('sms')
   })
 
   it('falls back to tags.reason + tags.step when template is unknown', () => {
