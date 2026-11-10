@@ -51,6 +51,10 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # next-env.d.ts and .next/types are generated, not committed. Without
+      # them a fresh checkout cannot resolve the route types, and tsc fails.
+      - name: Generate Next.js types
+        run: pnpm exec next typegen
       - name: Type-check the app
         run: pnpm typecheck
       - name: Type-check the test files against the baseline

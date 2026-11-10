@@ -4,7 +4,7 @@
  * `pnpm typecheck` uses tsconfig.check.json, which excludes tests/**, so a type
  * error in a test file went uncaught: vitest strips types without checking
  * them. Turning the check on outright was not possible, because the test files
- * already held 119 errors across 23 files.
+ * already held over a hundred errors in more than twenty files.
  *
  * So this runs `tsc -p tsconfig.tests.json`, counts the errors per file, and
  * compares that with scripts/test-types-baseline.json:
