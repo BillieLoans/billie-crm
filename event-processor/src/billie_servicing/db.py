@@ -63,6 +63,7 @@ async def upsert(
     insert_only_columns: Iterable[str] | None = None,
     do_nothing_on_conflict: bool = False,
     update_where: str | None = None,
+    version_column: str | None = None,
 ) -> str:
     """Run ``INSERT … ON CONFLICT (cols) DO UPDATE SET …`` against ``table``.
 
@@ -82,6 +83,12 @@ async def upsert(
             (``DO UPDATE SET … WHERE <predicate>``) — for monotonic guards such as
             ``COALESCE(t.version, 0) < EXCLUDED.version``. Caller-trusted SQL, like
             the column names; never user input. Ignored with ``do_nothing_on_conflict``.
+        version_column: optional column of ``values`` holding the event's version
+            (a non-None integer). On conflict, a row whose stored version is
+            HIGHER than the incoming one keeps every value it already has and
+            only has its NULL columns filled; otherwise the row is updated as
+            usual. The column itself is set to the higher of the two. A stored
+            NULL version never blocks the update.
 
     Returns:
         asyncpg's command tag (``"INSERT 0 1"``; ``"INSERT 0 0"`` when the
@@ -112,7 +119,17 @@ async def upsert(
         if not update_cols:
             sql += "DO NOTHING"
         else:
-            set_clause = ", ".join(f"{c} = EXCLUDED.{c}" for c in update_cols)
+            if version_column is None:
+                set_clause = ", ".join(f"{c} = EXCLUDED.{c}" for c in update_cols)
+            else:
+                stale = f"{table}.{version_column} > EXCLUDED.{version_column}"
+                set_clause = ", ".join(
+                    f"{c} = GREATEST({table}.{c}, EXCLUDED.{c})"
+                    if c == version_column
+                    else f"{c} = CASE WHEN {stale} THEN COALESCE({table}.{c}, EXCLUDED.{c}) "
+                    f"ELSE EXCLUDED.{c} END"
+                    for c in update_cols
+                )
             sql += f"DO UPDATE SET {set_clause}"
             if update_where:
                 sql += f" WHERE {update_where}"
@@ -239,16 +256,31 @@ async def update_by_key(
     key_column: str,
     key_value: Any,
     values: dict[str, Any],
+    version_column: str | None = None,
 ) -> str:
     """Plain UPDATE keyed by a single column. Returns the asyncpg status string.
 
     Use this for status-flip events (``writeoff.approved``, etc.) where we know
     the row exists and don't need an upsert.
+
+    ``version_column`` works as it does in :func:`upsert`: it names a column of
+    ``values`` holding the event's version (a non-None integer). A row whose
+    stored version is HIGHER keeps every value it already has and only has its
+    NULL columns filled; the column itself is set to the higher of the two.
     """
     if not values:
         raise ValueError(f"update_by_key({table}) called with empty values")
     cols = list(values.keys())
-    set_clause = ", ".join(f"{c} = ${i}" for i, c in enumerate(cols, start=1))
+    if version_column is None:
+        set_clause = ", ".join(f"{c} = ${i}" for i, c in enumerate(cols, start=1))
+    else:
+        stale = f"{version_column} > ${cols.index(version_column) + 1}"
+        set_clause = ", ".join(
+            f"{c} = GREATEST({c}, ${i})"
+            if c == version_column
+            else f"{c} = CASE WHEN {stale} THEN COALESCE({c}, ${i}) ELSE ${i} END"
+            for i, c in enumerate(cols, start=1)
+        )
     args = [values[c] for c in cols]
     args.append(key_value)
     sql = (

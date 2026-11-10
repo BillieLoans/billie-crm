@@ -310,6 +310,32 @@ export const LoanAccounts: CollectionConfig = {
         description: 'Original status from SDK (PENDING, ACTIVE, SUSPENDED, CLOSED)',
       },
     },
+    // === Event ordering (account_version, BTB-537) ===
+    // Written only by the event processor (handlers/account.py), straight into
+    // account_state_version and account_schedule_version: the highest
+    // `account_version` it has applied from account-state events (created,
+    // updated, status changed, closed, cancelled) and from schedule events
+    // (schedule created/updated). The platform's counter is shared by both
+    // families, so each needs its own column. Change a name here and that
+    // handler's SQL must change with it.
+    {
+      name: 'accountStateVersion',
+      type: 'number',
+      admin: {
+        readOnly: true,
+        description:
+          'Highest account_version applied from account-state events. An older event does not overwrite this record.',
+      },
+    },
+    {
+      name: 'accountScheduleVersion',
+      type: 'number',
+      admin: {
+        readOnly: true,
+        description:
+          'Highest account_version applied from schedule events. An older event does not overwrite the schedule.',
+      },
+    },
     {
       name: 'commencementDate',
       type: 'date',

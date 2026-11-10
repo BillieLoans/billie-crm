@@ -97,6 +97,99 @@ def _is_status_regression(incoming_sdk_status: str, row: Any) -> bool:
     return bool(row.get("loan_terms_disbursed_date"))
 
 
+# Ordering by account_version (BTB-537, accounts SDK 2.13.0+).
+#
+# The platform stamps every account.* event with ``account_version``: ONE
+# counter per account, shared by all of its account.* events, strictly
+# increasing in the order they were produced. A republished old event keeps its
+# original number. Older producers and older stored events carry no version.
+#
+# The last applied version is kept on the loan_accounts row in two columns, one
+# per family, because the counter is shared: a schedule event numbered 6 must
+# not make a later-arriving state event numbered 5 look stale when 5 is still
+# the newest STATE this projection has seen.
+#
+# - An event with no version is applied exactly as before, and so is any event
+#   for a row that has no stored version yet.
+# - incoming < stored: the event is stale. It overwrites nothing; it may still
+#   fill a column that is NULL. Logged at info with both versions.
+# - incoming == stored: a redelivery of the same event, re-applied as before.
+# - Otherwise the event is applied and the column takes the higher version.
+#
+# The comparison is made in the write itself (``version_column`` in db.upsert /
+# db.update_by_key), so two consumers racing on one account cannot both win.
+# The value read beforehand is used for the log line and for decisions the
+# handler makes in Python.
+STATE_VERSION_COLUMN = "account_state_version"
+SCHEDULE_VERSION_COLUMN = "account_schedule_version"
+
+
+def _event_version(payload: Any) -> int | None:
+    """The event's ``account_version``, or None when it carries none (an older
+    producer, an older stored event, or an SDK model without the field)."""
+    version = getattr(payload, "account_version", None)
+    if isinstance(version, bool) or not isinstance(version, int):
+        return None
+    return version
+
+
+def _as_version(value: Any) -> int | None:
+    """A stored version (a Postgres numeric) as an int; None when absent."""
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _row_version(row: Any, column: str) -> int | None:
+    """The stored version on a fetched row (asyncpg.Record or dict), if any."""
+    return _as_version(row.get(column)) if row is not None else None
+
+
+def _is_stale(
+    log: Any, event_type: str, incoming_version: int | None, stored_version: int | None
+) -> bool:
+    """True, and logged, when the event is older than the last one applied."""
+    if incoming_version is None or stored_version is None:
+        return False
+    if incoming_version >= stored_version:
+        return False
+    log.info(
+        f"Stale {event_type}: account_version is lower than the last applied "
+        "one — existing values are kept, only empty columns are filled",
+        incoming_account_version=incoming_version,
+        stored_account_version=stored_version,
+    )
+    return True
+
+
+async def _stored_state_version(pool: asyncpg.Pool, account_id: str) -> int | None:
+    """The last applied account-state version on the row, if any."""
+    row = await pool.fetchrow(
+        f"SELECT {STATE_VERSION_COLUMN} FROM loan_accounts WHERE loan_account_id = $1",
+        account_id,
+    )
+    return _row_version(row, STATE_VERSION_COLUMN)
+
+
+async def _schedule_event_is_stale(
+    conn: Any, log: Any, event_type: str, parent_id: Any, incoming_version: int | None
+) -> bool:
+    """Whether a schedule event is stale, read AFTER the parent upsert.
+
+    That upsert has already set the stored version to the higher of the two
+    and holds the row lock for the rest of the transaction, so a stored version
+    above the incoming one means the event is stale (and equal means it was
+    applied, or is a redelivery).
+    """
+    if incoming_version is None:
+        return False
+    stored = await conn.fetchval(
+        f"SELECT {SCHEDULE_VERSION_COLUMN} FROM loan_accounts WHERE id = $1", parent_id
+    )
+    return _is_stale(log, event_type, incoming_version, _as_version(stored))
+
+
 async def _resolve_customer_link(pool: asyncpg.Pool, customer_id: str | None) -> Any | None:
     """Look up customers.id (uuid) so Payload's relationship hydrates."""
     if not customer_id:
@@ -121,7 +214,7 @@ async def handle_account_created(pool: asyncpg.Pool, parsed_event: Any) -> None:
     account_status = SDK_STATUS_MAP.get(sdk_status, "active")
 
     existing_row = await pool.fetchrow(
-        "SELECT sdk_status, loan_terms_disbursed_date "
+        f"SELECT sdk_status, loan_terms_disbursed_date, {STATE_VERSION_COLUMN} "
         "FROM loan_accounts WHERE loan_account_id = $1",
         account_id,
     )
@@ -190,13 +283,36 @@ async def handle_account_created(pool: asyncpg.Pool, parsed_event: Any) -> None:
         del values["account_status"]
         del values["sdk_status"]
 
+    account_version = _event_version(payload)
+    stale = False
+    if account_version is not None:
+        values[STATE_VERSION_COLUMN] = account_version
+        stale = _is_stale(
+            log,
+            "account.created.v1",
+            account_version,
+            _row_version(existing_row, STATE_VERSION_COLUMN),
+        )
+
     await upsert(
         pool,
         "loan_accounts",
         conflict_columns=["loan_account_id"],
         values=values,
         insert_only_columns=["created_at"],
+        version_column=STATE_VERSION_COLUMN if account_version is not None else None,
     )
+
+    if stale and payload.account_number:
+        # A row first made by a schedule event holds its account id as a
+        # placeholder account_number (NOT NULL). That is an empty value, not a
+        # newer one, so a stale account.created.v1 still fills it.
+        await pool.execute(
+            "UPDATE loan_accounts SET account_number = $1 "
+            "WHERE loan_account_id = $2 AND account_number = loan_account_id",
+            payload.account_number,
+            account_id,
+        )
 
     log.info("Loan account upserted")
 
@@ -229,6 +345,11 @@ async def handle_account_updated(pool: asyncpg.Pool, parsed_event: Any) -> None:
     `updated_at`) and always still applies the write — mirroring the DLQ
     `extra_original_event_timestamp` staleness-triage convention from
     Task 39/BTB-256 (platform half), where timestamp is informational only.
+
+    Since accounts SDK 2.13.0 (BTB-537) an event may carry ``account_version``,
+    which IS a reliable ordering field: an event older than the stored
+    ``account_state_version`` overwrites nothing (see STATE_VERSION_COLUMN).
+    The timestamp warning above stays as it is, for events without a version.
     """
     payload = parsed_event.payload
     account_id = payload.account_id
@@ -245,11 +366,23 @@ async def handle_account_updated(pool: asyncpg.Pool, parsed_event: Any) -> None:
         if existing is None:
             existing = await pool.fetchrow(
                 "SELECT account_status, sdk_status, loan_terms_disbursed_date, "
-                "balances_total_outstanding, updated_at "
+                f"balances_total_outstanding, updated_at, {STATE_VERSION_COLUMN} "
                 "FROM loan_accounts WHERE loan_account_id = $1",
                 account_id,
             )
         return existing
+
+    # BTB-537: see the note above STATE_VERSION_COLUMN.
+    account_version = _event_version(payload)
+    stale = False
+    if account_version is not None:
+        update_doc[STATE_VERSION_COLUMN] = account_version
+        stale = _is_stale(
+            log,
+            "account.updated.v1",
+            account_version,
+            _row_version(await _load_existing(), STATE_VERSION_COLUMN),
+        )
 
     # Log-only staleness warning — see the docstring's "Ordering" note for
     # why this can't be a hard-skip guard. Never blocks/skips the write;
@@ -346,6 +479,9 @@ async def handle_account_updated(pool: asyncpg.Pool, parsed_event: Any) -> None:
         and current_balance_value is not None
         and update_doc.get("account_status", "active") == "active"
         and trigger_type in ("", "REPAYMENT")
+        # A stale event's balance is older than the stored one, so the
+        # difference between them is not a payment.
+        and not stale
     ):
         row = await _load_existing()
         existing_balance = row["balances_total_outstanding"] if row else None
@@ -380,6 +516,7 @@ async def handle_account_updated(pool: asyncpg.Pool, parsed_event: Any) -> None:
         key_column="loan_account_id",
         key_value=account_id,
         values=update_doc,
+        version_column=STATE_VERSION_COLUMN if account_version is not None else None,
     )
     log.info("Loan account updated", asyncpg_status=status)
 
@@ -397,7 +534,7 @@ async def handle_account_status_changed(pool: asyncpg.Pool, parsed_event: Any) -
     now = datetime.now(timezone.utc)
 
     row = await pool.fetchrow(
-        "SELECT account_status, sdk_status, loan_terms_disbursed_date "
+        f"SELECT account_status, sdk_status, loan_terms_disbursed_date, {STATE_VERSION_COLUMN} "
         "FROM loan_accounts WHERE loan_account_id = $1",
         account_id,
     )
@@ -426,12 +563,23 @@ async def handle_account_status_changed(pool: asyncpg.Pool, parsed_event: Any) -
             update_doc["loan_terms_disbursed_date"] = now
             log.info("Stamped disbursed_date on pending_disbursement → active transition")
 
+    account_version = _event_version(payload)
+    if account_version is not None:
+        update_doc[STATE_VERSION_COLUMN] = account_version
+        _is_stale(
+            log,
+            "account.status_changed.v1",
+            account_version,
+            _row_version(row, STATE_VERSION_COLUMN),
+        )
+
     status = await update_by_key(
         pool,
         "loan_accounts",
         key_column="loan_account_id",
         key_value=account_id,
         values=update_doc,
+        version_column=STATE_VERSION_COLUMN if account_version is not None else None,
     )
     log.info("Account status changed", new_status=account_status, asyncpg_status=status)
 
@@ -483,12 +631,23 @@ async def handle_account_closed(pool: asyncpg.Pool, parsed_event: Any) -> None:
         update_doc["balances_total_paid"] = total_paid
         update_doc["closure_total_paid"] = total_paid
 
+    account_version = _event_version(payload)
+    if account_version is not None:
+        update_doc[STATE_VERSION_COLUMN] = account_version
+        _is_stale(
+            log,
+            "account.closed.v1",
+            account_version,
+            await _stored_state_version(pool, account_id),
+        )
+
     status = await update_by_key(
         pool,
         "loan_accounts",
         key_column="loan_account_id",
         key_value=account_id,
         values=update_doc,
+        version_column=STATE_VERSION_COLUMN if account_version is not None else None,
     )
     log.info(
         "Loan account closed",
@@ -534,12 +693,23 @@ async def handle_account_cancelled(pool: asyncpg.Pool, parsed_event: Any) -> Non
         "updated_at": datetime.now(timezone.utc),
     }
 
+    account_version = _event_version(payload)
+    if account_version is not None:
+        update_doc[STATE_VERSION_COLUMN] = account_version
+        _is_stale(
+            log,
+            "account.cancelled.v1",
+            account_version,
+            await _stored_state_version(pool, account_id),
+        )
+
     status = await update_by_key(
         pool,
         "loan_accounts",
         key_column="loan_account_id",
         key_value=account_id,
         values=update_doc,
+        version_column=STATE_VERSION_COLUMN if account_version is not None else None,
     )
     if status.endswith(" 0"):
         # No loan_accounts row yet (account.created.v1 not projected): nothing
@@ -561,6 +731,40 @@ async def _get_parent_id(pool_or_conn: Any, account_id: str) -> Any | None:
     )
 
 
+# What a schedule event does to a payment row that already exists. The STALE
+# variants (BTB-537, see STATE_VERSION_COLUMN) keep every value the row has and
+# only fill the ones that are NULL; `status` is never NULL, so it is left alone.
+_PAYMENTS = "loan_accounts_repayment_schedule_payments"
+
+_SCHEDULE_CREATED_SET = f"""
+                      due_date = EXCLUDED.due_date,
+                      amount = EXCLUDED.amount,
+                      status = CASE
+                        WHEN {_PAYMENTS}.status != 'scheduled'
+                          THEN {_PAYMENTS}.status
+                        ELSE EXCLUDED.status
+                      END"""
+
+_SCHEDULE_CREATED_STALE_SET = f"""
+                      due_date = COALESCE({_PAYMENTS}.due_date, EXCLUDED.due_date),
+                      amount = COALESCE({_PAYMENTS}.amount, EXCLUDED.amount)"""
+
+_SCHEDULE_UPDATED_SET = f"""
+                      status = EXCLUDED.status,
+                      paid_date = COALESCE(EXCLUDED.paid_date, {_PAYMENTS}.paid_date),
+                      amount_paid = COALESCE(EXCLUDED.amount_paid, {_PAYMENTS}.amount_paid),
+                      amount_remaining = COALESCE(EXCLUDED.amount_remaining, {_PAYMENTS}.amount_remaining),
+                      linked_transaction_ids = COALESCE(EXCLUDED.linked_transaction_ids, {_PAYMENTS}.linked_transaction_ids),
+                      last_updated = EXCLUDED.last_updated"""
+
+_SCHEDULE_UPDATED_STALE_SET = f"""
+                      paid_date = COALESCE({_PAYMENTS}.paid_date, EXCLUDED.paid_date),
+                      amount_paid = COALESCE({_PAYMENTS}.amount_paid, EXCLUDED.amount_paid),
+                      amount_remaining = COALESCE({_PAYMENTS}.amount_remaining, EXCLUDED.amount_remaining),
+                      linked_transaction_ids = COALESCE({_PAYMENTS}.linked_transaction_ids, EXCLUDED.linked_transaction_ids),
+                      last_updated = COALESCE({_PAYMENTS}.last_updated, EXCLUDED.last_updated)"""
+
+
 async def handle_schedule_created(pool: asyncpg.Pool, parsed_event: Any) -> None:
     """Handle account.schedule.created.v1 event.
 
@@ -578,27 +782,32 @@ async def handle_schedule_created(pool: asyncpg.Pool, parsed_event: Any) -> None
     log.info("Processing account.schedule.created.v1")
 
     now = datetime.now(timezone.utc)
+    account_version = _event_version(payload)
 
     async with pool.acquire() as conn:
         async with conn.transaction():
             # Update parent row's schedule columns first (creates the loan_accounts
             # row if missing, so the child upserts can resolve _parent_id).
+            parent_values: dict[str, Any] = {
+                "loan_account_id": account_id,
+                "account_number": account_id,  # required NOT NULL; will be overwritten by account.created.v1
+                "repayment_schedule_schedule_id": payload.schedule_id,
+                "repayment_schedule_number_of_payments": payload.n_payments,
+                "repayment_schedule_payment_frequency": payload.payment_frequency,
+                "repayment_schedule_created_date": coerce_date(payload.created_date),
+                "account_status": "active",  # required NOT NULL
+                "updated_at": now,
+                "created_at": now,
+            }
+            if account_version is not None:
+                parent_values[SCHEDULE_VERSION_COLUMN] = account_version
             await upsert(
                 conn,
                 "loan_accounts",
                 conflict_columns=["loan_account_id"],
-                values={
-                    "loan_account_id": account_id,
-                    "account_number": account_id,  # required NOT NULL; will be overwritten by account.created.v1
-                    "repayment_schedule_schedule_id": payload.schedule_id,
-                    "repayment_schedule_number_of_payments": payload.n_payments,
-                    "repayment_schedule_payment_frequency": payload.payment_frequency,
-                    "repayment_schedule_created_date": coerce_date(payload.created_date),
-                    "account_status": "active",  # required NOT NULL
-                    "updated_at": now,
-                    "created_at": now,
-                },
+                values=parent_values,
                 insert_only_columns=["created_at", "account_number", "account_status"],
+                version_column=SCHEDULE_VERSION_COLUMN if account_version is not None else None,
             )
 
             parent_id = await _get_parent_id(conn, account_id)
@@ -606,24 +815,24 @@ async def handle_schedule_created(pool: asyncpg.Pool, parsed_event: Any) -> None
                 log.error("Parent loan_account row missing after upsert")
                 return
 
+            stale = await _schedule_event_is_stale(
+                conn, log, "account.schedule.created.v1", parent_id, account_version
+            )
+
             payments = payload.payments or []
             preserved = 0
             for payment in payments:
                 amount_value = float(payment.amount) if payment.amount else None
                 # CASE preserves any non-'scheduled' status that already exists.
+                # A stale event (BTB-537) keeps the whole existing row and
+                # only fills a due_date/amount that is still NULL.
                 result = await conn.execute(
-                    """
+                    f"""
                     INSERT INTO loan_accounts_repayment_schedule_payments
                       (id, _order, _parent_id, payment_number, due_date, amount, status)
                     VALUES ($1, $2, $3, $4, $5, $6, 'scheduled')
                     ON CONFLICT (_parent_id, payment_number) DO UPDATE SET
-                      due_date = EXCLUDED.due_date,
-                      amount = EXCLUDED.amount,
-                      status = CASE
-                        WHEN loan_accounts_repayment_schedule_payments.status != 'scheduled'
-                          THEN loan_accounts_repayment_schedule_payments.status
-                        ELSE EXCLUDED.status
-                      END
+                    {_SCHEDULE_CREATED_STALE_SET if stale else _SCHEDULE_CREATED_SET}
                     """,
                     str(uuid.uuid4()),
                     int(payment.payment_number),
@@ -660,6 +869,7 @@ async def handle_schedule_updated(pool: asyncpg.Pool, parsed_event: Any) -> None
         return
 
     now = datetime.now(timezone.utc)
+    account_version = _event_version(payload)
 
     async with pool.acquire() as conn:
         async with conn.transaction():
@@ -667,28 +877,36 @@ async def handle_schedule_updated(pool: asyncpg.Pool, parsed_event: Any) -> None
             # loan_accounts row hasn't been created yet (account.created.v1
             # arrives later), insert a stub that account.created.v1 will fill
             # in. We mark account_number as the account_id as a placeholder.
+            parent_values: dict[str, Any] = {
+                "loan_account_id": account_id,
+                "account_number": account_id,
+                "account_status": "active",
+                "updated_at": now,
+                "created_at": now,
+            }
+            if account_version is not None:
+                parent_values[SCHEDULE_VERSION_COLUMN] = account_version
             await upsert(
                 conn,
                 "loan_accounts",
                 conflict_columns=["loan_account_id"],
-                values={
-                    "loan_account_id": account_id,
-                    "account_number": account_id,
-                    "account_status": "active",
-                    "updated_at": now,
-                    "created_at": now,
-                },
+                values=parent_values,
                 insert_only_columns=[
                     "created_at",
                     "account_number",
                     "account_status",
                 ],
+                version_column=SCHEDULE_VERSION_COLUMN if account_version is not None else None,
             )
 
             parent_id = await _get_parent_id(conn, account_id)
             if parent_id is None:
                 log.error("Parent loan_account row missing after stub upsert")
                 return
+
+            stale = await _schedule_event_is_stale(
+                conn, log, "account.schedule.updated.v1", parent_id, account_version
+            )
 
             for payment in payment_updates:
                 payment_number = int(payment.payment_number)
@@ -721,19 +939,14 @@ async def handle_schedule_updated(pool: asyncpg.Pool, parsed_event: Any) -> None
                 last_updated = coerce_date(getattr(payment, "last_updated", None)) or now
 
                 await conn.execute(
-                    """
+                    f"""
                     INSERT INTO loan_accounts_repayment_schedule_payments
                       (id, _order, _parent_id, payment_number,
                        status, paid_date, amount_paid, amount_remaining,
                        linked_transaction_ids, last_updated)
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10)
                     ON CONFLICT (_parent_id, payment_number) DO UPDATE SET
-                      status = EXCLUDED.status,
-                      paid_date = COALESCE(EXCLUDED.paid_date, loan_accounts_repayment_schedule_payments.paid_date),
-                      amount_paid = COALESCE(EXCLUDED.amount_paid, loan_accounts_repayment_schedule_payments.amount_paid),
-                      amount_remaining = COALESCE(EXCLUDED.amount_remaining, loan_accounts_repayment_schedule_payments.amount_remaining),
-                      linked_transaction_ids = COALESCE(EXCLUDED.linked_transaction_ids, loan_accounts_repayment_schedule_payments.linked_transaction_ids),
-                      last_updated = EXCLUDED.last_updated
+                    {_SCHEDULE_UPDATED_STALE_SET if stale else _SCHEDULE_UPDATED_SET}
                     """,
                     str(uuid.uuid4()),
                     payment_number,
