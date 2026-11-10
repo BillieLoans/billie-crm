@@ -89,6 +89,19 @@ describe('sortAccountsForRail', () => {
     expect(closed.map((a) => a.loanAccountId)).toEqual(['paid'])
   })
 
+  it('lists a cancelled loan apart from closed loans (BTB-539)', () => {
+    const accounts = [
+      acc({ loanAccountId: 'paid', accountStatus: 'paid_off', updatedAt: '2026-05-02T00:00:00Z' }),
+      acc({ loanAccountId: 'canc-old', accountStatus: 'cancelled', updatedAt: '2026-05-01T00:00:00Z' }),
+      acc({ loanAccountId: 'canc-new', accountStatus: 'cancelled', updatedAt: '2026-05-20T00:00:00Z' }),
+      acc({ loanAccountId: 'lost', accountStatus: 'written_off', updatedAt: '2026-04-02T00:00:00Z' }),
+    ]
+    const { active, closed, cancelled } = sortAccountsForRail(accounts, TODAY)
+    expect(active).toEqual([])
+    expect(closed.map((a) => a.loanAccountId)).toEqual(['paid', 'lost'])
+    expect(cancelled.map((a) => a.loanAccountId)).toEqual(['canc-new', 'canc-old'])
+  })
+
   it('orders multiple closed accounts most-recent-first', () => {
     const accounts = [
       acc({ loanAccountId: 'old', accountStatus: 'paid_off', updatedAt: '2026-01-10T00:00:00Z' }),
@@ -335,9 +348,11 @@ describe('cancelled loans (BTB-517)', () => {
       nextDueDate: null,
       nextDueAmount: null,
     })
-    const { active, closed } = sortAccountsForRail([cancelled], TODAY)
+    // Nothing is due on it, but it is listed apart from closed loans (BTB-539).
+    const { active, closed, cancelled: cancelledGroup } = sortAccountsForRail([cancelled], TODAY)
     expect(active).toEqual([])
-    expect(closed.map((a) => a.loanAccountId)).toEqual(['X'])
+    expect(closed).toEqual([])
+    expect(cancelledGroup.map((a) => a.loanAccountId)).toEqual(['X'])
   })
 
   it('a cancelled loan raises no pending-disbursement or overdue chip', () => {

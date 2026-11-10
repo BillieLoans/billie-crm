@@ -232,10 +232,10 @@ export const ServicingView: React.FC<ServicingViewProps> = ({ customerId }) => {
     }
 
     // Auto-select the top-triaged account (in-arrears first, then pending,
-    // then active; falling back to the most recently closed) when nothing
+    // then active; falling back to the most recently closed, then cancelled) when nothing
     // is selected and no ?accountId= param applied above.
-    const { active, closed } = sortAccountsForRail(accounts)
-    const top = active[0] ?? closed[0]
+    const { active, closed, cancelled } = sortAccountsForRail(accounts)
+    const top = active[0] ?? closed[0] ?? cancelled[0]
     if (top) {
       setSelectedAccountId(top.loanAccountId)
       hasAutoSelectedRef.current = true

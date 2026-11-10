@@ -25,7 +25,8 @@ export interface DisbursableVerdict {
  * usable answer (network error, 401, 5xx, a body that is not a verdict): the
  * caller must treat it as "do not pay", never as "probably fine", and may offer
  * Retry. `forbidden` is a 403: the signed-in role may not ask, which asking again
- * cannot change, so there is nothing to retry. The payout details stay hidden
+ * cannot change, so there is nothing to retry. Only the CRM's own typed role
+ * refusal counts; any other 403 is `failed`. The payout details stay hidden
  * either way.
  */
 export type DisbursableCheckState =
@@ -50,6 +51,20 @@ function parseVerdict(body: unknown): DisbursableVerdict | null {
     reason: b.reason,
     status: typeof b.status === 'string' ? b.status : '',
     message: typeof b.message === 'string' ? b.message : '',
+  }
+}
+
+/**
+ * True when a 403 is the CRM's own role refusal: requireAuth answers
+ * `{ error: { code: 'FORBIDDEN' } }`. Anything else (an HTML block page, an
+ * empty body) is not.
+ */
+async function isRoleRefusal(res: Response): Promise<boolean> {
+  try {
+    const body = (await res.json()) as { error?: { code?: unknown } } | null
+    return body?.error?.code === 'FORBIDDEN'
+  } catch {
+    return false
   }
 }
 
@@ -90,7 +105,10 @@ export function useDisbursableCheck(loanAccountId: string): UseDisbursableCheckR
           `/api/ledger/disbursable?loanAccountId=${encodeURIComponent(loanAccountId)}`,
           { cache: 'no-store', signal: controller.signal },
         )
-        if (res.status === 403) {
+        // Only the CRM's own role refusal is "your role can't do this". A 403
+        // from a proxy or WAF in front of the CRM says nothing about the role,
+        // so it takes the generic fail-closed path below (BTB-541).
+        if (res.status === 403 && (await isRoleRefusal(res))) {
           if (!superseded) setSettled({ key, outcome: { status: 'forbidden' } })
           return
         }

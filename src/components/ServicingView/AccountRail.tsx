@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { Fragment, useMemo } from 'react'
 import type { LoanAccountData } from '@/hooks/queries/useCustomer'
 import type { CollectionsCaseRow } from '@/types/collections'
 import { sortAccountsForRail } from '@/lib/accountTriage'
@@ -25,7 +25,15 @@ export const AccountRail: React.FC<AccountRailProps> = ({
   today,
   collectionsCases = [],
 }) => {
-  const { active, closed } = useMemo(() => sortAccountsForRail(accounts, today), [accounts, today])
+  const { active, closed, cancelled } = useMemo(
+    () => sortAccountsForRail(accounts, today),
+    [accounts, today],
+  )
+  const groups = [
+    { label: 'CLOSED', testId: 'account-rail-closed', accounts: closed },
+    // Same neutral divider as CLOSED: the heading says what happened, colour does not.
+    { label: 'CANCELLED', testId: 'account-rail-cancelled', accounts: cancelled },
+  ]
   const total = useMemo(
     () => accounts.reduce((sum, a) => sum + (a.liveBalance?.totalOutstanding ?? a.balances?.totalOutstanding ?? 0), 0),
     [accounts],
@@ -63,22 +71,25 @@ export const AccountRail: React.FC<AccountRailProps> = ({
         />
       ))}
 
-      {closed.length > 0 && (
-        <>
-          <div className={styles.divider}>
-            <span className={styles.dividerLabel}>CLOSED</span>
-          </div>
-          {closed.map((a) => (
-            <LoanAccountCard
-              key={a.id}
-              account={a}
-              isSelected={a.loanAccountId === selectedAccountId}
-              onSelect={onSelectAccount}
-              today={today}
-              collectionsCase={caseByAccountId.get(a.loanAccountId) ?? null}
-            />
-          ))}
-        </>
+      {groups.map(
+        (group) =>
+          group.accounts.length > 0 && (
+            <Fragment key={group.label}>
+              <div className={styles.divider} data-testid={group.testId}>
+                <span className={styles.dividerLabel}>{group.label}</span>
+              </div>
+              {group.accounts.map((a) => (
+                <LoanAccountCard
+                  key={a.id}
+                  account={a}
+                  isSelected={a.loanAccountId === selectedAccountId}
+                  onSelect={onSelectAccount}
+                  today={today}
+                  collectionsCase={caseByAccountId.get(a.loanAccountId) ?? null}
+                />
+              ))}
+            </Fragment>
+          ),
       )}
     </div>
   )

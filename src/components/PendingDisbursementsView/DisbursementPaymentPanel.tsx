@@ -123,14 +123,25 @@ export function DisbursementPaymentPanel({ item, onDisburse }: Props) {
   const statusRef = useCallback((el: HTMLElement | null) => {
     if (el && focusPending.current) el.focus()
   }, [])
+  // After a Retry the outcome takes focus, and a screen reader reads a newly
+  // focused element. For a stop message that is the very text the announcer
+  // would say, so announcing it as well would read it twice; that one
+  // announcement is skipped (BTB-541). A "yes" focuses the "Pay to" heading,
+  // which does not say the loan can be paid, so that is still announced.
+  const outcomeFocused = useRef(false)
   const outcomeRef = useCallback((el: HTMLElement | null) => {
     if (el && focusPending.current) {
       focusPending.current = false
+      outcomeFocused.current = true
       el.focus()
     }
   }, [])
 
   useEffect(() => {
+    const stopMessageHasFocus = outcomeFocused.current
+    outcomeFocused.current = false
+    const saysYes = state.status === 'answered' && state.verdict.disbursable
+    if (stopMessageHasFocus && !saysYes) return
     if (state.status === 'forbidden') {
       announce(FORBIDDEN_COPY, 'assertive')
     } else if (state.status === 'failed') {

@@ -71,7 +71,7 @@ export function getAccountSignal(account: LoanAccountData, today: Date = new Dat
 export function sortAccountsForRail(
   accounts: LoanAccountData[],
   today: Date = new Date(),
-): { active: LoanAccountData[]; closed: LoanAccountData[] } {
+): { active: LoanAccountData[]; closed: LoanAccountData[]; cancelled: LoanAccountData[] } {
   const withSig = accounts.map((a) => ({ a, s: getAccountSignal(a, today) }))
 
   const active = withSig
@@ -83,12 +83,25 @@ export function sortAccountsForRail(
     })
     .map((x) => x.a)
 
+  const mostRecentFirst = (
+    x: { a: LoanAccountData },
+    y: { a: LoanAccountData },
+  ): number => +new Date(y.a.updatedAt ?? 0) - +new Date(x.a.updatedAt ?? 0)
+
+  // A loan cancelled before disbursement was never funded. It is listed apart
+  // from the closed (paid off, written off) loans, so the rail never suggests
+  // it was repaid (BTB-539).
   const closed = withSig
-    .filter((x) => x.s.tier === 'closed')
-    .sort((x, y) => +new Date(y.a.updatedAt ?? 0) - +new Date(x.a.updatedAt ?? 0))
+    .filter((x) => x.s.tier === 'closed' && x.a.accountStatus !== 'cancelled')
+    .sort(mostRecentFirst)
     .map((x) => x.a)
 
-  return { active, closed }
+  const cancelled = withSig
+    .filter((x) => x.s.tier === 'closed' && x.a.accountStatus === 'cancelled')
+    .sort(mostRecentFirst)
+    .map((x) => x.a)
+
+  return { active, closed, cancelled }
 }
 
 export function getAttentionItems(opts: {

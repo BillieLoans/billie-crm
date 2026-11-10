@@ -183,6 +183,19 @@ function CancelLoanForm({
     blockRequestId && !manualBlockActive && !blockRejection && !blockWaitExpired,
   )
 
+  // Requesting the block closes its modal and removes the button that opened
+  // it, which leaves keyboard focus on the page body. Move it to the status
+  // line instead (BTB-540). An effect, so it runs after the modal's own
+  // focus-return on unmount.
+  const blockStatusRef = useRef<HTMLParagraphElement>(null)
+  const focusBlockStatus = useRef(false)
+  useEffect(() => {
+    if (waitingForBlock && focusBlockStatus.current) {
+      focusBlockStatus.current = false
+      blockStatusRef.current?.focus()
+    }
+  }, [waitingForBlock])
+
   // A requested block arrives on the customer record, not on the request's
   // response, so re-read the customer until it shows, is refused, or we give up.
   useEffect(() => {
@@ -490,7 +503,7 @@ function CancelLoanForm({
                       : 'This customer has no active manual block. Once the loan is cancelled they could apply again straight away.'}
                 </p>
                 {waitingForBlock && (
-                  <p className={styles.info} role="status">
+                  <p ref={blockStatusRef} tabIndex={-1} className={styles.info} role="status">
                     Manual block requested. Waiting for it to reach the customer record…
                   </p>
                 )}
@@ -655,6 +668,7 @@ function CancelLoanForm({
           onClose={() => setBlockModalOpen(false)}
           onRequested={(requestId) => {
             setBlockModalOpen(false)
+            focusBlockStatus.current = true
             setBlockRequestId(requestId)
             setBlockWaitExpired(false)
             onRefresh?.()

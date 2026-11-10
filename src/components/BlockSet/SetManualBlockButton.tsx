@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useAuth } from '@payloadcms/ui'
 import { hasApprovalAuthority } from '@/lib/access'
 import { describeManualSetRejection } from '@/lib/reapplicationBlock'
@@ -70,6 +70,19 @@ export function SetManualBlockButton({
     }
   }, [waiting, onRefresh])
 
+  // Sending the request closes the modal and disables the trigger it would
+  // hand focus back to, which leaves keyboard focus on the page body. Move it
+  // to the status line instead (BTB-540). An effect, so it runs after the
+  // modal's own focus-return on unmount.
+  const statusRef = useRef<HTMLParagraphElement>(null)
+  const focusStatus = useRef(false)
+  useEffect(() => {
+    if (waiting && focusStatus.current) {
+      focusStatus.current = false
+      statusRef.current?.focus()
+    }
+  }, [waiting])
+
   // The confirmation is brief: the attention chip carries the block from here.
   useEffect(() => {
     if (!applied) return
@@ -92,6 +105,7 @@ export function SetManualBlockButton({
   const handleRequested = (id: string) => {
     setModalOpen(false)
     setWaitExpired(false)
+    focusStatus.current = true
     setRequestId(id)
   }
 
@@ -108,7 +122,7 @@ export function SetManualBlockButton({
           Set manual block
         </button>
         {waiting && (
-          <p className={styles.headerNotice} role="status">
+          <p ref={statusRef} tabIndex={-1} className={styles.headerNotice} role="status">
             Manual block requested. Waiting for confirmation…
           </p>
         )}
