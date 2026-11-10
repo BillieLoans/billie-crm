@@ -1,6 +1,6 @@
 import { MigrateUpArgs, MigrateDownArgs, sql } from '@payloadcms/db-postgres'
 
-import { REPORTING_SCHEMA_STATEMENTS } from '../server/reporting/schema'
+import { applyReportingSchema } from '../server/reporting/applySchema'
 
 /**
  * BTB-504 / BTB-505: the `reporting` schema every report reads, and the
@@ -12,9 +12,7 @@ import { REPORTING_SCHEMA_STATEMENTS } from '../server/reporting/schema'
 export async function up({ db }: MigrateUpArgs): Promise<void> {
   await db.execute(sql`
   ALTER TABLE "conversations" ADD COLUMN IF NOT EXISTS "decision_detail_ruleset_version" varchar;`)
-  for (const statement of REPORTING_SCHEMA_STATEMENTS) {
-    await db.execute(sql.raw(statement))
-  }
+  await applyReportingSchema(db, '20261023_090000_reporting_schema')
 }
 
 export async function down({ db }: MigrateDownArgs): Promise<void> {

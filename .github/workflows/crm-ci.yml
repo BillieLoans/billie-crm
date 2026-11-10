@@ -126,3 +126,63 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
+
+  fresh-migrate:
+    # BTB-534: `payload migrate` must work on an EMPTY database (a new
+    # environment, disaster recovery). The other jobs use `push`, so nothing
+    # else replays the committed migrations from the start.
+    name: payload migrate (empty database)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: billie_crm
+          POSTGRES_PASSWORD: billie_crm
+          POSTGRES_DB: billie_crm_fresh
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U billie_crm"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URI: postgresql://billie_crm:billie_crm@localhost:5432/billie_crm_fresh
+      PAYLOAD_SECRET: ci-fresh-migrate-secret-not-for-production
+      # production: `push` is off, so only the migrations build the schema.
+      NODE_ENV: production
+      # Same options `make pg-migrate` passes (see infra/fly/Makefile).
+      NODE_OPTIONS: --no-deprecation --conditions=development
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # `payload migrate` can exit 0 having done nothing (the silent no-op
+      # infra/fly/Makefile's pg-migrate guards against), so require evidence
+      # that migrations ran, and retry once like pg-migrate does.
+      - name: Migrate an empty database
+        run: |
+          for attempt in 1 2; do
+            pnpm exec payload migrate 2>&1 | tee migrate.log
+            if grep -q "Migrated:" migrate.log; then exit 0; fi
+            echo "payload migrate applied nothing on attempt $attempt"
+          done
+          exit 1
+      - name: Migrating again is a no-op
+        run: pnpm exec payload migrate
+      - name: The reporting views exist
+        env:
+          PGPASSWORD: billie_crm
+        run: |
+          views=$(psql -h localhost -U billie_crm -d billie_crm_fresh -At \
+            -c "select count(*) from information_schema.views where table_schema = 'reporting'")
+          echo "reporting views: $views"
+          test "$views" -gt 0
+          psql -h localhost -U billie_crm -d billie_crm_fresh -At \
+            -c "select cancellation_reason from reporting.loan limit 0"

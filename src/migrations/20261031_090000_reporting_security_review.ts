@@ -1,6 +1,6 @@
 import { MigrateUpArgs, MigrateDownArgs, sql } from '@payloadcms/db-postgres'
 
-import { REPORTING_SCHEMA_STATEMENTS } from '../server/reporting/schema'
+import { applyReportingSchema } from '../server/reporting/applySchema'
 
 /**
  * October 2026 security review of reporting and the MCP connector:
@@ -41,9 +41,7 @@ ALTER TABLE report_asks ADD COLUMN IF NOT EXISTS actor_key character varying;
 ALTER TABLE report_asks ADD COLUMN IF NOT EXISTS actor_grant character varying;
 `),
   )
-  for (const statement of REPORTING_SCHEMA_STATEMENTS) {
-    await db.execute(sql.raw(statement))
-  }
+  await applyReportingSchema(db, '20261031_090000_reporting_security_review')
 }
 
 export async function down({ db }: MigrateDownArgs): Promise<void> {

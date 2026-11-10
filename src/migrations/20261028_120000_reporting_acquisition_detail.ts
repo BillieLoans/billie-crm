@@ -1,6 +1,6 @@
-import { MigrateUpArgs, MigrateDownArgs, sql } from '@payloadcms/db-postgres'
+import { MigrateUpArgs, MigrateDownArgs } from '@payloadcms/db-postgres'
 
-import { REPORTING_SCHEMA_STATEMENTS } from '../server/reporting/schema'
+import { applyReportingSchema } from '../server/reporting/applySchema'
 
 /**
  * The application view's keyword, click_id_type and attribution_captured_at.
@@ -8,9 +8,7 @@ import { REPORTING_SCHEMA_STATEMENTS } from '../server/reporting/schema'
  * recreate every view.
  */
 export async function up({ db }: MigrateUpArgs): Promise<void> {
-  for (const statement of REPORTING_SCHEMA_STATEMENTS) {
-    await db.execute(sql.raw(statement))
-  }
+  await applyReportingSchema(db, '20261028_120000_reporting_acquisition_detail')
 }
 
 /** The columns stay until the schema is next applied; nothing reads them but reports. */

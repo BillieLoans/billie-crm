@@ -1,6 +1,6 @@
 import { MigrateUpArgs, MigrateDownArgs, sql } from '@payloadcms/db-postgres'
 
-import { REPORTING_SCHEMA_STATEMENTS } from '../server/reporting/schema'
+import { applyReportingSchema } from '../server/reporting/applySchema'
 
 /**
  * Loans cancelled before disbursement (BTB-517).
@@ -36,9 +36,7 @@ export async function up({ db }: MigrateUpArgs): Promise<void> {
   ALTER TABLE "loan_accounts" ADD COLUMN IF NOT EXISTS "cancellation_cancelled_by_name" varchar;
   ALTER TABLE "loan_accounts" ADD COLUMN IF NOT EXISTS "cancellation_cancelled_at" timestamp(3) with time zone;`)
 
-  for (const statement of REPORTING_SCHEMA_STATEMENTS) {
-    await db.execute(sql.raw(statement))
-  }
+  await applyReportingSchema(db, '20261103_090000_loan_account_cancellation')
 }
 
 /**

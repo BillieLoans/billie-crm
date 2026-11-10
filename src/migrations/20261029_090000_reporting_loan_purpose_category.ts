@@ -1,6 +1,6 @@
-import { MigrateUpArgs, MigrateDownArgs, sql } from '@payloadcms/db-postgres'
+import { MigrateUpArgs, MigrateDownArgs } from '@payloadcms/db-postgres'
 
-import { REPORTING_SCHEMA_STATEMENTS } from '../server/reporting/schema'
+import { applyReportingSchema } from '../server/reporting/applySchema'
 
 /**
  * The application view's loan_purpose becomes loan_purpose_category: the
@@ -9,9 +9,7 @@ import { REPORTING_SCHEMA_STATEMENTS } from '../server/reporting/schema'
  * and recreate every view.
  */
 export async function up({ db }: MigrateUpArgs): Promise<void> {
-  for (const statement of REPORTING_SCHEMA_STATEMENTS) {
-    await db.execute(sql.raw(statement))
-  }
+  await applyReportingSchema(db, '20261029_090000_reporting_loan_purpose_category')
 }
 
 /** The view keeps the category until the schema is next applied; nothing reads it but reports. */

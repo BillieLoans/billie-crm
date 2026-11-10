@@ -1,6 +1,6 @@
 import { MigrateUpArgs, MigrateDownArgs, sql } from '@payloadcms/db-postgres'
 
-import { REPORTING_SCHEMA_STATEMENTS } from '../server/reporting/schema'
+import { applyReportingSchema } from '../server/reporting/applySchema'
 
 /**
  * Restricted reporting columns over the MCP connector (ADR 0002):
@@ -22,9 +22,7 @@ ALTER TABLE report_definitions ADD COLUMN IF NOT EXISTS mcp_restricted_access bo
 ALTER TABLE _report_definitions_v ADD COLUMN IF NOT EXISTS version_mcp_restricted_access boolean DEFAULT false;
 `),
   )
-  for (const statement of REPORTING_SCHEMA_STATEMENTS) {
-    await db.execute(sql.raw(statement))
-  }
+  await applyReportingSchema(db, '20261102_090000_mcp_restricted_columns')
 }
 
 /** Removes the column. The schema additions stay; they are harmless without the role. */

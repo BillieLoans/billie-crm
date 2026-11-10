@@ -1,4 +1,5 @@
 import { MigrateUpArgs, MigrateDownArgs, sql } from '@payloadcms/db-postgres'
+import { ensureReportDefinitionColumns } from '../server/reporting/applySchema'
 import {
   CORE_REPORTS,
   createReports,
@@ -19,7 +20,9 @@ import {
  * report-preferences, -events, -subscriptions, -deliveries and -boards
  * collections, and failed on any database whose first reports it upgraded.
  */
-export async function up({ payload, req }: MigrateUpArgs): Promise<void> {
+export async function up({ db, payload, req }: MigrateUpArgs): Promise<void> {
+  // The Local API needs every current report-definitions column (BTB-534).
+  await ensureReportDefinitionColumns(db)
   const created = await createReports(payload, CORE_REPORTS, req)
   const upgraded = await upgradeFirstReports(payload, req)
   payload.logger.info(
