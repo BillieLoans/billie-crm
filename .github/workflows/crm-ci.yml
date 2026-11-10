@@ -35,6 +35,31 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
 
+  typecheck:
+    # BTB-536: vitest strips types without checking them, and `pnpm typecheck`
+    # excludes tests/**, so nothing type-checked the app in CI or the tests
+    # anywhere. The test files are held to a baseline that can only shrink
+    # (scripts/check-test-types.mjs).
+    name: tsc (app + test files)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # next-env.d.ts and .next/types are generated, not committed. Without
+      # them a fresh checkout cannot resolve the route types, and tsc fails.
+      - name: Generate Next.js types
+        run: pnpm exec next typegen
+      - name: Type-check the app
+        run: pnpm typecheck
+      - name: Type-check the test files against the baseline
+        run: pnpm typecheck:tests
+
   test:
     name: vitest (unit + integration)
     runs-on: ubuntu-latest
