@@ -56,6 +56,7 @@ const mockDashboardResponse: DashboardResponse = {
   ],
   pendingDisbursements: [],
   pendingDisbursementsCount: 0,
+  cancelledBeforeDisbursementCount: 0,
   disbursementBuckets: {
     overdue: { count: 0, totalAmount: 0, totalAmountFormatted: '$0.00' },
     today: { count: 0, totalAmount: 0, totalAmountFormatted: '$0.00' },
