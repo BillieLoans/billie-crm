@@ -320,6 +320,53 @@ class TestVersionColumn:
 
 
 # ---------------------------------------------------------------------------
+# An event with no version does not depend on the new columns
+# ---------------------------------------------------------------------------
+
+ALL_HANDLERS = [
+    pytest.param(handle_account_created, _created, id="created"),
+    pytest.param(handle_account_updated, _updated, id="updated"),
+    pytest.param(handle_account_status_changed, _status_changed, id="status_changed"),
+    pytest.param(handle_account_closed, _closed, id="closed"),
+    pytest.param(handle_account_cancelled, _cancelled, id="cancelled"),
+    pytest.param(handle_schedule_created, _schedule_created, id="schedule_created"),
+    pytest.param(handle_schedule_updated, _schedule_updated, id="schedule_updated"),
+]
+
+
+class TestUnversionedEventNeverNamesTheVersionColumns:
+    """No incoming version means "exactly as before": not one statement, read
+    or write, may mention either column, so such an event cannot fail on a
+    database the migration has not reached (UndefinedColumnError)."""
+
+    @pytest.mark.parametrize("handler, make_event", ALL_HANDLERS)
+    @pytest.mark.asyncio
+    async def test_no_statement_mentions_either_column(self, mock_pool, handler, make_event):
+        mock_pool.set_fetchrow(_row())
+        mock_pool.set_fetchval(PARENT_ID)
+
+        await handler(mock_pool, make_event(None))
+
+        assert mock_pool.calls, "the handler sent nothing"
+        for call in mock_pool.calls:
+            assert STATE not in call.sql, call.sql
+            assert SCHEDULE not in call.sql, call.sql
+
+    @pytest.mark.parametrize("handler, make_event", ALL_HANDLERS)
+    @pytest.mark.asyncio
+    async def test_a_versioned_event_does_read_its_own_column(self, mock_pool, handler, make_event):
+        """The counterpart, so the test above cannot pass by the handlers
+        never reading a version at all."""
+        mock_pool.set_fetchrow(_row())
+        mock_pool.set_fetchval_sequence([PARENT_ID, Decimal("4")])
+
+        await handler(mock_pool, make_event(4))
+
+        column = SCHEDULE if make_event in (_schedule_created, _schedule_updated) else STATE
+        assert any(c.op == "SELECT" and column in c.sql for c in mock_pool.calls)
+
+
+# ---------------------------------------------------------------------------
 # Account-state events
 # ---------------------------------------------------------------------------
 

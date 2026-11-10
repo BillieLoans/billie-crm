@@ -163,6 +163,16 @@ def _is_stale(
     return True
 
 
+def _state_version_select(account_version: int | None) -> str:
+    """``, account_state_version`` for a versioned event's SELECT, else nothing.
+
+    An event with no version must send exactly the statements it sent before
+    BTB-537, so it never names the column (and so cannot fail on a database
+    the migration has not reached yet).
+    """
+    return f", {STATE_VERSION_COLUMN}" if account_version is not None else ""
+
+
 async def _stored_state_version(pool: asyncpg.Pool, account_id: str) -> int | None:
     """The last applied account-state version on the row, if any."""
     row = await pool.fetchrow(
@@ -213,8 +223,10 @@ async def handle_account_created(pool: asyncpg.Pool, parsed_event: Any) -> None:
     sdk_status = _normalise_status(payload.status, default="PENDING")
     account_status = SDK_STATUS_MAP.get(sdk_status, "active")
 
+    account_version = _event_version(payload)
+
     existing_row = await pool.fetchrow(
-        f"SELECT sdk_status, loan_terms_disbursed_date, {STATE_VERSION_COLUMN} "
+        f"SELECT sdk_status, loan_terms_disbursed_date{_state_version_select(account_version)} "
         "FROM loan_accounts WHERE loan_account_id = $1",
         account_id,
     )
@@ -283,7 +295,6 @@ async def handle_account_created(pool: asyncpg.Pool, parsed_event: Any) -> None:
         del values["account_status"]
         del values["sdk_status"]
 
-    account_version = _event_version(payload)
     stale = False
     if account_version is not None:
         values[STATE_VERSION_COLUMN] = account_version
@@ -360,20 +371,20 @@ async def handle_account_updated(pool: asyncpg.Pool, parsed_event: Any) -> None:
     now = datetime.now(timezone.utc)
     update_doc: dict[str, Any] = {"updated_at": now}
     existing: asyncpg.Record | None = None
+    account_version = _event_version(payload)
 
     async def _load_existing() -> asyncpg.Record | None:
         nonlocal existing
         if existing is None:
             existing = await pool.fetchrow(
                 "SELECT account_status, sdk_status, loan_terms_disbursed_date, "
-                f"balances_total_outstanding, updated_at, {STATE_VERSION_COLUMN} "
+                f"balances_total_outstanding, updated_at{_state_version_select(account_version)} "
                 "FROM loan_accounts WHERE loan_account_id = $1",
                 account_id,
             )
         return existing
 
     # BTB-537: see the note above STATE_VERSION_COLUMN.
-    account_version = _event_version(payload)
     stale = False
     if account_version is not None:
         update_doc[STATE_VERSION_COLUMN] = account_version
@@ -533,8 +544,11 @@ async def handle_account_status_changed(pool: asyncpg.Pool, parsed_event: Any) -
     account_status = SDK_STATUS_MAP.get(sdk_status, "active")
     now = datetime.now(timezone.utc)
 
+    account_version = _event_version(payload)
+
     row = await pool.fetchrow(
-        f"SELECT account_status, sdk_status, loan_terms_disbursed_date, {STATE_VERSION_COLUMN} "
+        "SELECT account_status, sdk_status, loan_terms_disbursed_date"
+        f"{_state_version_select(account_version)} "
         "FROM loan_accounts WHERE loan_account_id = $1",
         account_id,
     )
@@ -563,7 +577,6 @@ async def handle_account_status_changed(pool: asyncpg.Pool, parsed_event: Any) -
             update_doc["loan_terms_disbursed_date"] = now
             log.info("Stamped disbursed_date on pending_disbursement → active transition")
 
-    account_version = _event_version(payload)
     if account_version is not None:
         update_doc[STATE_VERSION_COLUMN] = account_version
         _is_stale(
