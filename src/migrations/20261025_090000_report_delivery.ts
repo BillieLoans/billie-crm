@@ -1,5 +1,5 @@
 import { MigrateUpArgs, MigrateDownArgs, sql } from '@payloadcms/db-postgres'
-import { REPORTING_SCHEMA_STATEMENTS } from '../server/reporting/schema'
+import { applyReportingSchema } from '../server/reporting/applySchema'
 
 /**
  * BTB-507: scheduled report delivery, and the funnel columns the first
@@ -29,9 +29,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS report_runs_scheduled_delivery_key
   ON report_runs USING btree (report_slug, scheduled_for);
 `),
   )
-  for (const statement of REPORTING_SCHEMA_STATEMENTS) {
-    await db.execute(sql.raw(statement))
-  }
+  await applyReportingSchema(db, '20261025_090000_report_delivery')
 }
 
 export async function down({ db }: MigrateDownArgs): Promise<void> {

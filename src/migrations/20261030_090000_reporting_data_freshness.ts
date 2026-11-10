@@ -1,6 +1,6 @@
 import { MigrateUpArgs, MigrateDownArgs, sql } from '@payloadcms/db-postgres'
 
-import { REPORTING_SCHEMA_STATEMENTS } from '../server/reporting/schema'
+import { applyReportingSchema } from '../server/reporting/applySchema'
 
 /**
  * Adds reporting.data_freshness, which the Reports view shows beside each
@@ -8,9 +8,7 @@ import { REPORTING_SCHEMA_STATEMENTS } from '../server/reporting/schema'
  * statements, which are idempotent and recreate every view.
  */
 export async function up({ db }: MigrateUpArgs): Promise<void> {
-  for (const statement of REPORTING_SCHEMA_STATEMENTS) {
-    await db.execute(sql.raw(statement))
-  }
+  await applyReportingSchema(db, '20261030_090000_reporting_data_freshness')
 }
 
 export async function down({ db }: MigrateDownArgs): Promise<void> {

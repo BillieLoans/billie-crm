@@ -1,6 +1,6 @@
 import { MigrateUpArgs, MigrateDownArgs, sql } from '@payloadcms/db-postgres'
 
-import { REPORTING_SCHEMA_STATEMENTS } from '../server/reporting/schema'
+import { applyReportingSchema } from '../server/reporting/applySchema'
 
 /**
  * The reporting schema with the CRM's non-personal data: the customer,
@@ -10,9 +10,7 @@ import { REPORTING_SCHEMA_STATEMENTS } from '../server/reporting/schema'
  * idempotent and recreate every view.
  */
 export async function up({ db }: MigrateUpArgs): Promise<void> {
-  for (const statement of REPORTING_SCHEMA_STATEMENTS) {
-    await db.execute(sql.raw(statement))
-  }
+  await applyReportingSchema(db, '20261028_090000_reporting_all_data')
 }
 
 /** The new views go; application and loan keep their new columns until the schema is next applied. */

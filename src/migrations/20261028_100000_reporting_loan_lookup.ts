@@ -1,6 +1,6 @@
-import { MigrateUpArgs, MigrateDownArgs, sql } from '@payloadcms/db-postgres'
+import { MigrateUpArgs, MigrateDownArgs } from '@payloadcms/db-postgres'
 
-import { REPORTING_SCHEMA_STATEMENTS } from '../server/reporting/schema'
+import { applyReportingSchema } from '../server/reporting/applySchema'
 
 /**
  * The loan view finds each loan's conversation through the
@@ -9,9 +9,7 @@ import { REPORTING_SCHEMA_STATEMENTS } from '../server/reporting/schema'
  * recreate every view.
  */
 export async function up({ db }: MigrateUpArgs): Promise<void> {
-  for (const statement of REPORTING_SCHEMA_STATEMENTS) {
-    await db.execute(sql.raw(statement))
-  }
+  await applyReportingSchema(db, '20261028_100000_reporting_loan_lookup')
 }
 
 /** Nothing to undo: the loan view's columns are unchanged. */

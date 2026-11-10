@@ -1,4 +1,5 @@
 import { MigrateUpArgs, MigrateDownArgs, sql } from '@payloadcms/db-postgres'
+import { ensureReportDefinitionColumns } from '../server/reporting/applySchema'
 import { FIRST_REPORTS, createFirstReports } from '../server/reporting/definitions/first-reports'
 
 /**
@@ -9,11 +10,12 @@ import { FIRST_REPORTS, createFirstReports } from '../server/reporting/definitio
  *
  * It uses the Local API, which reads and writes every column of the
  * *current* report-definitions config. On a fresh database (every migration
- * replayed with today's code) it must therefore run after every migration
- * that adds a report-definitions column. When you add one, give your
- * migration an earlier timestamp than this one, or move this one later.
+ * replayed with today's code) those columns must exist before it runs, so it
+ * first adds the ones later migrations add (`ensureReportDefinitionColumns`,
+ * BTB-534). When you add a report-definitions column, add it there too.
  */
-export async function up({ payload, req }: MigrateUpArgs): Promise<void> {
+export async function up({ db, payload, req }: MigrateUpArgs): Promise<void> {
+  await ensureReportDefinitionColumns(db)
   const created = await createFirstReports(payload, req)
   payload.logger.info(`[reports] first reports created: ${created.join(', ') || 'none'}`)
 }

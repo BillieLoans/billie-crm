@@ -1,5 +1,5 @@
 import { MigrateUpArgs, MigrateDownArgs, sql } from '@payloadcms/db-postgres'
-import { REPORTING_SCHEMA_STATEMENTS } from '../server/reporting/schema'
+import { applyReportingSchema } from '../server/reporting/applySchema'
 import {
   createReports,
   DECLINE_DETAIL_REPORTS,
@@ -25,9 +25,7 @@ import {
  * core_reports migration).
  */
 export async function up({ db, payload, req }: MigrateUpArgs): Promise<void> {
-  for (const statement of REPORTING_SCHEMA_STATEMENTS) {
-    await db.execute(sql.raw(statement))
-  }
+  await applyReportingSchema(db, '20261101_090000_decline_reasons')
   const created = await createReports(payload, DECLINE_DETAIL_REPORTS, req)
   const upgraded = await upgradeDeclineRateDrill(payload, req)
   payload.logger.info(
