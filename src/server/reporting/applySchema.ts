@@ -23,7 +23,7 @@ import { REPORTING_SCHEMA_STATEMENTS } from './schema'
  * statements strictly: any failure fails the migration.
  *
  * When you add a migration that calls `applyReportingSchema`, set this to its
- * name. `tests/unit/migrations/reporting-schema-migrations.test.ts` fails
+ * name. `tests/unit/reporting/apply-schema.test.ts` fails
  * until you do.
  */
 export const LATEST_REPORTING_SCHEMA_MIGRATION = '20261103_090000_loan_account_cancellation'

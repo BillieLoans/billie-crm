@@ -122,10 +122,17 @@ describe('reporting schema migrations', () => {
     expect(direct).toEqual([])
   })
 
-  it('each migration passes its own name', () => {
+  it('each migration uses the migration helper and passes its own name', () => {
     for (const file of files) {
-      const calls = [...source(file).matchAll(/applyReportingSchema\(db, '([^']+)'\)/g)]
-      for (const call of calls) {
+      const text = source(file)
+      const calls = text.match(/applyReportingSchema\(/g) ?? []
+      if (calls.length === 0) continue
+      // schema.ts exports an unrelated one-argument applyReportingSchema.
+      expect(text, file).toContain("from '../server/reporting/applySchema'")
+      // Every call is the literal form with this file's own name.
+      const named = [...text.matchAll(/applyReportingSchema\(db, '([^']+)'\)/g)]
+      expect(named.length, file).toBe(calls.length)
+      for (const call of named) {
         expect(call[1]).toBe(file.replace(/\.ts$/, ''))
       }
     }

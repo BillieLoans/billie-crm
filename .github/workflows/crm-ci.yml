@@ -138,8 +138,17 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # `payload migrate` can exit 0 having done nothing (the silent no-op
+      # infra/fly/Makefile's pg-migrate guards against), so require evidence
+      # that migrations ran, and retry once like pg-migrate does.
       - name: Migrate an empty database
-        run: pnpm exec payload migrate
+        run: |
+          for attempt in 1 2; do
+            pnpm exec payload migrate 2>&1 | tee migrate.log
+            if grep -q "Migrated:" migrate.log; then exit 0; fi
+            echo "payload migrate applied nothing on attempt $attempt"
+          done
+          exit 1
       - name: Migrating again is a no-op
         run: pnpm exec payload migrate
       - name: The reporting views exist
