@@ -740,6 +740,11 @@ describe('CancelLoanDrawer: setting a manual block first', () => {
   it('requests a manual block, shows it as requested, and polls until it reaches the customer', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     const { props, rerender } = renderDrawer()
+    // Let the drawer finish opening (it focuses itself a moment after it
+    // renders), as it has long before an operator reaches this button.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(50)
+    })
     chooseReason('fraud_hold')
     writeNote(NOTE)
 
@@ -753,8 +758,13 @@ describe('CancelLoanDrawer: setting a manual block first', () => {
     reply(202, { requestId: 'req-9', eventId: 'evt-9', status: 'accepted' })
     fireEvent.click(within(modal).getByRole('button', { name: 'Set manual block' }))
 
-    expect(await screen.findByText(/Manual block requested/)).toBeInTheDocument()
+    const requested = await screen.findByText(/Manual block requested/)
+    expect(requested).toBeInTheDocument()
     expect(screen.queryByRole('dialog', { name: 'Set manual block' })).toBeNull()
+    // BTB-540: the button that opened the modal is gone, so focus goes to the
+    // status line instead of falling to the page body.
+    expect(requested).toHaveAttribute('tabindex', '-1')
+    expect(document.activeElement).toBe(requested)
     const [url, init] = fetchMock.mock.calls[0]
     expect(url).toBe('/api/commands/reapp-block-set')
     expect(JSON.parse(init.body as string)).toEqual({

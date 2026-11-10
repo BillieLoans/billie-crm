@@ -486,7 +486,7 @@ describe('DisbursementPaymentPanel: the platform check', () => {
       })
 
       it('announces it assertively, and a 403 is an expected outcome that logs no error', async () => {
-        checkHandler = async () => reply({}, 403)
+        checkHandler = async () => reply({ error: { code: 'FORBIDDEN' } }, 403)
         const error = vi.spyOn(console, 'error').mockImplementation(() => {})
         render(<DisbursementPaymentPanel item={makeItem()} onDisburse={vi.fn()} />)
         await screen.findByRole('alert')
@@ -496,8 +496,29 @@ describe('DisbursementPaymentPanel: the platform check', () => {
         expect(error).not.toHaveBeenCalled()
       })
 
+      it.each([
+        ['an empty body', {}],
+        ['a different error code', { error: { code: 'WAF_BLOCKED' } }],
+        ['a string error', { error: 'Forbidden' }],
+      ])(
+        'a 403 that is not the CRM role refusal (%s) fails closed with Retry (BTB-541)',
+        async (_name, body) => {
+          // A proxy or WAF in front of the CRM can answer 403 too. That says
+          // nothing about the operator's role, so it must not claim it does.
+          vi.spyOn(console, 'error').mockImplementation(() => {})
+          checkHandler = async () => reply(body, 403)
+          render(<DisbursementPaymentPanel item={makeItem()} onDisburse={vi.fn()} />)
+
+          await screen.findByRole('alert')
+          expect(screen.queryByTestId('disbursable-forbidden')).not.toBeInTheDocument()
+          expect(screen.getByRole('button', { name: /^retry$/i })).toBeInTheDocument()
+          expect(screen.queryByTestId('panel-disburse')).not.toBeInTheDocument()
+          expect(useAnnouncerStore.getState().assertive).toBe(FAILED)
+        },
+      )
+
       it('is neutral: it does not use the red stop style', async () => {
-        checkHandler = async () => reply({}, 403)
+        checkHandler = async () => reply({ error: { code: 'FORBIDDEN' } }, 403)
         render(<DisbursementPaymentPanel item={makeItem()} onDisburse={vi.fn()} />)
 
         const alert = await screen.findByTestId('disbursable-forbidden')
@@ -664,6 +685,25 @@ describe('DisbursementPaymentPanel: the platform check', () => {
       const blocked = await screen.findByTestId('disbursable-blocked')
       expect(blocked).toHaveAttribute('tabindex', '-1')
       expect(document.activeElement).toBe(blocked)
+    })
+
+    it('does not also announce an outcome that took focus after a Retry (BTB-541)', async () => {
+      // Focus moving to the stop message makes a screen reader read it. An
+      // assertive announcement of the same text would read it a second time.
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      checkHandler = FAILED_503
+      render(<DisbursementPaymentPanel item={makeItem()} onDisburse={vi.fn()} />)
+      await screen.findByRole('alert')
+      useAnnouncerStore.getState().reset()
+
+      checkHandler = async () =>
+        reply({ disbursable: false, reason: 'CANCELLED', status: 'CANCELLED', message: '' })
+      fireEvent.click(screen.getByRole('button', { name: /^retry$/i }))
+
+      const blocked = await screen.findByTestId('disbursable-blocked')
+      expect(document.activeElement).toBe(blocked)
+      expect(useAnnouncerStore.getState().assertive).toBe('')
+      expect(useAnnouncerStore.getState().polite).toBe('')
     })
 
     it('moves to the check-failed message when a Retry fails again, so Retry can be pressed again', async () => {

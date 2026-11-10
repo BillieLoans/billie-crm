@@ -29,6 +29,35 @@ describe('AccountRail', () => {
     expect(screen.getByText('CLOSED')).toBeInTheDocument()
   })
 
+  test('a cancelled loan is listed under Cancelled, never under Closed (BTB-539)', () => {
+    render(
+      <AccountRail
+        accounts={[acc('A'), acc('C', { accountStatus: 'cancelled' })]}
+        selectedAccountId={null}
+        onSelectAccount={vi.fn()}
+        today={TODAY}
+      />,
+    )
+    expect(screen.getByText('CANCELLED')).toBeInTheDocument()
+    expect(screen.queryByText('CLOSED')).not.toBeInTheDocument()
+  })
+
+  test('closed and cancelled loans each get their own heading, closed first', () => {
+    render(
+      <AccountRail
+        accounts={[acc('C', { accountStatus: 'cancelled' }), acc('Z', { accountStatus: 'paid_off' })]}
+        selectedAccountId={null}
+        onSelectAccount={vi.fn()}
+        today={TODAY}
+      />,
+    )
+    const closed = screen.getByTestId('account-rail-closed')
+    const cancelled = screen.getByTestId('account-rail-cancelled')
+    expect(closed.compareDocumentPosition(cancelled) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // Both headings use the same neutral divider styling.
+    expect(cancelled.className).toBe(closed.className)
+  })
+
   test('renders an empty state when there are no accounts', () => {
     render(<AccountRail accounts={[]} selectedAccountId={null} onSelectAccount={vi.fn()} today={TODAY} />)
     expect(screen.getByText(/No loan accounts/i)).toBeInTheDocument()

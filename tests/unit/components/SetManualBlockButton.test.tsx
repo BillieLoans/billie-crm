@@ -80,6 +80,19 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+describe('SetManualBlockButton: keyboard focus after sending (BTB-540)', () => {
+  it('moves focus to the status line, not to the page body', async () => {
+    renderButton()
+    await requestBlock('req-1')
+
+    const status = screen.getByText('Manual block requested. Waiting for confirmation…')
+    expect(status).toHaveAttribute('tabindex', '-1')
+    expect(document.activeElement).toBe(status)
+    // The trigger is disabled while waiting, so focus could not have gone there.
+    expect(trigger()).toBeDisabled()
+  })
+})
+
 describe('SetManualBlockButton: who sees it', () => {
   it.each(['supervisor', 'admin'])('shows the button to a %s', (role) => {
     auth.user = { id: 'u-1', role }

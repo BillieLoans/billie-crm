@@ -80,7 +80,7 @@ def _cancelled_event(**payload_overrides):
     return parse_account_message(envelope)
 
 
-def _updated_event(status, current_balance="52.50", trigger_type="ADJUSTMENT"):
+def _updated_event(status):
     return parse_account_message(
         {
             "conv": "conv-upd-001",
@@ -99,12 +99,12 @@ def _updated_event(status, current_balance="52.50", trigger_type="ADJUSTMENT"):
                 "loan_fee": "2.50",
                 "loan_total_payable": "52.50",
                 "opened_date": "2026-10-20T00:00:00Z",
-                "current_balance": current_balance,
+                "current_balance": "52.50",
                 "total_paid": "0.00",
                 "previous_balance": "52.50",
                 "balance_change": "0.00",
                 "triggered_by_transaction_id": "TXN-1",
-                "triggered_by_transaction_type": trigger_type,
+                "triggered_by_transaction_type": "ADJUSTMENT",
             },
         }
     )
@@ -219,13 +219,13 @@ def _schedule_updated_event(statuses):
     )
 
 
-def _row(account_status, sdk_status=None, disbursed=None, balance=52.5):
+def _row(account_status, sdk_status=None, disbursed=None):
     """The stored loan_accounts projection row, as the handlers SELECT it."""
     return {
         "account_status": account_status,
         "sdk_status": sdk_status,
         "loan_terms_disbursed_date": disbursed,
-        "balances_total_outstanding": balance,
+        "balances_total_outstanding": 52.5,
         "updated_at": None,
     }
 

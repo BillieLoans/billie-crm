@@ -124,7 +124,7 @@ vi.mock('@/components/Breadcrumb', () => ({
 
 vi.mock('@/lib/accountTriage', () => ({
   getAttentionItems: vi.fn(() => []),
-  sortAccountsForRail: vi.fn(() => ({ active: [], closed: [] })),
+  sortAccountsForRail: vi.fn(() => ({ active: [], closed: [], cancelled: [] })),
 }))
 
 // ─── ClearBlockButton spy ─────────────────────────────────────────────────────
