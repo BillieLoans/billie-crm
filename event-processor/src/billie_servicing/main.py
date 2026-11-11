@@ -89,6 +89,7 @@ from .handlers import (
     handle_notification_suppression_changed,
     # Credit assessment & post-identity handlers
     handle_post_identity_risk_check,
+    handle_different_person_clear_requested,
     handle_reapplication_block_auto_cleared,
     handle_reapplication_block_clear_rejected,
     handle_reapplication_block_cleared,
@@ -335,6 +336,13 @@ def setup_handlers(processor: EventProcessor) -> None:
     )
     processor.register_handler(
         "block_clear_approval.cancelled.v1", handle_block_clear_approval_cancelled
+    )
+    # BTB-569: the CRM's own record of a "Clear: different person" request for
+    # a verified-contact stop. No approval step; billieChat answers with the
+    # ordinary reapplication_block.cleared.v1 / clear_rejected.v1.
+    processor.register_handler(
+        "block_clear.different_person_requested.v1",
+        handle_different_person_clear_requested,
     )
 
     # =========================================================================

@@ -257,11 +257,16 @@ async def update_by_key(
     key_value: Any,
     values: dict[str, Any],
     version_column: str | None = None,
+    extra_where: str | None = None,
 ) -> str:
     """Plain UPDATE keyed by a single column. Returns the asyncpg status string.
 
     Use this for status-flip events (``writeoff.approved``, etc.) where we know
     the row exists and don't need an upsert.
+
+    ``extra_where`` is a further SQL condition ANDed onto the key match. It is
+    interpolated as written, so it must be a constant of the calling module,
+    never event data.
 
     ``version_column`` works as it does in :func:`upsert`: it names a column of
     ``values`` holding the event's version (a non-None integer). A row whose
@@ -287,4 +292,6 @@ async def update_by_key(
         f"UPDATE {table} SET {set_clause} "
         f"WHERE {key_column} = ${len(cols) + 1}"
     )
+    if extra_where:
+        sql += f" AND ({extra_where})"
     return await target.execute(sql, *args)

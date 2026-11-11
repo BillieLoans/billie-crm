@@ -151,13 +151,21 @@ export const RecognitionCandidateSchema = z.object({
 export type RecognitionCandidate = z.infer<typeof RecognitionCandidateSchema>
 
 export const RecognitionSchema = z.object({
-  /** "review" for review halts; null for eligibility blocks. */
+  /**
+   * "review" for review halts; "verified_contact" for a stop on a shared
+   * code-verified contact (identity not proven); null for eligibility blocks.
+   */
   band: z.string().nullable().optional(),
   /** Overall match confidence, 0..1 (render as %). */
   posterior: z.number().nullable().optional(),
   case_id: z.string().nullable().optional(),
   /** Matched prior customers, even weak ones; [] for eligibility blocks. */
   candidates: z.array(RecognitionCandidateSchema).nullable().optional(),
+  /**
+   * Verified-contact stop only (band "verified_contact", BTB-569): which
+   * code-verified contacts matched the earlier customer ("phone" / "email").
+   */
+  matched_contact_kinds: z.array(z.string()).nullable().optional(),
 })
 
 export type Recognition = z.infer<typeof RecognitionSchema>
@@ -195,6 +203,10 @@ export const ReapplicationBlockSchema = z.object({
   clearedBy: z.string().nullish(),
   clearJustification: z.string().nullish(),
   clearRequestId: z.string().nullish(),
+  /** Why billieChat refused the latest "different person" clear ("CODE: detail"). */
+  clearRejection: z.string().nullish(),
+  /** Display name for `clearedBy`, resolved server-side for a verified-contact stop. */
+  clearedByName: z.string().nullish(),
 })
 
 /** Archived KYC artifact availability (S3 locations stay server-side). */

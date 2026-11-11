@@ -18,6 +18,7 @@
 
 import { formatDateOnly } from '@/lib/formatters'
 import { sydneyDayStartUtc } from '@/lib/disbursement-cutoff'
+import { VERIFIED_CONTACT_BAND } from '@/lib/events/config'
 
 /** Block reason enum → staff-facing label. Unknown values fall back to the raw enum. */
 const BLOCK_REASON_LABELS: Record<string, string> = {
@@ -41,6 +42,52 @@ export function formatBlockReason(reason: string | null | undefined): string {
 export interface BlockLike {
   reason?: string | null
   blockedUntil?: string | Date | null
+}
+
+// =============================================================================
+// Verified-contact stop (BTB-569)
+// =============================================================================
+
+/**
+ * True when an application was stopped by a verified-contact match: the
+ * applicant code-verified an email or mobile that an earlier, currently
+ * blocked customer also verified. billieChat marks it with
+ * `recognition.band = "verified_contact"` on the blocked event.
+ *
+ * Identity is NOT proven by a shared contact. The application stays on its own
+ * customer; `canonicalCustomerId` on such a block names the customer the
+ * contact matched, for reference only.
+ */
+export function isVerifiedContactStop(
+  block: { recognition?: { band?: string | null } | null } | null | undefined,
+): boolean {
+  return block?.recognition?.band === VERIFIED_CONTACT_BAND
+}
+
+const CONTACT_KIND_LABELS: Record<string, string> = { phone: 'mobile', email: 'email' }
+
+/** "mobile", "email" or "mobile and email" for the contacts that matched. */
+export function formatMatchedContactKinds(kinds: readonly string[] | null | undefined): string {
+  const labels = (kinds ?? []).map((kind) => CONTACT_KIND_LABELS[kind] ?? kind)
+  return labels.length ? labels.join(' and ') : 'contact'
+}
+
+/**
+ * Staff wording for why billieChat refused a "different person" clear.
+ * `clearRejection` is stored as "CODE: detail"; a code with no wording here is
+ * shown as received, so a new billieChat code is never hidden.
+ */
+export function describeClearRejection(rejection: string | null | undefined): string {
+  const raw = rejection?.trim()
+  if (!raw) return 'no reason given'
+  switch (raw.split(':', 1)[0].trim()) {
+    case 'UNKNOWN_STOPPED_CONVERSATION':
+      return 'no contact match is on record for this application against that customer'
+    case 'MISSING_FIELDS':
+      return 'details were missing'
+    default:
+      return raw
+  }
 }
 
 // =============================================================================

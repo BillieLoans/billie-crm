@@ -190,6 +190,8 @@ export type { KillConversationResult } from './mutations/useKillConversation'
 
 // Manual re-application block (BTB-517)
 export { useSetManualBlock } from './mutations/useSetManualBlock'
+export { useClearDifferentPerson } from './mutations/useClearDifferentPerson'
+export type { ClearDifferentPersonResult } from './mutations/useClearDifferentPerson'
 export type { SetManualBlockResult } from './mutations/useSetManualBlock'
 
 export { useLendingAccess } from './useLendingAccess'

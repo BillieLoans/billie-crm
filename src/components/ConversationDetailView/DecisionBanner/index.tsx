@@ -5,7 +5,9 @@ import type { ConversationDetail, RecognitionCandidate } from '@/lib/schemas/con
 import {
   formatBlockReason,
   formatBlockedUntil,
+  formatMatchedContactKinds,
   isBlockDeclineReason,
+  isVerifiedContactStop,
 } from '@/lib/reapplicationBlock'
 import {
   type SignalEntry,
@@ -16,7 +18,7 @@ import {
 } from '@/lib/recognition'
 import { decisionEvidenceRows, formatDecisionReason } from '@/lib/decisionReason'
 import { formatDateOnly } from '@/lib/formatters'
-import { ClearBlockButton } from '@/components/BlockClear'
+import { ClearBlockButton, ClearDifferentPersonButton } from '@/components/BlockClear'
 import styles from './styles.module.css'
 
 type ReapplicationBlock = NonNullable<ConversationDetail['reapplicationBlock']>
@@ -50,6 +52,11 @@ export interface DecisionBannerProps {
  *   and auto-held for manual review. Rendered on its own axis (before the
  *   decision states) with the identity-recognition match context — see
  *   {@link ReviewHalt}.
+ * - Verified-contact stop (BTB-569) → a block-decline whose only link to the
+ *   earlier customer is a shared code-verified email or mobile. Identity is
+ *   not proven, so the banner says so, names the matched customer as a
+ *   reference only, and offers "Clear: different person" in place of the
+ *   ordinary clear (which would clear the earlier customer's own block).
  */
 export function DecisionBanner({ conversation }: DecisionBannerProps) {
   const { finalDecision, decisionDetail, reapplicationBlock } = conversation
@@ -87,7 +94,9 @@ export function DecisionBanner({ conversation }: DecisionBannerProps) {
   if (decision !== 'DECLINED') {
     // An uncleared eligibility block with no credit decision behind it: the
     // halt happened at session start, before the credit FSM could decline.
-    if (block && block.clearStatus !== 'cleared') {
+    // A verified-contact stop keeps its banner once cleared: the clear lifts
+    // the contact match, not the block reason, and the record of it lives here.
+    if (block && (block.clearStatus !== 'cleared' || isVerifiedContactStop(block))) {
       return (
         <div className={`${styles.banner} ${styles.declined}`} data-testid="decision-banner">
           <span className={styles.headline}>✗ Blocked · Re-application block</span>
@@ -95,11 +104,7 @@ export function DecisionBanner({ conversation }: DecisionBannerProps) {
             Application halted by an eligibility block — no credit decision recorded
           </span>
           <BlockDetail conversation={conversation} block={block} />
-          <ClearBlockButton
-            block={block}
-            conversationId={conversation.conversationId}
-            customerName={conversation.customer?.fullName ?? undefined}
-          />
+          <BlockClearAction conversation={conversation} block={block} />
         </div>
       )
     }
@@ -144,14 +149,32 @@ export function DecisionBanner({ conversation }: DecisionBannerProps) {
         </div>
       )}
       {isBlockDecline && <BlockDetail conversation={conversation} block={block} />}
-      {isBlockDecline && (
-        <ClearBlockButton
-          block={block}
-          conversationId={conversation.conversationId}
-          customerName={conversation.customer?.fullName ?? undefined}
-        />
-      )}
+      {isBlockDecline && <BlockClearAction conversation={conversation} block={block} />}
     </div>
+  )
+}
+
+/**
+ * BlockClearAction — the clear offered on a block. A verified-contact stop
+ * (BTB-569) gets "Clear: different person", which clears that one contact
+ * match; every other block gets the ordinary clear of the customer's block.
+ */
+function BlockClearAction({
+  conversation,
+  block,
+}: {
+  conversation: ConversationDetail
+  block: ReapplicationBlock | null
+}) {
+  if (isVerifiedContactStop(block)) {
+    return <ClearDifferentPersonButton block={block} conversationId={conversation.conversationId} />
+  }
+  return (
+    <ClearBlockButton
+      block={block}
+      conversationId={conversation.conversationId}
+      customerName={conversation.customer?.fullName ?? undefined}
+    />
   )
 }
 
@@ -194,12 +217,34 @@ function BlockDetail({
   // Prefer the human-readable account number; the ledger GUID is the fallback
   // (older rows, or an account the CRM has not projected yet).
   const sourceAccountLabel = block?.sourceAccountNumber ?? sourceAccountId
-  const customerId = conversation.customer?.customerId
+  // On a verified-contact stop the reason, source decline and source account
+  // belong to the customer the contact matched, not to this applicant.
+  const contactMatch = isVerifiedContactStop(block)
+  const matchedCustomerId = contactMatch ? block?.canonicalCustomerId : null
+  const customerId = contactMatch ? matchedCustomerId : conversation.customer?.customerId
 
   return (
     <div className={styles.detail}>
+      {contactMatch && (
+        <div className={styles.detailRow} data-testid="contact-match-row">
+          <span className={styles.detailLabel}>Matched on</span>
+          <span className={styles.detailValue}>
+            Shared {formatMatchedContactKinds(block?.recognition?.matched_contact_kinds)} with{' '}
+            {matchedCustomerId ? (
+              <Link href={`/admin/servicing/${matchedCustomerId}`} className={styles.detailLink}>
+                customer {matchedCustomerId} →
+              </Link>
+            ) : (
+              'an earlier customer'
+            )}{' '}
+            · identity not proven, so this application stays on its own customer record
+          </span>
+        </div>
+      )}
       <div className={styles.detailRow}>
-        <span className={styles.detailLabel}>Reason</span>
+        <span className={styles.detailLabel}>
+          {contactMatch ? 'Their block reason' : 'Reason'}
+        </span>
         <span className={styles.detailValue}>{formatBlockReason(blockReason)}</span>
       </div>
       <div className={styles.detailRow}>

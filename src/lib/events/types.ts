@@ -5,7 +5,7 @@
  * These follow the LedgerMessage format for consistency with the event ecosystem.
  */
 
-import type { ClearableReason, ReleaseType } from './config'
+import type { ClearableReason, DifferentPersonClearReason, ReleaseType } from './config'
 import type { ManualBlockReasonCode } from '@/lib/reapplicationBlock'
 
 // =============================================================================
@@ -249,15 +249,36 @@ export interface BlockClearApprovalCancelledPayload {
 }
 
 /**
+ * Payload for block_clear.different_person_requested.v1 (BTB-569, internal).
+ * The envelope's `conv` is the request id sent to billieChat.
+ */
+export interface DifferentPersonClearRequestedPayload {
+  /** The conversation the verified-contact match stopped. */
+  conversationId: string
+  /** The earlier customer the contact matched (still blocked after the clear). */
+  canonicalCustomerId: string
+  justification: string
+  requestedBy: string
+  requestedByName: string
+}
+
+/**
  * The authoritative command billieChat consumes off chatLedger (spec §7.1).
  */
 export interface ReapplicationBlockClearAuthorizedPayload {
   canonical_customer_id: string
-  reasons: ClearableReason[] | 'ALL_CLEARABLE'
+  /**
+   * `['DIFFERENT_PERSON']` (BTB-569) clears a verified-contact match, not a
+   * block: `canonical_customer_id` is then the customer the stop names, and
+   * `stopped_conversation_id` is required.
+   */
+  reasons: ClearableReason[] | 'ALL_CLEARABLE' | [DifferentPersonClearReason]
   operator_id: string
   justification: string
   request_id: string
   requested_at: string
+  /** The conversation a verified-contact match stopped (DIFFERENT_PERSON only). */
+  stopped_conversation_id?: string
   approval?: {
     approval_request_id: string
     approved_by: string

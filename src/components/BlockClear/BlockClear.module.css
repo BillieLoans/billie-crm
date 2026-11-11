@@ -264,6 +264,23 @@
   color: #ef4444;
 }
 
+/* "Clear: different person" outcome on a verified-contact stop (BTB-569). */
+.clearOutcome {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 12px;
+  font-size: 12px;
+}
+
+.clearOutcomeHeadline {
+  font-weight: 600;
+}
+
+.clearOutcomeDetail {
+  font-style: italic;
+}
+
 /* Inline (attention-strip) variant — chip-height pill, no orphan-row margin. */
 .clearBlockContainerInline {
   margin-top: 0;

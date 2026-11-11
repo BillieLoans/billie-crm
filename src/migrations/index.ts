@@ -67,6 +67,7 @@ import * as migration_20261103_090000_loan_account_cancellation from './20261103
 import * as migration_20261104_090000_customer_manual_block from './20261104_090000_customer_manual_block'
 import * as migration_20261106_090000_google_ads_conversions from './20261106_090000_google_ads_conversions'
 import * as migration_20261111_090000_loan_account_event_versions from './20261111_090000_loan_account_event_versions'
+import * as migration_20261111_100000_conversation_block_clear_rejection from './20261111_100000_conversation_block_clear_rejection'
 
 export const migrations = [
   {
@@ -413,5 +414,10 @@ export const migrations = [
     up: migration_20261111_090000_loan_account_event_versions.up,
     down: migration_20261111_090000_loan_account_event_versions.down,
     name: '20261111_090000_loan_account_event_versions',
+  },
+  {
+    up: migration_20261111_100000_conversation_block_clear_rejection.up,
+    down: migration_20261111_100000_conversation_block_clear_rejection.down,
+    name: '20261111_100000_conversation_block_clear_rejection',
   },
 ]
