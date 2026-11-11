@@ -74,7 +74,7 @@ export function SetManualBlockButton({
   // hand focus back to, which leaves keyboard focus on the page body. Move it
   // to the status line instead (BTB-540). An effect, so it runs after the
   // modal's own focus-return on unmount.
-  const statusRef = useRef<HTMLParagraphElement>(null)
+  const statusRef = useRef<HTMLDivElement>(null)
   const focusStatus = useRef(false)
   useEffect(() => {
     if (waiting && focusStatus.current) {
@@ -109,6 +109,23 @@ export function SetManualBlockButton({
     setRequestId(id)
   }
 
+  // A refusal or a timeout stays up until the supervisor has read it. It
+  // floats over the page, so it needs a way to be put away (BTB-540).
+  const dismissButton = (
+    <button
+      type="button"
+      className={styles.headerNoticeDismiss}
+      onClick={() => {
+        setRequestId(null)
+        setWaitExpired(false)
+      }}
+      aria-label="Dismiss manual block notice"
+      data-testid="set-manual-block-notice-dismiss"
+    >
+      ×
+    </button>
+  )
+
   return (
     <>
       <div className={styles.headerBlock}>
@@ -122,25 +139,31 @@ export function SetManualBlockButton({
           Set manual block
         </button>
         {waiting && (
-          <p ref={statusRef} tabIndex={-1} className={styles.headerNotice} role="status">
-            Manual block requested. Waiting for confirmation…
-          </p>
+          <div ref={statusRef} tabIndex={-1} className={styles.headerNotice} role="status">
+            <p className={styles.headerNoticeText}>
+              Manual block requested. Waiting for confirmation…
+            </p>
+          </div>
         )}
         {applied && (
-          <p className={styles.headerNotice} role="status">
-            Manual block set.
-          </p>
+          <div className={styles.headerNotice} role="status">
+            <p className={styles.headerNoticeText}>Manual block set.</p>
+          </div>
         )}
         {rejection && (
-          <p className={`${styles.headerNotice} ${styles.headerNoticeError}`} role="alert">
-            The manual block was not set: {rejection}
-          </p>
+          <div className={`${styles.headerNotice} ${styles.headerNoticeError}`} role="alert">
+            <p className={styles.headerNoticeText}>The manual block was not set: {rejection}</p>
+            {dismissButton}
+          </div>
         )}
         {requestId && waitExpired && !applied && !rejection && (
-          <p className={styles.headerNotice} role="status">
-            The block hasn&apos;t reached the customer record yet. Refresh in a minute; if it still
-            isn&apos;t there, the block service may be off.
-          </p>
+          <div className={styles.headerNotice} role="status">
+            <p className={styles.headerNoticeText}>
+              The block hasn&apos;t reached the customer record yet. Refresh in a minute; if it
+              still isn&apos;t there, the block service may be off.
+            </p>
+            {dismissButton}
+          </div>
         )}
       </div>
 

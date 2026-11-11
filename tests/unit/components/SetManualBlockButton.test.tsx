@@ -85,11 +85,69 @@ describe('SetManualBlockButton: keyboard focus after sending (BTB-540)', () => {
     renderButton()
     await requestBlock('req-1')
 
-    const status = screen.getByText('Manual block requested. Waiting for confirmation…')
+    const status = screen.getByRole('status')
+    expect(status).toHaveTextContent('Manual block requested. Waiting for confirmation…')
     expect(status).toHaveAttribute('tabindex', '-1')
     expect(document.activeElement).toBe(status)
     // The trigger is disabled while waiting, so focus could not have gone there.
     expect(trigger()).toBeDisabled()
+  })
+})
+
+describe('SetManualBlockButton: notices that stay can be put away (BTB-540)', () => {
+  const dismiss = () => screen.getByRole('button', { name: 'Dismiss manual block notice' })
+
+  it('a refusal is dismissed, and the button is ready for another request', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const { rerender } = renderButton()
+    await requestBlock('req-20')
+    rerender({
+      reapplicationBlock: {
+        reason: 'MANUAL_ADMIN',
+        blockedUntil: null,
+        manualSetRejectedRequestId: 'req-20',
+        manualSetRejection: 'INVALID_REASON',
+      },
+    })
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+
+    fireEvent.click(dismiss())
+
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(trigger()).toBeEnabled()
+  })
+
+  it('the two-minute timeout notice is dismissed, and polling does not restart', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const { props } = renderButton()
+    await requestBlock('req-21')
+    await advance(121_000)
+    expect(screen.getByRole('status')).toHaveTextContent("hasn't reached the customer record")
+    const calls = vi.mocked(props.onRefresh).mock.calls.length
+
+    fireEvent.click(dismiss())
+
+    expect(screen.queryByRole('status')).toBeNull()
+    expect(trigger()).toBeEnabled()
+    await advance(10_000)
+    expect(vi.mocked(props.onRefresh).mock.calls.length).toBe(calls)
+  })
+
+  it('the short-lived notices have no dismiss button', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const { rerender } = renderButton()
+    await requestBlock('req-22')
+    expect(screen.queryByRole('button', { name: 'Dismiss manual block notice' })).toBeNull()
+
+    rerender({
+      reapplicationBlock: {
+        reason: 'MANUAL_ADMIN',
+        blockedUntil: null,
+        manualSetRequestId: 'req-22',
+      },
+    })
+    expect(screen.getByRole('status')).toHaveTextContent('Manual block set.')
+    expect(screen.queryByRole('button', { name: 'Dismiss manual block notice' })).toBeNull()
   })
 })
 

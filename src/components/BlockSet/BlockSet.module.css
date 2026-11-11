@@ -129,12 +129,12 @@
  * #656565 on elevation-50 #fafafa 5.6:1; notice text #1a1a1a on white 17.4:1;
  * refusal text error-750 on error-50 8.6:1.
  */
+/* The notice floats under the button instead of sitting in the header's
+   action row: a line of text there made the row taller and re-centred its
+   neighbours every time a notice came or went (BTB-540). */
 .headerBlock {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  max-width: 280px;
+  position: relative;
+  display: inline-flex;
 }
 
 .headerBtn {
@@ -168,22 +168,64 @@
 }
 
 .headerNotice {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: max-content;
+  max-width: 280px;
   margin: 0;
+  padding: 6px 8px;
   font-size: 12px;
   line-height: 1.4;
   color: var(--theme-text, #1a1a1a);
+  background: var(--theme-elevation-0, #fff);
+  border: 1px solid var(--theme-elevation-200, #ddd);
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.headerNotice:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.headerNoticeText {
+  margin: 0;
 }
 
 .headerNoticeError {
-  padding: 6px 8px;
-  border-radius: 6px;
   border: 2px solid var(--theme-error-300, #fd9a92);
   background: var(--theme-error-50, #faf1f0);
   color: var(--theme-error-750, #7b2927);
 }
 
+/* Refusal and timeout notices stay until dismissed or the form is reopened. */
+.headerNoticeDismiss {
+  flex-shrink: 0;
+  padding: 0 4px;
+  font-size: 14px;
+  line-height: 1.2;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.headerNoticeDismiss:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
+/* Narrow: the action row wraps to the left edge, so open towards the right. */
 @media (max-width: 768px) {
-  .headerBlock {
-    max-width: none;
+  .headerNotice {
+    right: auto;
+    left: 0;
+    max-width: min(280px, 80vw);
   }
 }
