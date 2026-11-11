@@ -13,6 +13,7 @@ vi.mock('@payloadcms/ui', () => ({
   })),
 }))
 
+import { useAuth } from '@payloadcms/ui'
 import { DecisionBanner } from '@/components/ConversationDetailView/DecisionBanner'
 import type { ConversationDetail } from '@/lib/schemas/conversations'
 
@@ -523,5 +524,136 @@ describe('DecisionBanner ruleset version (BTB-505)', () => {
   test('decisions made before the field existed show no ruleset line', () => {
     render(<DecisionBanner conversation={createConversation({ finalDecision: 'APPROVED' })} />)
     expect(screen.queryByTestId('decision-ruleset')).not.toBeInTheDocument()
+  })
+})
+
+describe('DecisionBanner verified-contact stop (BTB-569)', () => {
+  afterEach(() => {
+    cleanup()
+    vi.mocked(useAuth).mockImplementation(
+      () => ({ user: { id: 'ro-1', role: 'readonly' } }) as ReturnType<typeof useAuth>,
+    )
+  })
+
+  // The applicant is their own customer (NEWJOURNEY1); the stop names the
+  // earlier customer their mobile matched (22F0652F).
+  const contactStop = createConversation({
+    finalDecision: 'DECLINED',
+    customer: { fullName: 'Nia New', customerId: 'NEWJOURNEY1', payloadId: 'p9' },
+    decisionDetail: { reason: 'REAPPLICATION_BLOCK:ACTIVE_LOAN', retryEligible: false },
+    reapplicationBlock: {
+      reason: 'ACTIVE_LOAN',
+      messageVariant: 'ACTIVE_LOAN',
+      stopMessage: "Sorry, we can't help right now.",
+      sourceAccountId: 'acct-guid-1',
+      sourceAccountNumber: 'BL-000123',
+      blockedUntil: null,
+      blockedAt: '2026-11-11T07:08:40+00:00',
+      canonicalCustomerId: '22F0652F',
+      dispositionKind: 'block',
+      recognition: {
+        band: 'verified_contact',
+        posterior: null,
+        case_id: null,
+        candidates: [],
+        matched_contact_kinds: ['phone'],
+      },
+    },
+  })
+
+  const asOperations = () =>
+    vi.mocked(useAuth).mockImplementation(
+      () => ({ user: { id: 'ops-1', role: 'operations' } }) as ReturnType<typeof useAuth>,
+    )
+
+  test('still reads as declined for the block reason', () => {
+    render(<DecisionBanner conversation={contactStop} />)
+    expect(screen.getByText('✗ Declined · Re-application block')).toBeInTheDocument()
+    expect(screen.getByText('Their block reason')).toBeInTheDocument()
+    expect(screen.getByText('Active loan')).toBeInTheDocument()
+  })
+
+  test('names the matched customer as a reference and says identity is not proven', () => {
+    render(<DecisionBanner conversation={contactStop} />)
+    const row = screen.getByTestId('contact-match-row')
+    expect(row).toHaveTextContent('Shared mobile with customer 22F0652F')
+    expect(row).toHaveTextContent(
+      'identity not proven, so this application stays on its own customer record',
+    )
+    expect(screen.getByRole('link', { name: 'customer 22F0652F →' })).toHaveAttribute(
+      'href',
+      '/admin/servicing/22F0652F',
+    )
+  })
+
+  test("links the source account under the matched customer, not the applicant's own record", () => {
+    render(<DecisionBanner conversation={contactStop} />)
+    expect(screen.getByRole('link', { name: 'BL-000123 →' })).toHaveAttribute(
+      'href',
+      '/admin/servicing/22F0652F?accountId=acct-guid-1',
+    )
+  })
+
+  test('offers "Clear: different person" in place of the ordinary clear', () => {
+    asOperations()
+    render(<DecisionBanner conversation={contactStop} />)
+    expect(screen.getByTestId('clear-different-person-btn')).toBeInTheDocument()
+    expect(screen.queryByTestId('clear-block-btn')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('clear-block-btn-disabled')).not.toBeInTheDocument()
+  })
+
+  test('an ordinary block has no contact-match row and no different-person action', () => {
+    render(
+      <DecisionBanner
+        conversation={{
+          ...contactStop,
+          reapplicationBlock: { ...contactStop.reapplicationBlock, recognition: null },
+        }}
+      />,
+    )
+    expect(screen.queryByTestId('contact-match-row')).not.toBeInTheDocument()
+    expect(screen.getByText('Reason')).toBeInTheDocument()
+    expect(screen.queryByTestId('clear-different-person-btn')).not.toBeInTheDocument()
+  })
+
+  test('shows who cleared it, when and why, and keeps the decline', () => {
+    render(
+      <DecisionBanner
+        conversation={{
+          ...contactStop,
+          reapplicationBlock: {
+            ...contactStop.reapplicationBlock,
+            clearStatus: 'cleared',
+            clearedAt: '2026-11-11T09:00:00.000Z',
+            clearedBy: '7',
+            clearedByName: 'Sam Support',
+            clearJustification: 'Recycled number, different person',
+          },
+        }}
+      />,
+    )
+    expect(screen.getByText('✗ Declined · Re-application block')).toBeInTheDocument()
+    const record = screen.getByTestId('different-person-cleared')
+    expect(record).toHaveTextContent('Cleared as a different person by Sam Support')
+    expect(record).toHaveTextContent('Recycled number, different person')
+  })
+
+  test('a cleared stop with no credit decision keeps its banner and its record', () => {
+    render(
+      <DecisionBanner
+        conversation={{
+          ...contactStop,
+          finalDecision: null,
+          decisionDetail: null,
+          reapplicationBlock: {
+            ...contactStop.reapplicationBlock,
+            clearStatus: 'cleared',
+            clearedByName: 'Sam Support',
+          },
+        }}
+      />,
+    )
+    expect(screen.getByText('✗ Blocked · Re-application block')).toBeInTheDocument()
+    expect(screen.getByTestId('different-person-cleared')).toBeInTheDocument()
   })
 })

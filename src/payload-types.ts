@@ -986,6 +986,10 @@ export interface Conversation {
      * ID of the ReapplicationBlockClearRequest that cleared this block
      */
     clearRequestId?: string | null;
+    /**
+     * Why billieChat refused the latest "different person" clear of this stop ("CODE: detail")
+     */
+    clearRejection?: string | null;
   };
   /**
    * Archived identity verification artifacts (S3)
@@ -3293,6 +3297,7 @@ export interface ConversationsSelect<T extends boolean = true> {
         clearedBy?: T;
         clearJustification?: T;
         clearRequestId?: T;
+        clearRejection?: T;
       };
   identityVerificationReport?:
     | T

@@ -13,6 +13,7 @@ import { headers } from 'next/headers'
 import configPromise from '@payload-config'
 import { hasAnyRole, hasApprovalAuthority } from '@/lib/access'
 import { resolveActorDisplayName } from '@/lib/users'
+import { isVerifiedContactStop } from '@/lib/reapplicationBlock'
 import { shapeAttempts } from '@/lib/identityAttempts'
 import { shapeAttribution } from '@/lib/attribution'
 import { shapeGoogleAdsConversions } from '@/lib/google-ads-conversions'
@@ -149,6 +150,14 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       })
       sourceAccountNumber = (accountResult.docs[0]?.accountNumber as string) ?? null
     }
+    // BTB-569: a verified-contact stop shows who asked for / made its
+    // "different person" clear. `clearedBy` holds the bare user id billieChat
+    // echoes back as operator_id; render-time only, never blocks the response.
+    let clearedByName: string | null = null
+    if (isVerifiedContactStop(block as { recognition?: { band?: string | null } }) && block?.clearedBy) {
+      const name = await resolveActorDisplayName(payload, `user:${String(block.clearedBy)}`)
+      clearedByName = name && !name.startsWith('user:') ? name : null
+    }
     // BTB-546: what was sent to Google Ads for this application. The raw
     // outbox is admin-only; this is status and times, no click id. Only an
     // ad click can have rows. Optional panel data: a failure here must not
@@ -222,7 +231,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       decisionMetadata,
       killRecord: killRecordOut,
       cancellationRecord,
-      reapplicationBlock: block ? { ...block, sourceAccountNumber } : null,
+      reapplicationBlock: block ? { ...block, sourceAccountNumber, clearedByName } : null,
       sourceConversationId,
       identityVerificationReport: {
         labRequestId: (ivr?.labRequestId as string) ?? null,

@@ -8,6 +8,7 @@
 import { z } from 'zod'
 import { CLEARABLE_REASONS } from './config'
 import { MANUAL_BLOCK_REASON_CODES } from '@/lib/reapplicationBlock'
+import { MIN_APPROVAL_COMMENT_LENGTH } from '@/lib/constants'
 
 // =============================================================================
 // Write-Off Request Schema
@@ -139,6 +140,25 @@ export const BlockClearRequestCommandSchema = z.object({
 })
 
 export type BlockClearRequestCommand = z.infer<typeof BlockClearRequestCommandSchema>
+
+/**
+ * Schema for the "Clear: different person" command (input from client,
+ * BTB-569). Only the stopped conversation is named: the route reads the
+ * matched customer from the conversation's own block record.
+ */
+export const DifferentPersonClearCommandSchema = z.object({
+  conversationId: z.string().trim().min(1, 'Conversation ID is required'),
+  justification: z
+    .string()
+    .trim()
+    .min(
+      MIN_APPROVAL_COMMENT_LENGTH,
+      `Justification must be at least ${MIN_APPROVAL_COMMENT_LENGTH} characters`,
+    )
+    .max(1000),
+})
+
+export type DifferentPersonClearCommand = z.infer<typeof DifferentPersonClearCommandSchema>
 
 /**
  * Schema for the "Set manual block" command (input from client, BTB-517).

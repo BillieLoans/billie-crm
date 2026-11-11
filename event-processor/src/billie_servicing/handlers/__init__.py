@@ -104,6 +104,7 @@ from .notification import (
     handle_statement_generated,
 )
 from .reapplication import (
+    handle_different_person_clear_requested,
     handle_reapplication_block_auto_cleared,
     handle_reapplication_block_clear_rejected,
     handle_reapplication_block_cleared,
@@ -144,6 +145,7 @@ __all__ = [
     "handle_reapplication_block_state_changed",
     "handle_reapplication_block_manual_set_applied",
     "handle_reapplication_block_manual_set_rejected",
+    "handle_different_person_clear_requested",
     # Identity verification archival (PR #67)
     "handle_identity_attempt",
     "handle_identity_report_archived",

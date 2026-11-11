@@ -208,6 +208,35 @@ export const REASONS_REQUIRING_APPROVAL = [
  */
 export type ClearableReason = (typeof CLEARABLE_REASONS)[number]
 
+/**
+ * `recognition.band` on application.reapplication_blocked.v1 when the stop is
+ * a verified-contact match (BTB-569): the applicant code-verified an email or
+ * mobile an earlier, currently blocked customer also verified. Identity is not
+ * proven, so the application stays on its own customer record.
+ */
+export const VERIFIED_CONTACT_BAND = 'verified_contact'
+
+/**
+ * The clear reason for a verified-contact stop whose applicant is not the
+ * earlier customer (BTB-569). Not a block reason, so not in CLEARABLE_REASONS:
+ * it clears one contact match and leaves the earlier customer blocked. Sent on
+ * reapplication_block.clear_authorized.v1 with `stopped_conversation_id`. No
+ * maker-checker.
+ */
+export const DIFFERENT_PERSON_CLEAR_REASON = 'DIFFERENT_PERSON'
+
+export type DifferentPersonClearReason = typeof DIFFERENT_PERSON_CLEAR_REASON
+
+/**
+ * The CRM's own record of a "Clear: different person" request (internal
+ * stream). The event processor marks the stopped conversation pending with
+ * who asked and why, and ties the request id to it so billieChat's answer can
+ * be shown on that conversation.
+ */
+export const EVENT_TYPE_BLOCK_CLEAR_DIFFERENT_PERSON_REQUESTED =
+  process.env.EVENT_TYPE_BLOCK_CLEAR_DIFFERENT_PERSON_REQUESTED ??
+  'block_clear.different_person_requested.v1'
+
 // =============================================================================
 // Event Types (Applicant Release)
 // =============================================================================

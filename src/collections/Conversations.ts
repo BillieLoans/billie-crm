@@ -433,6 +433,16 @@ export const Conversations: CollectionConfig = {
           type: 'text',
           admin: { description: 'ID of the ReapplicationBlockClearRequest that cleared this block' },
         },
+        // BTB-569: a verified-contact stop is cleared per conversation
+        // ("different person"), so billieChat's refusal is kept here.
+        {
+          name: 'clearRejection',
+          type: 'text',
+          admin: {
+            description:
+              'Why billieChat refused the latest "different person" clear of this stop ("CODE: detail")',
+          },
+        },
       ],
     },
     {

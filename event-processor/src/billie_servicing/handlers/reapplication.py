@@ -13,6 +13,11 @@ Two projections:
 * ``customers.reapplication_block_*`` — a compact mirror on the canonical
   customer row so the servicing view can flag "blocked until …" without
   scanning conversations.
+
+A verified-contact stop (BTB-569, ``recognition.band == "verified_contact"``)
+is the exception: the applicant shares a code-verified email or mobile with an
+earlier blocked customer but is not proven to be them, so only the
+conversation projection is written and nothing is moved onto that customer.
 """
 
 from __future__ import annotations
@@ -47,6 +52,36 @@ logger = structlog.get_logger()
 _REATTRIBUTE_BLOCK_REASONS = frozenset(
     {"ACTIVE_LOAN", "PRIOR_DEFAULT", "PRIOR_SERIOUS_ARREARS"}
 )
+
+
+# BTB-569. ``recognition.band`` on a blocked event whose only link to the
+# earlier customer is a code-verified email or mobile (billieChat's
+# verified_contact_block.RECOGNITION_BAND). The applicant has proven control of
+# a contact, not who they are, so nothing of theirs may be moved onto, or
+# written on, the customer the contact matched.
+VERIFIED_CONTACT_BAND = "verified_contact"
+
+# The clear reason an operator names to say the stopped applicant is not the
+# earlier customer. Not a block reason: it clears one contact match and leaves
+# the earlier customer blocked.
+DIFFERENT_PERSON = "DIFFERENT_PERSON"
+
+# SQL guards. A contact-match stop keeps the matched customer's id in
+# ``reapplication_block_canonical_customer_id`` (information only), so every
+# statement keyed on that column must say which kind of stop it means.
+_IS_CONTACT_MATCH_STOP = (
+    f"reapplication_block_recognition->>'band' = '{VERIFIED_CONTACT_BAND}'"
+)
+_NOT_CONTACT_MATCH_STOP = (
+    "reapplication_block_recognition->>'band' IS DISTINCT FROM "
+    f"'{VERIFIED_CONTACT_BAND}'"
+)
+
+
+def is_verified_contact_stop(payload: dict[str, Any]) -> bool:
+    """True when a blocked event is a verified-contact match (BTB-569)."""
+    recognition = payload.get("recognition")
+    return isinstance(recognition, dict) and recognition.get("band") == VERIFIED_CONTACT_BAND
 
 
 async def handle_reapplication_blocked(pool: asyncpg.Pool, event: dict[str, Any]) -> None:
@@ -114,6 +149,19 @@ async def handle_reapplication_blocked(pool: asyncpg.Pool, event: dict[str, Any]
         )
     else:
         log.warning("Re-application block event without conversation id")
+
+    if is_verified_contact_stop(payload):
+        # BTB-569: the stop is a shared email or mobile, not proven identity.
+        # The application stays on its own customer. The matched customer's id
+        # is kept on the conversation above as a reference only; their row is
+        # not written (their own block is already mirrored there by
+        # state.changed, and this application is not theirs), and the journey
+        # is not re-attributed, whatever the reason.
+        log.info(
+            "Verified-contact stop recorded on the conversation only",
+            matched_customer_id=payload.get("canonical_customer_id"),
+        )
+        return
 
     # Customer-level mirror on the canonical row.
     customer_id = safe_str(
@@ -229,6 +277,20 @@ async def handle_reapplication_block_cleared(
     operator_id = payload.get("operator_id")
     justification = payload.get("justification")
 
+    if DIFFERENT_PERSON in cleared_reasons:
+        await _record_different_person_cleared(
+            pool,
+            request_id=request_id,
+            stopped_conversation_id=safe_str(
+                payload.get("stopped_conversation_id"), "stopped_conversation_id"
+            ),
+            cleared_at=cleared_at,
+            operator_id=operator_id,
+            justification=justification,
+            canonical=canonical,
+        )
+        return
+
     log = logger.bind(
         canonical_customer_id=canonical,
         request_id=request_id,
@@ -273,12 +335,15 @@ async def handle_reapplication_block_cleared(
         }
         if reason_is_gone:
             conv_values["reapplication_block_reason"] = None
+        # Not a contact-match stop of someone else's application (BTB-569):
+        # that record is cleared only by its own "different person" clear.
         await update_by_key(
             pool,
             "conversations",
             key_column="reapplication_block_canonical_customer_id",
             key_value=canonical,
             values=conv_values,
+            extra_where=_NOT_CONTACT_MATCH_STOP,
         )
     else:
         log.warning("Cleared event without resolvable customer id — no customer mirror")
@@ -339,6 +404,19 @@ async def handle_reapplication_block_clear_rejected(
         f"{rejection_code}: {detail or ''}" if rejection_code else detail
     )
 
+    # BTB-569: a refused "different person" clear belongs to one stopped
+    # conversation, not to the customer its contact matched.
+    if await _record_different_person_rejected(
+        pool,
+        request_id=request_id,
+        stopped_conversation_id=safe_str(
+            payload.get("stopped_conversation_id"), "stopped_conversation_id"
+        ),
+        named=DIFFERENT_PERSON in (payload.get("rejected_reasons") or []),
+        rejection=approval_reason,
+    ):
+        return
+
     # Flip the queue row to "rejected" and record the reason.
     if request_id:
         await update_by_key(
@@ -376,11 +454,189 @@ async def handle_reapplication_block_clear_rejected(
             key_column="reapplication_block_canonical_customer_id",
             key_value=canonical,
             values={"reapplication_block_clear_status": "rejected", "updated_at": now},
+            extra_where=_NOT_CONTACT_MATCH_STOP,
         )
     else:
         log.warning("Rejected event without resolvable customer id — no customer mirror")
 
     log.info("Re-application block clear rejected")
+
+
+# =============================================================================
+# "Clear: different person" for a verified-contact stop (BTB-569)
+# =============================================================================
+#
+# One stopped application is cleared, never a customer: billieChat writes an
+# exclusion for the (contact, customer) pair that stop recorded and leaves the
+# earlier customer's block as it is. So all three writers below touch exactly
+# one conversation row, the stopped one, and no customer row.
+#
+#   requested (CRM, internal stream)   -> clear_status "pending" + who and why
+#   cleared   (billieChat)             -> "cleared"  + who, when, why
+#   rejected  (billieChat)             -> "rejected" + billieChat's reason
+
+
+async def handle_different_person_clear_requested(
+    pool: asyncpg.Pool, parsed_event: dict[str, Any]
+) -> None:
+    """Handle ``block_clear.different_person_requested.v1`` (CRM internal).
+
+    The CRM publishes this next to the ``clear_authorized`` command it sends
+    billieChat. It records who asked and why on the stopped conversation, and
+    ties the request id to it: billieChat's rejection names only the request,
+    so this is how a rejection finds the conversation.
+
+    Never moves a record backwards: a conversation already cleared stays
+    cleared, and a redelivery after this request's own answer arrived (the
+    answer stamps the same request id) changes nothing.
+    """
+    payload = parse_payload(parsed_event)
+    request_id = safe_str(parsed_event.get("conv", ""), "request_id")
+    conversation_id = safe_str(payload.get("conversationId"), "conversation_id")
+    log = logger.bind(request_id=request_id, conversation_id=conversation_id)
+    log.info("Processing block_clear.different_person_requested.v1")
+    if not (request_id and conversation_id):
+        log.warning("different-person clear request without request or conversation id")
+        return
+
+    status = await pool.execute(
+        f"""
+        UPDATE conversations
+        SET reapplication_block_clear_status = 'pending',
+            reapplication_block_clear_request_id = $2,
+            reapplication_block_cleared_by = $3,
+            reapplication_block_clear_justification = $4,
+            reapplication_block_clear_rejection = NULL,
+            updated_at = $5
+        WHERE conversation_id = $1
+          AND {_IS_CONTACT_MATCH_STOP}
+          AND reapplication_block_clear_status IS DISTINCT FROM 'cleared'
+          AND reapplication_block_clear_request_id IS DISTINCT FROM $2
+        """,
+        conversation_id,
+        request_id,
+        safe_str(payload.get("requestedBy"), "requested_by") or None,
+        payload.get("justification"),
+        datetime.now(UTC),
+    )
+    log.info("Different-person clear request recorded", update_status=status)
+
+
+async def _record_different_person_cleared(
+    pool: asyncpg.Pool,
+    *,
+    request_id: str,
+    stopped_conversation_id: str,
+    cleared_at: object,
+    operator_id: object,
+    justification: object,
+    canonical: str | None,
+) -> None:
+    """``cleared.v1`` with ``cleared_reasons: ["DIFFERENT_PERSON"]``.
+
+    Stamps who cleared the stopped conversation, when and why. The block
+    reason stays on it: the application was declined for that reason and the
+    earlier customer is still blocked for it (``prior_block_reason``), so the
+    customer row and that customer's own conversations are not touched.
+    """
+    log = logger.bind(
+        request_id=request_id,
+        stopped_conversation_id=stopped_conversation_id,
+        matched_customer_id=canonical,
+    )
+    log.info("Processing reapplication_block.cleared.v1 (different person)")
+    values: dict[str, Any] = {
+        "reapplication_block_clear_status": "cleared",
+        "reapplication_block_cleared_at": cleared_at,
+        "reapplication_block_cleared_by": operator_id,
+        "reapplication_block_clear_justification": justification,
+        "reapplication_block_clear_request_id": request_id,
+        "reapplication_block_clear_rejection": None,
+        "updated_at": datetime.now(UTC),
+    }
+    if stopped_conversation_id:
+        key_column, key_value = "conversation_id", stopped_conversation_id
+    elif request_id:
+        # billieChat always names the conversation; the request id (stamped by
+        # the CRM's own request event) is the fallback if it ever does not.
+        key_column, key_value = "reapplication_block_clear_request_id", request_id
+    else:
+        log.warning("different-person cleared event names no conversation or request")
+        return
+    status = await update_by_key(
+        pool,
+        "conversations",
+        key_column=key_column,
+        key_value=key_value,
+        values=values,
+        extra_where=_IS_CONTACT_MATCH_STOP,
+    )
+    log.info("Verified-contact stop cleared as a different person", update_status=status)
+
+
+async def _record_different_person_rejected(
+    pool: asyncpg.Pool,
+    *,
+    request_id: str,
+    stopped_conversation_id: str,
+    named: bool,
+    rejection: str | None,
+) -> bool:
+    """``clear_rejected.v1`` for a "different person" clear, if it is one.
+
+    Returns True when the rejection belongs to a different-person clear and
+    has been dealt with, so the caller must not treat it as a rejected clear
+    of a customer's block.
+
+    It is one when the event names ``DIFFERENT_PERSON`` in
+    ``rejected_reasons`` (billieChat's ``MISSING_FIELDS`` for a missing
+    conversation id, and ``UNKNOWN_STOPPED_CONVERSATION``), or when the
+    request id is one a contact-match conversation is waiting on (billieChat's
+    earliest ``MISSING_FIELDS`` check names no reasons at all).
+
+    The rejection event carries no conversation id today, so the conversation
+    is found by the request id the CRM's request event stamped. A cleared
+    conversation is never turned back to rejected.
+    """
+    log = logger.bind(request_id=request_id, rejection=rejection)
+    conversation_id = stopped_conversation_id
+    if not conversation_id and request_id:
+        row = await pool.fetchrow(
+            "SELECT conversation_id FROM conversations "
+            "WHERE reapplication_block_clear_request_id = $1 "
+            f"AND {_IS_CONTACT_MATCH_STOP} LIMIT 1",
+            request_id,
+        )
+        conversation_id = (row["conversation_id"] if row else None) or ""
+    if not conversation_id:
+        if named:
+            # Its request event has not been projected (or was lost). Nothing
+            # to stamp, and it must not fall through to the customer's row.
+            log.warning("Different-person clear rejected, no conversation waiting on it")
+        return named
+
+    status = await update_by_key(
+        pool,
+        "conversations",
+        key_column="conversation_id",
+        key_value=conversation_id,
+        values={
+            "reapplication_block_clear_status": "rejected",
+            "reapplication_block_clear_request_id": request_id or None,
+            "reapplication_block_clear_rejection": rejection,
+            "updated_at": datetime.now(UTC),
+        },
+        extra_where=(
+            f"{_IS_CONTACT_MATCH_STOP} "
+            "AND reapplication_block_clear_status IS DISTINCT FROM 'cleared'"
+        ),
+    )
+    log.info(
+        "Different-person clear rejected",
+        stopped_conversation_id=conversation_id,
+        update_status=status,
+    )
+    return True
 
 
 async def handle_reapplication_block_auto_cleared(
