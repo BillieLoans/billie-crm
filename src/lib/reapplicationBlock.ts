@@ -73,9 +73,10 @@ export function formatMatchedContactKinds(kinds: readonly string[] | null | unde
 }
 
 /**
- * Staff wording for why billieChat refused a "different person" clear.
- * `clearRejection` is stored as "CODE: detail"; a code with no wording here is
- * shown as received, so a new billieChat code is never hidden.
+ * Staff wording for why billieChat refused a "different person" clear, or the
+ * undo of one. `clearRejection` / `clearRevokeRejection` are stored as
+ * "CODE: detail"; a code with no wording here is shown as received, so a new
+ * billieChat code is never hidden.
  */
 export function describeClearRejection(rejection: string | null | undefined): string {
   const raw = rejection?.trim()
@@ -85,6 +86,8 @@ export function describeClearRejection(rejection: string | null | undefined): st
       return 'no contact match is on record for this application against that customer'
     case 'MISSING_FIELDS':
       return 'details were missing'
+    case 'NOT_CLEARED':
+      return 'this contact match is not currently cleared'
     default:
       return raw
   }

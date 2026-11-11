@@ -192,6 +192,7 @@ export type { KillConversationResult } from './mutations/useKillConversation'
 export { useSetManualBlock } from './mutations/useSetManualBlock'
 export { useClearDifferentPerson } from './mutations/useClearDifferentPerson'
 export type { ClearDifferentPersonResult } from './mutations/useClearDifferentPerson'
+export { useUndoDifferentPersonClear } from './mutations/useUndoDifferentPersonClear'
 export type { SetManualBlockResult } from './mutations/useSetManualBlock'
 
 export { useLendingAccess } from './useLendingAccess'

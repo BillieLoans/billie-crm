@@ -90,8 +90,11 @@ from .handlers import (
     # Credit assessment & post-identity handlers
     handle_post_identity_risk_check,
     handle_different_person_clear_requested,
+    handle_different_person_clear_revoke_requested,
     handle_reapplication_block_auto_cleared,
     handle_reapplication_block_clear_rejected,
+    handle_reapplication_block_clear_revoke_rejected,
+    handle_reapplication_block_clear_revoked,
     handle_reapplication_block_cleared,
     handle_reapplication_block_manual_set_applied,
     handle_reapplication_block_manual_set_rejected,
@@ -343,6 +346,20 @@ def setup_handlers(processor: EventProcessor) -> None:
     processor.register_handler(
         "block_clear.different_person_requested.v1",
         handle_different_person_clear_requested,
+    )
+    # BTB-569: "Undo clear" of a different-person clear. The CRM's own record
+    # of the request, then billieChat's answer to
+    # reapplication_block.clear_revoke_authorized.v1.
+    processor.register_handler(
+        "block_clear.different_person_revoke_requested.v1",
+        handle_different_person_clear_revoke_requested,
+    )
+    processor.register_handler(
+        "reapplication_block.clear_revoked.v1", handle_reapplication_block_clear_revoked
+    )
+    processor.register_handler(
+        "reapplication_block.clear_revoke_rejected.v1",
+        handle_reapplication_block_clear_revoke_rejected,
     )
 
     # =========================================================================

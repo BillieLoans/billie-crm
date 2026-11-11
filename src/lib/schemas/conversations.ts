@@ -207,6 +207,25 @@ export const ReapplicationBlockSchema = z.object({
   clearRejection: z.string().nullish(),
   /** Display name for `clearedBy`, resolved server-side for a verified-contact stop. */
   clearedByName: z.string().nullish(),
+  /**
+   * "Undo clear" of a different-person clear (BTB-569). An applied undo sets
+   * `clearStatus` back to empty; these keep who undid it, when and why.
+   * `clearRevokeStatus` is "pending", "revoked" or "rejected".
+   */
+  clearRevokeStatus: z.string().nullish(),
+  clearRevokeRequestId: z.string().nullish(),
+  clearRevokedAt: z.string().nullish(),
+  clearRevokedBy: z.string().nullish(),
+  clearRevokeJustification: z.string().nullish(),
+  /** Why billieChat refused the latest undo ("CODE: detail"). */
+  clearRevokeRejection: z.string().nullish(),
+  /** The clear the undo removed: when it was made, by whom and why. */
+  revokedClearAt: z.string().nullish(),
+  revokedClearBy: z.string().nullish(),
+  revokedClearJustification: z.string().nullish(),
+  /** Display names for `clearRevokedBy` / `revokedClearBy`, resolved server-side. */
+  clearRevokedByName: z.string().nullish(),
+  revokedClearByName: z.string().nullish(),
 })
 
 /** Archived KYC artifact availability (S3 locations stay server-side). */

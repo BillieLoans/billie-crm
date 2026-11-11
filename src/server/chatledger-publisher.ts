@@ -19,6 +19,7 @@ import {
   CHATLEDGER_STREAM,
   CRM_AGENT_ID,
   EVENT_TYPE_REAPPLICATION_BLOCK_CLEAR_AUTHORIZED,
+  EVENT_TYPE_REAPPLICATION_BLOCK_CLEAR_REVOKE_AUTHORIZED,
   EVENT_TYPE_CONTACT_INTAKE_REQUESTED,
   EVENT_TYPE_FEEDBACK_SUBMIT_REQUESTED,
   EVENT_TYPE_CONVERSATION_KILL_REQUESTED,
@@ -28,6 +29,7 @@ import {
 } from '@/lib/events/config'
 import type {
   ReapplicationBlockClearAuthorizedPayload,
+  ReapplicationBlockClearRevokeAuthorizedPayload,
   ContactIntakeCommandPayload,
   FeedbackSubmitCommandPayload,
   ConversationKillPayload,
@@ -102,6 +104,36 @@ export async function publishClearAuthorized(
     payload: JSON.stringify(payload),
   }
   await xaddWithRetry(fields, 'Failed to publish clear_authorized to chatLedger after retries')
+  return { eventId }
+}
+
+/**
+ * Publish a reapplication_block.clear_revoke_authorized.v1 command to
+ * chatLedger (BTB-569): undo a "different person" clear.
+ *
+ * Same envelope as {@link publishClearAuthorized}, on the same synthetic ops
+ * conversation (`ops:block-clear:{request_id}`).
+ *
+ * @returns The nanoid used as both the cause field and the returned eventId.
+ */
+export async function publishClearRevokeAuthorized(
+  payload: ReapplicationBlockClearRevokeAuthorizedPayload,
+): Promise<{ eventId: string }> {
+  const eventId = nanoid()
+  const fields: Record<string, string> = {
+    conv: `ops:block-clear:${payload.request_id}`,
+    agt: CRM_AGENT_ID,
+    usr: payload.canonical_customer_id,
+    seq: '1',
+    cls: 'cmd',
+    typ: EVENT_TYPE_REAPPLICATION_BLOCK_CLEAR_REVOKE_AUTHORIZED,
+    cause: eventId,
+    payload: JSON.stringify(payload),
+  }
+  await xaddWithRetry(
+    fields,
+    'Failed to publish clear_revoke_authorized to chatLedger after retries',
+  )
   return { eventId }
 }
 

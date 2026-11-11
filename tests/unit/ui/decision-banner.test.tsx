@@ -656,4 +656,54 @@ describe('DecisionBanner verified-contact stop (BTB-569)', () => {
     expect(screen.getByText('✗ Blocked · Re-application block')).toBeInTheDocument()
     expect(screen.getByTestId('different-person-cleared')).toBeInTheDocument()
   })
+  test('a cleared stop offers "Undo: same person after all" to the roles that may clear', () => {
+    asOperations()
+    render(
+      <DecisionBanner
+        conversation={{
+          ...contactStop,
+          reapplicationBlock: { ...contactStop.reapplicationBlock, clearStatus: 'cleared' },
+        }}
+      />,
+    )
+    expect(screen.getByTestId('undo-different-person-clear-btn')).toBeInTheDocument()
+    expect(screen.queryByTestId('clear-different-person-btn')).not.toBeInTheDocument()
+  })
+
+  test('after an undo it is an active contact-match stop again, with the record of the undo', () => {
+    asOperations()
+    render(
+      <DecisionBanner
+        conversation={{
+          ...contactStop,
+          finalDecision: null,
+          decisionDetail: null,
+          reapplicationBlock: {
+            ...contactStop.reapplicationBlock,
+            clearStatus: null,
+            clearRevokeStatus: 'revoked',
+            clearRevokedAt: '2026-11-12T03:00:00.000Z',
+            clearRevokedByName: 'Una Supervisor',
+            clearRevokeJustification: 'Matching licence on the new application',
+            revokedClearAt: '2026-11-11T02:00:00.000Z',
+            revokedClearByName: 'Sam Support',
+            revokedClearJustification: 'Recycled number, different person',
+          },
+        }}
+      />,
+    )
+    expect(screen.getByText('✗ Blocked · Re-application block')).toBeInTheDocument()
+    expect(screen.getByTestId('contact-match-row')).toHaveTextContent(
+      'Shared mobile with customer 22F0652F',
+    )
+    expect(screen.queryByTestId('different-person-cleared')).not.toBeInTheDocument()
+    expect(screen.getByTestId('clear-different-person-btn')).not.toBeDisabled()
+    expect(screen.queryByTestId('undo-different-person-clear-btn')).not.toBeInTheDocument()
+    expect(screen.getByTestId('different-person-clear-undone')).toHaveTextContent(
+      'Clear undone: same person after all by Una Supervisor',
+    )
+    expect(screen.getByTestId('different-person-undone-clear')).toHaveTextContent(
+      'made by Sam Support',
+    )
+  })
 })

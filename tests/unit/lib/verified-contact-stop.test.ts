@@ -62,6 +62,12 @@ describe('describeClearRejection', () => {
     )
   })
 
+  it("words billieChat's refusal to undo a clear that is not in effect", () => {
+    expect(
+      describeClearRejection('NOT_CLEARED: no different-person clear is in effect'),
+    ).toBe('this contact match is not currently cleared')
+  })
+
   it('shows a code it has no wording for exactly as received', () => {
     expect(describeClearRejection('SOMETHING_NEW: with detail')).toBe('SOMETHING_NEW: with detail')
     expect(describeClearRejection('constructor')).toBe('constructor')

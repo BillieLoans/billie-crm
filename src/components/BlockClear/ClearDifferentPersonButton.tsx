@@ -24,6 +24,19 @@ export interface ClearDifferentPersonButtonProps {
     clearJustification?: string | null
     clearRequestId?: string | null
     clearRejection?: string | null
+    /** "Undo clear": the latest undo request, and the last undo applied. */
+    clearRevokeStatus?: string | null
+    clearRevokeRequestId?: string | null
+    clearRevokedAt?: string | null
+    clearRevokedBy?: string | null
+    clearRevokedByName?: string | null
+    clearRevokeJustification?: string | null
+    clearRevokeRejection?: string | null
+    /** The clear that undo removed. */
+    revokedClearAt?: string | null
+    revokedClearBy?: string | null
+    revokedClearByName?: string | null
+    revokedClearJustification?: string | null
   } | null
   /** The conversation the contact match stopped. */
   conversationId: string
@@ -42,6 +55,11 @@ const WAIT_GIVE_UP_MS = 120_000
  * action itself is role-gated like ClearBlockButton (admin, supervisor,
  * operations), as the route requires.
  *
+ * While the clear is in effect the same roles get "Undo: same person after
+ * all", for an applicant who turned out to be the earlier customer. An applied
+ * undo sets the record back to an uncleared stop, so the clear is offered
+ * again; who undid it, when and why, and the clear it removed, stay on show.
+ *
  * The answer arrives on the conversation record, not on the request's
  * response. The conversation view re-reads the record every few seconds, so
  * this only remembers the request it sent, to show "requested" until the
@@ -52,16 +70,31 @@ export function ClearDifferentPersonButton({
   conversationId,
 }: ClearDifferentPersonButtonProps) {
   const { user } = useAuth()
-  const [modalOpen, setModalOpen] = useState(false)
+  const [modalOpen, setModalOpen] = useState<'clear' | 'undo' | null>(null)
   const [requestId, setRequestId] = useState<string | null>(null)
   const [waitExpired, setWaitExpired] = useState(false)
+  const [undoRequestId, setUndoRequestId] = useState<string | null>(null)
+  const [undoWaitExpired, setUndoWaitExpired] = useState(false)
 
   const status = block?.clearStatus ?? null
   const cleared = status === 'cleared'
-  // The record has an answer for the request this button sent.
+  // The record has an answer for the request this button sent: cleared,
+  // refused, or cleared and since undone (the record keeps the request id and
+  // is no longer pending on it).
   const answered =
-    cleared || (status === 'rejected' && Boolean(requestId) && block?.clearRequestId === requestId)
+    cleared ||
+    (Boolean(requestId) && block?.clearRequestId === requestId && status !== 'pending')
   const waitingOnOwn = Boolean(requestId) && !answered && !waitExpired
+
+  const undoStatus = block?.clearRevokeStatus ?? null
+  // The record has an answer for the undo this button sent: the clear is gone,
+  // or the record names the request as applied or refused.
+  const undoAnswered =
+    !cleared ||
+    (Boolean(undoRequestId) &&
+      block?.clearRevokeRequestId === undoRequestId &&
+      (undoStatus === 'revoked' || undoStatus === 'rejected'))
+  const waitingOnOwnUndo = Boolean(undoRequestId) && !undoAnswered && !undoWaitExpired
 
   useEffect(() => {
     if (!waitingOnOwn) return
@@ -69,18 +102,39 @@ export function ClearDifferentPersonButton({
     return () => clearTimeout(giveUp)
   }, [waitingOnOwn])
 
+  useEffect(() => {
+    if (!waitingOnOwnUndo) return
+    const giveUp = setTimeout(() => setUndoWaitExpired(true), WAIT_GIVE_UP_MS)
+    return () => clearTimeout(giveUp)
+  }, [waitingOnOwnUndo])
+
   if (!isVerifiedContactStop(block)) return null
 
   const matchedCustomerId = block?.canonicalCustomerId ?? null
   const who = block?.clearedByName || block?.clearedBy || null
   // A refusal of an older request is history once a new one has been sent.
   const rejected = status === 'rejected' && !waitingOnOwn
-  const pending = !cleared && !rejected && (status === 'pending' || Boolean(requestId))
+  const pending =
+    !cleared && !rejected && (status === 'pending' || (Boolean(requestId) && !answered))
+
+  // "Undo clear", only while the clear is in effect.
+  const undoneBy = block?.clearRevokedByName || block?.clearRevokedBy || null
+  const undoneClearBy = block?.revokedClearByName || block?.revokedClearBy || null
+  const undoRejected = cleared && undoStatus === 'rejected' && !waitingOnOwnUndo
+  const undoPending =
+    cleared &&
+    !undoRejected &&
+    (undoStatus === 'pending' || (Boolean(undoRequestId) && !undoAnswered))
 
   const handleRequested = (id: string) => {
-    setModalOpen(false)
-    setWaitExpired(false)
-    setRequestId(id)
+    if (modalOpen === 'undo') {
+      setUndoWaitExpired(false)
+      setUndoRequestId(id)
+    } else {
+      setWaitExpired(false)
+      setRequestId(id)
+    }
+    setModalOpen(null)
   }
 
   return (
@@ -98,6 +152,80 @@ export function ClearDifferentPersonButton({
         </div>
       )}
 
+      {block?.clearRevokedAt && (
+        <div
+          className={styles.clearOutcome}
+          role="status"
+          data-testid="different-person-clear-undone"
+        >
+          <span className={styles.clearOutcomeHeadline}>
+            {cleared ? 'An earlier clear was undone' : 'Clear undone: same person after all'}
+            {undoneBy ? ` by ${undoneBy}` : ''}
+            {` on ${formatDateOnly(block.clearRevokedAt)}`}
+            {cleared ? '' : ' — this contact match stops applications again'}
+          </span>
+          {block.clearRevokeJustification && (
+            <span className={styles.clearOutcomeDetail}>“{block.clearRevokeJustification}”</span>
+          )}
+          {(block.revokedClearAt || undoneClearBy || block.revokedClearJustification) && (
+            <span data-testid="different-person-undone-clear">
+              The clear that was undone
+              {undoneClearBy ? ` was made by ${undoneClearBy}` : ' was made'}
+              {block.revokedClearAt ? ` on ${formatDateOnly(block.revokedClearAt)}` : ''}
+              {block.revokedClearJustification ? `: “${block.revokedClearJustification}”` : ''}
+            </span>
+          )}
+        </div>
+      )}
+
+      {cleared && (canService(user) || undoPending || undoRejected) && (
+        <div className={styles.clearBlockContainer}>
+          {canService(user) &&
+            (matchedCustomerId ? (
+              <button
+                type="button"
+                className={styles.clearBlockBtn}
+                onClick={() => setModalOpen('undo')}
+                disabled={waitingOnOwnUndo}
+                data-testid="undo-different-person-clear-btn"
+              >
+                Undo: same person after all
+              </button>
+            ) : (
+              <button
+                type="button"
+                className={styles.clearBlockBtnDisabled}
+                disabled
+                title="The matched customer isn't recorded on this stop — can't undo the clear here."
+                data-testid="undo-different-person-clear-btn-disabled"
+              >
+                Undo: same person after all
+              </button>
+            ))}
+
+          {undoPending && (
+            <span
+              className={styles.clearStatusPending}
+              role="status"
+              data-testid="different-person-undo-pending"
+            >
+              {undoWaitExpired
+                ? 'Undo requested — no answer yet. If it still shows after a minute, the block service may be off.'
+                : 'Undo requested — waiting for confirmation…'}
+            </span>
+          )}
+          {undoRejected && (
+            <span
+              className={styles.clearStatusRejected}
+              role="alert"
+              data-testid="different-person-undo-rejected"
+            >
+              The undo was not applied: {describeClearRejection(block?.clearRevokeRejection)}
+            </span>
+          )}
+        </div>
+      )}
+
       {!cleared && (
         <div className={styles.clearBlockContainer}>
           {canService(user) &&
@@ -105,7 +233,7 @@ export function ClearDifferentPersonButton({
               <button
                 type="button"
                 className={styles.clearBlockBtn}
-                onClick={() => setModalOpen(true)}
+                onClick={() => setModalOpen('clear')}
                 disabled={waitingOnOwn}
                 data-testid="clear-different-person-btn"
               >
@@ -148,7 +276,8 @@ export function ClearDifferentPersonButton({
 
       {modalOpen && matchedCustomerId && (
         <ClearDifferentPersonModal
-          onClose={() => setModalOpen(false)}
+          mode={modalOpen}
+          onClose={() => setModalOpen(null)}
           onRequested={handleRequested}
           conversationId={conversationId}
           matchedCustomerId={matchedCustomerId}

@@ -153,10 +153,21 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     // BTB-569: a verified-contact stop shows who asked for / made its
     // "different person" clear. `clearedBy` holds the bare user id billieChat
     // echoes back as operator_id; render-time only, never blocks the response.
+    // The same for who undid a clear, and who had made the clear that was undone.
     let clearedByName: string | null = null
-    if (isVerifiedContactStop(block as { recognition?: { band?: string | null } }) && block?.clearedBy) {
-      const name = await resolveActorDisplayName(payload, `user:${String(block.clearedBy)}`)
-      clearedByName = name && !name.startsWith('user:') ? name : null
+    let clearRevokedByName: string | null = null
+    let revokedClearByName: string | null = null
+    if (isVerifiedContactStop(block as { recognition?: { band?: string | null } })) {
+      const nameOf = async (userId: unknown): Promise<string | null> => {
+        if (!userId) return null
+        const name = await resolveActorDisplayName(payload, `user:${String(userId)}`)
+        return name && !name.startsWith('user:') ? name : null
+      }
+      ;[clearedByName, clearRevokedByName, revokedClearByName] = await Promise.all([
+        nameOf(block?.clearedBy),
+        nameOf(block?.clearRevokedBy),
+        nameOf(block?.revokedClearBy),
+      ])
     }
     // BTB-546: what was sent to Google Ads for this application. The raw
     // outbox is admin-only; this is status and times, no click id. Only an
@@ -231,7 +242,9 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       decisionMetadata,
       killRecord: killRecordOut,
       cancellationRecord,
-      reapplicationBlock: block ? { ...block, sourceAccountNumber, clearedByName } : null,
+      reapplicationBlock: block
+        ? { ...block, sourceAccountNumber, clearedByName, clearRevokedByName, revokedClearByName }
+        : null,
       sourceConversationId,
       identityVerificationReport: {
         labRequestId: (ivr?.labRequestId as string) ?? null,
