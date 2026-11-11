@@ -99,6 +99,14 @@ function expectNoPayoutDetails() {
   expect(screen.queryByRole('button', { name: /mark disbursed/i })).not.toBeInTheDocument()
 }
 
+/**
+ * The panel announces from an effect, which React runs after the commit that
+ * puts the outcome on screen. `findByRole` can resolve in the gap between the
+ * two, so an announcement checked on the very next line is sometimes not there
+ * yet (it failed about one CI run in three). Wait for it instead.
+ */
+const announced = (assertion: () => void) => waitFor(assertion)
+
 beforeEach(() => {
   Object.defineProperty(navigator, 'clipboard', {
     value: { writeText },
@@ -322,9 +330,8 @@ describe('DisbursementPaymentPanel: the platform check', () => {
       expect(screen.queryByRole('status')).not.toBeInTheDocument()
       expect(screen.queryByTestId('disbursable-blocked')).not.toBeInTheDocument()
 
-      const { polite, assertive } = useAnnouncerStore.getState()
-      expect(polite).toMatch(/can be paid/i)
-      expect(assertive).toBe('')
+      await announced(() => expect(useAnnouncerStore.getState().polite).toMatch(/can be paid/i))
+      expect(useAnnouncerStore.getState().assertive).toBe('')
     })
   })
 
@@ -347,7 +354,7 @@ describe('DisbursementPaymentPanel: the platform check', () => {
       expect(screen.queryByRole('status')).not.toBeInTheDocument()
       // Nothing to retry: a cancelled loan stays cancelled.
       expect(screen.queryByRole('button', { name: /retry/i })).not.toBeInTheDocument()
-      expect(useAnnouncerStore.getState().assertive).toMatch(/cancelled before disbursement/i)
+      await announced(() => expect(useAnnouncerStore.getState().assertive).toMatch(/cancelled before disbursement/i))
       expect(useAnnouncerStore.getState().polite).toBe('')
     })
 
@@ -361,7 +368,7 @@ describe('DisbursementPaymentPanel: the platform check', () => {
       )
       expectNoPayoutDetails()
       expect(screen.queryByRole('button', { name: /retry/i })).not.toBeInTheDocument()
-      expect(useAnnouncerStore.getState().assertive).toMatch(/already recorded a disbursement/i)
+      await announced(() => expect(useAnnouncerStore.getState().assertive).toMatch(/already recorded a disbursement/i))
     })
 
     it('NOT_PENDING_DISBURSEMENT: names the status the platform holds', async () => {
@@ -439,7 +446,7 @@ describe('DisbursementPaymentPanel: the platform check', () => {
       expect(screen.getByRole('button', { name: /^retry$/i })).toBeInTheDocument()
       expectNoPayoutDetails()
       expect(screen.queryByRole('status')).not.toBeInTheDocument()
-      expect(useAnnouncerStore.getState().assertive).toBe(FAILED)
+      await announced(() => expect(useAnnouncerStore.getState().assertive).toBe(FAILED))
     })
 
     it('a 503 from the route: do not pay, Retry, no payout details', async () => {
@@ -491,7 +498,7 @@ describe('DisbursementPaymentPanel: the platform check', () => {
         render(<DisbursementPaymentPanel item={makeItem()} onDisburse={vi.fn()} />)
         await screen.findByRole('alert')
 
-        expect(useAnnouncerStore.getState().assertive).toBe(FORBIDDEN)
+        await announced(() => expect(useAnnouncerStore.getState().assertive).toBe(FORBIDDEN))
         expect(useAnnouncerStore.getState().polite).toBe('')
         expect(error).not.toHaveBeenCalled()
       })
@@ -513,7 +520,7 @@ describe('DisbursementPaymentPanel: the platform check', () => {
           expect(screen.queryByTestId('disbursable-forbidden')).not.toBeInTheDocument()
           expect(screen.getByRole('button', { name: /^retry$/i })).toBeInTheDocument()
           expect(screen.queryByTestId('panel-disburse')).not.toBeInTheDocument()
-          expect(useAnnouncerStore.getState().assertive).toBe(FAILED)
+          await announced(() => expect(useAnnouncerStore.getState().assertive).toBe(FAILED))
         },
       )
 
@@ -579,7 +586,7 @@ describe('DisbursementPaymentPanel: the platform check', () => {
       expect(await screen.findByTestId('panel-disburse')).toBeInTheDocument()
       expect(callsTo(CHECK_URL)).toHaveLength(2)
       expect(screen.queryByRole('status')).not.toBeInTheDocument()
-      expect(useAnnouncerStore.getState().polite).toMatch(/can be paid/i)
+      await announced(() => expect(useAnnouncerStore.getState().polite).toMatch(/can be paid/i))
     })
 
     it('Retry that fails again stays closed', async () => {
