@@ -182,16 +182,15 @@ class TestDifferentPersonCleared:
         assert "WHERE conversation_id = " in call.sql
         assert STOPPED_CONV in call.args
         assert "reapplication_block_recognition->>'band' = 'verified_contact'" in call.sql
-        assert call.values["reapplication_block_clear_status"] == "cleared"
-        assert call.values["reapplication_block_cleared_by"] == "ops-7"
-        assert call.values["reapplication_block_clear_justification"] == (
-            "Recycled mobile number, different name and DOB"
-        )
-        assert call.values["reapplication_block_clear_request_id"] == "req-dp-1"
-        assert call.values["reapplication_block_cleared_at"] is not None
-        assert call.values["reapplication_block_clear_rejection"] is None
+        # request id, cleared_at, who, why (the statement is conditional on an
+        # undo not having overtaken this clear: test_different_person_clear_undo).
+        assert call.args[1] == "req-dp-1"
+        assert call.args[2] is not None
+        assert call.args[3] == "ops-7"
+        assert call.args[4] == "Recycled mobile number, different name and DOB"
+        assert "THEN 'cleared'" in call.sql
         # The decline reason stays on the application's record.
-        assert "reapplication_block_reason" not in call.values
+        assert "reapplication_block_reason =" not in call.sql
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("prior", ["ACTIVE_LOAN", None])

@@ -78,6 +78,32 @@ _NOT_CONTACT_MATCH_STOP = (
 )
 
 
+# "Undo clear" ordering (BTB-569). billieChat stamps ``cleared_at`` on a clear
+# and ``revoked_at`` on its undo from the same clock, and the two prod
+# consumers deliver them in any order, so each writer compares the two times
+# instead of trusting arrival order. ``$3`` is the event's own time in both
+# statements that use these.
+#
+# A cleared event stands unless an undo made at or after it is on the row.
+_CLEAR_STANDS = (
+    "(reapplication_block_clear_revoked_at IS NULL OR $3::timestamptz IS NULL "
+    "OR reapplication_block_clear_revoked_at < $3::timestamptz)"
+)
+# A cleared event that does not stand is the clear the recorded undo removed,
+# unless a later undone clear is already recorded.
+_CLEAR_WAS_UNDONE = (
+    "(reapplication_block_clear_revoked_at >= $3::timestamptz "
+    "AND (reapplication_block_revoked_clear_at IS NULL "
+    "OR reapplication_block_revoked_clear_at <= $3::timestamptz))"
+)
+# A revoked event un-clears only a clear made before it: never a newer one.
+_UNDO_REMOVES_CLEAR = (
+    "(reapplication_block_clear_status = 'cleared' "
+    "AND (reapplication_block_cleared_at IS NULL "
+    "OR reapplication_block_cleared_at < $3::timestamptz))"
+)
+
+
 def is_verified_contact_stop(payload: dict[str, Any]) -> bool:
     """True when a blocked event is a verified-contact match (BTB-569)."""
     recognition = payload.get("recognition")
@@ -474,6 +500,9 @@ async def handle_reapplication_block_clear_rejected(
 #   requested (CRM, internal stream)   -> clear_status "pending" + who and why
 #   cleared   (billieChat)             -> "cleared"  + who, when, why
 #   rejected  (billieChat)             -> "rejected" + billieChat's reason
+#
+# A clear can be undone ("Undo clear", further down), after which the stop is
+# uncleared and can be cleared again.
 
 
 async def handle_different_person_clear_requested(
@@ -538,6 +567,9 @@ async def _record_different_person_cleared(
     reason stays on it: the application was declined for that reason and the
     earlier customer is still blocked for it (``prior_block_reason``), so the
     customer row and that customer's own conversations are not touched.
+
+    A clear that an undo has already overtaken (``clear_revoked.v1`` made at
+    or after it) does not come back: see the statement below.
     """
     log = logger.bind(
         request_id=request_id,
@@ -545,15 +577,6 @@ async def _record_different_person_cleared(
         matched_customer_id=canonical,
     )
     log.info("Processing reapplication_block.cleared.v1 (different person)")
-    values: dict[str, Any] = {
-        "reapplication_block_clear_status": "cleared",
-        "reapplication_block_cleared_at": cleared_at,
-        "reapplication_block_cleared_by": operator_id,
-        "reapplication_block_clear_justification": justification,
-        "reapplication_block_clear_request_id": request_id,
-        "reapplication_block_clear_rejection": None,
-        "updated_at": datetime.now(UTC),
-    }
     if stopped_conversation_id:
         key_column, key_value = "conversation_id", stopped_conversation_id
     elif request_id:
@@ -563,13 +586,56 @@ async def _record_different_person_cleared(
     else:
         log.warning("different-person cleared event names no conversation or request")
         return
-    status = await update_by_key(
-        pool,
-        "conversations",
-        key_column=key_column,
-        key_value=key_value,
-        values=values,
-        extra_where=_IS_CONTACT_MATCH_STOP,
+    # One statement, so the two unordered consumers cannot interleave between
+    # "is this clear newer than the undo?" and the write.
+    #
+    # The clear stands unless an undo made at or after it is already on the
+    # row (a late or redelivered clear must not bring back a clear that has
+    # been undone). A clear that does not stand is the one that undo removed:
+    # it is kept as the undone clear's record, and a "pending" still waiting
+    # on this very request is settled.
+    status = await pool.execute(
+        f"""
+        UPDATE conversations
+        SET reapplication_block_clear_status = CASE
+                WHEN {_CLEAR_STANDS} THEN 'cleared'
+                WHEN reapplication_block_clear_status = 'pending'
+                     AND reapplication_block_clear_request_id = $2::text THEN NULL
+                ELSE reapplication_block_clear_status END,
+            reapplication_block_cleared_at = CASE
+                WHEN {_CLEAR_STANDS} THEN $3::timestamptz
+                ELSE reapplication_block_cleared_at END,
+            reapplication_block_cleared_by = CASE
+                WHEN {_CLEAR_STANDS} THEN $4::text
+                ELSE reapplication_block_cleared_by END,
+            reapplication_block_clear_justification = CASE
+                WHEN {_CLEAR_STANDS} THEN $5::text
+                ELSE reapplication_block_clear_justification END,
+            reapplication_block_clear_request_id = CASE
+                WHEN {_CLEAR_STANDS} THEN $2::text
+                ELSE reapplication_block_clear_request_id END,
+            reapplication_block_clear_rejection = CASE
+                WHEN {_CLEAR_STANDS} THEN NULL
+                ELSE reapplication_block_clear_rejection END,
+            reapplication_block_revoked_clear_at = CASE
+                WHEN {_CLEAR_WAS_UNDONE} THEN $3::timestamptz
+                ELSE reapplication_block_revoked_clear_at END,
+            reapplication_block_revoked_clear_by = CASE
+                WHEN {_CLEAR_WAS_UNDONE} THEN $4::text
+                ELSE reapplication_block_revoked_clear_by END,
+            reapplication_block_revoked_clear_justification = CASE
+                WHEN {_CLEAR_WAS_UNDONE} THEN $5::text
+                ELSE reapplication_block_revoked_clear_justification END,
+            updated_at = $6::timestamptz
+        WHERE {key_column} = $1::text
+          AND {_IS_CONTACT_MATCH_STOP}
+        """,
+        key_value,
+        request_id or None,
+        cleared_at if isinstance(cleared_at, datetime) else None,
+        str(operator_id) if operator_id is not None else None,
+        justification,
+        datetime.now(UTC),
     )
     log.info("Verified-contact stop cleared as a different person", update_status=status)
 
@@ -637,6 +703,238 @@ async def _record_different_person_rejected(
         update_status=status,
     )
     return True
+
+
+# =============================================================================
+# "Undo clear" of a different-person clear (BTB-569)
+# =============================================================================
+#
+# The applicant turned out to be the earlier customer after all, so the
+# contact must stop applications again. billieChat removes the exclusion the
+# clear wrote; the earlier customer's block never moved. Like the clear, all
+# three writers touch exactly one conversation row, the stopped one, and no
+# customer row.
+#
+#   requested (CRM, internal stream) -> clear_revoke_status "pending"; the
+#                                       clear stays in effect
+#   clear_revoked (billieChat)       -> the stop is uncleared again
+#                                       (clear_status NULL), who / when / why
+#                                       of the undo, and the undone clear's
+#                                       own who / when / why kept beside it
+#   clear_revoke_rejected (billieChat) -> "rejected" + billieChat's reason;
+#                                       the clear stays in effect
+
+
+async def handle_different_person_clear_revoke_requested(
+    pool: asyncpg.Pool, parsed_event: dict[str, Any]
+) -> None:
+    """Handle ``block_clear.different_person_revoke_requested.v1`` (CRM internal).
+
+    The CRM publishes this next to the ``clear_revoke_authorized`` command it
+    sends billieChat. It marks the undo pending on the stopped conversation and
+    ties the request id to it, which is how a rejection that names no
+    conversation finds the row.
+
+    Only a currently cleared stop can have an undo pending. A redelivery after
+    this request's own answer arrived (the answer stamps the same request id)
+    changes nothing. Who asked and why are not written here: those columns
+    hold the last undo that was applied, and billieChat's answer carries both.
+    """
+    payload = parse_payload(parsed_event)
+    request_id = safe_str(parsed_event.get("conv", ""), "request_id")
+    conversation_id = safe_str(payload.get("conversationId"), "conversation_id")
+    log = logger.bind(request_id=request_id, conversation_id=conversation_id)
+    log.info("Processing block_clear.different_person_revoke_requested.v1")
+    if not (request_id and conversation_id):
+        log.warning("different-person undo request without request or conversation id")
+        return
+
+    status = await pool.execute(
+        f"""
+        UPDATE conversations
+        SET reapplication_block_clear_revoke_status = 'pending',
+            reapplication_block_clear_revoke_request_id = $2,
+            reapplication_block_clear_revoke_rejection = NULL,
+            updated_at = $3
+        WHERE conversation_id = $1
+          AND {_IS_CONTACT_MATCH_STOP}
+          AND reapplication_block_clear_status = 'cleared'
+          AND reapplication_block_clear_revoke_request_id IS DISTINCT FROM $2
+        """,
+        conversation_id,
+        request_id,
+        datetime.now(UTC),
+    )
+    log.info("Different-person undo request recorded", update_status=status)
+
+
+async def handle_reapplication_block_clear_revoked(
+    pool: asyncpg.Pool, event: dict[str, Any]
+) -> None:
+    """Handle ``reapplication_block.clear_revoked.v1``.
+
+    billieChat undid a "different person" clear: the contact stops
+    applications again. The stopped conversation goes back to an uncleared
+    contact-match stop (``clear_status`` NULL, so the clear is offered again),
+    with who undid it, when and why. The clear it removed is moved to the
+    ``revoked_clear_*`` columns rather than lost.
+
+    Ordering, in one statement:
+
+    * the newest undo wins: an undo no newer than the one on the row is a
+      no-op, which also makes a redelivery a no-op;
+    * it un-clears only a clear made before it. A late undo arriving after a
+      newer clear is recorded as history and leaves that clear in effect;
+    * arriving before its own request record, it stamps the request id, so the
+      late request record changes nothing; arriving before the clear it
+      removed, it is recorded, and that clear is then refused by the cleared
+      handler and filed as the undone clear.
+
+    Never touches the matched customer's row or any other conversation.
+    """
+    payload = parse_payload(event)
+    request_id = safe_str(payload.get("request_id"), "request_id")
+    stopped_conversation_id = safe_str(
+        payload.get("stopped_conversation_id"), "stopped_conversation_id"
+    )
+    log = logger.bind(request_id=request_id, stopped_conversation_id=stopped_conversation_id)
+    log.info("Processing reapplication_block.clear_revoked.v1")
+
+    if DIFFERENT_PERSON not in (payload.get("revoked_reasons") or []):
+        # The only clear that can be undone is a different-person clear. An
+        # undo of anything else has no projection here, least of all onto a
+        # customer row.
+        log.warning("clear_revoked without DIFFERENT_PERSON — ignored")
+        return
+
+    if stopped_conversation_id:
+        key_column, key_value = "conversation_id", stopped_conversation_id
+    elif request_id:
+        # billieChat always names the conversation; the request id (stamped by
+        # the CRM's own request event) is the fallback if it ever does not.
+        key_column, key_value = "reapplication_block_clear_revoke_request_id", request_id
+    else:
+        log.warning("clear_revoked event names no conversation or request")
+        return
+
+    operator_id = payload.get("operator_id")
+    revoked_at = coerce_date(payload.get("revoked_at"))
+    if not isinstance(revoked_at, datetime):
+        # The time orders this undo against clears. Without it, the time it
+        # was seen is the closest truth available.
+        log.warning("clear_revoked without a parseable revoked_at — using now")
+        revoked_at = datetime.now(UTC)
+
+    status = await pool.execute(
+        f"""
+        UPDATE conversations
+        SET reapplication_block_clear_status = CASE
+                WHEN {_UNDO_REMOVES_CLEAR} THEN NULL
+                ELSE reapplication_block_clear_status END,
+            reapplication_block_revoked_clear_at = CASE
+                WHEN {_UNDO_REMOVES_CLEAR} THEN reapplication_block_cleared_at
+                ELSE NULL END,
+            reapplication_block_revoked_clear_by = CASE
+                WHEN {_UNDO_REMOVES_CLEAR} THEN reapplication_block_cleared_by
+                ELSE NULL END,
+            reapplication_block_revoked_clear_justification = CASE
+                WHEN {_UNDO_REMOVES_CLEAR} THEN reapplication_block_clear_justification
+                ELSE NULL END,
+            reapplication_block_cleared_at = CASE
+                WHEN {_UNDO_REMOVES_CLEAR} THEN NULL
+                ELSE reapplication_block_cleared_at END,
+            reapplication_block_cleared_by = CASE
+                WHEN {_UNDO_REMOVES_CLEAR} THEN NULL
+                ELSE reapplication_block_cleared_by END,
+            reapplication_block_clear_justification = CASE
+                WHEN {_UNDO_REMOVES_CLEAR} THEN NULL
+                ELSE reapplication_block_clear_justification END,
+            reapplication_block_clear_revoke_status = 'revoked',
+            reapplication_block_clear_revoke_request_id = $2::text,
+            reapplication_block_clear_revoked_at = $3::timestamptz,
+            reapplication_block_clear_revoked_by = $4::text,
+            reapplication_block_clear_revoke_justification = $5::text,
+            reapplication_block_clear_revoke_rejection = NULL,
+            updated_at = $6::timestamptz
+        WHERE {key_column} = $1::text
+          AND {_IS_CONTACT_MATCH_STOP}
+          AND (reapplication_block_clear_revoked_at IS NULL
+               OR reapplication_block_clear_revoked_at < $3::timestamptz)
+        """,
+        key_value,
+        request_id or None,
+        revoked_at,
+        str(operator_id) if operator_id is not None else None,
+        payload.get("justification"),
+        datetime.now(UTC),
+    )
+    log.info("Different-person clear undone", update_status=status)
+
+
+async def handle_reapplication_block_clear_revoke_rejected(
+    pool: asyncpg.Pool, event: dict[str, Any]
+) -> None:
+    """Handle ``reapplication_block.clear_revoke_rejected.v1``.
+
+    billieChat refused an undo (``MISSING_FIELDS``,
+    ``UNKNOWN_STOPPED_CONVERSATION``, ``NOT_CLEARED``). The refusal is recorded
+    on the stopped conversation and the clear is left exactly as it is.
+
+    The conversation is the one the event names, else the one waiting on the
+    request id (stamped by the CRM's own request event). A refusal never
+    replaces an applied undo of the same request, nor an undo applied at or
+    after it. Never touches the matched customer's row.
+    """
+    payload = parse_payload(event)
+    request_id = safe_str(payload.get("request_id"), "request_id")
+    rejection_code = safe_str(payload.get("rejection_code"), "rejection_code") or None
+    detail = safe_str(payload.get("detail"), "detail") or None
+    rejection = ": ".join(part for part in (rejection_code, detail) if part) or None
+    log = logger.bind(request_id=request_id, rejection=rejection)
+    log.info("Processing reapplication_block.clear_revoke_rejected.v1")
+
+    conversation_id = safe_str(
+        payload.get("stopped_conversation_id"), "stopped_conversation_id"
+    )
+    if not conversation_id and request_id:
+        row = await pool.fetchrow(
+            "SELECT conversation_id FROM conversations "
+            "WHERE reapplication_block_clear_revoke_request_id = $1 "
+            f"AND {_IS_CONTACT_MATCH_STOP} LIMIT 1",
+            request_id,
+        )
+        conversation_id = (row["conversation_id"] if row else None) or ""
+    if not conversation_id:
+        # Its request event has not been projected (or was lost) and the
+        # event names no conversation. Nothing to stamp.
+        log.warning("Different-person undo rejected, no conversation waiting on it")
+        return
+
+    rejected_at = coerce_date(payload.get("rejected_at"))
+    status = await pool.execute(
+        f"""
+        UPDATE conversations
+        SET reapplication_block_clear_revoke_status = 'rejected',
+            reapplication_block_clear_revoke_request_id = $2::text,
+            reapplication_block_clear_revoke_rejection = $3::text,
+            updated_at = $5::timestamptz
+        WHERE conversation_id = $1::text
+          AND {_IS_CONTACT_MATCH_STOP}
+          AND (reapplication_block_clear_revoke_status IS DISTINCT FROM 'revoked'
+               OR (reapplication_block_clear_revoke_request_id IS DISTINCT FROM $2::text
+                   AND reapplication_block_clear_revoked_at < $4::timestamptz))
+        """,
+        conversation_id,
+        request_id or None,
+        rejection,
+        rejected_at if isinstance(rejected_at, datetime) else None,
+        datetime.now(UTC),
+    )
+    log.info(
+        "Different-person undo rejected",
+        stopped_conversation_id=conversation_id,
+        update_status=status,
+    )
 
 
 async def handle_reapplication_block_auto_cleared(

@@ -443,6 +443,60 @@ export const Conversations: CollectionConfig = {
               'Why billieChat refused the latest "different person" clear of this stop ("CODE: detail")',
           },
         },
+        // BTB-569: "Undo clear" of a different-person clear. An applied undo
+        // sets clearStatus back to empty (the stop is uncleared again) and
+        // moves the clear it removed to the revokedClear* fields.
+        {
+          name: 'clearRevokeStatus',
+          type: 'text',
+          admin: {
+            description:
+              'Status of the latest undo of a "different person" clear: pending, revoked or rejected',
+          },
+        },
+        {
+          name: 'clearRevokeRequestId',
+          type: 'text',
+          admin: { description: 'Request id of the latest undo of a "different person" clear' },
+        },
+        {
+          name: 'clearRevokedAt',
+          type: 'date',
+          admin: { description: 'When the last applied undo of a "different person" clear was made' },
+        },
+        {
+          name: 'clearRevokedBy',
+          type: 'text',
+          admin: { description: 'User ID who undid the "different person" clear' },
+        },
+        {
+          name: 'clearRevokeJustification',
+          type: 'text',
+          admin: { description: 'Justification given for undoing the "different person" clear' },
+        },
+        {
+          name: 'clearRevokeRejection',
+          type: 'text',
+          admin: {
+            description:
+              'Why billieChat refused the latest undo of a "different person" clear ("CODE: detail")',
+          },
+        },
+        {
+          name: 'revokedClearAt',
+          type: 'date',
+          admin: { description: 'When the clear that was undone had been made' },
+        },
+        {
+          name: 'revokedClearBy',
+          type: 'text',
+          admin: { description: 'User ID who made the clear that was undone' },
+        },
+        {
+          name: 'revokedClearJustification',
+          type: 'text',
+          admin: { description: 'Justification of the clear that was undone' },
+        },
       ],
     },
     {

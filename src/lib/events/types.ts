@@ -263,6 +263,37 @@ export interface DifferentPersonClearRequestedPayload {
 }
 
 /**
+ * Payload for block_clear.different_person_revoke_requested.v1 (BTB-569,
+ * internal). The envelope's `conv` is the request id sent to billieChat.
+ */
+export interface DifferentPersonClearRevokeRequestedPayload {
+  /** The conversation the verified-contact match stopped. */
+  conversationId: string
+  /** The earlier customer the contact matched. */
+  canonicalCustomerId: string
+  justification: string
+  requestedBy: string
+  requestedByName: string
+  /** The request id of the clear being undone, as the record had it. */
+  clearRequestId: string | null
+}
+
+/**
+ * reapplication_block.clear_revoke_authorized.v1 (BTB-569): undo a
+ * "different person" clear. Field names are billieChat's contract.
+ */
+export interface ReapplicationBlockClearRevokeAuthorizedPayload {
+  request_id: string
+  operator_id: string
+  justification: string
+  /** The customer the stop names (the one the contact matched). */
+  canonical_customer_id: string
+  reasons: [DifferentPersonClearReason]
+  /** The conversation the verified-contact match stopped. */
+  stopped_conversation_id: string
+}
+
+/**
  * The authoritative command billieChat consumes off chatLedger (spec §7.1).
  */
 export interface ReapplicationBlockClearAuthorizedPayload {

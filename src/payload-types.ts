@@ -990,6 +990,42 @@ export interface Conversation {
      * Why billieChat refused the latest "different person" clear of this stop ("CODE: detail")
      */
     clearRejection?: string | null;
+    /**
+     * Status of the latest undo of a "different person" clear: pending, revoked or rejected
+     */
+    clearRevokeStatus?: string | null;
+    /**
+     * Request id of the latest undo of a "different person" clear
+     */
+    clearRevokeRequestId?: string | null;
+    /**
+     * When the last applied undo of a "different person" clear was made
+     */
+    clearRevokedAt?: string | null;
+    /**
+     * User ID who undid the "different person" clear
+     */
+    clearRevokedBy?: string | null;
+    /**
+     * Justification given for undoing the "different person" clear
+     */
+    clearRevokeJustification?: string | null;
+    /**
+     * Why billieChat refused the latest undo of a "different person" clear ("CODE: detail")
+     */
+    clearRevokeRejection?: string | null;
+    /**
+     * When the clear that was undone had been made
+     */
+    revokedClearAt?: string | null;
+    /**
+     * User ID who made the clear that was undone
+     */
+    revokedClearBy?: string | null;
+    /**
+     * Justification of the clear that was undone
+     */
+    revokedClearJustification?: string | null;
   };
   /**
    * Archived identity verification artifacts (S3)
@@ -3298,6 +3334,15 @@ export interface ConversationsSelect<T extends boolean = true> {
         clearJustification?: T;
         clearRequestId?: T;
         clearRejection?: T;
+        clearRevokeStatus?: T;
+        clearRevokeRequestId?: T;
+        clearRevokedAt?: T;
+        clearRevokedBy?: T;
+        clearRevokeJustification?: T;
+        clearRevokeRejection?: T;
+        revokedClearAt?: T;
+        revokedClearBy?: T;
+        revokedClearJustification?: T;
       };
   identityVerificationReport?:
     | T

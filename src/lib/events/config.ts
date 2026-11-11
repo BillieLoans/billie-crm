@@ -237,6 +237,26 @@ export const EVENT_TYPE_BLOCK_CLEAR_DIFFERENT_PERSON_REQUESTED =
   process.env.EVENT_TYPE_BLOCK_CLEAR_DIFFERENT_PERSON_REQUESTED ??
   'block_clear.different_person_requested.v1'
 
+/**
+ * Command: undo a "different person" clear (BTB-569, posted to chatLedger),
+ * because the applicant turned out to be the earlier customer after all. The
+ * contact then stops applications again. billieChat answers with
+ * reapplication_block.clear_revoked.v1 or ..._clear_revoke_rejected.v1
+ * (`MISSING_FIELDS`, `UNKNOWN_STOPPED_CONVERSATION`, `NOT_CLEARED`).
+ */
+export const EVENT_TYPE_REAPPLICATION_BLOCK_CLEAR_REVOKE_AUTHORIZED =
+  process.env.EVENT_TYPE_REAPPLICATION_BLOCK_CLEAR_REVOKE_AUTHORIZED ??
+  'reapplication_block.clear_revoke_authorized.v1'
+
+/**
+ * The CRM's own record of an "Undo clear" request (internal stream). The
+ * event processor marks the undo pending on the stopped conversation and ties
+ * the request id to it so billieChat's answer can be shown there.
+ */
+export const EVENT_TYPE_BLOCK_CLEAR_DIFFERENT_PERSON_REVOKE_REQUESTED =
+  process.env.EVENT_TYPE_BLOCK_CLEAR_DIFFERENT_PERSON_REVOKE_REQUESTED ??
+  'block_clear.different_person_revoke_requested.v1'
+
 // =============================================================================
 // Event Types (Applicant Release)
 // =============================================================================

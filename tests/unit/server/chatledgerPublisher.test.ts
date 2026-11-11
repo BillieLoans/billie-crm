@@ -9,6 +9,7 @@ vi.mock('@/server/redis-client', () => ({
 
 import {
   publishClearAuthorized,
+  publishClearRevokeAuthorized,
   publishContactIntakeRequested,
   publishFeedbackSubmitted,
   publishManualBlockSet,
@@ -287,5 +288,45 @@ describe('publishManualBlockSet', () => {
     xadd.mockRejectedValue(new Error('down'))
     await expect(publishManualBlockSet(payload)).rejects.toBeInstanceOf(EventPublishError)
     expect(xadd).toHaveBeenCalledTimes(3)
+  })
+})
+
+describe('publishClearRevokeAuthorized (BTB-569)', () => {
+  const command = {
+    request_id: 'req-undo-1',
+    operator_id: 'ops-1',
+    justification: 'Same person after all',
+    canonical_customer_id: 'MATCHED-1',
+    reasons: ['DIFFERENT_PERSON'] as ['DIFFERENT_PERSON'],
+    stopped_conversation_id: 'conv-stopped-1',
+  }
+
+  it('xadds the command in the same envelope as the clear, on the ops conv', async () => {
+    const res = await publishClearRevokeAuthorized(command)
+
+    expect(res.eventId).toBeTruthy()
+    expect(xadd).toHaveBeenCalledTimes(1)
+    const [stream, star, ...flat] = xadd.mock.calls[0]
+    expect(stream).toBe('chatLedger')
+    expect(star).toBe('*')
+    const fields = Object.fromEntries(
+      flat.reduce((acc: string[][], v: string, i: number) => {
+        if (i % 2 === 0) acc.push([v, flat[i + 1]])
+        return acc
+      }, []),
+    )
+    expect(fields.typ).toBe('reapplication_block.clear_revoke_authorized.v1')
+    expect(fields.agt).toBe('billie-crm')
+    expect(fields.conv).toBe('ops:block-clear:req-undo-1')
+    expect(fields.usr).toBe('MATCHED-1')
+    expect(fields.cls).toBe('cmd')
+    expect(fields.seq).toBe('1')
+    expect(fields.cause).toBe(res.eventId)
+    expect(JSON.parse(fields.payload)).toEqual(command)
+  })
+
+  it('throws EventPublishError after exhausting retries', async () => {
+    xadd.mockRejectedValue(new Error('down'))
+    await expect(publishClearRevokeAuthorized(command)).rejects.toBeInstanceOf(EventPublishError)
   })
 })
