@@ -48,7 +48,7 @@ These stay where they are for now. The review step says so, so staff know.
   its step downloads (`statementProcessingAgent.py:862` in billieChat). Basiq is no
   longer used, so Rohan has ruled this folder out. Don't list or mention it.
 - Any other S3 folder under the application (e.g. generated loan documents),
-  backups, replicas, Redis caches.
+  Redis caches. (Backups were a non-goal until 13 Nov 2026; see "Backups" below.)
 - Any change to billieChat or the Python event processor.
 
 ## Anti-goals (would make this a failure even if it "works")
@@ -141,8 +141,9 @@ both prefixes for each application in scope and shows:
 
 ### Step 2 of 2: Confirm
 
-- A warning panel: "N files across M applications will be permanently deleted.
-  They can't be recovered."
+- A warning panel: "N files across M applications will be deleted from Billie's
+  storage now. Backup copies are erased within 180 days." (Changed 13 Nov 2026;
+  see "Backups".)
 - Type `DELETE` to enable the button.
 - Buttons: Back, and "Delete N files" (destructive).
 
@@ -183,9 +184,10 @@ Add to `src/server/s3-client.ts`:
 - `deleteKeys(keys)`: `DeleteObjects` in batches of ≤1000. It returns per-key
   success and error from the response's `Errors` array. A 200 from DeleteObjects can
   still contain per-key failures.
-- Always list with `ListObjectVersions` and delete each `VersionId` (delete markers
-  included). This works on unversioned buckets too, and on a versioned bucket a plain
-  delete leaves the bytes in place.
+- Always list with `ListObjectVersions` and delete each data `VersionId`. This works
+  on unversioned buckets too, and on a versioned bucket a plain delete leaves the
+  bytes in place. Since 13 Nov 2026 a plain delete (a delete marker) comes first, and
+  delete markers are never deleted; see "Backups".
 
 ### Deletion log: new collection `statement-file-deletions`
 
@@ -238,6 +240,30 @@ possible:
 Rohan has said the IAM role can be updated. The policy change is applied outside this
 repo; the builder writes out the exact policy JSON for Rohan to apply.
 
+## Backups (13 Nov 2026)
+
+Prod (`billie-files-prod-734836384687`) replicates to a backup bucket in another
+account (`billie-replica-files-prod-342996267425`). S3 replicates delete markers but
+never version-specific deletes, so deleting every version by `VersionId` left the
+backup's copy in place forever.
+
+Decision:
+
+- For each key with a data version, the CRM first places a delete marker (a plain
+  `DeleteObjects` entry with no `VersionId`), then deletes the data versions it
+  listed, by `VersionId`. A key whose marker fails keeps all its versions and is
+  reported as remaining. Delete markers are never deleted and never counted as
+  files.
+- The marker replicates and makes the backup's copy noncurrent. A backup lifecycle
+  rule expires noncurrent versions 180 days after they become noncurrent (the 30-day
+  Governance lock can only delay that). Erasure is immediate in Billie's bucket and
+  complete at 180 days for the backup.
+- The confirm copy says so: files go from Billie's storage now; backup copies are
+  erased within 180 days. The delete is no longer described as unrecoverable.
+- The replication rule must have delete-marker replication enabled and no tag filter
+  (Rohan to confirm). Urgent erasure from the backup and the first-deletion check are
+  runbooks in `docs/statement-file-deletion.md`. IAM is unchanged.
+
 ## Open checks for the builder (do before building the delete path)
 
 1. **Check the buckets' settings** on `billie-files-prod-734836384687` and
@@ -245,7 +271,8 @@ repo; the builder writes out the exact policy JSON for Rohan to apply.
    - **Object Lock or MFA-delete:** either would block deletion outright.
    - **Versioning:** the delete path is version-aware either way, but the IAM
      version permissions are needed only if versioning is on.
-   - **Replication or backup:** note any as a known gap.
+   - **Replication or backup:** note any. (Prod's replica is handled since 13 Nov 2026;
+     see "Backups".)
 2. Spot-check a real prod key to confirm the layout
    `customer/{applicationNumber}/statements/…` (e.g. from a `fileLocations` URI on a
    recent conversation).
@@ -268,7 +295,8 @@ repo; the builder writes out the exact policy JSON for Rohan to apply.
 
   Remember the `@payloadcms/ui` mock.
 - Rollout: demo first on a test application, then prod on Rohan's own applications.
-  Confirm with an S3 listing that both prefixes are empty afterwards.
+  Confirm with an S3 listing that both prefixes hold no data versions afterwards (a
+  delete marker per key stays).
 
 ## Calls made by Claude (not discussed)
 
