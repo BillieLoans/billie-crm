@@ -58,9 +58,11 @@ function makePayload(opts: { conversations?: Row[]; loanAccounts?: Row[]; deleti
     }
     if (args.collection === 'statement-file-deletions') {
       const statuses: string[] | undefined = where.status?.in
+      const minDeleted: number | undefined = where.filesDeleted?.greater_than
       const docs = deletions
         .filter((d) => d.conversationId === where.conversationId?.equals)
         .filter((d) => !statuses || statuses.includes(d.status))
+        .filter((d) => minDeleted === undefined || Number(d.filesDeleted) > minDeleted)
         .sort((a, b) => String(b.occurredAt).localeCompare(String(a.occurredAt)))
         .slice(0, args.limit)
       return { docs }
@@ -763,11 +765,62 @@ describe('latestDeletion', () => {
     const args = find.mock.calls[0][0]
     expect(args).toMatchObject({
       collection: 'statement-file-deletions',
-      where: { conversationId: { equals: 'C-1' }, status: { in: ['deleted', 'partial'] } },
+      where: {
+        conversationId: { equals: 'C-1' },
+        status: { in: ['deleted', 'partial'] },
+        filesDeleted: { greater_than: 0 },
+      },
       sort: ['-occurredAt'],
       limit: 1,
       overrideAccess: true,
     })
+  })
+
+  it('ignores an unverified partial row that removed nothing, falling back to an older one', async () => {
+    const { payload } = makePayload({
+      deletions: [
+        {
+          conversationId: 'C-1',
+          status: 'deleted',
+          occurredAt: '2026-11-05T00:00:00.000Z',
+          actorName: 'Sue',
+          actorEmail: 'sup@billie.loans',
+          filesDeleted: 4,
+          reason: 'earlier',
+        },
+        {
+          conversationId: 'C-1',
+          status: 'partial',
+          occurredAt: '2026-11-10T00:00:00.000Z',
+          actorName: 'Sue',
+          actorEmail: 'sup@billie.loans',
+          filesDeleted: 0,
+          reason: 'unverified',
+          error: 'Could not confirm deletion: SlowDown',
+        },
+      ],
+    })
+
+    expect(await latestDeletion(payload, 'C-1')).toMatchObject({
+      status: 'deleted',
+      filesDeleted: 4,
+      reason: 'earlier',
+    })
+  })
+
+  it('returns null when the only partial row removed nothing', async () => {
+    const { payload } = makePayload({
+      deletions: [
+        {
+          conversationId: 'C-1',
+          status: 'partial',
+          occurredAt: '2026-11-10T00:00:00.000Z',
+          filesDeleted: 0,
+          reason: 'unverified',
+        },
+      ],
+    })
+    expect(await latestDeletion(payload, 'C-1')).toBeNull()
   })
 
   it('returns null when there is no qualifying row', async () => {

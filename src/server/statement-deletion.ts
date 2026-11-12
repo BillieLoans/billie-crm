@@ -397,7 +397,12 @@ export async function executeDeletion(
   return results
 }
 
-/** The newest deletion that actually removed files, for the conversation's Files block. */
+/**
+ * The newest deletion that actually removed files, for the conversation's
+ * Files block: a `deleted` or `partial` row with at least one file removed.
+ * An unverified outcome (the post-delete re-list failed) is logged as
+ * `partial` with nothing counted as deleted, so it never hides the files.
+ */
 export async function latestDeletion(
   payload: Payload,
   conversationId: string,
@@ -407,6 +412,7 @@ export async function latestDeletion(
     where: {
       conversationId: { equals: conversationId },
       status: { in: ['deleted', 'partial'] },
+      filesDeleted: { greater_than: 0 },
     },
     sort: ['-occurredAt'],
     limit: 1,
@@ -424,6 +430,7 @@ export async function latestDeletion(
       }
     | undefined
   if (!row || (row.status !== 'deleted' && row.status !== 'partial')) return null
+  if (!(row.filesDeleted > 0)) return null
   return {
     occurredAt: row.occurredAt,
     actorName: row.actorName ?? null,
