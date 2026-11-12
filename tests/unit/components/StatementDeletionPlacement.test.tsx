@@ -115,6 +115,14 @@ describe('Statements section — deletion placement', () => {
     expect(screen.getByRole('button', { name: 'Delete statement files…' })).toBeInTheDocument()
   })
 
+  it('says "1 file removed" for a single file', () => {
+    latestDeletion = { ...DELETION, filesDeleted: 1 }
+    wrap(<AssessmentPanel conversation={conversation()} conversationId="conv-001" />)
+    openStatements()
+    expect(screen.getByText(/1 file removed · Reason: Customer request/)).toBeInTheDocument()
+    expect(screen.queryByText(/1 files removed/)).not.toBeInTheDocument()
+  })
+
   it('falls back to the actor email and flags a partial deletion', () => {
     latestDeletion = { ...DELETION, actorName: null, status: 'partial' }
     wrap(<AssessmentPanel conversation={conversation()} conversationId="conv-001" />)

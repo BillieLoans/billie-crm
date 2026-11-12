@@ -35,6 +35,9 @@ primary_region = "syd"
   # TODO(platform): confirm dispatcher hostname for staging — placeholder pending platform team handover
   NOTIFICATION_DISPATCHER_GRPC_URL = "billie-platform-services-staging.internal:50052"
   COLLECTIONS_SERVICE_GRPC_URL = "billie-platform-services-staging.internal:50053"
+  # Statement files live under {base}/{applicationNumber}/ in billie-applications-nonprod.
+  # Unlike prod and demo, S3_BUCKET_NAME is not in this [env] block: check it is set as a secret.
+  S3_STATEMENT_BASE_FOLDER = "customer"
 
 # =============================================================================
 # HTTP service configuration

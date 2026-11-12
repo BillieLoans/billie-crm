@@ -26,6 +26,7 @@ import { attributionSummary } from '@/lib/attribution'
 import { LlmCostsSection } from '../LlmCostsSection'
 import { DeleteStatementFilesButton } from '@/components/StatementDeletion/DeleteStatementFilesButton'
 import { useStatementDeletion } from '@/hooks/queries/useStatementDeletion'
+import { plural } from '@/lib/statement-deletion'
 import styles from './styles.module.css'
 
 type NoticeboardPost = {
@@ -547,7 +548,7 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
                   {statementDeletion.actorName ?? statementDeletion.actorEmail}
                 </p>
                 <p className={styles.deletionNote}>
-                  {statementDeletion.filesDeleted} files removed · Reason:{' '}
+                  {plural(statementDeletion.filesDeleted, 'file')} removed · Reason:{' '}
                   {statementDeletion.reason}
                   {statementDeletion.status === 'partial'
                     ? ' · some files could not be deleted'

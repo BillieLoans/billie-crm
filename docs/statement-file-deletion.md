@@ -26,7 +26,7 @@ Kept (not deleted):
 - any other S3 folder under the application, including `StatementCapture/`
 - backups, replicas and Redis caches
 
-Every deletion is recorded in the append-only `statement-file-deletions` collection (admin only): who, when, why, and the keys removed or failed.
+Every deletion is recorded in the append-only `statement-file-deletions` collection, which admins and supervisors can read: who, when, why, and the keys removed or failed.
 
 ## Bucket check
 

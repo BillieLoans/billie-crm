@@ -7,8 +7,8 @@
  * an irreversible action: Review (with a reason), Confirm (type DELETE), Result.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, cleanup, waitFor, within } from '@testing-library/react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { render, screen, fireEvent, cleanup, waitFor, within, act } from '@testing-library/react'
+import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import React from 'react'
 import { DeleteStatementFilesButton } from '@/components/StatementDeletion/DeleteStatementFilesButton'
 import { DELETION_WARNING_COPY, KEPT_DATA_COPY } from '@/lib/statement-deletion'
@@ -104,7 +104,7 @@ async function goToConfirm(reason = 'Customer asked us to delete their statement
   await openDrawer()
   fireEvent.change(reasonBox(), { target: { value: reason } })
   fireEvent.click(continueBtn())
-  await screen.findByRole('heading', { name: 'Confirm deletion' })
+  await screen.findByRole('heading', { name: 'Step 2 of 2: Confirm' })
 }
 
 const confirmInput = () => within(dialog()).getByLabelText('Type DELETE to confirm')
@@ -133,6 +133,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+  focusManager.setFocused(undefined)
 })
 
 describe('DeleteStatementFilesButton: who sees it', () => {
@@ -176,14 +177,46 @@ describe('DeleteStatementFilesDrawer: review', () => {
     expect(document.activeElement).toBe(reasonBox())
   })
 
-  it('keeps Continue disabled until a reason is entered', async () => {
+  it('keeps Continue disabled until a reason is entered, and says why', async () => {
     await openDrawer()
 
     expect(continueBtn()).toBeDisabled()
+    expect(continueBtn()).toHaveAccessibleDescription('Enter a reason to continue.')
+    expect(within(dialog()).getByText('Enter a reason to continue.')).toBeVisible()
     fireEvent.change(reasonBox(), { target: { value: '   ' } })
     expect(continueBtn()).toBeDisabled()
     fireEvent.change(reasonBox(), { target: { value: 'Customer request' } })
     expect(continueBtn()).toBeEnabled()
+    expect(continueBtn()).not.toHaveAttribute('aria-describedby')
+    expect(screen.queryByText('Enter a reason to continue.')).toBeNull()
+  })
+
+  it('does not re-list S3 when the window regains focus', async () => {
+    await openDrawer()
+    expect(callsTo('/api/statements/deletion/preview')).toHaveLength(1)
+
+    act(() => {
+      focusManager.setFocused(false)
+      focusManager.setFocused(true)
+    })
+    await new Promise((r) => setTimeout(r, 20))
+
+    expect(callsTo('/api/statements/deletion/preview')).toHaveLength(1)
+  })
+
+  it('a customer with no conversations (preview 404) is a plain empty state', async () => {
+    previewQueue.push(
+      json(404, { error: { code: 'NOT_FOUND', message: 'No application matches that request.' } }),
+    )
+    renderButton()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete statement files' }))
+
+    expect(await screen.findByText('No statement files found.')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.queryByText('There is a problem')).toBeNull()
+    fireEvent.change(reasonBox(), { target: { value: 'Customer request' } })
+    expect(continueBtn()).toBeDisabled()
+    expect(continueBtn()).toHaveAccessibleDescription('There are no files to delete.')
   })
 
   it('says no files were found, and Continue stays disabled', async () => {
@@ -201,7 +234,7 @@ describe('DeleteStatementFilesDrawer: confirm', () => {
   it('states what will go, and needs DELETE typed exactly', async () => {
     await goToConfirm()
 
-    const heading = screen.getByRole('heading', { name: 'Confirm deletion' })
+    const heading = screen.getByRole('heading', { name: 'Step 2 of 2: Confirm' })
     expect(document.activeElement).toBe(heading)
     expect(
       screen.getByText(
@@ -211,17 +244,20 @@ describe('DeleteStatementFilesDrawer: confirm', () => {
 
     const deleteBtn = within(dialog()).getByRole('button', { name: 'Delete 3 files' })
     expect(deleteBtn).toBeDisabled()
+    expect(deleteBtn).toHaveAccessibleDescription('Type DELETE to confirm.')
+    expect(within(dialog()).getByText('Type DELETE to confirm.')).toBeVisible()
     fireEvent.change(confirmInput(), { target: { value: 'delete' } })
     expect(deleteBtn).toBeDisabled()
     fireEvent.change(confirmInput(), { target: { value: 'DELETE' } })
     expect(deleteBtn).toBeEnabled()
+    expect(deleteBtn).not.toHaveAttribute('aria-describedby')
   })
 
   it('Back returns to the review with the reason kept', async () => {
     await goToConfirm('Keep me')
     fireEvent.click(within(dialog()).getByRole('button', { name: 'Back' }))
 
-    const heading = await screen.findByRole('heading', { name: 'Review files to delete' })
+    const heading = await screen.findByRole('heading', { name: 'Step 1 of 2: Review' })
     expect(document.activeElement).toBe(heading)
     expect(reasonBox()).toHaveValue('Keep me')
   })
@@ -259,11 +295,11 @@ describe('DeleteStatementFilesDrawer: delete', () => {
       name: 'Some files could not be deleted',
     })
     await waitFor(() => expect(document.activeElement).toBe(heading))
-    expect(screen.getByText(/Failed — 1 of 3 files remain/)).toBeInTheDocument()
+    expect(screen.getByText('APP-1 · Failed — 1 of 3 files remains')).toBeInTheDocument()
 
     fireEvent.click(within(dialog()).getByRole('button', { name: 'Retry' }))
 
-    expect(await screen.findByRole('heading', { name: 'Review files to delete' })).toBeVisible()
+    expect(await screen.findByRole('heading', { name: 'Step 1 of 2: Review' })).toBeVisible()
     // The old counts are not shown while the re-check is out.
     expect(screen.getByText('Checking for statement files…')).toBeInTheDocument()
     expect(screen.queryByText('APP-1 · 3 files')).toBeNull()
@@ -279,7 +315,10 @@ describe('DeleteStatementFilesDrawer: delete', () => {
     deleteResponse = pending.promise
     await goToConfirm()
     submitDelete()
-    await screen.findByText('Deleting files. Keep this drawer open.')
+    const status = await screen.findByText('Deleting files. Keep this drawer open.')
+    // The pressed Delete button is now disabled; focus moves to the status.
+    expect(status).toHaveAttribute('role', 'status')
+    await waitFor(() => expect(document.activeElement).toBe(status))
 
     const closeX = within(dialog()).getByRole('button', { name: 'Close drawer' })
     expect(closeX).toHaveAttribute('aria-disabled', 'true')
@@ -298,6 +337,43 @@ describe('DeleteStatementFilesDrawer: delete', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
+  it.each([
+    [{ filesDeleted: 0, failedCount: 2, fileCount: 2 }, 'APP-1 · Failed — 2 of 2 files remain'],
+    [{ filesDeleted: 0, failedCount: 1, fileCount: 1 }, 'APP-1 · Failed — 1 of 1 file remains'],
+  ])('a failed result counts what remains (%o)', async (counts, line) => {
+    deleteResponse = json(200, { results: [{ ...APP_1, status: 'failed', ...counts }] })
+    await goToConfirm()
+    submitDelete()
+
+    expect(await screen.findByText(line)).toBeInTheDocument()
+  })
+
+  it('an unconfirmed result says to check again instead of counting what remains', async () => {
+    deleteResponse = json(200, {
+      results: [
+        {
+          ...APP_1,
+          status: 'partial',
+          filesDeleted: 0,
+          failedCount: 3,
+          error: 'Could not confirm deletion: SlowDown',
+        },
+      ],
+    })
+    await goToConfirm()
+    submitDelete()
+
+    expect(
+      await screen.findByText('APP-1 · Could not confirm what remains — check again'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/files remain/)).toBeNull()
+    expect(screen.getByText('Could not confirm deletion: SlowDown')).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'Some files could not be deleted' }),
+    ).toBeInTheDocument()
+    expect(within(dialog()).getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+  })
+
   it('a server error shows an error summary with the message and takes focus', async () => {
     deleteResponse = json(500, {
       error: { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred.' },
@@ -309,6 +385,6 @@ describe('DeleteStatementFilesDrawer: delete', () => {
     expect(alert).toHaveTextContent('An unexpected error occurred.')
     await waitFor(() => expect(document.activeElement).toBe(alert))
     // Still on the confirm step, so the operator can try again.
-    expect(screen.getByRole('heading', { name: 'Confirm deletion' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Step 2 of 2: Confirm' })).toBeInTheDocument()
   })
 })

@@ -7,7 +7,13 @@ import {
   useDeleteStatementFiles,
   type DeleteStatementFilesParams,
 } from '@/hooks/mutations/useDeleteStatementFiles'
-import { CONFIRM_WORD, DELETION_WARNING_COPY, KEPT_DATA_COPY } from '@/lib/statement-deletion'
+import {
+  CONFIRM_WORD,
+  DELETION_WARNING_COPY,
+  KEPT_DATA_COPY,
+  plural,
+  UNCONFIRMED_DELETION_ERROR,
+} from '@/lib/statement-deletion'
 import type {
   ApplicationPreview,
   ApplicationResult,
@@ -26,8 +32,6 @@ type Step = 'review' | 'confirm' | 'result'
 
 const REASON_MAX = 500
 
-const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`
-
 const appLabel = (app: ApplicationPreview) => app.applicationNumber ?? 'No application number'
 
 /** "{N} files across {M} applications will be permanently deleted. They can't be recovered." */
@@ -39,8 +43,12 @@ function outcomeText(result: ApplicationResult): string {
   if (result.status === 'deleted') return `Deleted (${plural(result.filesDeleted, 'file')})`
   if (result.status === 'nothing_found') return 'Nothing to delete'
   if (result.fileCount === 0) return 'Failed'
-  const remain = result.fileCount === 1 ? 'file remains' : 'files remain'
-  return `Failed — ${result.failedCount} of ${result.fileCount} ${remain}`
+  // The re-list after the delete failed, so what remains is unknown.
+  if (result.error?.startsWith(UNCONFIRMED_DELETION_ERROR)) {
+    return 'Could not confirm what remains — check again'
+  }
+  const k = result.failedCount
+  return `Failed — ${k} of ${plural(result.fileCount, 'file')} ${k === 1 ? 'remains' : 'remain'}`
 }
 
 /** The delete request: the scope's own fields and the reason, never file keys. */
@@ -110,9 +118,12 @@ function DeletionFlow({ scope, onClose, deletion }: DeletionFlowProps) {
   const reasonHintId = `${ids}-reason-hint`
   const confirmId = `${ids}-confirm`
   const errorTitleId = `${ids}-error-title`
+  const continueHintId = `${ids}-continue-hint`
+  const deleteHintId = `${ids}-delete-hint`
 
   const headingRef = useRef<HTMLHeadingElement>(null)
   const errorRef = useRef<HTMLDivElement>(null)
+  const deletingRef = useRef<HTMLParagraphElement>(null)
   const shownStep = useRef<Step>('review')
 
   // A new step takes focus to its heading, so a screen reader starts there.
@@ -132,6 +143,24 @@ function DeletionFlow({ scope, onClose, deletion }: DeletionFlowProps) {
   const canContinue = trimmedReason.length > 0 && reviewTotal > 0
   const canDelete = confirmText === CONFIRM_WORD && totalFiles > 0 && !deletion.isPending
 
+  // A disabled button says why, in a visible hint it is described by.
+  const continueHint = canContinue
+    ? null
+    : !reviewApplications
+      ? preview.isError
+        ? 'Check for files again to continue.'
+        : 'Wait for the check for files to finish.'
+      : reviewTotal === 0
+        ? 'There are no files to delete.'
+        : 'Enter a reason to continue.'
+  // While the delete is in flight the "Deleting files" status says why.
+  const deleteHint =
+    canDelete || deletion.isPending
+      ? null
+      : totalFiles === 0
+        ? 'There are no files to delete.'
+        : `Type ${CONFIRM_WORD} to confirm.`
+
   const errorMessage =
     step === 'review'
       ? (preview.error?.message ?? null)
@@ -147,6 +176,12 @@ function DeletionFlow({ scope, onClose, deletion }: DeletionFlowProps) {
   useEffect(() => {
     if (requestError) errorRef.current?.focus()
   }, [requestError])
+
+  // Pressing Delete disables it, so focus moves to the status that says the
+  // delete is under way rather than being dropped on the page.
+  useEffect(() => {
+    if (step === 'confirm' && deletion.isPending) deletingRef.current?.focus()
+  }, [step, deletion.isPending])
 
   const operatorAskedForPreview = useRef(true)
   useEffect(() => {
@@ -208,7 +243,7 @@ function DeletionFlow({ scope, onClose, deletion }: DeletionFlowProps) {
           }}
         >
           <h3 ref={headingRef} tabIndex={-1} className={styles.stepHeading}>
-            Review files to delete
+            Step 1 of 2: Review
           </h3>
           {errorSummary}
           {preview.isError && (
@@ -281,10 +316,20 @@ function DeletionFlow({ scope, onClose, deletion }: DeletionFlowProps) {
             <button type="button" className={styles.secondaryBtn} onClick={onClose}>
               Cancel
             </button>
-            <button type="submit" className={styles.primaryBtn} disabled={!canContinue}>
+            <button
+              type="submit"
+              className={styles.primaryBtn}
+              disabled={!canContinue}
+              aria-describedby={continueHint ? continueHintId : undefined}
+            >
               Continue
             </button>
           </div>
+          {continueHint && (
+            <p id={continueHintId} className={styles.hint}>
+              {continueHint}
+            </p>
+          )}
         </form>
       )}
 
@@ -297,7 +342,7 @@ function DeletionFlow({ scope, onClose, deletion }: DeletionFlowProps) {
           }}
         >
           <h3 ref={headingRef} tabIndex={-1} className={styles.stepHeading}>
-            Confirm deletion
+            Step 2 of 2: Confirm
           </h3>
           {errorSummary}
           <p className={styles.irreversible}>
@@ -326,7 +371,7 @@ function DeletionFlow({ scope, onClose, deletion }: DeletionFlowProps) {
           </div>
 
           {deletion.isPending && (
-            <p className={styles.hint} role="status">
+            <p ref={deletingRef} tabIndex={-1} className={styles.hint} role="status">
               Deleting files. Keep this drawer open.
             </p>
           )}
@@ -344,10 +389,20 @@ function DeletionFlow({ scope, onClose, deletion }: DeletionFlowProps) {
             >
               Back
             </button>
-            <button type="submit" className={styles.dangerBtn} disabled={!canDelete}>
+            <button
+              type="submit"
+              className={styles.dangerBtn}
+              disabled={!canDelete}
+              aria-describedby={deleteHint ? deleteHintId : undefined}
+            >
               {`Delete ${plural(totalFiles, 'file')}`}
             </button>
           </div>
+          {deleteHint && (
+            <p id={deleteHintId} className={styles.hint}>
+              {deleteHint}
+            </p>
+          )}
         </form>
       )}
 

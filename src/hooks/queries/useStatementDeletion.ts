@@ -45,6 +45,13 @@ async function fetchDeletionPreview(scope: DeletionScope): Promise<ApplicationPr
     credentials: 'include',
     body: JSON.stringify(scope),
   })
+  // A customer with no conversations has nothing to delete: that is the
+  // normal empty state, not a problem to report.
+  if (res.status === 404) {
+    const body = (await res.json().catch(() => null)) as { error?: { code?: unknown } } | null
+    if (body?.error?.code === 'NOT_FOUND') return []
+    throw new Error(`Could not check for statement files (${res.status})`)
+  }
   if (!res.ok) throw await statementDeletionError(res, 'Could not check for statement files')
   const body = (await res.json()) as { applications: ApplicationPreview[] }
   return body.applications ?? []
@@ -54,6 +61,8 @@ async function fetchDeletionPreview(scope: DeletionScope): Promise<ApplicationPr
  * What a deletion would remove right now: one row per application in scope.
  * Never cached, so the review always shows what is in the bucket. The delete
  * route lists the bucket again itself; this is for the operator to read.
+ * Not refetched on window focus: every check lists S3 and spends the shared
+ * statement-deletion rate limit.
  */
 export function useStatementDeletionPreview(scope: DeletionScope | null) {
   return useQuery({
@@ -62,5 +71,6 @@ export function useStatementDeletionPreview(scope: DeletionScope | null) {
     enabled: !!scope,
     staleTime: 0,
     retry: false,
+    refetchOnWindowFocus: false,
   })
 }
