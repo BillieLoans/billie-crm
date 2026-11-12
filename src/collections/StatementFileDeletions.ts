@@ -1,9 +1,8 @@
 import type { CollectionConfig, Access } from 'payload'
 import { hasApprovalAuthority, hideFromNonAdmins } from '@/lib/access'
 
-/** Deleting statement files is a supervisory act, and so is reading the trail. */
+/** Reading the trail is a supervisory act. */
 const canRead: Access = ({ req: { user } }) => hasApprovalAuthority(user)
-const canCreate: Access = ({ req: { user } }) => hasApprovalAuthority(user)
 
 /**
  * Append-only record of every permanent deletion of a customer's bank-statement
@@ -32,7 +31,9 @@ export const StatementFileDeletions: CollectionConfig = {
   },
   access: {
     read: canRead,
-    create: canCreate,
+    // Rows are written only by the deletion service (overrideAccess), so no one
+    // can forge an audit row through the REST API.
+    create: () => false,
     update: () => false, // Append-only
     delete: () => false,
   },
@@ -125,6 +126,11 @@ export const StatementFileDeletions: CollectionConfig = {
         { label: 'Funded loan', value: 'funded_loan' },
       ],
       admin: { readOnly: true, description: 'Warnings shown to the operator, who went ahead' },
+    },
+    {
+      name: 'error',
+      type: 'text',
+      admin: { readOnly: true, description: 'Why the application failed or could not be verified' },
     },
     {
       name: 'deletedKeys',

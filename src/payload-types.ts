@@ -2850,6 +2850,10 @@ export interface StatementFileDeletion {
    */
   warnings?: ('in_progress' | 'funded_loan')[] | null;
   /**
+   * Why the application failed or could not be verified
+   */
+  error?: string | null;
+  /**
    * S3 keys removed
    */
   deletedKeys?:
@@ -4316,6 +4320,7 @@ export interface StatementFileDeletionsSelect<T extends boolean = true> {
   filesFound?: T;
   filesDeleted?: T;
   warnings?: T;
+  error?: T;
   deletedKeys?: T;
   failedKeys?: T;
   occurredAt?: T;

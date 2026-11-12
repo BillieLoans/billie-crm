@@ -297,6 +297,7 @@ describe('executeDeletion', () => {
     expect(result.status).toBe('partial')
     expect(result.error).toMatch(/Could not confirm deletion: SlowDown/)
     expect(create.mock.calls[0][0].data.status).toBe('partial')
+    expect(create.mock.calls[0][0].data.error).toBe('Could not confirm deletion: SlowDown')
     errSpy.mockRestore()
   })
 
@@ -428,7 +429,9 @@ describe('executeDeletion', () => {
       status: 'failed',
       filesFound: 0,
       filesDeleted: 0,
+      error: 'Missing or invalid application number',
     })
+    expect(create.mock.calls[1][0].data.error).toBeNull()
   })
 
   it('missing application number fails with no S3 call and still logs', async () => {
@@ -475,7 +478,41 @@ describe('executeDeletion', () => {
     expect(results[0].error).toMatch(/Access Denied/)
     expect(results[1]).toMatchObject({ conversationId: 'C-2', status: 'deleted' })
     expect(create).toHaveBeenCalledTimes(2)
-    expect(create.mock.calls[0][0].data).toMatchObject({ conversationId: 'C-1', status: 'failed' })
+    expect(create.mock.calls[0][0].data).toMatchObject({
+      conversationId: 'C-1',
+      status: 'failed',
+      error: 'Could not list files: Access Denied',
+    })
+    errSpy.mockRestore()
+  })
+
+  it('logs the full outcome before rethrowing when the log row cannot be written', async () => {
+    seed('customer/APP-1/statements/a.json', 'customer/APP-2/statements/b.json')
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { payload, create } = makePayload({
+      conversations: [conv(), conv({ conversationId: 'C-2', applicationNumber: 'APP-2' })],
+    })
+    create.mockRejectedValueOnce(new Error('db down'))
+
+    await expect(
+      executeDeletion(payload, { scope: 'customer', customerIdString: 'CUS-1' }, 'r', actor),
+    ).rejects.toThrow('db down')
+
+    const logged = errSpy.mock.calls.find((c) =>
+      String(c[0]).includes('could not write the deletion log row'),
+    )
+    expect(logged?.[1]).toMatchObject({
+      conversationId: 'C-1',
+      applicationNumber: 'APP-1',
+      status: 'deleted',
+      filesFound: 1,
+      filesDeleted: 1,
+      deletedKeys: ['customer/APP-1/statements/a.json'],
+      failedKeys: [],
+    })
+    // Nothing further is deleted once the audit trail cannot be written.
+    expect(deleteMock).toHaveBeenCalledTimes(1)
+    expect(bucket.map((r) => r.key)).toEqual(['customer/APP-2/statements/b.json'])
     errSpy.mockRestore()
   })
 })

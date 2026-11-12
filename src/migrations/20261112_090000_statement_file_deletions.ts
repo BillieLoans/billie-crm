@@ -39,12 +39,15 @@ CREATE TABLE IF NOT EXISTS statement_file_deletions (
   status enum_statement_file_deletions_status NOT NULL,
   files_found numeric NOT NULL,
   files_deleted numeric NOT NULL,
+  error varchar,
   deleted_keys jsonb,
   failed_keys jsonb,
   occurred_at timestamp(3) with time zone NOT NULL,
   updated_at timestamp(3) with time zone DEFAULT now() NOT NULL,
   created_at timestamp(3) with time zone DEFAULT now() NOT NULL
 );
+
+ALTER TABLE statement_file_deletions ADD COLUMN IF NOT EXISTS error varchar;
 
 CREATE TABLE IF NOT EXISTS statement_file_deletions_warnings (
   "order" integer NOT NULL,

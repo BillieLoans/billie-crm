@@ -302,28 +302,45 @@ export async function executeDeletion(
     const outcome = await deleteApplication(baseFolder, conv)
 
     // A failed write throws: stopping before the next application is better
-    // than deleting more files with no audit row.
-    await payload.create({
-      collection: 'statement-file-deletions',
-      overrideAccess: true,
-      data: {
+    // than deleting more files with no audit row. The outcome is logged first so
+    // the evidence of what was deleted survives in the logs.
+    try {
+      await payload.create({
+        collection: 'statement-file-deletions',
+        overrideAccess: true,
+        data: {
+          conversationId: conv.conversationId,
+          applicationNumber: conv.applicationNumber,
+          customerIdString: conv.customerIdString,
+          scope: scope.scope,
+          actorId: actor.id,
+          actorEmail: actor.email ?? null,
+          actorName: actor.name ?? null,
+          reason,
+          status: outcome.status,
+          filesFound: outcome.filesFound,
+          filesDeleted: outcome.filesDeleted,
+          warnings,
+          deletedKeys: outcome.deletedKeys,
+          failedKeys: outcome.failedKeys,
+          error: outcome.error ?? null,
+          occurredAt: new Date().toISOString(),
+        },
+      })
+    } catch (err) {
+      console.error('[statement-deletion] could not write the deletion log row', {
         conversationId: conv.conversationId,
         applicationNumber: conv.applicationNumber,
-        customerIdString: conv.customerIdString,
-        scope: scope.scope,
-        actorId: actor.id,
-        actorEmail: actor.email ?? null,
-        actorName: actor.name ?? null,
-        reason,
         status: outcome.status,
         filesFound: outcome.filesFound,
         filesDeleted: outcome.filesDeleted,
-        warnings,
         deletedKeys: outcome.deletedKeys,
         failedKeys: outcome.failedKeys,
-        occurredAt: new Date().toISOString(),
-      },
-    })
+        error: outcome.error,
+        err,
+      })
+      throw err
+    }
 
     const result: ApplicationResult = {
       conversationId: conv.conversationId,
