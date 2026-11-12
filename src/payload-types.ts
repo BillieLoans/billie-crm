@@ -100,6 +100,7 @@ export interface Config {
     'mcp-oauth-clients': McpOauthClient;
     'mcp-oauth-grants': McpOauthGrant;
     'google-ads-conversions': GoogleAdsConversion;
+    'statement-file-deletions': StatementFileDeletion;
     'payload-mcp-api-keys': PayloadMcpApiKey;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
@@ -141,6 +142,7 @@ export interface Config {
     'mcp-oauth-clients': McpOauthClientsSelect<false> | McpOauthClientsSelect<true>;
     'mcp-oauth-grants': McpOauthGrantsSelect<false> | McpOauthGrantsSelect<true>;
     'google-ads-conversions': GoogleAdsConversionsSelect<false> | GoogleAdsConversionsSelect<true>;
+    'statement-file-deletions': StatementFileDeletionsSelect<false> | StatementFileDeletionsSelect<true>;
     'payload-mcp-api-keys': PayloadMcpApiKeysSelect<false> | PayloadMcpApiKeysSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
@@ -2816,6 +2818,66 @@ export interface GoogleAdsConversion {
   createdAt: string;
 }
 /**
+ * Audit trail of permanent bank-statement file deletions from S3
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "statement-file-deletions".
+ */
+export interface StatementFileDeletion {
+  id: string;
+  conversationId: string;
+  applicationNumber?: string | null;
+  customerIdString?: string | null;
+  /**
+   * What the operator asked to delete
+   */
+  scope: 'application' | 'customer';
+  actorId: string;
+  actorEmail?: string | null;
+  actorName?: string | null;
+  reason: string;
+  status: 'deleted' | 'partial' | 'failed' | 'nothing_found';
+  /**
+   * Object versions found under the prefixes
+   */
+  filesFound: number;
+  /**
+   * Object versions confirmed gone by re-listing after the delete
+   */
+  filesDeleted: number;
+  /**
+   * Warnings shown to the operator, who went ahead
+   */
+  warnings?: ('in_progress' | 'funded_loan')[] | null;
+  /**
+   * S3 keys removed
+   */
+  deletedKeys?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * S3 keys that could not be removed
+   */
+  failedKeys?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  occurredAt: string;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * Keys for the reporting connector (BTB-509): one per person, for report authors only. Delete a key to revoke it.
  *
  * This interface was referenced by `Config`'s JSON-Schema
@@ -3043,6 +3105,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'google-ads-conversions';
         value: string | GoogleAdsConversion;
+      } | null)
+    | ({
+        relationTo: 'statement-file-deletions';
+        value: string | StatementFileDeletion;
       } | null)
     | ({
         relationTo: 'payload-mcp-api-keys';
@@ -4230,6 +4296,29 @@ export interface GoogleAdsConversionsSelect<T extends boolean = true> {
   claimedAt?: T;
   sentAt?: T;
   validatedAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "statement-file-deletions_select".
+ */
+export interface StatementFileDeletionsSelect<T extends boolean = true> {
+  conversationId?: T;
+  applicationNumber?: T;
+  customerIdString?: T;
+  scope?: T;
+  actorId?: T;
+  actorEmail?: T;
+  actorName?: T;
+  reason?: T;
+  status?: T;
+  filesFound?: T;
+  filesDeleted?: T;
+  warnings?: T;
+  deletedKeys?: T;
+  failedKeys?: T;
+  occurredAt?: T;
   updatedAt?: T;
   createdAt?: T;
 }

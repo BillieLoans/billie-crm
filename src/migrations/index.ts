@@ -69,6 +69,7 @@ import * as migration_20261106_090000_google_ads_conversions from './20261106_09
 import * as migration_20261111_090000_loan_account_event_versions from './20261111_090000_loan_account_event_versions'
 import * as migration_20261111_100000_conversation_block_clear_rejection from './20261111_100000_conversation_block_clear_rejection'
 import * as migration_20261111_110000_conversation_block_clear_revoke from './20261111_110000_conversation_block_clear_revoke'
+import * as migration_20261112_090000_statement_file_deletions from './20261112_090000_statement_file_deletions'
 
 export const migrations = [
   {
@@ -425,5 +426,10 @@ export const migrations = [
     up: migration_20261111_110000_conversation_block_clear_revoke.up,
     down: migration_20261111_110000_conversation_block_clear_revoke.down,
     name: '20261111_110000_conversation_block_clear_revoke',
+  },
+  {
+    up: migration_20261112_090000_statement_file_deletions.up,
+    down: migration_20261112_090000_statement_file_deletions.down,
+    name: '20261112_090000_statement_file_deletions',
   },
 ]
