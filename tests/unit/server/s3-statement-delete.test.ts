@@ -61,7 +61,7 @@ describe('s3 statement delete helpers', () => {
     expect(refs).toEqual([
       { key: 'p/a', versionId: 'v-a' },
       { key: 'p/b', versionId: 'v-b' },
-      { key: 'p/c' },
+      { key: 'p/c', versionId: 'null' },
     ])
     expect(sendMock).toHaveBeenCalledTimes(2)
     const first = sendMock.mock.calls[0][0]
@@ -89,12 +89,15 @@ describe('s3 statement delete helpers', () => {
 
   it('reports per-key errors from a 200 response', async () => {
     sendMock.mockResolvedValueOnce({
-      Deleted: [{ Key: 'a' }],
-      Errors: [{ Key: 'b', Message: 'AccessDenied' }],
+      Deleted: [{ Key: 'a', VersionId: 'null' }],
+      Errors: [{ Key: 'b', VersionId: 'null', Message: 'AccessDenied' }],
     })
-    const res = await deleteObjectVersions([{ key: 'a' }, { key: 'b' }])
+    const res = await deleteObjectVersions([
+      { key: 'a', versionId: 'null' },
+      { key: 'b', versionId: 'null' },
+    ])
     expect(res.deleted).toHaveLength(1)
-    expect(res.failed[0]).toEqual({ key: 'b', message: 'AccessDenied' })
+    expect(res.failed[0]).toEqual({ key: 'b', versionId: 'null', message: 'AccessDenied' })
   })
 
   it('a thrown chunk fails only that chunk', async () => {
@@ -111,6 +114,32 @@ describe('s3 statement delete helpers', () => {
     expect(res.failed).toHaveLength(1000)
     expect(res.failed[0].message).toBe('boom')
     expect(res.deleted).toHaveLength(500)
+  })
+
+  it('sends VersionId null through to DeleteObjects', async () => {
+    sendMock.mockResolvedValueOnce({ Deleted: [{ Key: 'a', VersionId: 'null' }] })
+    await deleteObjectVersions([{ key: 'a', versionId: 'null' }])
+    expect(sendMock.mock.calls[0][0].input.Delete.Objects).toEqual([
+      { Key: 'a', VersionId: 'null' },
+    ])
+  })
+
+  it('skips listed items without a VersionId', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    sendMock.mockResolvedValueOnce({ Versions: [{ Key: 'p/x' }, { Key: 'p/y', VersionId: 'v' }] })
+    expect(await listObjectVersionsUnderPrefix('p/')).toEqual([{ key: 'p/y', versionId: 'v' }])
+    expect(spy).toHaveBeenCalled()
+    spy.mockRestore()
+  })
+
+  it('fails refs the response does not report', async () => {
+    sendMock.mockResolvedValueOnce({ Deleted: [{ Key: 'a', VersionId: 'v1' }] })
+    const res = await deleteObjectVersions([
+      { key: 'a', versionId: 'v1' },
+      { key: 'b', versionId: 'v2' },
+    ])
+    expect(res.deleted).toHaveLength(1)
+    expect(res.failed).toEqual([{ key: 'b', versionId: 'v2', message: 'No result returned' }])
   })
 
   it('getStatementBaseFolder throws when unset', () => {

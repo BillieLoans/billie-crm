@@ -102,7 +102,9 @@ export async function getObjectByUri(s3Uri: string): Promise<{
   // Validate that the URI refers to the configured bucket to prevent cross-bucket access
   const expectedBucket = process.env.S3_BUCKET_NAME
   if (expectedBucket && bucket !== expectedBucket) {
-    throw new Error(`S3 URI bucket "${bucket}" does not match configured bucket "${expectedBucket}"`)
+    throw new Error(
+      `S3 URI bucket "${bucket}" does not match configured bucket "${expectedBucket}"`,
+    )
   }
   const client = getS3Client()
   try {
@@ -110,7 +112,7 @@ export async function getObjectByUri(s3Uri: string): Promise<{
       new GetObjectCommand({
         Bucket: bucket,
         Key: key,
-      })
+      }),
     )
     if (!response.Body) return null
     const contentType =
@@ -122,17 +124,17 @@ export async function getObjectByUri(s3Uri: string): Promise<{
       contentLength: response.ContentLength ?? undefined,
     }
   } catch (err) {
-    const code = (err as { Code?: string; name?: string }).Code ?? (err as { name?: string }).name ?? 'Unknown'
+    const code =
+      (err as { Code?: string; name?: string }).Code ?? (err as { name?: string }).name ?? 'Unknown'
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[s3-client] getObjectByUri failed', { bucket, key, code, msg })
     return null
   }
 }
 
-
 export interface ObjectVersionRef {
   key: string
-  versionId?: string
+  versionId: string
 }
 
 /**
@@ -149,7 +151,8 @@ export function getStatementBaseFolder(): string {
 
 /**
  * List every object version and delete marker under a prefix, following
- * pagination. A versionId of 'null' (unversioned objects) is omitted.
+ * pagination. The literal VersionId 'null' (pre-versioning objects) is kept: it
+ * must be sent on delete, or S3 only adds a delete marker and leaves the bytes.
  */
 export async function listObjectVersionsUnderPrefix(prefix: string): Promise<ObjectVersionRef[]> {
   const client = getS3Client()
@@ -169,9 +172,11 @@ export async function listObjectVersionsUnderPrefix(prefix: string): Promise<Obj
     )
     for (const item of [...(page.Versions ?? []), ...(page.DeleteMarkers ?? [])]) {
       if (!item.Key) continue
-      const ref: ObjectVersionRef = { key: item.Key }
-      if (item.VersionId && item.VersionId !== 'null') ref.versionId = item.VersionId
-      refs.push(ref)
+      if (!item.VersionId) {
+        console.error('[s3-client] skipping listed item without VersionId', { key: item.Key })
+        continue
+      }
+      refs.push({ key: item.Key, versionId: item.VersionId })
     }
     if (page.IsTruncated) {
       keyMarker = page.NextKeyMarker
@@ -215,18 +220,23 @@ export async function deleteObjectVersions(refs: ObjectVersionRef[]): Promise<{
       )
       for (const d of res.Deleted ?? []) {
         if (!d.Key) continue
-        const ref: ObjectVersionRef = { key: d.Key }
-        if (d.VersionId && d.VersionId !== 'null') ref.versionId = d.VersionId
-        deleted.push(ref)
+        deleted.push({ key: d.Key, versionId: d.VersionId ?? '' })
       }
       for (const e of res.Errors ?? []) {
         if (!e.Key) continue
-        const ref: ObjectVersionRef & { message: string } = {
+        failed.push({
           key: e.Key,
+          versionId: e.VersionId ?? '',
           message: e.Message ?? e.Code ?? 'Unknown error',
+        })
+      }
+      const reported = new Set(
+        [...(res.Deleted ?? []), ...(res.Errors ?? [])].map((x) => `${x.Key}\u0000${x.VersionId}`),
+      )
+      for (const r of chunk) {
+        if (!reported.has(`${r.key}\u0000${r.versionId}`)) {
+          failed.push({ ...r, message: 'No result returned' })
         }
-        if (e.VersionId && e.VersionId !== 'null') ref.versionId = e.VersionId
-        failed.push(ref)
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
