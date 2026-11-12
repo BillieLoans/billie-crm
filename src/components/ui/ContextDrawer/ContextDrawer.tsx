@@ -13,11 +13,17 @@ export interface ContextDrawerProps {
    * (e.g. `"560px"`, `"40rem"`). Defaults to the stylesheet's 480px.
    */
   maxWidth?: string
+  /**
+   * While true, Escape, the overlay and the close button do nothing, and the
+   * close button is marked aria-disabled. For a request that must not be
+   * walked away from mid-flight.
+   */
+  closeDisabled?: boolean
 }
 
 /**
  * ContextDrawer - Slide-over panel from the right.
- * 
+ *
  * Features:
  * - Accessible focus trap when open
  * - Escape key to close
@@ -30,6 +36,7 @@ export const ContextDrawer: React.FC<ContextDrawerProps> = ({
   title,
   children,
   maxWidth,
+  closeDisabled = false,
 }) => {
   const drawerRef = useRef<HTMLDivElement>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
@@ -49,14 +56,18 @@ export const ContextDrawer: React.FC<ContextDrawerProps> = ({
     }
   }, [isOpen])
 
+  const requestClose = useCallback(() => {
+    if (!closeDisabled) onClose()
+  }, [closeDisabled, onClose])
+
   // Handle escape key
   const handleKeyDown = useCallback(
     (event: KeyboardEvent) => {
       if (event.key === 'Escape' && isOpen) {
-        onClose()
+        requestClose()
       }
     },
-    [isOpen, onClose]
+    [isOpen, requestClose],
   )
 
   useEffect(() => {
@@ -79,7 +90,7 @@ export const ContextDrawer: React.FC<ContextDrawerProps> = ({
   if (!isOpen) return null
 
   return (
-    <div className={styles.overlay} onClick={onClose} data-testid="context-drawer-overlay">
+    <div className={styles.overlay} onClick={requestClose} data-testid="context-drawer-overlay">
       <div
         ref={drawerRef}
         className={styles.drawer}
@@ -98,7 +109,8 @@ export const ContextDrawer: React.FC<ContextDrawerProps> = ({
           <button
             type="button"
             className={styles.closeButton}
-            onClick={onClose}
+            onClick={requestClose}
+            aria-disabled={closeDisabled || undefined}
             aria-label="Close drawer"
             data-testid="context-drawer-close"
           >

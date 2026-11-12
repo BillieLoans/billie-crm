@@ -45,14 +45,27 @@ const json = (status: number, body: unknown) => ({
   json: async () => body,
 })
 
+type FakeResponse = ReturnType<typeof json>
+
+/** A response the test hands over later, to hold a request in flight. */
+function deferred() {
+  let resolve!: (res: FakeResponse) => void
+  const promise = new Promise<FakeResponse>((r) => {
+    resolve = r
+  })
+  return { promise, resolve }
+}
+
 const fetchMock = vi.fn()
 let previewApps: ApplicationPreview[]
-let deleteResponse: ReturnType<typeof json>
+/** Responses for the next preview requests, in order; then `previewApps`. */
+let previewQueue: Array<FakeResponse | Promise<FakeResponse>>
+let deleteResponse: FakeResponse | Promise<FakeResponse>
 
 function installFetch() {
   fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
     if (url === '/api/statements/deletion/preview') {
-      return json(200, { applications: previewApps })
+      return previewQueue.shift() ?? json(200, { applications: previewApps })
     }
     if (url === '/api/statements/deletion' && init?.method === 'POST') {
       return deleteResponse
@@ -63,8 +76,10 @@ function installFetch() {
 
 const callsTo = (path: string) => fetchMock.mock.calls.filter(([url]) => url === path)
 
+let client: QueryClient
+
 function renderButton() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
       <DeleteStatementFilesButton scope={SCOPE} label="Delete statement files" title={TITLE} />
@@ -104,6 +119,7 @@ beforeEach(() => {
   vi.stubGlobal('fetch', fetchMock)
   auth.user = { id: 'sup-1', role: 'supervisor' }
   previewApps = [APP_1, APP_2]
+  previewQueue = []
   const deleted: ApplicationResult = {
     ...APP_1,
     status: 'deleted',
@@ -146,6 +162,18 @@ describe('DeleteStatementFilesDrawer: review', () => {
     expect(callsTo('/api/statements/deletion/preview')).toHaveLength(1)
     const [, init] = callsTo('/api/statements/deletion/preview')[0]
     expect(JSON.parse(init.body)).toEqual(SCOPE)
+  })
+
+  it('a failed background re-check is announced but leaves focus in the reason', async () => {
+    await openDrawer()
+    reasonBox().focus()
+    fireEvent.change(reasonBox(), { target: { value: 'Customer req' } })
+    previewQueue.push(json(500, { error: { code: 'INTERNAL_ERROR', message: 'S3 is down.' } }))
+
+    await client.invalidateQueries({ queryKey: ['statement-deletion-preview'] })
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('S3 is down.')
+    expect(document.activeElement).toBe(reasonBox())
   })
 
   it('keeps Continue disabled until a reason is entered', async () => {
@@ -222,6 +250,9 @@ describe('DeleteStatementFilesDrawer: delete', () => {
       results: [{ ...APP_1, status: 'partial', filesDeleted: 2, failedCount: 1 }],
     })
     await goToConfirm()
+    // The delete settling re-checks the bucket; hold that answer back.
+    const recheck = deferred()
+    previewQueue.push(recheck.promise)
     submitDelete()
 
     const heading = await screen.findByRole('heading', {
@@ -230,13 +261,41 @@ describe('DeleteStatementFilesDrawer: delete', () => {
     await waitFor(() => expect(document.activeElement).toBe(heading))
     expect(screen.getByText(/Failed — 1 of 3 files remain/)).toBeInTheDocument()
 
-    const previewsBefore = callsTo('/api/statements/deletion/preview').length
     fireEvent.click(within(dialog()).getByRole('button', { name: 'Retry' }))
 
     expect(await screen.findByRole('heading', { name: 'Review files to delete' })).toBeVisible()
-    await waitFor(() =>
-      expect(callsTo('/api/statements/deletion/preview').length).toBeGreaterThan(previewsBefore),
+    // The old counts are not shown while the re-check is out.
+    expect(screen.getByText('Checking for statement files…')).toBeInTheDocument()
+    expect(screen.queryByText('APP-1 · 3 files')).toBeNull()
+
+    recheck.resolve(json(200, { applications: [{ ...APP_1, fileCount: 1 }] }))
+    expect(await screen.findByText('APP-1 · 1 file')).toBeInTheDocument()
+    // The first preview and the one re-check: Retry does not ask again.
+    expect(callsTo('/api/statements/deletion/preview')).toHaveLength(2)
+  })
+
+  it('cannot be closed while the delete is in flight, so the outcome is shown', async () => {
+    const pending = deferred()
+    deleteResponse = pending.promise
+    await goToConfirm()
+    submitDelete()
+    await screen.findByText('Deleting files. Keep this drawer open.')
+
+    const closeX = within(dialog()).getByRole('button', { name: 'Close drawer' })
+    expect(closeX).toHaveAttribute('aria-disabled', 'true')
+    fireEvent.keyDown(document, { key: 'Escape' })
+    fireEvent.click(closeX)
+    fireEvent.click(screen.getByTestId('context-drawer-overlay'))
+    expect(dialog()).toBeInTheDocument()
+
+    pending.resolve(
+      json(200, { results: [{ ...APP_1, status: 'deleted', filesDeleted: 3, failedCount: 0 }] }),
     )
+    expect(await screen.findByText(/Deleted \(3 files\)/)).toBeInTheDocument()
+
+    expect(closeX).not.toHaveAttribute('aria-disabled', 'true')
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 
   it('a server error shows an error summary with the message and takes focus', async () => {

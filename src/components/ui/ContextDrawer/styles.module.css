@@ -70,12 +70,19 @@
   border-radius: 6px;
   color: var(--theme-elevation-600, #666);
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
 .closeButton:hover {
   background: var(--theme-elevation-100, #f3f3f3);
   color: var(--theme-text, #1a1a1a);
+}
+
+.closeButton[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .closeButton:focus {

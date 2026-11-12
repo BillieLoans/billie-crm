@@ -70,16 +70,33 @@ export function DeleteStatementFilesDrawer({
   scope,
   title,
 }: DeleteStatementFilesDrawerProps) {
+  // The delete lives out here so the drawer can refuse to close while it is in
+  // flight: closing would unmount the flow, and the operator would never see
+  // which files went.
+  const deletion = useDeleteStatementFiles()
+
   // ContextDrawer renders its children only while open, so each opening mounts
   // a fresh flow: back at the review, with a fresh preview.
   return (
-    <ContextDrawer isOpen={isOpen} onClose={onClose} title={title} maxWidth="560px">
-      <DeletionFlow scope={scope} onClose={onClose} />
+    <ContextDrawer
+      isOpen={isOpen}
+      onClose={onClose}
+      closeDisabled={deletion.isPending}
+      title={title}
+      maxWidth="560px"
+    >
+      <DeletionFlow scope={scope} onClose={onClose} deletion={deletion} />
     </ContextDrawer>
   )
 }
 
-function DeletionFlow({ scope, onClose }: { scope: DeletionScope; onClose: () => void }) {
+interface DeletionFlowProps {
+  scope: DeletionScope
+  onClose: () => void
+  deletion: ReturnType<typeof useDeleteStatementFiles>
+}
+
+function DeletionFlow({ scope, onClose, deletion }: DeletionFlowProps) {
   const [step, setStep] = useState<Step>('review')
   const [reason, setReason] = useState('')
   const [confirmText, setConfirmText] = useState('')
@@ -87,7 +104,6 @@ function DeletionFlow({ scope, onClose }: { scope: DeletionScope; onClose: () =>
   const [requestError, setRequestError] = useState<{ message: string; at: number } | null>(null)
 
   const preview = useStatementDeletionPreview(scope)
-  const deletion = useDeleteStatementFiles()
 
   const ids = useId()
   const reasonId = `${ids}-reason`
@@ -107,10 +123,13 @@ function DeletionFlow({ scope, onClose }: { scope: DeletionScope; onClose: () =>
   }, [step])
 
   const applications = preview.data ?? null
+  // The review never shows counts from before a re-check that is still out.
+  const reviewApplications = preview.isFetching ? null : applications
+  const reviewTotal = reviewApplications?.reduce((sum, app) => sum + app.fileCount, 0) ?? 0
   const totalFiles = applications?.reduce((sum, app) => sum + app.fileCount, 0) ?? 0
   const applicationsWithFiles = applications?.filter((app) => app.fileCount > 0).length ?? 0
   const trimmedReason = reason.trim()
-  const canContinue = trimmedReason.length > 0 && totalFiles > 0
+  const canContinue = trimmedReason.length > 0 && reviewTotal > 0
   const canDelete = confirmText === CONFIRM_WORD && totalFiles > 0 && !deletion.isPending
 
   const errorMessage =
@@ -119,12 +138,23 @@ function DeletionFlow({ scope, onClose }: { scope: DeletionScope; onClose: () =>
       : step === 'confirm'
         ? (requestError?.message ?? null)
         : null
-  const errorStamp = step === 'review' ? preview.errorUpdatedAt : requestError?.at
 
-  // An error takes focus to its summary (role="alert" also announces it).
+  // An error from something the operator did takes focus to the summary. A
+  // failed delete always is. A failed preview is only when the operator asked
+  // for it (opening, Check again, Retry): a background re-check that fails is
+  // announced by role="alert" but leaves focus where it is, say in Reason.
+  // Declared after the heading effect, so an error wins over the heading.
   useEffect(() => {
-    if (errorMessage) errorRef.current?.focus()
-  }, [errorMessage, errorStamp])
+    if (requestError) errorRef.current?.focus()
+  }, [requestError])
+
+  const operatorAskedForPreview = useRef(true)
+  useEffect(() => {
+    if (step !== 'review' || preview.isFetching) return
+    const focusError = operatorAskedForPreview.current && preview.isError
+    operatorAskedForPreview.current = false
+    if (focusError) errorRef.current?.focus()
+  }, [step, preview.isFetching, preview.isError, preview.errorUpdatedAt])
 
   const submit = () => {
     if (!canDelete) return
@@ -138,12 +168,14 @@ function DeletionFlow({ scope, onClose }: { scope: DeletionScope; onClose: () =>
     })
   }
 
+  // The delete settling has already re-checked the bucket (the hook
+  // invalidates the preview), so Retry only goes back to the review.
   const retry = () => {
+    operatorAskedForPreview.current = true
     setConfirmText('')
     setResults(null)
     setRequestError(null)
     setStep('review')
-    void preview.refetch()
   }
 
   const errorSummary = errorMessage ? (
@@ -184,20 +216,23 @@ function DeletionFlow({ scope, onClose }: { scope: DeletionScope; onClose: () =>
               <button
                 type="button"
                 className={styles.secondaryBtn}
-                onClick={() => void preview.refetch()}
+                onClick={() => {
+                  operatorAskedForPreview.current = true
+                  void preview.refetch()
+                }}
               >
                 Check again
               </button>
             </div>
           )}
-          {preview.isPending && (
+          {preview.isFetching && (
             <p className={styles.hint} role="status">
               Checking for statement files…
             </p>
           )}
-          {applications && (
+          {reviewApplications && (
             <ul className={styles.apps}>
-              {applications.map((app) => (
+              {reviewApplications.map((app) => (
                 <li key={app.conversationId} className={styles.app}>
                   <p className={styles.appLine}>
                     {`${appLabel(app)} · ${app.fileCount > 0 ? plural(app.fileCount, 'file') : 'No files'}`}
@@ -218,7 +253,7 @@ function DeletionFlow({ scope, onClose }: { scope: DeletionScope; onClose: () =>
               ))}
             </ul>
           )}
-          {applications && totalFiles === 0 && (
+          {reviewApplications && reviewTotal === 0 && (
             <p className={styles.info}>No statement files found.</p>
           )}
           <p className={styles.kept}>{KEPT_DATA_COPY}</p>
