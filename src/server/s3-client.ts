@@ -5,7 +5,13 @@
  * customer documents and issue screenshots. All access is server-side.
  */
 
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  ListObjectVersionsCommand,
+  DeleteObjectsCommand,
+} from '@aws-sdk/client-s3'
 
 let s3ClientInstance: S3Client | null = null
 
@@ -121,4 +127,112 @@ export async function getObjectByUri(s3Uri: string): Promise<{
     console.error('[s3-client] getObjectByUri failed', { bucket, key, code, msg })
     return null
   }
+}
+
+
+export interface ObjectVersionRef {
+  key: string
+  versionId?: string
+}
+
+/**
+ * Get the base folder under which per-application statement files live.
+ * @throws if S3_STATEMENT_BASE_FOLDER is not set
+ */
+export function getStatementBaseFolder(): string {
+  const folder = process.env.S3_STATEMENT_BASE_FOLDER
+  if (!folder) {
+    throw new Error('S3_STATEMENT_BASE_FOLDER environment variable is not set')
+  }
+  return folder
+}
+
+/**
+ * List every object version and delete marker under a prefix, following
+ * pagination. A versionId of 'null' (unversioned objects) is omitted.
+ */
+export async function listObjectVersionsUnderPrefix(prefix: string): Promise<ObjectVersionRef[]> {
+  const client = getS3Client()
+  const bucket = getBucketName()
+  const refs: ObjectVersionRef[] = []
+  let keyMarker: string | undefined
+  let versionIdMarker: string | undefined
+
+  do {
+    const page = await client.send(
+      new ListObjectVersionsCommand({
+        Bucket: bucket,
+        Prefix: prefix,
+        KeyMarker: keyMarker,
+        VersionIdMarker: versionIdMarker,
+      }),
+    )
+    for (const item of [...(page.Versions ?? []), ...(page.DeleteMarkers ?? [])]) {
+      if (!item.Key) continue
+      const ref: ObjectVersionRef = { key: item.Key }
+      if (item.VersionId && item.VersionId !== 'null') ref.versionId = item.VersionId
+      refs.push(ref)
+    }
+    if (page.IsTruncated) {
+      keyMarker = page.NextKeyMarker
+      versionIdMarker = page.NextVersionIdMarker
+    } else {
+      keyMarker = undefined
+      versionIdMarker = undefined
+    }
+  } while (keyMarker || versionIdMarker)
+
+  return refs
+}
+
+const DELETE_CHUNK_SIZE = 1000
+
+/**
+ * Delete specific object versions in chunks of 1000. DeleteObjects returns
+ * HTTP 200 with per-key Errors, so those are surfaced as failures. A chunk
+ * that throws marks every ref in it failed and the next chunk still runs.
+ */
+export async function deleteObjectVersions(refs: ObjectVersionRef[]): Promise<{
+  deleted: ObjectVersionRef[]
+  failed: Array<ObjectVersionRef & { message: string }>
+}> {
+  const client = getS3Client()
+  const bucket = getBucketName()
+  const deleted: ObjectVersionRef[] = []
+  const failed: Array<ObjectVersionRef & { message: string }> = []
+
+  for (let i = 0; i < refs.length; i += DELETE_CHUNK_SIZE) {
+    const chunk = refs.slice(i, i + DELETE_CHUNK_SIZE)
+    try {
+      const res = await client.send(
+        new DeleteObjectsCommand({
+          Bucket: bucket,
+          Delete: {
+            Quiet: false,
+            Objects: chunk.map((r) => ({ Key: r.key, VersionId: r.versionId })),
+          },
+        }),
+      )
+      for (const d of res.Deleted ?? []) {
+        if (!d.Key) continue
+        const ref: ObjectVersionRef = { key: d.Key }
+        if (d.VersionId && d.VersionId !== 'null') ref.versionId = d.VersionId
+        deleted.push(ref)
+      }
+      for (const e of res.Errors ?? []) {
+        if (!e.Key) continue
+        const ref: ObjectVersionRef & { message: string } = {
+          key: e.Key,
+          message: e.Message ?? e.Code ?? 'Unknown error',
+        }
+        if (e.VersionId && e.VersionId !== 'null') ref.versionId = e.VersionId
+        failed.push(ref)
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      for (const r of chunk) failed.push({ ...r, message })
+    }
+  }
+
+  return { deleted, failed }
 }
