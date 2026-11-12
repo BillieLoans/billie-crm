@@ -24,6 +24,15 @@ export const KEPT_DATA_COPY =
 
 export const CONFIRM_WORD = 'DELETE'
 
+/**
+ * Starts the error on an application whose post-delete re-list failed: the
+ * outcome is unverified, so the result says to check again.
+ */
+export const UNCONFIRMED_DELETION_ERROR = 'Could not confirm deletion'
+
+/** "1 file", "3 files". */
+export const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`
+
 export function isValidApplicationNumber(value: unknown): value is string {
   return typeof value === 'string' && APPLICATION_NUMBER_PATTERN.test(value)
 }

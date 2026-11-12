@@ -42,11 +42,17 @@ vi.mock('@/server/statement-deletion', () => ({
   previewDeletion: vi.fn(),
   executeDeletion: vi.fn(),
   latestDeletion: vi.fn(),
+  DeletionLogWriteError: class DeletionLogWriteError extends Error {},
 }))
 
 import { POST as previewPOST } from '@/app/api/statements/deletion/preview/route'
 import { POST as deletePOST, GET } from '@/app/api/statements/deletion/route'
-import { previewDeletion, executeDeletion, latestDeletion } from '@/server/statement-deletion'
+import {
+  DeletionLogWriteError,
+  previewDeletion,
+  executeDeletion,
+  latestDeletion,
+} from '@/server/statement-deletion'
 import { rateLimit } from '@/lib/utils/rateLimit'
 
 type Res = { body: Record<string, any>; status: number }
@@ -169,6 +175,26 @@ describe('POST delete validation', () => {
     expect(scope).toEqual(appScope)
     expect(reason).toBe('Customer request')
     expect(actor).toEqual({ id: '7', email: 'sam@billie.loans', name: 'Sam Lee' })
+  })
+
+  it('500 says the deletion may have partly happened when the log row cannot be written', async () => {
+    vi.mocked(executeDeletion).mockRejectedValue(new DeletionLogWriteError('db down'))
+    const res = await post(deletePOST, { ...appScope, reason: 'r' })
+    expect(res.status).toBe(500)
+    expect(res.body.error).toEqual({
+      code: 'LOG_WRITE_FAILED',
+      message: 'The deletion may have partly happened. Check again before retrying.',
+    })
+  })
+
+  it('any other failure keeps the generic 500 message', async () => {
+    vi.mocked(executeDeletion).mockRejectedValue(new Error('db down'))
+    const res = await post(deletePOST, { ...appScope, reason: 'r' })
+    expect(res.status).toBe(500)
+    expect(res.body.error).toEqual({
+      code: 'INTERNAL_ERROR',
+      message: 'An unexpected error occurred.',
+    })
   })
 
   it('actor name is undefined when the user has no names', async () => {

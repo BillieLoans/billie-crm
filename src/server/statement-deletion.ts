@@ -4,9 +4,9 @@
  * The scope (one application, or every application for a customer) is always
  * resolved here from the conversations projection, and S3 is always listed
  * here: callers never supply keys. Each application's files are deleted
- * version by version, then the prefixes are listed again so the reported
- * counts reflect what is actually left in the bucket, not what DeleteObjects
- * claimed. One append-only `statement-file-deletions` row is written per
+ * version by version, then the prefixes are listed again: the status and
+ * counts follow what is actually left in the bucket, not what DeleteObjects
+ * claimed. If that re-list fails, nothing is counted as deleted. One append-only `statement-file-deletions` row is written per
  * application, whatever the outcome.
  *
  * Authorisation is the route's job; every Local API call here overrides access.
@@ -16,6 +16,7 @@ import {
   isKeyWithinPrefixes,
   isValidApplicationNumber,
   statementPrefixes,
+  UNCONFIRMED_DELETION_ERROR,
   type DeletionStatus,
   type DeletionWarning,
 } from '@/lib/statement-deletion'
@@ -43,7 +44,10 @@ export interface ApplicationResult extends ApplicationPreview {
   status: DeletionStatus
   /** Versions confirmed gone by re-listing after the delete. */
   filesDeleted: number
-  /** Versions found that are still there. */
+  /**
+   * Versions still listed after the delete, including any written mid-delete.
+   * When the re-list failed, every version found (nothing is confirmed gone).
+   */
   failedCount: number
 }
 
@@ -58,6 +62,19 @@ export interface LatestDeletion {
 
 const INVALID_APPLICATION_NUMBER = 'Missing or invalid application number'
 const ERROR_MESSAGE_MAX = 200
+
+/**
+ * The deletion log row could not be written after the S3 work for an
+ * application had run, so files may already be gone with no audit row.
+ * The route tells the operator to check before retrying.
+ */
+export class DeletionLogWriteError extends Error {
+  constructor(cause: unknown) {
+    const message = cause instanceof Error ? cause.message : String(cause)
+    super(`Could not write the deletion log row: ${message}`, { cause })
+    this.name = 'DeletionLogWriteError'
+  }
+}
 
 interface ConversationRow {
   conversationId: string
@@ -199,6 +216,8 @@ interface Outcome {
   status: DeletionStatus
   filesFound: number
   filesDeleted: number
+  /** Versions still listed after the delete (or all found, if that is unconfirmed). */
+  failedCount: number
   deletedKeys: string[]
   failedKeys: string[]
   error?: string
@@ -208,6 +227,7 @@ const failedOutcome = (error: string): Outcome => ({
   status: 'failed',
   filesFound: 0,
   filesDeleted: 0,
+  failedCount: 0,
   deletedKeys: [],
   failedKeys: [],
   error,
@@ -235,6 +255,7 @@ async function deleteApplication(baseFolder: string, conv: ConversationRow): Pro
       status: 'nothing_found',
       filesFound: 0,
       filesDeleted: 0,
+      failedCount: 0,
       deletedKeys: [],
       failedKeys: [],
     }
@@ -254,37 +275,55 @@ async function deleteApplication(baseFolder: string, conv: ConversationRow): Pro
     })
   }
 
-  // Verify against the bucket rather than trusting the delete response.
-  let remaining: ObjectVersionRef[] = []
-  let stillThere: Set<string>
-  let error: string | undefined
+  // Verify against the bucket rather than trusting the delete response: what
+  // is still listed is what remains, including any version written mid-delete.
+  let remaining: ObjectVersionRef[]
   try {
     remaining = await listApplicationVersions(prefixes)
-    stillThere = new Set(remaining.map(versionId))
   } catch (err) {
-    // Without a re-list, fall back to what S3 reported as failed, and never
-    // let the outcome read as a clean delete.
+    // Without a re-list nothing is confirmed gone, so nothing is counted as
+    // deleted and the outcome never reads as a clean delete.
     console.error('[statement-deletion] verification listing failed', {
       conversationId: conv.conversationId,
       err,
     })
-    error = shortMessage('Could not confirm deletion', err)
-    stillThere = new Set(failed.map(versionId))
+    return {
+      status: 'partial',
+      filesFound: found.length,
+      filesDeleted: 0,
+      failedCount: found.length,
+      deletedKeys: [],
+      failedKeys: distinctKeys(found),
+      error: shortMessage(UNCONFIRMED_DELETION_ERROR, err),
+    }
   }
 
-  const gone = found.filter((r) => !stillThere.has(versionId(r)))
-  const filesDeleted = gone.length
-
-  const failedKeys = distinctKeys([...remaining, ...failed])
+  const stillThere = new Set(remaining.map(versionId))
+  const filesDeleted = found.filter((r) => !stillThere.has(versionId(r))).length
+  const failedKeys = distinctKeys(remaining)
   const failedKeySet = new Set(failedKeys)
-  const deletedKeys = distinctKeys(gone).filter((k) => !failedKeySet.has(k))
+  const deletedKeys = distinctKeys(found).filter((k) => !failedKeySet.has(k))
 
   let status: DeletionStatus
-  if (remaining.length === 0 && failed.length === 0 && !error) status = 'deleted'
+  if (remaining.length === 0) status = 'deleted'
   else if (filesDeleted === 0) status = 'failed'
   else status = 'partial'
 
-  return { status, filesFound: found.length, filesDeleted, deletedKeys, failedKeys, error }
+  // The delete response's failures only explain what is still listed.
+  const error =
+    remaining.length > 0 && failed.length > 0
+      ? shortMessage('Could not delete', [...new Set(failed.map((f) => f.message))].join('; '))
+      : undefined
+
+  return {
+    status,
+    filesFound: found.length,
+    filesDeleted,
+    failedCount: remaining.length,
+    deletedKeys,
+    failedKeys,
+    error,
+  }
 }
 
 export async function executeDeletion(
@@ -339,7 +378,7 @@ export async function executeDeletion(
         error: outcome.error,
         err,
       })
-      throw err
+      throw new DeletionLogWriteError(err)
     }
 
     const result: ApplicationResult = {
@@ -349,7 +388,7 @@ export async function executeDeletion(
       warnings,
       status: outcome.status,
       filesDeleted: outcome.filesDeleted,
-      failedCount: outcome.filesFound - outcome.filesDeleted,
+      failedCount: outcome.failedCount,
     }
     if (outcome.error) result.error = outcome.error
     results.push(result)

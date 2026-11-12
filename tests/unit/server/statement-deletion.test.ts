@@ -16,7 +16,12 @@ import {
   listObjectVersionsUnderPrefix,
   type ObjectVersionRef,
 } from '@/server/s3-client'
-import { executeDeletion, latestDeletion, previewDeletion } from '@/server/statement-deletion'
+import {
+  DeletionLogWriteError,
+  executeDeletion,
+  latestDeletion,
+  previewDeletion,
+} from '@/server/statement-deletion'
 
 const listMock = vi.mocked(listObjectVersionsUnderPrefix)
 const deleteMock = vi.mocked(deleteObjectVersions)
@@ -229,12 +234,14 @@ describe('executeDeletion', () => {
       fileCount: 3,
       filesDeleted: 2,
       failedCount: 1,
+      error: 'Could not delete: AccessDenied',
     })
     expect(create.mock.calls[0][0].data).toMatchObject({
       status: 'partial',
       filesFound: 3,
       filesDeleted: 2,
       failedKeys: ['customer/APP-1/AffordabilityReports/c.pdf'],
+      error: 'Could not delete: AccessDenied',
     })
   })
 
@@ -294,10 +301,117 @@ describe('executeDeletion', () => {
       actor,
     )
 
-    expect(result.status).toBe('partial')
-    expect(result.error).toMatch(/Could not confirm deletion: SlowDown/)
-    expect(create.mock.calls[0][0].data.status).toBe('partial')
-    expect(create.mock.calls[0][0].data.error).toBe('Could not confirm deletion: SlowDown')
+    // Unverified: nothing is counted as deleted, and every found key is unconfirmed.
+    expect(result).toMatchObject({
+      status: 'partial',
+      fileCount: 2,
+      filesDeleted: 0,
+      failedCount: 2,
+      error: 'Could not confirm deletion: SlowDown',
+    })
+    const row = create.mock.calls[0][0].data
+    expect(row).toMatchObject({
+      status: 'partial',
+      filesFound: 2,
+      filesDeleted: 0,
+      deletedKeys: [],
+      error: 'Could not confirm deletion: SlowDown',
+    })
+    expect([...row.failedKeys].sort()).toEqual([
+      'customer/APP-1/statements/a.json',
+      'customer/APP-1/statements/b.json',
+    ])
+    errSpy.mockRestore()
+  })
+
+  it('deleted when the re-list is empty, whatever the delete response reported', async () => {
+    seed('customer/APP-1/statements/a.json', 'customer/APP-1/statements/b.json')
+    deleteMock.mockImplementation(async (refs: ObjectVersionRef[]) => {
+      // Every version goes, but the response still lists failures.
+      bucket = []
+      return { deleted: [], failed: refs.map((r) => ({ ...r, message: 'InternalError' })) }
+    })
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { payload, create } = makePayload({ conversations: [conv()] })
+
+    const [result] = await executeDeletion(
+      payload,
+      { scope: 'application', conversationId: 'C-1' },
+      'r',
+      actor,
+    )
+
+    expect(result).toMatchObject({
+      status: 'deleted',
+      fileCount: 2,
+      filesDeleted: 2,
+      failedCount: 0,
+    })
+    expect(result.error).toBeUndefined()
+    const row = create.mock.calls[0][0].data
+    expect(row).toMatchObject({ status: 'deleted', filesDeleted: 2, failedKeys: [], error: null })
+    expect([...row.deletedKeys].sort()).toEqual([
+      'customer/APP-1/statements/a.json',
+      'customer/APP-1/statements/b.json',
+    ])
+    errSpy.mockRestore()
+  })
+
+  it('a version written mid-delete counts as remaining', async () => {
+    seed('customer/APP-1/statements/a.json', 'customer/APP-1/statements/b.json')
+    const late = { key: 'customer/APP-1/statements/late.json', versionId: 'v-late' }
+    deleteMock.mockImplementation(async (refs: ObjectVersionRef[]) => {
+      // Everything found goes, and a new file lands before the re-list.
+      bucket = [late]
+      return { deleted: refs, failed: [] }
+    })
+    const { payload, create } = makePayload({ conversations: [conv()] })
+
+    const [result] = await executeDeletion(
+      payload,
+      { scope: 'application', conversationId: 'C-1' },
+      'r',
+      actor,
+    )
+
+    expect(result).toMatchObject({
+      status: 'partial',
+      fileCount: 2,
+      filesDeleted: 2,
+      failedCount: 1,
+    })
+    const row = create.mock.calls[0][0].data
+    expect(row).toMatchObject({ status: 'partial', failedKeys: [late.key] })
+    expect([...row.deletedKeys].sort()).toEqual([
+      'customer/APP-1/statements/a.json',
+      'customer/APP-1/statements/b.json',
+    ])
+  })
+
+  it('failed when nothing found went but a new version also appeared', async () => {
+    seed('customer/APP-1/statements/a.json')
+    const late = { key: 'customer/APP-1/statements/late.json', versionId: 'v-late' }
+    deleteMock.mockImplementation(async (refs: ObjectVersionRef[]) => {
+      bucket.push(late)
+      return { deleted: [], failed: refs.map((r) => ({ ...r, message: 'AccessDenied' })) }
+    })
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { payload } = makePayload({ conversations: [conv()] })
+
+    const [result] = await executeDeletion(
+      payload,
+      { scope: 'application', conversationId: 'C-1' },
+      'r',
+      actor,
+    )
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      fileCount: 1,
+      filesDeleted: 0,
+      failedCount: 2,
+      error: 'Could not delete: AccessDenied',
+    })
     errSpy.mockRestore()
   })
 
@@ -319,6 +433,7 @@ describe('executeDeletion', () => {
     )
 
     expect(results.map((r) => r.status)).toEqual(['failed', 'deleted'])
+    expect(results[0].error).toBe('Could not delete: boom')
     expect(create.mock.calls[0][0].data).toMatchObject({
       status: 'failed',
       failedKeys: ['customer/APP-1/statements/a.json'],
@@ -494,9 +609,14 @@ describe('executeDeletion', () => {
     })
     create.mockRejectedValueOnce(new Error('db down'))
 
-    await expect(
-      executeDeletion(payload, { scope: 'customer', customerIdString: 'CUS-1' }, 'r', actor),
-    ).rejects.toThrow('db down')
+    const thrown = await executeDeletion(
+      payload,
+      { scope: 'customer', customerIdString: 'CUS-1' },
+      'r',
+      actor,
+    ).catch((e: unknown) => e)
+    expect(thrown).toBeInstanceOf(DeletionLogWriteError)
+    expect((thrown as Error).message).toMatch(/db down/)
 
     const logged = errSpy.mock.calls.find((c) =>
       String(c[0]).includes('could not write the deletion log row'),

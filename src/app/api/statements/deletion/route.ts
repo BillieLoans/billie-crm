@@ -11,7 +11,7 @@ import { requireAuth } from '@/lib/auth'
 import { hasAnyRole, hasApprovalAuthority } from '@/lib/access'
 import { DeletionRequestSchema } from '@/lib/schemas/statement-deletion'
 import { rateLimit, STATEMENT_DELETION_RATE_LIMIT } from '@/lib/utils/rateLimit'
-import { executeDeletion, latestDeletion } from '@/server/statement-deletion'
+import { DeletionLogWriteError, executeDeletion, latestDeletion } from '@/server/statement-deletion'
 
 const err = (code: string, message: string, status: number) =>
   NextResponse.json({ error: { code, message } }, { status })
@@ -48,10 +48,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ results })
   } catch (error) {
     console.error('[StatementDeletion] Delete error:', error)
+    if (error instanceof DeletionLogWriteError) {
+      // S3 work ran for at least one application before its log row failed.
+      return err(
+        'LOG_WRITE_FAILED',
+        'The deletion may have partly happened. Check again before retrying.',
+        500,
+      )
+    }
     return err('INTERNAL_ERROR', 'An unexpected error occurred.', 500)
   }
 }
 
+// This intentionally serves the latest deletion's reason and actor to every
+// staff role: the spec puts the "deleted on/by" note in the Statements section
+// for all staff. The raw `statement-file-deletions` collection (keys, warnings,
+// every attempt) stays approver-only.
 export async function GET(request: NextRequest) {
   try {
     const auth = await requireAuth(hasAnyRole)
