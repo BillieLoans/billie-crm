@@ -114,3 +114,9 @@ export const ASSESSMENT_RATE_LIMIT: RateLimitOptions = {
   limit: 30,
   windowMs: 60_000,
 }
+
+/** Statement file deletion (preview and delete): 10 req/min/user */
+export const STATEMENT_DELETION_RATE_LIMIT: RateLimitOptions = {
+  limit: 10,
+  windowMs: 60_000,
+}
