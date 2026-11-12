@@ -340,3 +340,13 @@
 .statementValue {
   font-weight: 500;
 }
+
+.deletionNote {
+  margin: 0;
+  font-size: 13px;
+  color: var(--theme-elevation-800, #374151);
+}
+
+.deletionAction {
+  margin-top: 12px;
+}

@@ -2,6 +2,9 @@
 import { describe, test, expect, afterEach, vi } from 'vitest'
 import { render, screen, cleanup } from '@testing-library/react'
 
+// The panel renders the statement-deletion button, which reads the user via useAuth.
+vi.mock('@payloadcms/ui', () => ({ useAuth: () => ({ user: null }) }))
+
 // Mock the conversations query so no QueryClient / network is needed.
 vi.mock('@/hooks/queries/useConversations', () => ({
   useCustomerConversations: () => ({
