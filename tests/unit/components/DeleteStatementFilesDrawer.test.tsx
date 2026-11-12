@@ -1,6 +1,6 @@
 /**
  * DeleteStatementFilesButton + DeleteStatementFilesDrawer: a supervisor
- * permanently deletes a customer's bank-statement files from S3.
+ * deletes a customer's bank-statement files from S3.
  *
  * Drives the real button, drawer and hooks; only `fetch` and the signed-in
  * user are stubbed. The flow is the stepped one docs/ux-standards.md asks of
@@ -238,7 +238,7 @@ describe('DeleteStatementFilesDrawer: confirm', () => {
     expect(document.activeElement).toBe(heading)
     expect(
       screen.getByText(
-        "3 files across 1 application will be permanently deleted. They can't be recovered.",
+        "3 files across 1 application will be deleted from Billie's storage now. Backup copies are erased within 180 days.",
       ),
     ).toBeInTheDocument()
 

@@ -1,13 +1,23 @@
 /**
- * Permanently delete a customer's bank-statement files from S3.
+ * Delete a customer's bank-statement files from S3.
  *
  * The scope (one application, or every application for a customer) is always
  * resolved here from the conversations projection, and S3 is always listed
- * here: callers never supply keys. Each application's files are deleted
- * version by version, then the prefixes are listed again: the status and
- * counts follow what is actually left in the bucket, not what DeleteObjects
- * claimed. If that re-list fails, nothing is counted as deleted. One append-only `statement-file-deletions` row is written per
- * application, whatever the outcome.
+ * here: callers never supply keys.
+ *
+ * Per application: list every version, place a delete marker on each key that
+ * holds data (a plain delete, no VersionId), then delete the listed data
+ * versions by VersionId. The marker comes first because replication carries
+ * delete markers to the backup bucket but never version-specific deletes; the
+ * marker makes the backup's copy noncurrent, and its lifecycle rule erases it.
+ * A key whose marker was not placed keeps all its versions. Delete markers are
+ * never deleted and never counted as files.
+ *
+ * Then the prefixes are listed again: the status and counts follow the data
+ * versions actually left in the bucket, not what DeleteObjects claimed. If that
+ * re-list fails, nothing is counted as deleted. One append-only
+ * `statement-file-deletions` row is written per application, whatever the
+ * outcome.
  *
  * Authorisation is the route's job; every Local API call here overrides access.
  */
@@ -24,7 +34,9 @@ import {
   deleteObjectVersions,
   getStatementBaseFolder,
   listObjectVersionsUnderPrefix,
+  placeDeleteMarkers,
   type ObjectVersionRef,
+  type VersionedKey,
 } from '@/server/s3-client'
 
 export type DeletionScope =
@@ -34,7 +46,7 @@ export type DeletionScope =
 export interface ApplicationPreview {
   conversationId: string
   applicationNumber: string | null
-  /** Object versions (delete markers included) found under the application's prefixes. */
+  /** Data versions found under the application's prefixes. Delete markers are not files. */
   fileCount: number
   warnings: DeletionWarning[]
   error?: string
@@ -42,11 +54,12 @@ export interface ApplicationPreview {
 
 export interface ApplicationResult extends ApplicationPreview {
   status: DeletionStatus
-  /** Versions confirmed gone by re-listing after the delete. */
+  /** Data versions confirmed gone by re-listing after the delete. */
   filesDeleted: number
   /**
-   * Versions still listed after the delete, including any written mid-delete.
-   * When the re-list failed, every version found (nothing is confirmed gone).
+   * Data versions still listed after the delete, including any written
+   * mid-delete. When the re-list failed, every data version found (nothing is
+   * confirmed gone).
    */
   failedCount: number
 }
@@ -146,9 +159,9 @@ async function warningsFor(payload: Payload, conv: ConversationRow): Promise<Del
 }
 
 /**
- * Every version under the application's prefixes, re-checked key by key: a
- * listing that strays outside the prefixes (e.g. APP-10 for APP-1) is dropped
- * and reported, never deleted.
+ * Every version and delete marker under the application's prefixes, re-checked
+ * key by key: a listing that strays outside the prefixes (e.g. APP-10 for
+ * APP-1) is dropped and reported, never deleted.
  */
 async function listApplicationVersions(prefixes: string[]): Promise<ObjectVersionRef[]> {
   const refs: ObjectVersionRef[] = []
@@ -172,8 +185,15 @@ function shortMessage(prefix: string, err: unknown): string {
   return `${prefix}: ${message}`.slice(0, ERROR_MESSAGE_MAX)
 }
 
-const versionId = (r: ObjectVersionRef) => `${r.key}\u0000${r.versionId}`
+/** The listed entries that hold data: everything but delete markers. */
+async function listApplicationData(prefixes: string[]): Promise<ObjectVersionRef[]> {
+  return (await listApplicationVersions(prefixes)).filter((r) => !r.isDeleteMarker)
+}
+
+const versionId = (r: VersionedKey) => `${r.key}\u0000${r.versionId}`
 const distinctKeys = (refs: Array<{ key: string }>) => [...new Set(refs.map((r) => r.key))]
+const distinctMessages = (failures: Array<{ message: string }>) =>
+  [...new Set(failures.map((f) => f.message))].join('; ')
 
 export async function previewDeletion(
   payload: Payload,
@@ -194,7 +214,7 @@ export async function previewDeletion(
       preview.error = INVALID_APPLICATION_NUMBER
     } else {
       try {
-        const refs = await listApplicationVersions(
+        const refs = await listApplicationData(
           statementPrefixes(baseFolder, conv.applicationNumber),
         )
         preview.fileCount = refs.length
@@ -216,7 +236,7 @@ interface Outcome {
   status: DeletionStatus
   filesFound: number
   filesDeleted: number
-  /** Versions still listed after the delete (or all found, if that is unconfirmed). */
+  /** Data versions still listed after the delete (or all found, if that is unconfirmed). */
   failedCount: number
   deletedKeys: string[]
   failedKeys: string[]
@@ -241,7 +261,7 @@ async function deleteApplication(baseFolder: string, conv: ConversationRow): Pro
 
   let found: ObjectVersionRef[]
   try {
-    found = await listApplicationVersions(prefixes)
+    found = await listApplicationData(prefixes)
   } catch (err) {
     console.error('[statement-deletion] listing failed', {
       conversationId: conv.conversationId,
@@ -261,12 +281,46 @@ async function deleteApplication(baseFolder: string, conv: ConversationRow): Pro
     }
   }
 
-  let failed: Array<ObjectVersionRef & { message: string }>
+  // Markers first. A key without its marker keeps every version: deleting them
+  // by VersionId alone would never reach the backup bucket.
+  const keys = distinctKeys(found)
+  let markerFailures: Array<{ key: string; message: string }>
+  let placed: Set<string>
   try {
-    ;({ failed } = await deleteObjectVersions(found))
+    const res = await placeDeleteMarkers(keys)
+    placed = new Set(res.placed)
+    markerFailures = res.failed
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    failed = found.map((r) => ({ ...r, message }))
+    placed = new Set()
+    markerFailures = keys.map((key) => ({ key, message }))
+  }
+  const reportedFailed = new Set(markerFailures.map((f) => f.key))
+  for (const key of keys) {
+    if (!placed.has(key) && !reportedFailed.has(key)) {
+      markerFailures.push({ key, message: 'No result returned' })
+    }
+  }
+  if (markerFailures.length > 0) {
+    console.error('[statement-deletion] some delete markers could not be placed', {
+      conversationId: conv.conversationId,
+      markerFailures,
+    })
+  }
+
+  // Only the data versions listed above, so the new markers (and any older
+  // ones) are never deleted.
+  const toDelete: VersionedKey[] = found
+    .filter((r) => placed.has(r.key) && !r.isDeleteMarker)
+    .map((r) => ({ key: r.key, versionId: r.versionId }))
+  let failed: Array<VersionedKey & { message: string }> = []
+  if (toDelete.length > 0) {
+    try {
+      ;({ failed } = await deleteObjectVersions(toDelete))
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      failed = toDelete.map((r) => ({ ...r, message }))
+    }
   }
   if (failed.length > 0) {
     console.error('[statement-deletion] some versions could not be deleted', {
@@ -275,11 +329,12 @@ async function deleteApplication(baseFolder: string, conv: ConversationRow): Pro
     })
   }
 
-  // Verify against the bucket rather than trusting the delete response: what
-  // is still listed is what remains, including any version written mid-delete.
+  // Verify against the bucket rather than trusting the delete response: the
+  // data versions still listed are what remains, including any written
+  // mid-delete. Delete markers, old and new, are not files.
   let remaining: ObjectVersionRef[]
   try {
-    remaining = await listApplicationVersions(prefixes)
+    remaining = await listApplicationData(prefixes)
   } catch (err) {
     // Without a re-list nothing is confirmed gone, so nothing is counted as
     // deleted and the outcome never reads as a clean delete.
@@ -309,10 +364,15 @@ async function deleteApplication(baseFolder: string, conv: ConversationRow): Pro
   else if (filesDeleted === 0) status = 'failed'
   else status = 'partial'
 
-  // The delete response's failures only explain what is still listed.
+  // The marker and delete failures only explain what is still listed.
+  const reasons: string[] = []
+  if (markerFailures.length > 0) {
+    reasons.push(`Could not place delete marker: ${distinctMessages(markerFailures)}`)
+  }
+  if (failed.length > 0) reasons.push(`Could not delete: ${distinctMessages(failed)}`)
   const error =
-    remaining.length > 0 && failed.length > 0
-      ? shortMessage('Could not delete', [...new Set(failed.map((f) => f.message))].join('; '))
+    remaining.length > 0 && reasons.length > 0
+      ? reasons.join('; ').slice(0, ERROR_MESSAGE_MAX)
       : undefined
 
   return {

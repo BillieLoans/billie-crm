@@ -4,12 +4,22 @@ import {
   DELETION_WARNING_COPY,
   KEPT_DATA_COPY,
   STATEMENT_SUBFOLDERS,
+  confirmDeletionWarning,
   isKeyWithinPrefixes,
   isValidApplicationNumber,
   statementPrefixes,
 } from '@/lib/statement-deletion'
 
 describe('statement-deletion helpers', () => {
+  it('states the confirm warning, with backups erased within 180 days', () => {
+    expect(confirmDeletionWarning(3, 1)).toBe(
+      "3 files across 1 application will be deleted from Billie's storage now. Backup copies are erased within 180 days.",
+    )
+    expect(confirmDeletionWarning(1, 2)).toBe(
+      "1 file across 2 applications will be deleted from Billie's storage now. Backup copies are erased within 180 days.",
+    )
+  })
+
   it('builds the two prefixes, each ending in a slash', () => {
     expect(statementPrefixes('customer', 'APP-1')).toEqual([
       'customer/APP-1/statements/',

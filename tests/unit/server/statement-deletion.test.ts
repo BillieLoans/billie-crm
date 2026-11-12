@@ -1,12 +1,14 @@
 /**
  * The statement-file deletion service: scope resolution, warnings, the S3
- * list → delete → verify cycle, and the append-only log row per application.
+ * list → place delete markers → delete versions → verify cycle, and the
+ * append-only log row per application.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { Payload } from 'payload'
 
 vi.mock('@/server/s3-client', () => ({
   listObjectVersionsUnderPrefix: vi.fn(),
+  placeDeleteMarkers: vi.fn(),
   deleteObjectVersions: vi.fn(),
   getStatementBaseFolder: vi.fn(() => 'customer'),
 }))
@@ -14,7 +16,9 @@ vi.mock('@/server/s3-client', () => ({
 import {
   deleteObjectVersions,
   listObjectVersionsUnderPrefix,
+  placeDeleteMarkers,
   type ObjectVersionRef,
+  type VersionedKey,
 } from '@/server/s3-client'
 import {
   DeletionLogWriteError,
@@ -24,16 +28,39 @@ import {
 } from '@/server/statement-deletion'
 
 const listMock = vi.mocked(listObjectVersionsUnderPrefix)
+const markerMock = vi.mocked(placeDeleteMarkers)
 const deleteMock = vi.mocked(deleteObjectVersions)
 
 type Row = Record<string, any>
 
-/** A versioned bucket held in memory: listing reads it, deleting removes from it. */
+/**
+ * A versioned bucket held in memory. Listing reads it; a delete without a
+ * VersionId adds a delete-marker version for the key; a delete by VersionId
+ * removes that version.
+ */
 let bucket: ObjectVersionRef[] = []
-const id = (r: ObjectVersionRef) => `${r.key}\u0000${r.versionId}`
+let markerSeq = 0
+const id = (r: VersionedKey) => `${r.key}\u0000${r.versionId}`
+const data = (key: string, versionId: string): ObjectVersionRef => ({
+  key,
+  versionId,
+  isDeleteMarker: false,
+})
+const marker = (key: string, versionId: string): ObjectVersionRef => ({
+  key,
+  versionId,
+  isDeleteMarker: true,
+})
+const markerIds = () => new Set(bucket.filter((r) => r.isDeleteMarker).map(id))
+const dataIn = (refs: ObjectVersionRef[]) => refs.filter((r) => !r.isDeleteMarker)
 
 function seed(...keys: string[]) {
-  bucket.push(...keys.map((key, i) => ({ key, versionId: `v${i}` })))
+  bucket.push(...keys.map((key, i) => data(key, `v${i}`)))
+}
+
+function addMarkers(keys: string[]) {
+  for (const key of keys) bucket.push(marker(key, `dm-${++markerSeq}`))
+  return { placed: [...keys], failed: [] }
 }
 
 function makePayload(opts: { conversations?: Row[]; loanAccounts?: Row[]; deletions?: Row[] }) {
@@ -86,12 +113,19 @@ const actor = { id: 'u-1', email: 'sup@billie.loans', name: 'Sue Pervisor' }
 
 beforeEach(() => {
   bucket = []
+  markerSeq = 0
   listMock.mockReset()
+  markerMock.mockReset()
   deleteMock.mockReset()
   listMock.mockImplementation(async (prefix: string) =>
     bucket.filter((r) => r.key.startsWith(prefix)).map((r) => ({ ...r })),
   )
-  deleteMock.mockImplementation(async (refs: ObjectVersionRef[]) => {
+  markerMock.mockImplementation(async (keys: string[]) => addMarkers(keys))
+  deleteMock.mockImplementation(async (refs: VersionedKey[]) => {
+    const markers = markerIds()
+    if (refs.some((r) => markers.has(id(r)))) {
+      throw new Error('test bucket: a delete marker was sent to deleteObjectVersions')
+    }
     const gone = new Set(refs.map(id))
     bucket = bucket.filter((r) => !gone.has(id(r)))
     return { deleted: refs, failed: [] }
@@ -188,7 +222,7 @@ describe('executeDeletion', () => {
 
   it('drops keys outside the prefixes', async () => {
     seed('customer/APP-1/statements/a.json')
-    const stray = { key: 'customer/APP-10/statements/x', versionId: 'vx' }
+    const stray = data('customer/APP-10/statements/x', 'vx')
     listMock.mockImplementation(async (prefix: string) => {
       const real = bucket.filter((r) => r.key.startsWith(prefix))
       return prefix.endsWith('/statements/') ? [...real, stray] : real
@@ -200,6 +234,7 @@ describe('executeDeletion', () => {
 
     const passed = deleteMock.mock.calls.flatMap((c) => c[0])
     expect(passed.map((r) => r.key)).toEqual(['customer/APP-1/statements/a.json'])
+    expect(markerMock.mock.calls.flatMap((c) => c[0])).toEqual(['customer/APP-1/statements/a.json'])
     expect(errSpy.mock.calls.some((c) => JSON.stringify(c).includes(stray.key))).toBe(true)
     expect(create.mock.calls[0][0].data).toMatchObject({
       status: 'deleted',
@@ -215,7 +250,7 @@ describe('executeDeletion', () => {
       'customer/APP-1/statements/b.json',
       'customer/APP-1/AffordabilityReports/c.pdf',
     )
-    deleteMock.mockImplementation(async (refs: ObjectVersionRef[]) => {
+    deleteMock.mockImplementation(async (refs: VersionedKey[]) => {
       const failed = refs.filter((r) => r.key.endsWith('c.pdf'))
       const deleted = refs.filter((r) => !r.key.endsWith('c.pdf'))
       const gone = new Set(deleted.map(id))
@@ -253,8 +288,8 @@ describe('executeDeletion', () => {
       'customer/APP-1/statements/b.json',
       'customer/APP-1/AffordabilityReports/c.pdf',
     )
-    deleteMock.mockImplementation(async (refs: ObjectVersionRef[]) => {
-      // Reports every ref deleted, but b.json survives.
+    deleteMock.mockImplementation(async (refs: VersionedKey[]) => {
+      // Reports every ref deleted, but b.json survives (with its new marker).
       bucket = bucket.filter((r) => r.key.endsWith('b.json'))
       return { deleted: refs, failed: [] }
     })
@@ -328,7 +363,7 @@ describe('executeDeletion', () => {
 
   it('deleted when the re-list is empty, whatever the delete response reported', async () => {
     seed('customer/APP-1/statements/a.json', 'customer/APP-1/statements/b.json')
-    deleteMock.mockImplementation(async (refs: ObjectVersionRef[]) => {
+    deleteMock.mockImplementation(async (refs: VersionedKey[]) => {
       // Every version goes, but the response still lists failures.
       bucket = []
       return { deleted: [], failed: refs.map((r) => ({ ...r, message: 'InternalError' })) }
@@ -361,8 +396,8 @@ describe('executeDeletion', () => {
 
   it('a version written mid-delete counts as remaining', async () => {
     seed('customer/APP-1/statements/a.json', 'customer/APP-1/statements/b.json')
-    const late = { key: 'customer/APP-1/statements/late.json', versionId: 'v-late' }
-    deleteMock.mockImplementation(async (refs: ObjectVersionRef[]) => {
+    const late = data('customer/APP-1/statements/late.json', 'v-late')
+    deleteMock.mockImplementation(async (refs: VersionedKey[]) => {
       // Everything found goes, and a new file lands before the re-list.
       bucket = [late]
       return { deleted: refs, failed: [] }
@@ -392,8 +427,8 @@ describe('executeDeletion', () => {
 
   it('failed when nothing found went but a new version also appeared', async () => {
     seed('customer/APP-1/statements/a.json')
-    const late = { key: 'customer/APP-1/statements/late.json', versionId: 'v-late' }
-    deleteMock.mockImplementation(async (refs: ObjectVersionRef[]) => {
+    const late = data('customer/APP-1/statements/late.json', 'v-late')
+    deleteMock.mockImplementation(async (refs: VersionedKey[]) => {
       bucket.push(late)
       return { deleted: [], failed: refs.map((r) => ({ ...r, message: 'AccessDenied' })) }
     })
@@ -445,7 +480,7 @@ describe('executeDeletion', () => {
 
   it('failed: 0 deleted and 2 failed', async () => {
     seed('customer/APP-1/statements/a.json', 'customer/APP-1/statements/b.json')
-    deleteMock.mockImplementation(async (refs: ObjectVersionRef[]) => ({
+    deleteMock.mockImplementation(async (refs: VersionedKey[]) => ({
       deleted: [],
       failed: refs.map((r) => ({ ...r, message: 'AccessDenied' })),
     }))
@@ -487,6 +522,7 @@ describe('executeDeletion', () => {
     )
 
     expect(result).toMatchObject({ status: 'nothing_found', fileCount: 0, filesDeleted: 0 })
+    expect(markerMock).not.toHaveBeenCalled()
     expect(deleteMock).not.toHaveBeenCalled()
     expect(create.mock.calls[0][0].data).toMatchObject({
       status: 'nothing_found',
@@ -497,9 +533,9 @@ describe('executeDeletion', () => {
 
   it('counts versions, not keys, while the key lists stay distinct', async () => {
     bucket.push(
-      { key: 'customer/APP-1/statements/a.json', versionId: 'v1' },
-      { key: 'customer/APP-1/statements/a.json', versionId: 'v2' },
-      { key: 'customer/APP-1/statements/a.json', versionId: 'null' },
+      data('customer/APP-1/statements/a.json', 'v1'),
+      data('customer/APP-1/statements/a.json', 'v2'),
+      data('customer/APP-1/statements/a.json', 'null'),
     )
     const { payload, create } = makePayload({ conversations: [conv()] })
 
@@ -511,6 +547,9 @@ describe('executeDeletion', () => {
       filesDeleted: 3,
       deletedKeys: ['customer/APP-1/statements/a.json'],
     })
+    // One marker per key, not per version.
+    expect(markerMock).toHaveBeenCalledTimes(1)
+    expect(markerMock.mock.calls[0][0]).toEqual(['customer/APP-1/statements/a.json'])
   })
 
   it('invalid application number fails only that application', async () => {
@@ -569,6 +608,7 @@ describe('executeDeletion', () => {
       error: 'Missing or invalid application number',
     })
     expect(listMock).not.toHaveBeenCalled()
+    expect(markerMock).not.toHaveBeenCalled()
     expect(deleteMock).not.toHaveBeenCalled()
     expect(create).toHaveBeenCalledTimes(1)
   })
@@ -633,9 +673,249 @@ describe('executeDeletion', () => {
       failedKeys: [],
     })
     // Nothing further is deleted once the audit trail cannot be written.
+    expect(markerMock).toHaveBeenCalledTimes(1)
     expect(deleteMock).toHaveBeenCalledTimes(1)
-    expect(bucket.map((r) => r.key)).toEqual(['customer/APP-2/statements/b.json'])
+    expect(dataIn(bucket).map((r) => r.key)).toEqual(['customer/APP-2/statements/b.json'])
     errSpy.mockRestore()
+  })
+
+  describe('delete markers first, so the backup learns of the delete', () => {
+    it('places a marker for every key with a data version before any version delete', async () => {
+      seed(
+        'customer/APP-1/statements/a.json',
+        'customer/APP-1/statements/b.json',
+        'customer/APP-1/AffordabilityReports/c.pdf',
+      )
+      bucket.push(data('customer/APP-1/statements/a.json', 'v-old'))
+      const { payload } = makePayload({ conversations: [conv()] })
+
+      await executeDeletion(payload, { scope: 'application', conversationId: 'C-1' }, 'r', actor)
+
+      expect([...markerMock.mock.calls.flatMap((c) => c[0])].sort()).toEqual([
+        'customer/APP-1/AffordabilityReports/c.pdf',
+        'customer/APP-1/statements/a.json',
+        'customer/APP-1/statements/b.json',
+      ])
+      const lastMarkerCall = Math.max(...markerMock.mock.invocationCallOrder)
+      const firstDeleteCall = Math.min(...deleteMock.mock.invocationCallOrder)
+      expect(deleteMock).toHaveBeenCalled()
+      expect(lastMarkerCall).toBeLessThan(firstDeleteCall)
+      expect(
+        deleteMock.mock.calls
+          .flatMap((c) => c[0])
+          .map(id)
+          .sort(),
+      ).toEqual(
+        [
+          'customer/APP-1/AffordabilityReports/c.pdf\u0000v2',
+          'customer/APP-1/statements/a.json\u0000v-old',
+          'customer/APP-1/statements/a.json\u0000v0',
+          'customer/APP-1/statements/b.json\u0000v1',
+        ].sort(),
+      )
+    })
+
+    it('a key whose marker fails keeps all its versions and ends partial with an error', async () => {
+      seed('customer/APP-1/statements/a.json', 'customer/APP-1/AffordabilityReports/c.pdf')
+      bucket.push(data('customer/APP-1/AffordabilityReports/c.pdf', 'v-old'))
+      markerMock.mockImplementation(async (keys: string[]) => {
+        const ok = keys.filter((k) => !k.endsWith('c.pdf'))
+        addMarkers(ok)
+        return {
+          placed: ok,
+          failed: keys
+            .filter((k) => k.endsWith('c.pdf'))
+            .map((key) => ({ key, message: 'AccessDenied' })),
+        }
+      })
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const { payload, create } = makePayload({ conversations: [conv()] })
+
+      const [result] = await executeDeletion(
+        payload,
+        { scope: 'application', conversationId: 'C-1' },
+        'r',
+        actor,
+      )
+
+      const sent = deleteMock.mock.calls.flatMap((c) => c[0])
+      expect(sent.map((r) => r.key)).toEqual(['customer/APP-1/statements/a.json'])
+      expect(dataIn(bucket).filter((r) => r.key.endsWith('c.pdf'))).toHaveLength(2)
+      expect(result).toMatchObject({
+        status: 'partial',
+        fileCount: 3,
+        filesDeleted: 1,
+        failedCount: 2,
+        error: 'Could not place delete marker: AccessDenied',
+      })
+      expect(create.mock.calls[0][0].data).toMatchObject({
+        status: 'partial',
+        filesFound: 3,
+        filesDeleted: 1,
+        deletedKeys: ['customer/APP-1/statements/a.json'],
+        failedKeys: ['customer/APP-1/AffordabilityReports/c.pdf'],
+        error: 'Could not place delete marker: AccessDenied',
+      })
+      errSpy.mockRestore()
+    })
+
+    it('a key the marker response does not report is not deleted', async () => {
+      seed('customer/APP-1/statements/a.json', 'customer/APP-1/statements/b.json')
+      markerMock.mockImplementation(async (keys: string[]) => addMarkers(keys.slice(0, 1)))
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const { payload } = makePayload({ conversations: [conv()] })
+
+      const [result] = await executeDeletion(
+        payload,
+        { scope: 'application', conversationId: 'C-1' },
+        'r',
+        actor,
+      )
+
+      expect(deleteMock.mock.calls.flatMap((c) => c[0]).map((r) => r.key)).toEqual([
+        'customer/APP-1/statements/a.json',
+      ])
+      expect(result).toMatchObject({ status: 'partial', filesDeleted: 1, failedCount: 1 })
+      expect(result.error).toMatch(/^Could not place delete marker/)
+      errSpy.mockRestore()
+    })
+
+    it('when every marker fails, no version is deleted and the status is failed', async () => {
+      seed('customer/APP-1/statements/a.json', 'customer/APP-1/statements/b.json')
+      markerMock.mockImplementation(async (keys: string[]) => ({
+        placed: [],
+        failed: keys.map((key) => ({ key, message: 'AccessDenied' })),
+      }))
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const { payload, create } = makePayload({ conversations: [conv()] })
+
+      const [result] = await executeDeletion(
+        payload,
+        { scope: 'application', conversationId: 'C-1' },
+        'r',
+        actor,
+      )
+
+      expect(deleteMock).not.toHaveBeenCalled()
+      expect(result).toMatchObject({
+        status: 'failed',
+        fileCount: 2,
+        filesDeleted: 0,
+        failedCount: 2,
+        error: 'Could not place delete marker: AccessDenied',
+      })
+      expect(create.mock.calls[0][0].data.deletedKeys).toEqual([])
+      errSpy.mockRestore()
+    })
+
+    it('a marker call that throws deletes nothing and fails only its own application', async () => {
+      seed('customer/APP-1/statements/a.json', 'customer/APP-2/statements/b.json')
+      markerMock.mockImplementationOnce(async () => {
+        throw new Error('boom')
+      })
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const { payload } = makePayload({
+        conversations: [conv(), conv({ conversationId: 'C-2', applicationNumber: 'APP-2' })],
+      })
+
+      const results = await executeDeletion(
+        payload,
+        { scope: 'customer', customerIdString: 'CUS-1' },
+        'r',
+        actor,
+      )
+
+      expect(results.map((r) => r.status)).toEqual(['failed', 'deleted'])
+      expect(results[0].error).toBe('Could not place delete marker: boom')
+      expect(deleteMock).toHaveBeenCalledTimes(1)
+      expect(deleteMock.mock.calls[0][0].map((r) => r.key)).toEqual([
+        'customer/APP-2/statements/b.json',
+      ])
+      errSpy.mockRestore()
+    })
+
+    it('never sends an old delete marker to the version delete, nor counts it', async () => {
+      seed('customer/APP-1/statements/a.json')
+      bucket.push(
+        marker('customer/APP-1/statements/a.json', 'old-1'),
+        marker('customer/APP-1/statements/gone.json', 'old-2'),
+      )
+      const oldMarkers = markerIds()
+      const { payload, create } = makePayload({ conversations: [conv()] })
+
+      const [result] = await executeDeletion(
+        payload,
+        { scope: 'application', conversationId: 'C-1' },
+        'r',
+        actor,
+      )
+
+      const sent = deleteMock.mock.calls.flatMap((c) => c[0])
+      expect(sent.map(id)).toEqual(['customer/APP-1/statements/a.json\u0000v0'])
+      expect(sent.some((r) => oldMarkers.has(id(r)))).toBe(false)
+      // A key with only markers has nothing to delete, so it gets no new marker.
+      expect(markerMock.mock.calls[0][0]).toEqual(['customer/APP-1/statements/a.json'])
+      expect(result).toMatchObject({ status: 'deleted', fileCount: 1, filesDeleted: 1 })
+      expect(create.mock.calls[0][0].data).toMatchObject({
+        filesFound: 1,
+        filesDeleted: 1,
+        deletedKeys: ['customer/APP-1/statements/a.json'],
+        failedKeys: [],
+      })
+      // The old markers are still there, untouched.
+      for (const m of oldMarkers) expect(markerIds().has(m)).toBe(true)
+    })
+
+    it('a key with only delete markers counts as nothing found', async () => {
+      bucket.push(
+        marker('customer/APP-1/statements/a.json', 'old-1'),
+        marker('customer/APP-1/AffordabilityReports/r.pdf', 'old-2'),
+      )
+      const { payload, create } = makePayload({ conversations: [conv()] })
+
+      const [result] = await executeDeletion(
+        payload,
+        { scope: 'application', conversationId: 'C-1' },
+        'r',
+        actor,
+      )
+
+      expect(result).toMatchObject({ status: 'nothing_found', fileCount: 0, filesDeleted: 0 })
+      expect(markerMock).not.toHaveBeenCalled()
+      expect(deleteMock).not.toHaveBeenCalled()
+      expect(create.mock.calls[0][0].data).toMatchObject({
+        status: 'nothing_found',
+        filesFound: 0,
+        deletedKeys: [],
+        failedKeys: [],
+      })
+    })
+
+    it('the re-list ignores the new markers, so a clean delete reads as deleted', async () => {
+      seed('customer/APP-1/statements/a.json', 'customer/APP-1/AffordabilityReports/r.pdf')
+      const { payload } = makePayload({ conversations: [conv()] })
+
+      const [result] = await executeDeletion(
+        payload,
+        { scope: 'application', conversationId: 'C-1' },
+        'r',
+        actor,
+      )
+
+      // The bucket keeps one new marker per key, and no data versions.
+      expect(dataIn(bucket)).toEqual([])
+      expect(bucket.map((r) => r.key).sort()).toEqual([
+        'customer/APP-1/AffordabilityReports/r.pdf',
+        'customer/APP-1/statements/a.json',
+      ])
+      expect(result).toMatchObject({
+        status: 'deleted',
+        fileCount: 2,
+        filesDeleted: 2,
+        failedCount: 0,
+      })
+      expect(result.error).toBeUndefined()
+    })
   })
 })
 
@@ -702,7 +982,7 @@ describe('warnings', () => {
 describe('previewDeletion', () => {
   it('counts versions within the prefixes and never deletes', async () => {
     seed('customer/APP-1/statements/a.json', 'customer/APP-1/AffordabilityReports/r.pdf')
-    bucket.push({ key: 'customer/APP-1/statements/a.json', versionId: 'v9' })
+    bucket.push(data('customer/APP-1/statements/a.json', 'v9'))
     const { payload, create } = makePayload({ conversations: [conv()] })
 
     const previews = await previewDeletion(payload, {
@@ -713,8 +993,22 @@ describe('previewDeletion', () => {
     expect(previews).toEqual([
       { conversationId: 'C-1', applicationNumber: 'APP-1', fileCount: 3, warnings: [] },
     ])
+    expect(markerMock).not.toHaveBeenCalled()
     expect(deleteMock).not.toHaveBeenCalled()
     expect(create).not.toHaveBeenCalled()
+  })
+
+  it('does not count delete markers as files', async () => {
+    seed('customer/APP-1/statements/a.json')
+    bucket.push(
+      marker('customer/APP-1/statements/a.json', 'old-1'),
+      marker('customer/APP-1/statements/gone.json', 'old-2'),
+    )
+    const { payload } = makePayload({ conversations: [conv()] })
+
+    const [p] = await previewDeletion(payload, { scope: 'application', conversationId: 'C-1' })
+
+    expect(p.fileCount).toBe(1)
   })
 
   it('reports an invalid application number without listing', async () => {

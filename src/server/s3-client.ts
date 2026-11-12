@@ -132,9 +132,15 @@ export async function getObjectByUri(s3Uri: string): Promise<{
   }
 }
 
-export interface ObjectVersionRef {
+/** One version of one key: what a version-specific delete names. */
+export interface VersionedKey {
   key: string
   versionId: string
+}
+
+export interface ObjectVersionRef extends VersionedKey {
+  /** A delete marker holds no data; it is listed alongside the data versions. */
+  isDeleteMarker: boolean
 }
 
 /**
@@ -151,8 +157,9 @@ export function getStatementBaseFolder(): string {
 
 /**
  * List every object version and delete marker under a prefix, following
- * pagination. The literal VersionId 'null' (pre-versioning objects) is kept: it
- * must be sent on delete, or S3 only adds a delete marker and leaves the bytes.
+ * pagination, and say which entries are delete markers. The literal VersionId
+ * 'null' (pre-versioning objects) is kept: it must be sent on delete, or S3
+ * only adds a delete marker and leaves the bytes.
  */
 export async function listObjectVersionsUnderPrefix(prefix: string): Promise<ObjectVersionRef[]> {
   const client = getS3Client()
@@ -170,13 +177,17 @@ export async function listObjectVersionsUnderPrefix(prefix: string): Promise<Obj
         VersionIdMarker: versionIdMarker,
       }),
     )
-    for (const item of [...(page.Versions ?? []), ...(page.DeleteMarkers ?? [])]) {
+    const items = [
+      ...(page.Versions ?? []).map((item) => ({ item, isDeleteMarker: false })),
+      ...(page.DeleteMarkers ?? []).map((item) => ({ item, isDeleteMarker: true })),
+    ]
+    for (const { item, isDeleteMarker } of items) {
       if (!item.Key) continue
       if (!item.VersionId) {
         console.error('[s3-client] skipping listed item without VersionId', { key: item.Key })
         continue
       }
-      refs.push({ key: item.Key, versionId: item.VersionId })
+      refs.push({ key: item.Key, versionId: item.VersionId, isDeleteMarker })
     }
     if (page.IsTruncated) {
       keyMarker = page.NextKeyMarker
@@ -193,18 +204,65 @@ export async function listObjectVersionsUnderPrefix(prefix: string): Promise<Obj
 const DELETE_CHUNK_SIZE = 1000
 
 /**
+ * Delete each key without a VersionId, in chunks of 1000, so a versioned
+ * bucket adds a delete marker. Replication carries delete markers to the
+ * backup bucket; it never carries version-specific deletes.
+ *
+ * A key is placed when the response lists it in `Deleted`. `DeleteMarker` is
+ * false only on an unversioned bucket, where the key is simply gone, which is
+ * still a success. A key in `Errors`, missing from the response, or in a chunk
+ * that threw is failed.
+ */
+export async function placeDeleteMarkers(keys: string[]): Promise<{
+  placed: string[]
+  failed: Array<{ key: string; message: string }>
+}> {
+  const client = getS3Client()
+  const bucket = getBucketName()
+  const placed: string[] = []
+  const failed: Array<{ key: string; message: string }> = []
+
+  for (let i = 0; i < keys.length; i += DELETE_CHUNK_SIZE) {
+    const chunk = keys.slice(i, i + DELETE_CHUNK_SIZE)
+    try {
+      const res = await client.send(
+        new DeleteObjectsCommand({
+          Bucket: bucket,
+          Delete: { Quiet: false, Objects: chunk.map((key) => ({ Key: key })) },
+        }),
+      )
+      const deleted = new Set((res.Deleted ?? []).map((d) => d.Key))
+      const errors = new Map(
+        (res.Errors ?? []).map((e) => [e.Key, e.Message ?? e.Code ?? 'Unknown error']),
+      )
+      for (const key of chunk) {
+        const error = errors.get(key)
+        if (error !== undefined) failed.push({ key, message: error })
+        else if (deleted.has(key)) placed.push(key)
+        else failed.push({ key, message: 'No result returned' })
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      for (const key of chunk) failed.push({ key, message })
+    }
+  }
+
+  return { placed, failed }
+}
+
+/**
  * Delete specific object versions in chunks of 1000. DeleteObjects returns
  * HTTP 200 with per-key Errors, so those are surfaced as failures. A chunk
  * that throws marks every ref in it failed and the next chunk still runs.
  */
-export async function deleteObjectVersions(refs: ObjectVersionRef[]): Promise<{
-  deleted: ObjectVersionRef[]
-  failed: Array<ObjectVersionRef & { message: string }>
+export async function deleteObjectVersions(refs: VersionedKey[]): Promise<{
+  deleted: VersionedKey[]
+  failed: Array<VersionedKey & { message: string }>
 }> {
   const client = getS3Client()
   const bucket = getBucketName()
-  const deleted: ObjectVersionRef[] = []
-  const failed: Array<ObjectVersionRef & { message: string }> = []
+  const deleted: VersionedKey[] = []
+  const failed: Array<VersionedKey & { message: string }> = []
 
   for (let i = 0; i < refs.length; i += DELETE_CHUNK_SIZE) {
     const chunk = refs.slice(i, i + DELETE_CHUNK_SIZE)

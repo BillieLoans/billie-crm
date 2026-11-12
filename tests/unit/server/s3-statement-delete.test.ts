@@ -32,6 +32,7 @@ import {
   deleteObjectVersions,
   getStatementBaseFolder,
   listObjectVersionsUnderPrefix,
+  placeDeleteMarkers,
 } from '@/server/s3-client'
 
 type Input = Record<string, any>
@@ -59,9 +60,9 @@ describe('s3 statement delete helpers', () => {
       })
     const refs = await listObjectVersionsUnderPrefix('p/')
     expect(refs).toEqual([
-      { key: 'p/a', versionId: 'v-a' },
-      { key: 'p/b', versionId: 'v-b' },
-      { key: 'p/c', versionId: 'null' },
+      { key: 'p/a', versionId: 'v-a', isDeleteMarker: false },
+      { key: 'p/b', versionId: 'v-b', isDeleteMarker: true },
+      { key: 'p/c', versionId: 'null', isDeleteMarker: true },
     ])
     expect(sendMock).toHaveBeenCalledTimes(2)
     const first = sendMock.mock.calls[0][0]
@@ -127,7 +128,9 @@ describe('s3 statement delete helpers', () => {
   it('skips listed items without a VersionId', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     sendMock.mockResolvedValueOnce({ Versions: [{ Key: 'p/x' }, { Key: 'p/y', VersionId: 'v' }] })
-    expect(await listObjectVersionsUnderPrefix('p/')).toEqual([{ key: 'p/y', versionId: 'v' }])
+    expect(await listObjectVersionsUnderPrefix('p/')).toEqual([
+      { key: 'p/y', versionId: 'v', isDeleteMarker: false },
+    ])
     expect(spy).toHaveBeenCalled()
     spy.mockRestore()
   })
@@ -140,6 +143,86 @@ describe('s3 statement delete helpers', () => {
     ])
     expect(res.deleted).toHaveLength(1)
     expect(res.failed).toEqual([{ key: 'b', versionId: 'v2', message: 'No result returned' }])
+  })
+
+  it('marks versions and delete markers on the same page', async () => {
+    sendMock.mockResolvedValueOnce({
+      Versions: [{ Key: 'p/a', VersionId: 'v1' }],
+      DeleteMarkers: [{ Key: 'p/a', VersionId: 'm1' }],
+    })
+    expect(await listObjectVersionsUnderPrefix('p/')).toEqual([
+      { key: 'p/a', versionId: 'v1', isDeleteMarker: false },
+      { key: 'p/a', versionId: 'm1', isDeleteMarker: true },
+    ])
+  })
+
+  describe('placeDeleteMarkers', () => {
+    it('sends plain deletes with no VersionId, Quiet false', async () => {
+      sendMock.mockResolvedValueOnce({
+        Deleted: [
+          { Key: 'a', DeleteMarker: true, DeleteMarkerVersionId: 'm-a' },
+          { Key: 'b', DeleteMarker: true, DeleteMarkerVersionId: 'm-b' },
+        ],
+      })
+      const res = await placeDeleteMarkers(['a', 'b'])
+      const cmd = sendMock.mock.calls[0][0]
+      expect(cmd).toBeInstanceOf(DeleteObjectsCommand)
+      expect(cmd.input.Bucket).toBe('b')
+      expect(cmd.input.Delete.Quiet).toBe(false)
+      expect(cmd.input.Delete.Objects).toEqual([{ Key: 'a' }, { Key: 'b' }])
+      for (const o of cmd.input.Delete.Objects) expect(o).not.toHaveProperty('VersionId')
+      expect(res).toEqual({ placed: ['a', 'b'], failed: [] })
+    })
+
+    it('chunks at 1000', async () => {
+      sendMock.mockImplementation(async (cmd: { input: Input }) => ({
+        Deleted: cmd.input.Delete.Objects.map((o: Input) => ({ Key: o.Key, DeleteMarker: true })),
+      }))
+      const keys = Array.from({ length: 2500 }, (_, i) => `k${i}`)
+      const res = await placeDeleteMarkers(keys)
+      expect(sendMock.mock.calls.map((c) => c[0].input.Delete.Objects.length)).toEqual([
+        1000, 1000, 500,
+      ])
+      expect(res.placed).toHaveLength(2500)
+      expect(res.failed).toHaveLength(0)
+    })
+
+    it('counts a key deleted without a marker (unversioned bucket) as placed', async () => {
+      sendMock.mockResolvedValueOnce({ Deleted: [{ Key: 'a', DeleteMarker: false }] })
+      expect(await placeDeleteMarkers(['a'])).toEqual({ placed: ['a'], failed: [] })
+    })
+
+    it('fails keys in Errors and keys the response does not report', async () => {
+      sendMock.mockResolvedValueOnce({
+        Deleted: [{ Key: 'a', DeleteMarker: true }],
+        Errors: [{ Key: 'b', Code: 'AccessDenied', Message: 'Access Denied' }],
+      })
+      const res = await placeDeleteMarkers(['a', 'b', 'c'])
+      expect(res.placed).toEqual(['a'])
+      expect(res.failed).toEqual([
+        { key: 'b', message: 'Access Denied' },
+        { key: 'c', message: 'No result returned' },
+      ])
+    })
+
+    it('a thrown chunk fails only that chunk', async () => {
+      sendMock
+        .mockRejectedValueOnce(new Error('boom'))
+        .mockImplementationOnce(async (cmd: { input: Input }) => ({
+          Deleted: cmd.input.Delete.Objects.map((o: Input) => ({ Key: o.Key, DeleteMarker: true })),
+        }))
+      const keys = Array.from({ length: 1500 }, (_, i) => `k${i}`)
+      const res = await placeDeleteMarkers(keys)
+      expect(res.failed).toHaveLength(1000)
+      expect(res.failed[0]).toEqual({ key: 'k0', message: 'boom' })
+      expect(res.placed).toHaveLength(500)
+      expect(res.placed[0]).toBe('k1000')
+    })
+
+    it('sends nothing for no keys', async () => {
+      expect(await placeDeleteMarkers([])).toEqual({ placed: [], failed: [] })
+      expect(sendMock).not.toHaveBeenCalled()
+    })
   })
 
   it('getStatementBaseFolder throws when unset', () => {

@@ -9,6 +9,7 @@ import {
 } from '@/hooks/mutations/useDeleteStatementFiles'
 import {
   CONFIRM_WORD,
+  confirmDeletionWarning,
   DELETION_WARNING_COPY,
   KEPT_DATA_COPY,
   plural,
@@ -34,11 +35,6 @@ const REASON_MAX = 500
 
 const appLabel = (app: ApplicationPreview) => app.applicationNumber ?? 'No application number'
 
-/** "{N} files across {M} applications will be permanently deleted. They can't be recovered." */
-export function irreversibleWarning(files: number, applications: number): string {
-  return `${plural(files, 'file')} across ${plural(applications, 'application')} will be permanently deleted. They can't be recovered.`
-}
-
 function outcomeText(result: ApplicationResult): string {
   if (result.status === 'deleted') return `Deleted (${plural(result.filesDeleted, 'file')})`
   if (result.status === 'nothing_found') return 'Nothing to delete'
@@ -59,7 +55,7 @@ function requestFor(scope: DeletionScope, reason: string): DeleteStatementFilesP
 }
 
 /**
- * Permanently delete a customer's bank-statement files from S3, for one
+ * Delete a customer's bank-statement files from S3, for one
  * application or every application the customer has. Admin or supervisor only:
  * the button that opens this checks, and the routes check again.
  *
@@ -345,8 +341,8 @@ function DeletionFlow({ scope, onClose, deletion }: DeletionFlowProps) {
             Step 2 of 2: Confirm
           </h3>
           {errorSummary}
-          <p className={styles.irreversible}>
-            {irreversibleWarning(totalFiles, applicationsWithFiles)}
+          <p className={styles.confirmWarning}>
+            {confirmDeletionWarning(totalFiles, applicationsWithFiles)}
           </p>
           <dl className={styles.reasonSummary}>
             <dt>Reason</dt>
