@@ -82,6 +82,9 @@ export {
 } from './queries/useAssessments'
 export { useStatementFile, rawStatementFileUrl } from './queries/useStatementFile'
 export type { StatementSlot, StatementFileContent, CsvData } from './queries/useStatementFile'
+export { useStatementDeletion, useStatementDeletionPreview } from './queries/useStatementDeletion'
+export { useDeleteStatementFiles } from './mutations/useDeleteStatementFiles'
+export type { DeleteStatementFilesParams } from './mutations/useDeleteStatementFiles'
 
 // Notifications (E-notifications)
 export { useNotifications } from './queries/useNotifications'
