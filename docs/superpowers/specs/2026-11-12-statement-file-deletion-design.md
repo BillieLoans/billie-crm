@@ -142,7 +142,7 @@ both prefixes for each application in scope and shows:
 ### Step 2 of 2: Confirm
 
 - A warning panel: "N files across M applications will be deleted from Billie's
-  storage now. Backup copies are erased within 180 days." (Changed 13 Nov 2026;
+  storage now. Backup copies are erased after 180 days." (Changed 13 Nov 2026;
   see "Backups".)
 - Type `DELETE` to enable the button.
 - Buttons: Back, and "Delete N files" (destructive).
@@ -256,10 +256,12 @@ Decision:
   files.
 - The marker replicates and makes the backup's copy noncurrent. A backup lifecycle
   rule expires noncurrent versions 180 days after they become noncurrent (the 30-day
-  Governance lock can only delay that). Erasure is immediate in Billie's bucket and
-  complete at 180 days for the backup.
+  Governance lock can only delay that). Erasure is immediate in Billie's bucket. In
+  the backup it happens after 180 days once the marker has replicated; lifecycle runs
+  asynchronously after the due date and can add a few days, so no deadline is
+  promised.
 - The confirm copy says so: files go from Billie's storage now; backup copies are
-  erased within 180 days. The delete is no longer described as unrecoverable.
+  erased after 180 days. The delete is no longer described as unrecoverable.
 - The replication rule must have delete-marker replication enabled and no tag filter
   (Rohan to confirm). Urgent erasure from the backup and the first-deletion check are
   runbooks in `docs/statement-file-deletion.md`. IAM is unchanged.

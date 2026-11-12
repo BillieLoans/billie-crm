@@ -36,10 +36,11 @@ export const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' :
 /**
  * The confirm step's warning. The files go from Billie's bucket now; the
  * backup bucket's copies become noncurrent through the replicated delete
- * marker and its lifecycle rule erases them within 180 days.
+ * marker, and its lifecycle rule erases them after 180 days. Lifecycle runs
+ * asynchronously after the due date, so the copy promises no deadline.
  */
 export function confirmDeletionWarning(files: number, applications: number): string {
-  return `${plural(files, 'file')} across ${plural(applications, 'application')} will be deleted from Billie's storage now. Backup copies are erased within 180 days.`
+  return `${plural(files, 'file')} across ${plural(applications, 'application')} will be deleted from Billie's storage now. Backup copies are erased after 180 days.`
 }
 
 export function isValidApplicationNumber(value: unknown): value is string {

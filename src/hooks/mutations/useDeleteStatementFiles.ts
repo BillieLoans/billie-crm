@@ -7,7 +7,8 @@ import type { ApplicationResult, DeletionScope } from '@/server/statement-deleti
 export type DeleteStatementFilesParams = DeletionScope & { reason: string }
 
 /**
- * Permanently delete the statement files in a scope (admin/supervisor only).
+ * Delete the statement files in a scope from Billie's bucket (admin/supervisor
+ * only); the backup bucket's copies follow after 180 days.
  * The body is the scope and a reason, never file keys: the route resolves the
  * scope and lists the bucket itself.
  *

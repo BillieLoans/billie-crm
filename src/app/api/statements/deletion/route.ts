@@ -1,8 +1,9 @@
 /**
  * /api/statements/deletion
  *
- * POST: permanently delete a customer's bank-statement files from S3. Admin or
- *   supervisor only. The service re-resolves the scope and re-lists S3 itself;
+ * POST: delete a customer's bank-statement files from S3 (a delete marker per
+ *   key first, so the backup bucket learns of it, then the data versions). Admin
+ *   or supervisor only. The service re-resolves the scope and re-lists S3 itself;
  *   nothing from a preview (or any client-supplied key) is trusted.
  * GET ?conversationId=: the latest deletion for an application, for any role.
  */

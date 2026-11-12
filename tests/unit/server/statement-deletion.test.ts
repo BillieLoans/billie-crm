@@ -834,6 +834,73 @@ describe('executeDeletion', () => {
       errSpy.mockRestore()
     })
 
+    it('a key reported both placed and failed is never deleted', async () => {
+      seed('customer/APP-1/statements/a.json', 'customer/APP-1/statements/b.json')
+      markerMock.mockImplementation(async (keys: string[]) => {
+        addMarkers(keys)
+        return {
+          placed: [...keys],
+          failed: [{ key: 'customer/APP-1/statements/b.json', message: 'InternalError' }],
+        }
+      })
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const { payload } = makePayload({ conversations: [conv()] })
+
+      const [result] = await executeDeletion(
+        payload,
+        { scope: 'application', conversationId: 'C-1' },
+        'r',
+        actor,
+      )
+
+      expect(deleteMock.mock.calls.flatMap((c) => c[0]).map((r) => r.key)).toEqual([
+        'customer/APP-1/statements/a.json',
+      ])
+      expect(result).toMatchObject({ status: 'partial', filesDeleted: 1, failedCount: 1 })
+      expect(result.error).toBe('Could not place delete marker: InternalError')
+      errSpy.mockRestore()
+    })
+
+    it('an unconfirmed outcome keeps the marker failures after the confirm prefix', async () => {
+      seed('customer/APP-1/statements/a.json', 'customer/APP-1/statements/b.json')
+      markerMock.mockImplementation(async (keys: string[]) => {
+        const ok = keys.filter((k) => !k.endsWith('b.json'))
+        addMarkers(ok)
+        return {
+          placed: ok,
+          failed: keys
+            .filter((k) => k.endsWith('b.json'))
+            .map((key) => ({ key, message: 'AccessDenied' })),
+        }
+      })
+      let calls = 0
+      listMock.mockImplementation(async (prefix: string) => {
+        calls += 1
+        if (calls > 2) throw new Error('SlowDown')
+        return bucket.filter((r) => r.key.startsWith(prefix))
+      })
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const { payload, create } = makePayload({ conversations: [conv()] })
+
+      const [result] = await executeDeletion(
+        payload,
+        { scope: 'application', conversationId: 'C-1' },
+        'r',
+        actor,
+      )
+
+      const expected =
+        'Could not confirm deletion: SlowDown; Could not place delete marker: AccessDenied'
+      expect(result).toMatchObject({
+        status: 'partial',
+        filesDeleted: 0,
+        failedCount: 2,
+        error: expected,
+      })
+      expect(create.mock.calls[0][0].data.error).toBe(expected)
+      errSpy.mockRestore()
+    })
+
     it('never sends an old delete marker to the version delete, nor counts it', async () => {
       seed('customer/APP-1/statements/a.json')
       bucket.push(

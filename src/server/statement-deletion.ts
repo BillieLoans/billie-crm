@@ -307,11 +307,17 @@ async function deleteApplication(baseFolder: string, conv: ConversationRow): Pro
       markerFailures,
     })
   }
+  const markerReason =
+    markerFailures.length > 0
+      ? `Could not place delete marker: ${distinctMessages(markerFailures)}`
+      : undefined
+  const markerFailedKeys = new Set(markerFailures.map((f) => f.key))
 
   // Only the data versions listed above, so the new markers (and any older
-  // ones) are never deleted.
+  // ones) are never deleted. A key is deleted only when its marker is
+  // confirmed placed and not also reported failed.
   const toDelete: VersionedKey[] = found
-    .filter((r) => placed.has(r.key) && !r.isDeleteMarker)
+    .filter((r) => placed.has(r.key) && !markerFailedKeys.has(r.key) && !r.isDeleteMarker)
     .map((r) => ({ key: r.key, versionId: r.versionId }))
   let failed: Array<VersionedKey & { message: string }> = []
   if (toDelete.length > 0) {
@@ -337,7 +343,8 @@ async function deleteApplication(baseFolder: string, conv: ConversationRow): Pro
     remaining = await listApplicationData(prefixes)
   } catch (err) {
     // Without a re-list nothing is confirmed gone, so nothing is counted as
-    // deleted and the outcome never reads as a clean delete.
+    // deleted and the outcome never reads as a clean delete. The confirm prefix
+    // stays first (the UI keys on it); marker failures follow for the audit row.
     console.error('[statement-deletion] verification listing failed', {
       conversationId: conv.conversationId,
       err,
@@ -349,7 +356,10 @@ async function deleteApplication(baseFolder: string, conv: ConversationRow): Pro
       failedCount: found.length,
       deletedKeys: [],
       failedKeys: distinctKeys(found),
-      error: shortMessage(UNCONFIRMED_DELETION_ERROR, err),
+      error: [shortMessage(UNCONFIRMED_DELETION_ERROR, err), markerReason]
+        .filter(Boolean)
+        .join('; ')
+        .slice(0, ERROR_MESSAGE_MAX),
     }
   }
 
@@ -366,9 +376,7 @@ async function deleteApplication(baseFolder: string, conv: ConversationRow): Pro
 
   // The marker and delete failures only explain what is still listed.
   const reasons: string[] = []
-  if (markerFailures.length > 0) {
-    reasons.push(`Could not place delete marker: ${distinctMessages(markerFailures)}`)
-  }
+  if (markerReason) reasons.push(markerReason)
   if (failed.length > 0) reasons.push(`Could not delete: ${distinctMessages(failed)}`)
   const error =
     remaining.length > 0 && reasons.length > 0

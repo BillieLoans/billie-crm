@@ -1,6 +1,6 @@
 # Statement file deletion: IAM policy and rollout
 
-Admins and supervisors can delete a customer's bank-statement files from S3, for one application or for all of a customer's applications. The files leave Billie's bucket at once; the copies in the cross-account backup bucket are erased within 180 days (see "Backups"). Design: `docs/superpowers/specs/2026-11-12-statement-file-deletion-design.md`.
+Admins and supervisors can delete a customer's bank-statement files from S3, for one application or for all of a customer's applications. The files leave Billie's bucket at once; the copies in the cross-account backup bucket are erased after 180 days, once the delete marker has replicated (see "Backups"). Design: `docs/superpowers/specs/2026-11-12-statement-file-deletion-design.md`.
 
 ## What gets deleted, and what is kept
 
@@ -40,13 +40,13 @@ For each application (`executeDeletion` in `src/server/statement-deletion.ts`):
 
 Why the marker comes first: prod replicates to a backup bucket in another account. S3 replication carries **delete markers** (a delete with no `VersionId`) but **never** carries version-specific deletes. Deleting every version by `VersionId`, as the CRM did before, left the backup's copy current forever. The marker reaches the backup, makes its copy noncurrent, and the backup's lifecycle rule then erases it.
 
-After a delete, `list-object-versions` on a prefix shows one delete marker per key and no data versions. That is the expected end state.
+After a delete, `list-object-versions` on a prefix shows at least one delete marker per key (older markers are kept) and no data versions. That is the expected end state.
 
 ## Backups
 
-- **Prod replication rule** (`billie-files-prod-734836384687` → `billie-replica-files-prod-342996267425`): must have `DeleteMarkerReplication: Enabled`, and must not be filtered by tag (a tag-filtered rule cannot replicate delete markers). **Rohan to confirm** with `aws s3api get-bucket-replication --bucket billie-files-prod-734836384687`.
+- **Prod replication rule** (`billie-files-prod-734836384687` → `billie-replica-files-prod-342996267425`): must have `DeleteMarkerReplication: Enabled`, and must not be filtered by tag (a tag-filtered rule cannot replicate delete markers). **Rohan to confirm** with `aws s3api get-bucket-replication --bucket billie-files-prod-734836384687`. A legacy V1 rule (a top-level `Prefix`, no `Filter`) replicates delete markers by default and has no `DeleteMarkerReplication` element, so its absence is not a failure on such a rule. A bucket with replication configured cannot have versioning suspended, so the marker is always a real, replicable version there.
 - **Backup lifecycle rule** (on `billie-replica-files-prod-342996267425`): noncurrent versions expire 180 days after they become noncurrent (`NoncurrentVersionExpiration: { NoncurrentDays: 180 }`), plus expired-delete-marker cleanup (`ExpiredObjectDeleteMarker: true`). The backup's 30-day Governance-mode Object Lock delays the expiry of a version until its lock ends.
-- **When an erasure is complete:** at once in Billie's bucket, and at 180 days for the backup.
+- **When an erasure is complete:** at once in Billie's bucket. In the backup, after 180 days once the marker has replicated: lifecycle runs asynchronously after the due date and can add a few days, so there is no exact deadline.
 
 ### Urgent erasure runbook (backup bucket)
 
@@ -186,5 +186,5 @@ Notes:
 
 ## Known gaps
 
-- Backup copies: erased by the backup's lifecycle rule within 180 days of the delete, not at once. Use the urgent erasure runbook when that is too slow. Any backup other than the replica bucket (none known) is not touched.
+- Backup copies: erased by the backup's lifecycle rule after 180 days (plus however long lifecycle takes to run), not at once. Use the urgent erasure runbook when that is too slow. Any backup other than the replica bucket (none known) is not touched.
 - The non-goals listed under "What gets deleted, and what is kept": the affordability summary, account-holder names, assessment records, provider-held data, other S3 folders including `StatementCapture/`, and Redis.

@@ -238,7 +238,7 @@ describe('DeleteStatementFilesDrawer: confirm', () => {
     expect(document.activeElement).toBe(heading)
     expect(
       screen.getByText(
-        "3 files across 1 application will be deleted from Billie's storage now. Backup copies are erased within 180 days.",
+        "3 files across 1 application will be deleted from Billie's storage now. Backup copies are erased after 180 days.",
       ),
     ).toBeInTheDocument()
 
