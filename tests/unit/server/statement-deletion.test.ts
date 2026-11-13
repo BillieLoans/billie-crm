@@ -986,6 +986,103 @@ describe('executeDeletion', () => {
   })
 })
 
+describe('the affordability report is kept', () => {
+  const AFFORDABILITY = 'customer/APP-1/AffordabilityReports/APP-1_affordability.json'
+  const CSV = 'customer/APP-1/AffordabilityReports/APP-1_categorized.csv'
+  const ACCOUNTS = 'customer/APP-1/AffordabilityReports/APP-1_accounts.json'
+  const BASIQ = 'customer/APP-1/AffordabilityReports/job123.json'
+
+  const seedApplication = () => {
+    bucket.push(
+      data(CSV, 'csv-1'),
+      data(ACCOUNTS, 'acc-1'),
+      data(AFFORDABILITY, 'aff-1'),
+      data(AFFORDABILITY, 'aff-2'),
+      data(BASIQ, 'job-1'),
+    )
+  }
+
+  it('the preview does not count the affordability report versions', async () => {
+    seedApplication()
+    const { payload } = makePayload({ conversations: [conv()] })
+
+    const [p] = await previewDeletion(payload, { scope: 'application', conversationId: 'C-1' })
+
+    expect(p.fileCount).toBe(3)
+  })
+
+  it('deletes everything else and leaves the affordability report untouched', async () => {
+    seedApplication()
+    const { payload, create } = makePayload({ conversations: [conv()] })
+
+    const [result] = await executeDeletion(
+      payload,
+      { scope: 'application', conversationId: 'C-1' },
+      'r',
+      actor,
+    )
+
+    const kept = bucket.filter((r) => r.key === AFFORDABILITY)
+    expect(kept).toEqual([data(AFFORDABILITY, 'aff-1'), data(AFFORDABILITY, 'aff-2')])
+    expect(markerMock.mock.calls.flatMap((c) => c[0])).not.toContain(AFFORDABILITY)
+    expect(deleteMock.mock.calls.flatMap((c) => c[0]).map((r) => r.key)).not.toContain(
+      AFFORDABILITY,
+    )
+    for (const key of [CSV, ACCOUNTS, BASIQ]) {
+      const left = bucket.filter((r) => r.key === key)
+      expect(dataIn(left)).toEqual([])
+      expect(left.filter((r) => r.isDeleteMarker)).toHaveLength(1)
+    }
+    expect(result).toMatchObject({
+      status: 'deleted',
+      fileCount: 3,
+      filesDeleted: 3,
+      failedCount: 0,
+    })
+    const row = create.mock.calls[0][0].data
+    expect(row).toMatchObject({ status: 'deleted', filesFound: 3, filesDeleted: 3, failedKeys: [] })
+    expect([...row.deletedKeys].sort()).toEqual([ACCOUNTS, CSV, BASIQ].sort())
+  })
+
+  it('an application holding only the affordability report has nothing to delete', async () => {
+    bucket.push(data(AFFORDABILITY, 'aff-1'), data(AFFORDABILITY, 'aff-2'))
+    const { payload, create } = makePayload({ conversations: [conv()] })
+
+    const [result] = await executeDeletion(
+      payload,
+      { scope: 'application', conversationId: 'C-1' },
+      'r',
+      actor,
+    )
+
+    expect(result).toMatchObject({ status: 'nothing_found', fileCount: 0, filesDeleted: 0 })
+    expect(markerMock).not.toHaveBeenCalled()
+    expect(deleteMock).not.toHaveBeenCalled()
+    expect(bucket).toHaveLength(2)
+    expect(create.mock.calls[0][0].data).toMatchObject({ status: 'nothing_found', filesFound: 0 })
+  })
+
+  it('deletes look-alikes of the kept file', async () => {
+    const lookAlikes = [
+      'customer/APP-1/AffordabilityReports/sub/APP-1_affordability.json',
+      'customer/APP-1/statements/APP-1_affordability.json',
+      'customer/APP-1/AffordabilityReports/APP-10_affordability.json',
+    ]
+    seed(...lookAlikes)
+    const { payload } = makePayload({ conversations: [conv()] })
+
+    const [result] = await executeDeletion(
+      payload,
+      { scope: 'application', conversationId: 'C-1' },
+      'r',
+      actor,
+    )
+
+    expect(result).toMatchObject({ status: 'deleted', fileCount: 3, filesDeleted: 3 })
+    expect(dataIn(bucket)).toEqual([])
+  })
+})
+
 describe('warnings', () => {
   const previewOne = async (c: Row, loanAccounts: Row[] = []) => {
     const { payload } = makePayload({ conversations: [c], loanAccounts })

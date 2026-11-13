@@ -4,12 +4,14 @@ Admins and supervisors can delete a customer's bank-statement files from S3, for
 
 ## What gets deleted, and what is kept
 
-For each application the CRM deletes every data version of every object under exactly two prefixes. It leaves delete markers in place, including the new one it adds to each key (see "How a delete runs"):
+For each application the CRM deletes every data version of every object under exactly two prefixes, except one file, the affordability report. It leaves delete markers in place, including the new one it adds to each key (see "How a delete runs"):
 
-| Prefix | Contents |
-|---|---|
-| `{base}/{applicationNumber}/statements/` | raw provider statement files, TaleFin webhook bodies under `statements/talefin/events/` |
-| `{base}/{applicationNumber}/AffordabilityReports/` | categorised transactions CSV, affordability JSON, accounts JSON |
+| Prefix | Deleted | Kept |
+|---|---|---|
+| `{base}/{applicationNumber}/statements/` | everything: raw provider statement files, TaleFin webhook bodies under `statements/talefin/events/` | nothing |
+| `{base}/{applicationNumber}/AffordabilityReports/` | categorised transactions CSV (`{app}_categorized.csv`), accounts JSON (`{app}_accounts.json`, holder names and full account numbers), any Basiq-era `{jobId}.json`, anything else | `{app}_affordability.json` only |
+
+The kept key is an exact match, built the same way as the prefixes: `{base}/{applicationNumber}/AffordabilityReports/{applicationNumber}_affordability.json` (`keptStatementKeys` in `src/lib/statement-deletion.ts`). It holds the categoriser's category buckets (`data.groups`) and metrics: aggregates, not the statement. A copy in a subfolder, a file of the same name under `statements/`, and another application's `{otherApp}_affordability.json` are all deleted. The kept file is dropped from every listing, so it is never counted, never gets a delete marker, is never version-deleted and never shows as remaining; the marker and version-delete steps also refuse it outright.
 
 | Env | Bucket | Base folder (`S3_STATEMENT_BASE_FOLDER`) |
 |---|---|---|
@@ -19,6 +21,7 @@ For each application the CRM deletes every data version of every object under ex
 
 Kept (not deleted):
 
+- the affordability report file `{app}_affordability.json` (category totals and metrics), all its versions, with no delete marker added
 - the affordability report summary on the conversation (`statement_capture.affordabilityReport`)
 - bank account holder names (`conversations.statement_account_holders` and `statement_capture.accountHolders`)
 - credit assessment records
@@ -32,15 +35,15 @@ Every deletion is recorded in the append-only `statement-file-deletions` collect
 
 For each application (`executeDeletion` in `src/server/statement-deletion.ts`):
 
-1. List every version and delete marker under both prefixes, re-checking each key against the prefixes.
-2. The **data versions** are the listed entries that are not delete markers. Every count staff see (`fileCount`, `filesFound`, `filesDeleted`) counts data versions only. No data versions means `nothing_found`.
+1. List every version and delete marker under both prefixes, re-checking each key against the prefixes. Every entry on the kept key (`{app}_affordability.json`) is dropped here.
+2. The **data versions** are the remaining listed entries that are not delete markers. Every count staff see (`fileCount`, `filesFound`, `filesDeleted`) counts data versions only. No data versions means `nothing_found`.
 3. **Place a delete marker** on each key that has a data version: `DeleteObjects` with `{ Key }` and no `VersionId`. If the marker is not placed for a key (an `Errors` entry, the key missing from the response, or the call throwing), that key's versions are **not** deleted, and the result carries a "Could not place delete marker" error.
 4. **Delete the data versions** listed in step 1, by `VersionId`, for the keys whose marker was placed. Delete markers, old and new, are never deleted.
 5. **Verify** by listing again. The data versions still listed are what remains; delete markers are ignored. That sets the status (`deleted`, `partial` or `failed`) and the counts. If the re-list fails, the outcome is an unverified `partial` with nothing counted as deleted.
 
 Why the marker comes first: prod replicates to a backup bucket in another account. S3 replication carries **delete markers** (a delete with no `VersionId`) but **never** carries version-specific deletes. Deleting every version by `VersionId`, as the CRM did before, left the backup's copy current forever. The marker reaches the backup, makes its copy noncurrent, and the backup's lifecycle rule then erases it.
 
-After a delete, `list-object-versions` on a prefix shows at least one delete marker per key (older markers are kept) and no data versions. That is the expected end state.
+After a delete, `list-object-versions` on `statements/` shows at least one delete marker per key (older markers are kept) and no data versions. `AffordabilityReports/` holds only `{app}_affordability.json` and its versions, plus delete markers for the deleted keys. That is the expected end state.
 
 ## Backups
 
@@ -175,16 +178,16 @@ Notes:
 1. Apply the IAM policies above (demo user first, prod user before step 6).
 2. Deploy demo: `make -C infra/fly deploy ENV=demo`. `S3_STATEMENT_BASE_FOLDER` comes from `infra/fly/fly.demo.toml`. The deploy also applies the `statement_file_deletions` migration.
 3. In demo, delete a test application's statement files from the CRM.
-4. Verify both prefixes hold no data versions. A delete marker per key is expected and stays:
+4. Verify `statements/` holds no data versions, and `AffordabilityReports/` holds only `{app}_affordability.json` and its versions (no new delete marker on it) plus delete markers for the deleted keys. A delete marker per deleted key is expected and stays:
    ```bash
    aws s3api list-object-versions --bucket billie-applications-nonprod --prefix demo/<app>/statements/
    aws s3api list-object-versions --bucket billie-applications-nonprod --prefix demo/<app>/AffordabilityReports/
    ```
-5. In the admin, open `statement-file-deletions` and check the log row (status `deleted`, counts and keys match).
+5. In the admin, open `statement-file-deletions` and check the log row (status `deleted`, counts and keys match, and neither includes `{app}_affordability.json`). The conversation's Files block still offers "Affordability report →".
 6. Prod: confirm the replication rule and the backup lifecycle rule (see "Backups"), then `make -C infra/fly deploy ENV=prod CONFIRM=1`. Delete Rohan's own applications, then verify again with the same two commands against `billie-files-prod-734836384687` and prefix `customer/<app>/...`.
 7. Prod backup: run "Verify the first prod deletion" above.
 
 ## Known gaps
 
 - Backup copies: erased by the backup's lifecycle rule after 180 days (plus however long lifecycle takes to run), not at once. Use the urgent erasure runbook when that is too slow. Any backup other than the replica bucket (none known) is not touched.
-- The non-goals listed under "What gets deleted, and what is kept": the affordability summary, account-holder names, assessment records, provider-held data, other S3 folders including `StatementCapture/`, and Redis.
+- The non-goals listed under "What gets deleted, and what is kept": the affordability report file, the affordability summary, account-holder names, assessment records, provider-held data, other S3 folders including `StatementCapture/`, and Redis.

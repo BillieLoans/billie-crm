@@ -5,8 +5,10 @@ import {
   KEPT_DATA_COPY,
   STATEMENT_SUBFOLDERS,
   confirmDeletionWarning,
+  isKeptKey,
   isKeyWithinPrefixes,
   isValidApplicationNumber,
+  keptStatementKeys,
   statementPrefixes,
 } from '@/lib/statement-deletion'
 
@@ -53,10 +55,43 @@ describe('statement-deletion helpers', () => {
     expect(isKeyWithinPrefixes('customer/APP-1/StatementCapture/a.json', p)).toBe(false)
   })
 
+  it('keeps exactly one key: the application affordability report', () => {
+    expect(keptStatementKeys('customer', 'APP-1')).toEqual([
+      'customer/APP-1/AffordabilityReports/APP-1_affordability.json',
+    ])
+    expect(keptStatementKeys('/demo/', 'APP-1')).toEqual([
+      'demo/APP-1/AffordabilityReports/APP-1_affordability.json',
+    ])
+  })
+
+  it('throws on an invalid number or empty base when building the kept keys', () => {
+    expect(() => keptStatementKeys('customer', 'APP/1')).toThrow()
+    expect(() => keptStatementKeys('customer', '../x')).toThrow()
+    expect(() => keptStatementKeys('', 'APP-1')).toThrow()
+    expect(() => keptStatementKeys('/', 'APP-1')).toThrow()
+  })
+
+  it('matches a kept key exactly, nothing near it', () => {
+    const kept = keptStatementKeys('customer', 'APP-1')
+    expect(isKeptKey('customer/APP-1/AffordabilityReports/APP-1_affordability.json', kept)).toBe(
+      true,
+    )
+    for (const key of [
+      'customer/APP-1/AffordabilityReports/sub/APP-1_affordability.json',
+      'customer/APP-1/statements/APP-1_affordability.json',
+      'customer/APP-1/AffordabilityReports/APP-10_affordability.json',
+      'customer/APP-10/AffordabilityReports/APP-10_affordability.json',
+      'customer/APP-1/AffordabilityReports/APP-1_categorized.csv',
+      'customer/APP-1/AffordabilityReports/APP-1_accounts.json',
+    ]) {
+      expect(isKeptKey(key, kept)).toBe(false)
+    }
+  })
+
   it('exposes verbatim copy', () => {
     expect(CONFIRM_WORD).toBe('DELETE')
     expect(KEPT_DATA_COPY).toBe(
-      'Kept: the affordability summary, account-holder names and credit assessment records in the CRM, and anything held by TaleFin.',
+      'Kept: the affordability report file (category totals), the affordability summary, account-holder names and credit assessment records in the CRM, and anything held by TaleFin.',
     )
     expect(DELETION_WARNING_COPY.in_progress).toBe(
       "This application is still in progress. Deleting its statements may break the assessment that's about to read them.",

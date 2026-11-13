@@ -2,7 +2,9 @@
  * Helpers for deleting a customer's bank-statement files from S3.
  *
  * Only two sub-folders per application are ever in scope. `StatementCapture/`
- * is deliberately excluded.
+ * is deliberately excluded. Within them one file is kept: the application's
+ * affordability report (`{app}_affordability.json`), which holds category
+ * totals and metrics rather than the statement.
  */
 
 export const STATEMENT_SUBFOLDERS = ['statements', 'AffordabilityReports'] as const
@@ -20,7 +22,7 @@ export const DELETION_WARNING_COPY: Record<DeletionWarning, string> = {
 }
 
 export const KEPT_DATA_COPY =
-  'Kept: the affordability summary, account-holder names and credit assessment records in the CRM, and anything held by TaleFin.'
+  'Kept: the affordability report file (category totals), the affordability summary, account-holder names and credit assessment records in the CRM, and anything held by TaleFin.'
 
 export const CONFIRM_WORD = 'DELETE'
 
@@ -47,8 +49,8 @@ export function isValidApplicationNumber(value: unknown): value is string {
   return typeof value === 'string' && APPLICATION_NUMBER_PATTERN.test(value)
 }
 
-/** The S3 prefixes (each ending in `/`) holding one application's statement files. */
-export function statementPrefixes(baseFolder: string, applicationNumber: string): string[] {
+/** `{base}/{applicationNumber}`, validated: the root every statement key is built from. */
+function applicationRoot(baseFolder: string, applicationNumber: string): string {
   if (!isValidApplicationNumber(applicationNumber)) {
     throw new Error('Invalid application number')
   }
@@ -56,7 +58,27 @@ export function statementPrefixes(baseFolder: string, applicationNumber: string)
   if (!base) {
     throw new Error('Statement base folder is not configured')
   }
-  return STATEMENT_SUBFOLDERS.map((sub) => `${base}/${applicationNumber}/${sub}/`)
+  return `${base}/${applicationNumber}`
+}
+
+/** The S3 prefixes (each ending in `/`) holding one application's statement files. */
+export function statementPrefixes(baseFolder: string, applicationNumber: string): string[] {
+  const root = applicationRoot(baseFolder, applicationNumber)
+  return STATEMENT_SUBFOLDERS.map((sub) => `${root}/${sub}/`)
+}
+
+/**
+ * The keys under the prefixes that deletion never touches: only the
+ * application's own affordability report, directly under `AffordabilityReports/`.
+ */
+export function keptStatementKeys(baseFolder: string, applicationNumber: string): string[] {
+  const root = applicationRoot(baseFolder, applicationNumber)
+  return [`${root}/AffordabilityReports/${applicationNumber}_affordability.json`]
+}
+
+/** An exact match against the kept keys: no prefix, folder or case leeway. */
+export function isKeptKey(key: string, kept: string[]): boolean {
+  return kept.includes(key)
 }
 
 export function isKeyWithinPrefixes(key: string, prefixes: string[]): boolean {

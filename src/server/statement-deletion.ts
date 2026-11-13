@@ -19,12 +19,19 @@
  * `statement-file-deletions` row is written per application, whatever the
  * outcome.
  *
+ * One key is kept: the application's affordability report
+ * (`AffordabilityReports/{app}_affordability.json`). The listing drops it, so it
+ * is never counted, never gets a marker, is never version-deleted and never
+ * reads as remaining; the marker and delete steps also refuse it outright.
+ *
  * Authorisation is the route's job; every Local API call here overrides access.
  */
 import type { Payload, Where } from 'payload'
 import {
+  isKeptKey,
   isKeyWithinPrefixes,
   isValidApplicationNumber,
+  keptStatementKeys,
   statementPrefixes,
   UNCONFIRMED_DELETION_ERROR,
   type DeletionStatus,
@@ -185,9 +192,39 @@ function shortMessage(prefix: string, err: unknown): string {
   return `${prefix}: ${message}`.slice(0, ERROR_MESSAGE_MAX)
 }
 
-/** The listed entries that hold data: everything but delete markers. */
-async function listApplicationData(prefixes: string[]): Promise<ObjectVersionRef[]> {
-  return (await listApplicationVersions(prefixes)).filter((r) => !r.isDeleteMarker)
+/** Where one application's deletable files live, and the keys that are never deleted. */
+interface ApplicationScope {
+  prefixes: string[]
+  kept: string[]
+}
+
+function applicationScope(baseFolder: string, applicationNumber: string): ApplicationScope {
+  return {
+    prefixes: statementPrefixes(baseFolder, applicationNumber),
+    kept: keptStatementKeys(baseFolder, applicationNumber),
+  }
+}
+
+/**
+ * The listed entries that can be deleted: data versions only (no delete
+ * markers), and nothing on a kept key, whichever kind of entry it is.
+ */
+async function listApplicationData({
+  prefixes,
+  kept,
+}: ApplicationScope): Promise<ObjectVersionRef[]> {
+  return (await listApplicationVersions(prefixes)).filter(
+    (r) => !r.isDeleteMarker && !isKeptKey(r.key, kept),
+  )
+}
+
+/** Defence in depth: drop (and report) any kept key that reached a destructive step. */
+function withoutKept<T>(items: T[], keyOf: (item: T) => string, kept: string[], step: string): T[] {
+  const allowed = items.filter((item) => !isKeptKey(keyOf(item), kept))
+  if (allowed.length !== items.length) {
+    console.error('[statement-deletion] refused to act on a kept key', { step, kept })
+  }
+  return allowed
 }
 
 const versionId = (r: VersionedKey) => `${r.key}\u0000${r.versionId}`
@@ -214,9 +251,7 @@ export async function previewDeletion(
       preview.error = INVALID_APPLICATION_NUMBER
     } else {
       try {
-        const refs = await listApplicationData(
-          statementPrefixes(baseFolder, conv.applicationNumber),
-        )
+        const refs = await listApplicationData(applicationScope(baseFolder, conv.applicationNumber))
         preview.fileCount = refs.length
       } catch (err) {
         console.error('[statement-deletion] preview listing failed', {
@@ -257,11 +292,11 @@ async function deleteApplication(baseFolder: string, conv: ConversationRow): Pro
   if (!isValidApplicationNumber(conv.applicationNumber)) {
     return failedOutcome(INVALID_APPLICATION_NUMBER)
   }
-  const prefixes = statementPrefixes(baseFolder, conv.applicationNumber)
+  const scope = applicationScope(baseFolder, conv.applicationNumber)
 
   let found: ObjectVersionRef[]
   try {
-    found = await listApplicationData(prefixes)
+    found = await listApplicationData(scope)
   } catch (err) {
     console.error('[statement-deletion] listing failed', {
       conversationId: conv.conversationId,
@@ -283,7 +318,7 @@ async function deleteApplication(baseFolder: string, conv: ConversationRow): Pro
 
   // Markers first. A key without its marker keeps every version: deleting them
   // by VersionId alone would never reach the backup bucket.
-  const keys = distinctKeys(found)
+  const keys = withoutKept(distinctKeys(found), (k) => k, scope.kept, 'delete marker')
   let markerFailures: Array<{ key: string; message: string }>
   let placed: Set<string>
   try {
@@ -316,9 +351,12 @@ async function deleteApplication(baseFolder: string, conv: ConversationRow): Pro
   // Only the data versions listed above, so the new markers (and any older
   // ones) are never deleted. A key is deleted only when its marker is
   // confirmed placed and not also reported failed.
-  const toDelete: VersionedKey[] = found
-    .filter((r) => placed.has(r.key) && !markerFailedKeys.has(r.key) && !r.isDeleteMarker)
-    .map((r) => ({ key: r.key, versionId: r.versionId }))
+  const toDelete: VersionedKey[] = withoutKept(
+    found.filter((r) => placed.has(r.key) && !markerFailedKeys.has(r.key) && !r.isDeleteMarker),
+    (r) => r.key,
+    scope.kept,
+    'version delete',
+  ).map((r) => ({ key: r.key, versionId: r.versionId }))
   let failed: Array<VersionedKey & { message: string }> = []
   if (toDelete.length > 0) {
     try {
@@ -340,7 +378,7 @@ async function deleteApplication(baseFolder: string, conv: ConversationRow): Pro
   // mid-delete. Delete markers, old and new, are not files.
   let remaining: ObjectVersionRef[]
   try {
-    remaining = await listApplicationData(prefixes)
+    remaining = await listApplicationData(scope)
   } catch (err) {
     // Without a re-list nothing is confirmed gone, so nothing is counted as
     // deleted and the outcome never reads as a clean delete. The confirm prefix

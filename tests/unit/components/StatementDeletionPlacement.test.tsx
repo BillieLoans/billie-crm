@@ -115,6 +115,33 @@ describe('Statements section — deletion placement', () => {
     expect(screen.getByRole('button', { name: 'Delete statement files…' })).toBeInTheDocument()
   })
 
+  it('keeps the affordability report button beneath the note after a deletion', () => {
+    latestDeletion = DELETION
+    wrap(
+      <AssessmentPanel
+        conversation={conversation({
+          statementCapture: {
+            consentStatus: 'GRANTED',
+            retrievalComplete: true,
+            fileLocations: {
+              statementData: 's3://bucket/a.json',
+              categorizedTransactions: 's3://bucket/b.csv',
+              affordabilityReport: 's3://bucket/APP-001_affordability.json',
+              accounts: 's3://bucket/c.json',
+            },
+          },
+        } as Partial<ConversationDetail>)}
+        conversationId="conv-001"
+      />,
+    )
+    openStatements()
+    expect(screen.getByText(/Statement files deleted/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Affordability report →' })).toBeInTheDocument()
+    expect(screen.queryByText(/Bank statement data/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Categorised transactions/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Accounts summary/)).not.toBeInTheDocument()
+  })
+
   it('says "1 file removed" for a single file', () => {
     latestDeletion = { ...DELETION, filesDeleted: 1 }
     wrap(<AssessmentPanel conversation={conversation()} conversationId="conv-001" />)

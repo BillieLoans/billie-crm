@@ -39,6 +39,9 @@ gitignored). It is described in full below so the doc stands alone.
 
 These stay where they are for now. The review step says so, so staff know.
 
+- The affordability report file, `{base}/{applicationNumber}/AffordabilityReports/{applicationNumber}_affordability.json`
+  (category buckets in `data.groups` and metrics: aggregates, not the statement). Exact
+  key only; see "What gets deleted". (13 Nov 2026: affordability report kept)
 - The affordability report summary on the conversation (`statement_capture.affordabilityReport`).
 - Bank account holder names (`conversations.statement_account_holders` and
   `statement_capture.accountHolders`) that drive search.
@@ -64,12 +67,20 @@ These stay where they are for now. The review step says so, so staff know.
 billieChat writes statement files to S3 with key
 `{S3_BASE_FOLDER_CUSTOMER_DATA}/{applicationNumber}/{subfolder}/{file}`
 (`shared/billie_shared/infra/s3_client.py` in billieChat). For each application the
-CRM deletes every object under exactly these two prefixes:
+CRM deletes every object under exactly these two prefixes, except one kept file
+(13 Nov 2026: affordability report kept):
 
-| Prefix | What's in it | Writer |
-|---|---|---|
-| `{base}/{applicationNumber}/statements/` | raw provider statement files, TaleFin webhook bodies under `statements/talefin/events/` | billieChat backend webhooks (`routes/webhooks.py`, `routes/bankstatements.py`, `routes/talefin_webhooks.py`, `services/talefin/pull.py`) |
-| `{base}/{applicationNumber}/AffordabilityReports/` | categorised transactions CSV, affordability JSON, accounts JSON | categoriser |
+| Prefix | Deleted | Kept | Writer |
+|---|---|---|---|
+| `{base}/{applicationNumber}/statements/` | everything: raw provider statement files, TaleFin webhook bodies under `statements/talefin/events/` | nothing | billieChat backend webhooks (`routes/webhooks.py`, `routes/bankstatements.py`, `routes/talefin_webhooks.py`, `services/talefin/pull.py`) |
+| `{base}/{applicationNumber}/AffordabilityReports/` | categorised transactions CSV (`{app}_categorized.csv`), accounts JSON (`{app}_accounts.json`), any Basiq-era `{jobId}.json`, anything else | `{app}_affordability.json` only | categoriser |
+
+A key is kept if and only if it equals
+`{base}/{applicationNumber}/AffordabilityReports/{applicationNumber}_affordability.json`,
+an exact string match built the same way as the prefixes. A subfolder copy, a file
+of the same name under `statements/`, and `{otherApp}_affordability.json` are all
+deleted. The kept key is never counted, never gets a delete marker and is never
+version-deleted.
 
 Base folder and bucket by environment (from billieChat's fly tomls; the CRM's
 `S3_BUCKET_NAME` already matches):

@@ -159,6 +159,11 @@ describe('DeleteStatementFilesDrawer: review', () => {
     expect(screen.getByText(DELETION_WARNING_COPY.funded_loan)).toBeInTheDocument()
     expect(screen.queryByText(DELETION_WARNING_COPY.in_progress)).toBeNull()
     expect(screen.getByText(KEPT_DATA_COPY)).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Kept: the affordability report file (category totals), the affordability summary, account-holder names and credit assessment records in the CRM, and anything held by TaleFin.',
+      ),
+    ).toBeInTheDocument()
 
     expect(callsTo('/api/statements/deletion/preview')).toHaveLength(1)
     const [, init] = callsTo('/api/statements/deletion/preview')[0]

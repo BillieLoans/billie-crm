@@ -554,6 +554,15 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
                     ? ' · some files could not be deleted'
                     : ''}
                 </p>
+                {statementFiles?.affordabilityReport && (
+                  <button
+                    type="button"
+                    onClick={() => setOpenStatementSlot('affordabilityReport')}
+                    className={styles.statementFileButton}
+                  >
+                    Affordability report →
+                  </button>
+                )}
               </div>
             ) : (
               availableFiles.length > 0 && (
