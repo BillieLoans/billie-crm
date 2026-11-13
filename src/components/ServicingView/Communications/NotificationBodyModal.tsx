@@ -9,11 +9,61 @@ export interface NotificationBodyModalProps {
   onClose: () => void
 }
 
+/**
+ * The stored subject + body of one sent notification, as the customer saw it.
+ * Shared by this modal and the collections case view's reminder pop-up.
+ */
+export const NotificationBodyContent: React.FC<{ notificationId: string }> = ({
+  notificationId,
+}) => {
+  const { body, isLoading, isError, isNotFound, error } = useNotificationBody(notificationId)
+
+  return (
+    <>
+      {isLoading && <div className={styles.modalSkeleton} />}
+
+      {isNotFound && (
+        <div className={styles.modalEmpty}>
+          Body unavailable. Notifications are only retrievable for 90 days after send.
+        </div>
+      )}
+
+      {isError && !isNotFound && (
+        <div className={styles.modalEmpty}>
+          Could not load the notification body.
+          <br />
+          <small>{error?.message ?? 'Unknown error'}</small>
+        </div>
+      )}
+
+      {body && (
+        <>
+          {body.subject && (
+            <div className={styles.modalSubject}>
+              <span className={styles.modalSubjectLabel}>Subject:</span>
+              {body.subject}
+            </div>
+          )}
+          {body.isHtml ? (
+            <iframe
+              className={styles.modalIframe}
+              title="Notification body"
+              sandbox=""
+              srcDoc={body.body}
+            />
+          ) : (
+            <pre className={styles.modalPre}>{body.body}</pre>
+          )}
+        </>
+      )}
+    </>
+  )
+}
+
 export const NotificationBodyModal: React.FC<NotificationBodyModalProps> = ({
   notificationId,
   onClose,
 }) => {
-  const { body, isLoading, isError, isNotFound, error } = useNotificationBody(notificationId)
   const closeBtnRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
@@ -63,42 +113,7 @@ export const NotificationBodyModal: React.FC<NotificationBodyModalProps> = ({
         </div>
 
         <div className={styles.modalBody}>
-          {isLoading && <div className={styles.modalSkeleton} />}
-
-          {isNotFound && (
-            <div className={styles.modalEmpty}>
-              Body unavailable. Notifications are only retrievable for 90 days after send.
-            </div>
-          )}
-
-          {isError && !isNotFound && (
-            <div className={styles.modalEmpty}>
-              Could not load the notification body.
-              <br />
-              <small>{error?.message ?? 'Unknown error'}</small>
-            </div>
-          )}
-
-          {body && (
-            <>
-              {body.subject && (
-                <div className={styles.modalSubject}>
-                  <span className={styles.modalSubjectLabel}>Subject:</span>
-                  {body.subject}
-                </div>
-              )}
-              {body.isHtml ? (
-                <iframe
-                  className={styles.modalIframe}
-                  title="Notification body"
-                  sandbox=""
-                  srcDoc={body.body}
-                />
-              ) : (
-                <pre className={styles.modalPre}>{body.body}</pre>
-              )}
-            </>
-          )}
+          <NotificationBodyContent notificationId={notificationId} />
         </div>
       </div>
     </div>

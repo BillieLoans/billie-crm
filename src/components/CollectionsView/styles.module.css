@@ -580,8 +580,20 @@
   padding: 0;
 }
 
-.rungStep {
+.rungItem {
   flex: 1 1 90px;
+  display: flex;
+}
+
+.rungStep {
+  flex: 1;
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -801,10 +813,214 @@
   background: var(--theme-error-600);
 }
 
-.contactNotesWrapper {
+.rungStep:hover {
+  border-color: var(--theme-elevation-400);
+}
+
+.rungStep:focus-visible {
+  outline: 2px solid var(--theme-success-500);
+  outline-offset: 2px;
+}
+
+/* Case title links to the customer view */
+.titleLink {
+  color: inherit;
+  text-decoration: none;
+}
+
+.titleLink:hover {
+  text-decoration: underline;
+}
+
+.titleLink:focus-visible {
+  outline: 2px solid var(--theme-success-500);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Customer card */
+.customerCard {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 32px;
+  align-items: flex-start;
+  background: var(--theme-elevation-0);
+  border: 1px solid var(--theme-elevation-100);
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+}
+
+.customerIdentity {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 200px;
+}
+
+.customerName {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--theme-text);
+}
+
+.customerPreferred {
+  font-weight: 400;
+  color: var(--theme-elevation-600);
+}
+
+.customerIdRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.customerIdLink {
+  color: var(--theme-elevation-800);
+  text-decoration: underline;
+}
+
+.customerIdLink:hover {
+  color: var(--theme-text);
+}
+
+.customerContact {
+  flex: 1 1 400px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px 24px;
+  margin: 0;
+}
+
+.customerContact dt,
+.reminderDetails dt {
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--theme-elevation-600);
+  margin-bottom: 2px;
+}
+
+.customerContact dd,
+.reminderDetails dd {
+  margin: 0;
+  font-size: 14px;
+  color: var(--theme-text);
+  overflow-wrap: anywhere;
+}
+
+.customerContact a {
+  color: var(--theme-elevation-800);
+}
+
+.customerAddress {
+  grid-column: 1 / -1;
+}
+
+/* Communications, full width under the panels */
+.communicationsSection {
   margin-top: 20px;
-  border-top: 1px solid var(--theme-elevation-100);
-  padding-top: 16px;
+}
+
+/* Reminder detail modal */
+.reminderSendList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.reminderSend {
+  border: 1px solid var(--theme-elevation-100);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+
+.reminderDetails {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px 20px;
+  margin: 0 0 12px 0;
+}
+
+.reminderStatus {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.reminderStatusSent {
+  background: var(--theme-success-100);
+  color: var(--theme-success-800);
+}
+
+.reminderStatusFailed {
+  background: var(--theme-error-100);
+  color: var(--theme-error-800);
+}
+
+.reminderStatusBlocked {
+  background: var(--theme-warning-100);
+  color: var(--theme-warning-800);
+}
+
+.reminderFallbackTag {
+  margin-left: 6px;
+  font-size: 12px;
+  color: var(--theme-elevation-600);
+}
+
+.reminderTemplateRaw {
+  font-size: 12px;
+  color: var(--theme-elevation-600);
+}
+
+.reminderError {
+  margin: 0 0 12px 0;
+  font-size: 13px;
+  color: var(--theme-error-700);
+}
+
+.reminderNote {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  color: var(--theme-elevation-700);
+}
+
+.reminderBodyToggle {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--theme-elevation-200);
+  background: var(--theme-elevation-0);
+  color: var(--theme-text);
+  cursor: pointer;
+}
+
+.reminderBodyToggle:hover {
+  background: var(--theme-elevation-50);
+}
+
+.reminderBodyToggle:focus-visible {
+  outline: 2px solid var(--theme-success-500);
+  outline-offset: 2px;
+}
+
+.reminderBody {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 /* Not-found state */

@@ -5,14 +5,20 @@ import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import { useCollectionsCase } from '@/hooks/queries/useCollectionsCase'
 import { useCustomer } from '@/hooks/queries/useCustomer'
+import {
+  useAccountReminderNotifications,
+  groupRemindersByRung,
+} from '@/hooks/queries/useAccountReminderNotifications'
 import { useFlagHardship } from '@/hooks/mutations/useFlagHardship'
 import { useResumeHardship } from '@/hooks/mutations/useResumeHardship'
 import { useApplyStopContact } from '@/hooks/mutations/useApplyStopContact'
 import { useAdvanceToNextStep } from '@/hooks/mutations/useAdvanceToNextStep'
-import { ContactNotesPanel } from '@/components/ServicingView/ContactNotes'
+import { CommunicationsPanel } from '@/components/ServicingView/Communications/CommunicationsPanel'
 import type { CollectionsCaseRow } from '@/types/collections'
 import { stateInfoFor } from './CollectionsView'
 import { Modal } from '@/components/ui/Modal'
+import { CaseCustomerCard } from './CaseCustomerCard'
+import { ReminderDetailModal } from './ReminderDetailModal'
 import styles from './styles.module.css'
 
 // =============================================================================
@@ -149,7 +155,16 @@ function formatDateTime(value: string | null): string {
   return new Intl.DateTimeFormat('en-AU', { dateStyle: 'short', timeStyle: 'short' }).format(d)
 }
 
-function RungLadder({ caseRow }: { caseRow: CollectionsCaseRow }) {
+function RungLadder({
+  caseRow,
+  sentCountByRung,
+  onSelect,
+}: {
+  caseRow: CollectionsCaseRow
+  /** Reminders sent per rung, once known — used only in each tile's accessible name. */
+  sentCountByRung: Map<number, number> | null
+  onSelect: (rung: number) => void
+}) {
   const isCured = caseRow.state === 'cured'
   const isAwaitingHuman = caseRow.state === 'awaiting_human'
   const currentRung = isAwaitingHuman
@@ -171,14 +186,26 @@ function RungLadder({ caseRow }: { caseRow: CollectionsCaseRow }) {
             .join(' ')
 
           return (
-            <li key={rung} className={classNames} data-testid={`rung-step-${rung}`}>
-              <span className={styles.rungDot} />
-              <span className={styles.rungLabel}>{label}</span>
-              {isCurrent && isAwaitingHuman && (
-                <span className={styles.rungTag} data-testid="escalation-candidate-tag">
-                  Escalation candidate
-                </span>
-              )}
+            <li key={rung} className={styles.rungItem}>
+              <button
+                type="button"
+                className={classNames}
+                onClick={() => onSelect(rung)}
+                aria-haspopup="dialog"
+                aria-current={isCurrent ? 'step' : undefined}
+                aria-label={`${label}${
+                  sentCountByRung ? ` — ${sentCountByRung.get(rung) ?? 0} sent` : ''
+                }. View details`}
+                data-testid={`rung-step-${rung}`}
+              >
+                <span className={styles.rungDot} />
+                <span className={styles.rungLabel}>{label}</span>
+                {isCurrent && isAwaitingHuman && (
+                  <span className={styles.rungTag} data-testid="escalation-candidate-tag">
+                    Escalation candidate
+                  </span>
+                )}
+              </button>
             </li>
           )
         })}
@@ -413,6 +440,21 @@ export function CollectionsCaseView({ accountId, userRole }: CollectionsCaseView
   const [hardshipDialogOpen, setHardshipDialogOpen] = useState(false)
   const [stopContactDialogOpen, setStopContactDialogOpen] = useState(false)
   const [advanceModalOpen, setAdvanceModalOpen] = useState(false)
+  const [selectedRung, setSelectedRung] = useState<number | null>(null)
+
+  const remindersQuery = useAccountReminderNotifications(customerId, accountId)
+  const remindersByRung = React.useMemo(
+    () => groupRemindersByRung(remindersQuery.data ?? [], accountId),
+    [remindersQuery.data, accountId],
+  )
+  const sentCountByRung = React.useMemo(() => {
+    if (!remindersQuery.data) return null
+    const counts = new Map<number, number>()
+    for (const [rung, sends] of remindersByRung) {
+      counts.set(rung, sends.filter((n) => n.status === 'sent').length)
+    }
+    return counts
+  }, [remindersQuery.data, remindersByRung])
 
   const isSupervisor = userRole === 'admin' || userRole === 'supervisor'
   // Flag hardship / Resume / Stop contact are gated the same way the server
@@ -473,6 +515,10 @@ export function CollectionsCaseView({ accountId, userRole }: CollectionsCaseView
   }
 
   const stateInfo = stateInfoFor(caseRow.state)
+  const customerHref = customerId
+    ? `/admin/servicing/${encodeURIComponent(customerId)}?accountId=${encodeURIComponent(accountId)}`
+    : null
+  const customerDocId = customerQuery.data?.id ?? null
   const contactLog = contactLogQuery.data?.contactLog ?? null
   const contactLogUnavailable = !!contactLogQuery.data?.unavailable || (!contactLogQuery.isLoading && !contactLog)
 
@@ -484,16 +530,44 @@ export function CollectionsCaseView({ accountId, userRole }: CollectionsCaseView
 
       <div className={styles.caseHeader}>
         <div className={styles.caseTitleRow}>
-          <h1 className={styles.title}>{caseRow.accountNumber || caseRow.accountId}</h1>
+          <h1 className={styles.title}>
+            {customerHref ? (
+              <Link
+                href={customerHref}
+                className={styles.titleLink}
+                title="Open in customer view"
+                data-testid="case-title-link"
+              >
+                {caseRow.accountNumber || caseRow.accountId}
+              </Link>
+            ) : (
+              caseRow.accountNumber || caseRow.accountId
+            )}
+          </h1>
           <span className={`${styles.stateBadge} ${stateInfo.className}`}>{stateInfo.label}</span>
         </div>
       </div>
+
+      {customerId && customerHref && (
+        <CaseCustomerCard
+          customerId={customerId}
+          fallbackName={caseRow.customerName}
+          customer={customerQuery.data}
+          isLoading={customerQuery.isLoading}
+          isError={customerQuery.isError}
+          customerHref={customerHref}
+        />
+      )}
 
       <div className={styles.panelGrid}>
         {/* Operational panel */}
         <section className={styles.panel} aria-label="Operational">
           <h2 className={styles.panelTitle}>Operational</h2>
-          <RungLadder caseRow={caseRow} />
+          <RungLadder
+            caseRow={caseRow}
+            sentCountByRung={sentCountByRung}
+            onSelect={setSelectedRung}
+          />
           <ul className={styles.lifecycleList}>
             {LIFECYCLE_FIELDS.filter(({ key }) => caseRow[key]).map(({ key, label }) => (
               <li key={key} className={styles.lifecycleItem}>
@@ -672,18 +746,29 @@ export function CollectionsCaseView({ accountId, userRole }: CollectionsCaseView
             </button>
           </div>
 
-          {customerId && (
-            <div className={styles.contactNotesWrapper}>
-              <ContactNotesPanel
-                customerId={customerId}
-                customerName={caseRow.customerName ?? undefined}
-                selectedAccountId={accountId}
-                accounts={customerQuery.data?.loanAccounts ?? []}
-              />
-            </div>
-          )}
         </section>
       </div>
+
+      {/* Communications — the customer view's timeline (contact notes + every
+          notification sent, each with its message body). Needs the customer
+          record for the Payload doc id that notes hang off. */}
+      {customerId && (
+        <div className={styles.communicationsSection}>
+          {customerDocId ? (
+            <CommunicationsPanel
+              customerDocId={customerDocId}
+              customerBusinessId={customerId}
+              customerName={customerQuery.data?.fullName ?? caseRow.customerName ?? undefined}
+              selectedAccountId={accountId}
+              accounts={customerQuery.data?.loanAccounts ?? []}
+            />
+          ) : (
+            <div className={styles.pendingPlaceholder} data-testid="communications-pending">
+              {customerQuery.isError ? 'Communications unavailable' : 'Loading communications…'}
+            </div>
+          )}
+        </div>
+      )}
 
       {hardshipDialogOpen && (
         <FlagHardshipDialog
@@ -712,6 +797,18 @@ export function CollectionsCaseView({ accountId, userRole }: CollectionsCaseView
               // Error is surfaced by the mutation hook's onError toast; keep dialog open.
             }
           }}
+        />
+      )}
+
+      {selectedRung !== null && (
+        <ReminderDetailModal
+          rung={selectedRung}
+          label={RUNG_LADDER.find((r) => r.rung === selectedRung)?.label ?? `Rung ${selectedRung}`}
+          sends={remindersByRung.get(selectedRung) ?? []}
+          isLoading={remindersQuery.isLoading}
+          isError={remindersQuery.isError}
+          preview={preview && preview.rung === selectedRung ? preview : null}
+          onClose={() => setSelectedRung(null)}
         />
       )}
 

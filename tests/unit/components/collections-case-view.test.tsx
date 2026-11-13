@@ -56,14 +56,27 @@ vi.mock('@/hooks/mutations/useAdvanceToNextStep', () => ({
   useAdvanceToNextStep: () => mockUseAdvanceToNextStep(),
 }))
 
-// ContactNotesPanel pulls in its own data fetching (useContactNotes) that
-// isn't relevant to this component's own logic — stub it so we can assert
-// it mounts (or doesn't) without wiring up its full data dependencies.
-vi.mock('@/components/ServicingView/ContactNotes', () => ({
-  ContactNotesPanel: (props: { customerId: string; selectedAccountId: string | null }) => (
-    <div data-testid="contact-notes-panel-stub">
-      customerId={props.customerId} selectedAccountId={props.selectedAccountId}
+// CommunicationsPanel pulls in its own data fetching (contact notes +
+// notifications) that isn't relevant to this component's own logic — stub it
+// so we can assert it mounts (or doesn't) with the right ids.
+vi.mock('@/components/ServicingView/Communications/CommunicationsPanel', () => ({
+  CommunicationsPanel: (props: {
+    customerDocId: string
+    customerBusinessId: string
+    selectedAccountId: string | null
+  }) => (
+    <div data-testid="communications-panel-stub">
+      customerDocId={props.customerDocId} customerBusinessId={props.customerBusinessId}{' '}
+      selectedAccountId={props.selectedAccountId}
     </div>
+  ),
+}))
+
+// The stored message body is fetched per notification — stub the renderer so
+// the reminder modal can be asserted without the body route.
+vi.mock('@/components/ServicingView/Communications/NotificationBodyModal', () => ({
+  NotificationBodyContent: (props: { notificationId: string }) => (
+    <div data-testid={`notification-body-stub-${props.notificationId}`}>body</div>
   ),
 }))
 
@@ -122,6 +135,54 @@ const CONTACT_LOG = {
   },
 }
 
+function makeReminder(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'n-1',
+    notificationId: 'notif-1',
+    idempotencyKey: 'overdue:acc-1:2026-06-01:1',
+    customerId: 'cust-1',
+    status: 'sent',
+    channel: 'email',
+    templateName: 'overdue_email_v1',
+    provider: 'ses',
+    eventAt: '2026-06-01T01:00:00.000Z',
+    sentAt: '2026-06-01T01:00:00.000Z',
+    tags: { category: 'servicing', reason: 'overdue', step: 1 },
+    failure: null,
+    createdAt: '2026-06-01T01:00:00.000Z',
+    updatedAt: '2026-06-01T01:00:00.000Z',
+    ...overrides,
+  }
+}
+
+const REMINDERS = {
+  docs: [
+    makeReminder(),
+    // Another account of the same customer — must not show on this case.
+    makeReminder({ id: 'n-2', notificationId: 'notif-2', idempotencyKey: 'overdue:acc-9:2026-06-01:2' }),
+    makeReminder({
+      id: 'n-3',
+      notificationId: 'notif-3',
+      idempotencyKey: 'predue:acc-1:3:0',
+      templateName: 'pre_due_email_first',
+      tags: { category: 'servicing', reason: 'pre_due', step: null },
+    }),
+  ],
+}
+
+const CUSTOMER = {
+  id: 'cdoc-1',
+  customerId: 'cust-1',
+  fullName: 'Jane Doe',
+  firstName: 'Jane',
+  preferredName: null,
+  emailAddress: 'jane@example.com',
+  mobilePhoneNumber: '0400 000 000',
+  residentialAddress: { fullAddress: '1 Test St, Sydney NSW 2000' },
+  vulnerableFlag: false,
+  loanAccounts: [],
+}
+
 function defaultMutationReturn(overrides: Record<string, unknown> = {}) {
   return {
     isPending: false,
@@ -139,9 +200,19 @@ function fetchImplFor(opts: {
   contactLog?: unknown
   economicsOk?: boolean
   contactLogOk?: boolean
+  reminders?: unknown
 }) {
-  const { economics = PASS_ECONOMICS, contactLog = CONTACT_LOG, economicsOk = true, contactLogOk = true } = opts
+  const {
+    economics = PASS_ECONOMICS,
+    contactLog = CONTACT_LOG,
+    economicsOk = true,
+    contactLogOk = true,
+    reminders = REMINDERS,
+  } = opts
   return vi.fn((url: string) => {
+    if (url.startsWith('/api/notifications?')) {
+      return Promise.resolve({ ok: true, status: 200, json: async () => reminders })
+    }
     if (url.includes('/economics')) {
       return Promise.resolve({ ok: economicsOk, status: economicsOk ? 200 : 500, json: async () => economics })
     }
@@ -172,7 +243,7 @@ beforeEach(() => {
   mockUseAdvanceToNextStep.mockReset()
 
   mockUseCollectionsCase.mockReturnValue({ data: makeCase(), isLoading: false })
-  mockUseCustomer.mockReturnValue({ data: { loanAccounts: [] }, isLoading: false })
+  mockUseCustomer.mockReturnValue({ data: CUSTOMER, isLoading: false, isError: false })
   mockUseFlagHardship.mockReturnValue({
     flagHardship: vi.fn(),
     flagHardshipAsync: vi.fn().mockResolvedValue({ accountId: 'acc-1', newState: 'hardship_paused', emittedEventId: 'evt-1' }),
@@ -231,8 +302,87 @@ describe('CollectionsCaseView (BTB-197 WS4)', () => {
     expect(screen.getByTestId('stop-contact-button')).toBeInTheDocument()
     expect(screen.getByTestId('advance-button')).toBeInTheDocument()
 
-    // ContactNotesPanel mounted with customerId present
-    expect(screen.getByTestId('contact-notes-panel-stub')).toBeInTheDocument()
+    // Communications timeline mounted with both customer ids and this account
+    expect(screen.getByTestId('communications-panel-stub')).toHaveTextContent(
+      'customerDocId=cdoc-1 customerBusinessId=cust-1 selectedAccountId=acc-1',
+    )
+  })
+
+  it('links the case title and customer ID to the customer view with this account selected', () => {
+    renderView()
+
+    const href = '/admin/servicing/cust-1?accountId=acc-1'
+    expect(screen.getByTestId('case-title-link')).toHaveAttribute('href', href)
+    expect(screen.getByTestId('case-customer-link')).toHaveAttribute('href', href)
+    expect(screen.getByTestId('case-customer-link')).toHaveTextContent('cust-1')
+  })
+
+  it('shows the customer name, address and contact details', () => {
+    renderView()
+
+    const card = screen.getByTestId('case-customer-card')
+    expect(card).toHaveTextContent('Jane Doe')
+    expect(screen.getByTestId('case-customer-mobile')).toHaveTextContent('0400 000 000')
+    expect(screen.getByTestId('case-customer-email')).toHaveTextContent('jane@example.com')
+    expect(screen.getByTestId('case-customer-address')).toHaveTextContent(
+      '1 Test St, Sydney NSW 2000',
+    )
+  })
+
+  it('falls back to the loan-account name while the customer record loads', () => {
+    mockUseCustomer.mockReturnValue({ data: undefined, isLoading: true, isError: false })
+
+    renderView()
+
+    expect(screen.getByTestId('case-customer-card')).toHaveTextContent('Jane Doe')
+    expect(screen.getByTestId('case-customer-email')).toHaveTextContent('Loading…')
+    expect(screen.getByTestId('communications-pending')).toBeInTheDocument()
+  })
+
+  it('clicking a sent reminder rung opens its send details and message body', async () => {
+    renderView()
+
+    fireEvent.click(screen.getByTestId('rung-step-1'))
+
+    const modal = await screen.findByTestId('reminder-detail-modal')
+    await waitFor(() => expect(screen.getByTestId('reminder-send-n-1')).toBeInTheDocument())
+    expect(modal).toHaveTextContent('Reminder 1')
+    expect(modal).toHaveTextContent('Sent')
+    expect(modal).toHaveTextContent('EMAIL')
+    expect(modal).toHaveTextContent('overdue_email_v1')
+    // Newest send opens with its body showing
+    expect(screen.getByTestId('notification-body-stub-notif-1')).toBeInTheDocument()
+    // Another account's reminder is not attributed to this case
+    expect(screen.queryByTestId('reminder-send-n-2')).not.toBeInTheDocument()
+  })
+
+  it('clicking the pre-due rung shows pre-due reminders for this account', async () => {
+    renderView()
+
+    fireEvent.click(screen.getByTestId('rung-step-0'))
+
+    await waitFor(() => expect(screen.getByTestId('reminder-send-n-3')).toBeInTheDocument())
+    expect(screen.queryByTestId('reminder-send-n-1')).not.toBeInTheDocument()
+  })
+
+  it('clicking the unsent next rung shows the engine preview', async () => {
+    renderView()
+    await waitFor(() => expect(screen.getByTestId('gate-badge')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByTestId('rung-step-3'))
+
+    const preview = await screen.findByTestId('reminder-preview')
+    expect(preview).toHaveTextContent('Your payment is overdue')
+    expect(preview).toHaveTextContent('Hi Jane, your instalment is overdue.')
+  })
+
+  it('clicking an unsent rung with no preview says nothing was sent', async () => {
+    renderView()
+    await waitFor(() => expect(screen.getByTestId('gate-badge')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByTestId('rung-step-5'))
+
+    expect(await screen.findByTestId('reminder-none')).toHaveTextContent('Nothing has been sent')
   })
 
   it('renders only non-null lifecycle timestamps and flag chips', async () => {
