@@ -17,6 +17,7 @@ import { Applications } from './collections/Applications'
 import { LoanAccounts } from './collections/LoanAccounts'
 import { WriteOffRequests } from './collections/WriteOffRequests'
 import { DisbursementAccessLog } from './collections/DisbursementAccessLog'
+import { StatementFileDeletions } from './collections/StatementFileDeletions'
 import { ReapplicationBlockClearRequests } from './collections/ReapplicationBlockClearRequests'
 import { ContactNotes } from './collections/ContactNotes'
 import { Notifications } from './collections/Notifications'
@@ -188,7 +189,7 @@ export default buildConfig({
       },
     },
   },
-  collections: [Users, Media, Customers, Conversations, Applications, LoanAccounts, WriteOffRequests, ReapplicationBlockClearRequests, ContactNotes, Notifications, CollectionsCases, Contacts, Interactions, ContactAuditLog, Batches, Feedback, ReleaseBatches, ReleaseGrants, ReleaseGateStatus, Issues, LlmCosts, DisbursementAccessLog, ReportDefinitions, ReportRuns, ReportAsks, ReportPreferences, ReportEvents, ReportSubscriptions, ReportDeliveries, ReportBoards, McpOAuthClients, McpOAuthGrants, GoogleAdsConversions],
+  collections: [Users, Media, Customers, Conversations, Applications, LoanAccounts, WriteOffRequests, ReapplicationBlockClearRequests, ContactNotes, Notifications, CollectionsCases, Contacts, Interactions, ContactAuditLog, Batches, Feedback, ReleaseBatches, ReleaseGrants, ReleaseGateStatus, Issues, LlmCosts, DisbursementAccessLog, ReportDefinitions, ReportRuns, ReportAsks, ReportPreferences, ReportEvents, ReportSubscriptions, ReportDeliveries, ReportBoards, McpOAuthClients, McpOAuthGrants, GoogleAdsConversions, StatementFileDeletions],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || 'build-placeholder-not-for-production',
   typescript: {

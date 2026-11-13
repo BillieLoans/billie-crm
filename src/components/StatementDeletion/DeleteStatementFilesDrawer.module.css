@@ -1,0 +1,263 @@
+/*
+ * DeleteStatementFilesDrawer and its trigger button.
+ *
+ * Theme tokens only, as in CancelLoanDrawer, so light and dark both hold. No
+ * colour carries meaning on its own: warnings and errors are prefixed with
+ * "Warning:" / "Error:", and every outcome is said in words. Contrast (WCAG
+ * 2.2 AA) on the light theme's tokens:
+ * - hint text elevation-600 #656565 on white 5.8:1
+ * - control borders elevation-450 #8d8d8d on white 3.3:1 (non-text 3:1)
+ * - error text error-750 on error-50 8.7:1; warning text warning-800 on
+ *   warning-100 8.8:1
+ * - the destructive buttons are error-700 rgb(144,44,43) with white text, 8.1:1
+ * Every control is at least 32px tall (target size floor is 24px, SC 2.5.8).
+ */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.stepHeading {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--theme-text, #1a1a1a);
+}
+
+.stepHeading:focus {
+  outline: none;
+}
+
+.stepHeading:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.apps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--theme-elevation-150, #ddd);
+  border-radius: 6px;
+}
+
+.appLine {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--theme-text, #1a1a1a);
+  overflow-wrap: anywhere;
+}
+
+.flag {
+  font-weight: 700;
+}
+
+.warning,
+.appError {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.warning {
+  border: 1px solid var(--theme-warning-300, #e9b98d);
+  background: var(--theme-warning-100, #f8e8db);
+  color: var(--theme-warning-800, #5a3713);
+}
+
+.appError {
+  border: 1px solid var(--theme-error-300, #fd9a92);
+  background: var(--theme-error-50, #faf1f0);
+  color: var(--theme-error-750, #7b2927);
+}
+
+.info,
+.kept {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--theme-elevation-200, #d0d0d0);
+  background: var(--theme-elevation-50, #f5f5f5);
+  color: var(--theme-elevation-800, #2f2f2f);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.errorSummary {
+  padding: 12px 14px;
+  border: 2px solid var(--theme-error-500, #b42318);
+  border-radius: 6px;
+  background: var(--theme-error-50, #faf1f0);
+  color: var(--theme-error-750, #7b2927);
+}
+
+.errorSummary:focus-visible,
+.errorSummary:focus {
+  outline: 3px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.errorSummaryTitle {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.errorSummaryText {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.confirmWarning {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--theme-elevation-800, #2f2f2f);
+  background: var(--theme-elevation-50, #f5f5f5);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--theme-text, #1a1a1a);
+}
+
+.reasonSummary {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 16px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.reasonSummary dt {
+  color: var(--theme-elevation-600, #656565);
+}
+
+.reasonSummary dd {
+  margin: 0;
+  color: var(--theme-text, #1a1a1a);
+  overflow-wrap: anywhere;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--theme-text, #1a1a1a);
+}
+
+.hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--theme-elevation-600, #656565);
+}
+
+.input,
+.textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--theme-elevation-450, #8d8d8d);
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--theme-text, #1a1a1a);
+  background: var(--theme-elevation-0, #fff);
+}
+
+.textarea {
+  resize: vertical;
+  min-height: 64px;
+}
+
+.input:focus-visible,
+.textarea:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
+.input:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--theme-elevation-150, #ddd);
+}
+
+.secondaryBtn,
+.primaryBtn,
+.dangerBtn {
+  flex: 1;
+  min-height: 40px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.secondaryBtn {
+  border: 1px solid var(--theme-elevation-450, #8d8d8d);
+  background: var(--theme-elevation-0, #fff);
+  color: var(--theme-text, #1a1a1a);
+}
+
+.primaryBtn {
+  border: none;
+  background: var(--theme-elevation-800, #2f2f2f);
+  color: var(--theme-elevation-0, #fff);
+}
+
+.dangerBtn,
+.triggerBtn {
+  border: none;
+  background: var(--color-error-700, rgb(144, 44, 43));
+  color: #fff;
+}
+
+.triggerBtn {
+  min-height: 32px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.secondaryBtn:focus-visible,
+.primaryBtn:focus-visible,
+.dangerBtn:focus-visible,
+.triggerBtn:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.secondaryBtn:disabled,
+.primaryBtn:disabled,
+.dangerBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

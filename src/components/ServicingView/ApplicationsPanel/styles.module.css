@@ -176,3 +176,7 @@
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
 }
+
+.deletionAction {
+  margin-top: 12px;
+}

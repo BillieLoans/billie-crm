@@ -5,6 +5,7 @@ import { Conversations } from '../../src/collections/Conversations'
 import { Users } from '../../src/collections/Users'
 import { Media } from '../../src/collections/Media'
 import { ContactNotes } from '../../src/collections/ContactNotes'
+import { StatementFileDeletions } from '../../src/collections/StatementFileDeletions'
 import { createMockPayloadRequest } from '../utils/test-helpers'
 
 describe('Payload Collections Configuration', () => {
@@ -659,4 +660,22 @@ describe('Payload Collections Configuration', () => {
       expect((createdAtField?.admin as any)?.readOnly).toBe(true)
     })
   })
-}) 
+
+  describe('StatementFileDeletions Collection', () => {
+    test('is append-only and cannot be written through the API, even by an admin', () => {
+      const admin = createMockPayloadRequest({ role: 'admin' })
+      expect(StatementFileDeletions.slug).toBe('statement-file-deletions')
+      expect(StatementFileDeletions.access?.create?.(admin as any)).toBe(false)
+      expect(StatementFileDeletions.access?.update?.(admin as any)).toBe(false)
+      expect(StatementFileDeletions.access?.delete?.(admin as any)).toBe(false)
+    })
+
+    test('only approvers can read the trail', () => {
+      const read = StatementFileDeletions.access?.read
+      expect(read?.(createMockPayloadRequest({ role: 'admin' }) as any)).toBe(true)
+      expect(read?.(createMockPayloadRequest({ role: 'supervisor' }) as any)).toBe(true)
+      expect(read?.(createMockPayloadRequest({ role: 'operations' }) as any)).toBe(false)
+      expect(read?.(createMockPayloadRequest({ role: 'readonly' }) as any)).toBe(false)
+    })
+  })
+})

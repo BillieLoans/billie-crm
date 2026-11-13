@@ -24,6 +24,9 @@ import { identityResolutionSummary } from '@/lib/identityResolution'
 import { networkSummary } from '@/lib/network'
 import { attributionSummary } from '@/lib/attribution'
 import { LlmCostsSection } from '../LlmCostsSection'
+import { DeleteStatementFilesButton } from '@/components/StatementDeletion/DeleteStatementFilesButton'
+import { useStatementDeletion } from '@/hooks/queries/useStatementDeletion'
+import { plural } from '@/lib/statement-deletion'
 import styles from './styles.module.css'
 
 type NoticeboardPost = {
@@ -228,6 +231,7 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
     { slot: 'accounts', label: 'Accounts summary' },
   ]
   const availableFiles = fileSlots.filter((f) => statementFiles?.[f.slot])
+  const { data: statementDeletion } = useStatementDeletion(conversationId)
 
   // Noticeboard: most recent post
   const latestPost = noticeboard?.[noticeboard.length - 1]
@@ -536,25 +540,58 @@ export function AssessmentPanel({ conversation, conversationId }: AssessmentPane
                 {(sc.checksComplete as boolean) ? 'Complete' : 'Pending'}
               </span>
             </div>
-            {availableFiles.length > 0 && (
+            {statementDeletion ? (
               <div className={styles.statementFiles}>
                 <div className={styles.statementFilesHeader}>Files</div>
-                {availableFiles.map(({ slot, label }) => (
+                <p className={styles.deletionNote}>
+                  Statement files deleted {formatDateMedium(statementDeletion.occurredAt)} by{' '}
+                  {statementDeletion.actorName ?? statementDeletion.actorEmail}
+                </p>
+                <p className={styles.deletionNote}>
+                  {plural(statementDeletion.filesDeleted, 'file')} removed · Reason:{' '}
+                  {statementDeletion.reason}
+                  {statementDeletion.status === 'partial'
+                    ? ' · some files could not be deleted'
+                    : ''}
+                </p>
+                {statementFiles?.affordabilityReport && (
                   <button
-                    key={slot}
                     type="button"
-                    onClick={() => setOpenStatementSlot(slot)}
+                    onClick={() => setOpenStatementSlot('affordabilityReport')}
                     className={styles.statementFileButton}
                   >
-                    {label} →
+                    Affordability report →
                   </button>
-                ))}
+                )}
               </div>
+            ) : (
+              availableFiles.length > 0 && (
+                <div className={styles.statementFiles}>
+                  <div className={styles.statementFilesHeader}>Files</div>
+                  {availableFiles.map(({ slot, label }) => (
+                    <button
+                      key={slot}
+                      type="button"
+                      onClick={() => setOpenStatementSlot(slot)}
+                      className={styles.statementFileButton}
+                    >
+                      {label} →
+                    </button>
+                  ))}
+                </div>
+              )
             )}
           </div>
         ) : (
           <p>No statement capture data.</p>
         )}
+        <div className={styles.deletionAction}>
+          <DeleteStatementFilesButton
+            scope={{ scope: 'application', conversationId }}
+            label="Delete statement files…"
+            title={`Delete statement files for ${conversation.applicationNumber ?? conversationId}`}
+          />
+        </div>
       </AssessmentSection>
 
       {/* Noticeboard */}

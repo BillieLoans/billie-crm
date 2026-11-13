@@ -3,6 +3,7 @@
 import React from 'react'
 import Link from 'next/link'
 import { useCustomerConversations } from '@/hooks/queries/useConversations'
+import { DeleteStatementFilesButton } from '@/components/StatementDeletion/DeleteStatementFilesButton'
 import { StatusBadge } from '../../ApplicationsView/StatusBadge'
 import { formatCurrency, formatRelativeTime } from '@/lib/formatters'
 import styles from './styles.module.css'
@@ -127,6 +128,16 @@ export function ApplicationsPanel({ customerIdString }: ApplicationsPanelProps) 
             </div>
           )
         })}
+
+      {customerIdString && !isLoading && (
+        <div className={styles.deletionAction}>
+          <DeleteStatementFilesButton
+            scope={{ scope: 'customer', customerIdString }}
+            label="Delete statement files for all applications…"
+            title="Delete statement files for this customer"
+          />
+        </div>
+      )}
     </div>
   )
 }
